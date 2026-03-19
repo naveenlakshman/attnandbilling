@@ -1,16 +1,25 @@
-{% extends "base.html" %}
+{% extends "billing/base.html" %}
 
-{% block title %}Billing - Global IT ERP{% endblock %}
+{% block title %}Billing Dashboard - Global IT ERP{% endblock %}
 {% block page_title %}Global IT ERP - Billing{% endblock %}
 
 {% block extra_css %}
 <style>
+  .dashboard-filter-card,
+  .stat-card,
+  .receivable-card,
+  .dashboard-chart-card {
+    border: none;
+    border-radius: 18px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  }
+
   .stat-card h3,
   .receivable-card h3,
   .dashboard-chart-card h3 {
-    font-size: 1.2rem;
+    font-size: 1.15rem;
     font-weight: 600;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
   }
 
   .stat-card p,
@@ -19,15 +28,6 @@
     font-size: 2rem;
     font-weight: 700;
     margin: 0;
-  }
-
-  .dashboard-filter-card,
-  .stat-card,
-  .receivable-card,
-  .dashboard-chart-card {
-    border: none;
-    border-radius: 18px;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.06);
   }
 
   .receivable-link {
@@ -74,7 +74,7 @@
 
   .receivable-grid p {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 700;
   }
 
@@ -191,7 +191,7 @@
 <div class="card receivable-card p-4 mb-4">
   <h3>Total Receivables</h3>
   <p class="receivable-total">
-    <a href="{{ url_for('billing.receivables', branch_id=branch_id) }}" class="receivable-link">
+    <a href="#" class="receivable-link">
       ₹ {{ "%.2f"|format(total_receivables or 0) }}
     </a>
   </p>
@@ -204,33 +204,53 @@
   {% set b4_pct = (bucket_above_45 / total * 100) %}
 
   <div class="receivable-bar">
-    <a href="{{ url_for('billing.overdue_installments_report', age_range='current', branch_id=branch_id) }}" class="seg-current seg-link" style="width: {{ current_pct }}%;"></a>
-    <a href="{{ url_for('billing.overdue_installments_report', age_range='1-15', branch_id=branch_id) }}" class="seg-1-15 seg-link" style="width: {{ b1_pct }}%;"></a>
-    <a href="{{ url_for('billing.overdue_installments_report', age_range='16-30', branch_id=branch_id) }}" class="seg-16-30 seg-link" style="width: {{ b2_pct }}%;"></a>
-    <a href="{{ url_for('billing.overdue_installments_report', age_range='31-45', branch_id=branch_id) }}" class="seg-31-45 seg-link" style="width: {{ b3_pct }}%;"></a>
-    <a href="{{ url_for('billing.overdue_installments_report', age_range='above-45', branch_id=branch_id) }}" class="seg-45plus seg-link" style="width: {{ b4_pct }}%;"></a>
+    <a href="#" class="seg-current seg-link" style="width: {{ current_pct }}%;"></a>
+    <a href="#" class="seg-1-15 seg-link" style="width: {{ b1_pct }}%;"></a>
+    <a href="#" class="seg-16-30 seg-link" style="width: {{ b2_pct }}%;"></a>
+    <a href="#" class="seg-31-45 seg-link" style="width: {{ b3_pct }}%;"></a>
+    <a href="#" class="seg-45plus seg-link" style="width: {{ b4_pct }}%;"></a>
   </div>
 
   <div class="receivable-grid">
     <div>
       <small>CURRENT</small>
-      <p><a href="{{ url_for('billing.overdue_installments_report', age_range='current', branch_id=branch_id) }}" class="receivable-link">₹ {{ "%.2f"|format(current_amount or 0) }}</a></p>
+      <p>
+        <a href="#" class="receivable-link">
+          ₹ {{ "%.2f"|format(current_amount or 0) }}
+        </a>
+      </p>
     </div>
     <div>
       <small>1-15 Days</small>
-      <p><a href="{{ url_for('billing.overdue_installments_report', age_range='1-15', branch_id=branch_id) }}" class="receivable-link">₹ {{ "%.2f"|format(bucket_1_15 or 0) }}</a></p>
+      <p>
+        <a href="#" class="receivable-link">
+          ₹ {{ "%.2f"|format(bucket_1_15 or 0) }}
+        </a>
+      </p>
     </div>
     <div>
       <small>16-30 Days</small>
-      <p><a href="{{ url_for('billing.overdue_installments_report', age_range='16-30', branch_id=branch_id) }}" class="receivable-link">₹ {{ "%.2f"|format(bucket_16_30 or 0) }}</a></p>
+      <p>
+        <a href="#" class="receivable-link">
+          ₹ {{ "%.2f"|format(bucket_16_30 or 0) }}
+        </a>
+      </p>
     </div>
     <div>
       <small>31-45 Days</small>
-      <p><a href="{{ url_for('billing.overdue_installments_report', age_range='31-45', branch_id=branch_id) }}" class="receivable-link">₹ {{ "%.2f"|format(bucket_31_45 or 0) }}</a></p>
+      <p>
+        <a href="#" class="receivable-link">
+          ₹ {{ "%.2f"|format(bucket_31_45 or 0) }}
+        </a>
+      </p>
     </div>
     <div>
       <small>Above 45 Days</small>
-      <p><a href="{{ url_for('billing.overdue_installments_report', age_range='above-45', branch_id=branch_id) }}" class="receivable-link">₹ {{ "%.2f"|format(bucket_above_45 or 0) }}</a></p>
+      <p>
+        <a href="#" class="receivable-link">
+          ₹ {{ "%.2f"|format(bucket_above_45 or 0) }}
+        </a>
+      </p>
     </div>
   </div>
 </div>
@@ -302,7 +322,7 @@ const salesData = {{ sales_data|tojson }};
 const receiptsData = {{ receipts_data|tojson }};
 const expensesData = {{ expenses_data|tojson }};
 
-let chartInstance = new Chart(ctx, {
+const chartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
         labels: monthLabels,
@@ -389,7 +409,7 @@ document.getElementById('dashboardChart').addEventListener('click', function(evt
             document.getElementById('clickExpenses').innerHTML = `₹ ${expensesValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
             document.getElementById('clickInfo').style.display = 'block';
         }
-    } catch(e) {
+    } catch (e) {
         console.error('Error handling chart click:', e);
     }
 });

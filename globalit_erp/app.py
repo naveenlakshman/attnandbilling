@@ -2,7 +2,7 @@ from flask import Flask
 from config import Config
 from db import init_db
 from modules.leads.routes import leads_bp
-
+from modules.billing.routes import billing_bp
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -12,6 +12,7 @@ def create_app():
     from modules.core.routes import core_bp
     app.register_blueprint(core_bp)
     app.register_blueprint(leads_bp, url_prefix="/leads")
+    app.register_blueprint(billing_bp, url_prefix="/billing")
 
     return app
 

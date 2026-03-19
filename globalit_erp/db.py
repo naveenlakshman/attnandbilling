@@ -1,12 +1,34 @@
 import sqlite3
 from datetime import datetime
-from config import DB_PATH
 from werkzeug.security import generate_password_hash
+from config import DB_PATH
+
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON;")
+
+    def parse_ddmmyyyy(date_str):
+        if not date_str:
+            return None
+        try:
+            if "-" in date_str:
+                parts = date_str.split("-")
+                if len(parts) == 3:
+                    first_part = int(parts[0])
+                    if first_part > 31:
+                        return date_str
+                    else:
+                        day, month, year = parts
+                        return f"{year}-{month}-{day}"
+        except:
+            pass
+        return date_str
+
+    conn.create_function("parse_date", 1, parse_ddmmyyyy)
     return conn
+
 
 def log_activity(user_id, branch_id, action_type, module_name, record_id, description):
     conn = get_conn()
@@ -37,11 +59,33 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
     finally:
         conn.close()
 
+
+def add_column_if_not_exists(cur, table_name, column_name, column_def):
+    cur.execute(f"PRAGMA table_info({table_name})")
+    columns = [row["name"] for row in cur.fetchall()]
+    if column_name not in columns:
+        clean_def = column_def.replace(" UNIQUE", "").replace("UNIQUE ", "")
+        cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {clean_def}")
+
+
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
     now = datetime.now().isoformat(timespec="seconds")
 
+    # ---------- BRANCHES ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS branches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            branch_name TEXT NOT NULL UNIQUE,
+            branch_code TEXT NOT NULL UNIQUE,
+            address TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    # ---------- USERS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,122 +93,249 @@ def init_db():
             username TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('admin', 'staff')),
+            phone TEXT,
             branch_id INTEGER,
             can_view_all_branches INTEGER NOT NULL DEFAULT 1,
             is_active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (branch_id) REFERENCES branches(id)
         )
     """)
-
-    cur.execute("""
-        SELECT id FROM users WHERE username = ?
-    """, ("admin",))
-    existing_admin = cur.fetchone()
-
-    if not existing_admin:
-        cur.execute("""
-            INSERT INTO users (
-                full_name, username, password_hash, role,
-                branch_id, can_view_all_branches, is_active, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            "Administrator",
-            "admin",
-            generate_password_hash("admin123"),
-            "admin",
-            1,
-            1,
-            1,
-            datetime.now().isoformat(timespec="seconds")
-        ))
 
     # ---------- LEADS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS leads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-
             name TEXT NOT NULL,
             phone TEXT NOT NULL,
             whatsapp TEXT,
             gender TEXT,
             age INTEGER,
-
             education_status TEXT,
             stream TEXT,
             institute_name TEXT,
-
             career_goal TEXT,
             interested_courses TEXT,
-
             lead_source TEXT,
             decision_maker TEXT DEFAULT 'Self',
-
             start_timeframe TEXT,
             lead_score INTEGER DEFAULT 0,
-
             stage TEXT DEFAULT 'New Lead',
             status TEXT DEFAULT 'active',
             lost_reason TEXT,
-
             last_contact_date TEXT,
             next_followup_date TEXT,
             followup_count INTEGER DEFAULT 0,
-
             notes TEXT,
             is_deleted INTEGER DEFAULT 0,
-
             assigned_to_id INTEGER,
-
             created_at TEXT NOT NULL,
             updated_at TEXT,
-
             FOREIGN KEY (assigned_to_id) REFERENCES users(id)
         )
     """)
+
     # ---------- FOLLOWUPS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS followups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-
             lead_id INTEGER NOT NULL,
             user_id INTEGER,
-
             method TEXT,
             outcome TEXT,
             note TEXT,
-
             next_followup_date TEXT,
-
             created_at TEXT NOT NULL,
-
             FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
+
+    # ---------- STUDENTS ----------
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS activity_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        branch_id INTEGER,
-        action_type TEXT NOT NULL,
-        module_name TEXT NOT NULL,
-        record_id INTEGER,
-        description TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_code TEXT NOT NULL UNIQUE,
+            full_name TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            email TEXT,
+            address TEXT,
+            joined_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK(status IN ('active', 'completed', 'dropped')),
+            gender TEXT,
+            education_level TEXT,
+            qualification TEXT,
+            employment_status TEXT DEFAULT 'unemployed',
+            branch_id INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (branch_id) REFERENCES branches(id)
         )
     """)
 
+    # ---------- COURSES ----------
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS branches (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        branch_name TEXT NOT NULL UNIQUE,
-        branch_code TEXT NOT NULL UNIQUE,
-        address TEXT,
-        is_active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL
+        CREATE TABLE IF NOT EXISTS courses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            course_name TEXT NOT NULL UNIQUE,
+            duration TEXT,
+            fee REAL NOT NULL DEFAULT 0,
+            course_type TEXT DEFAULT 'standard',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
         )
     """)
+
+    # ---------- INVOICES ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS invoices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_no TEXT NOT NULL UNIQUE,
+            student_id INTEGER NOT NULL,
+            invoice_date TEXT NOT NULL,
+            subtotal REAL NOT NULL DEFAULT 0,
+            discount_type TEXT NOT NULL DEFAULT 'none'
+                CHECK(discount_type IN ('none', 'fixed', 'percentage')),
+            discount_value REAL NOT NULL DEFAULT 0,
+            discount_amount REAL NOT NULL DEFAULT 0,
+            total_amount REAL NOT NULL DEFAULT 0,
+            installment_type TEXT NOT NULL DEFAULT 'full'
+                CHECK(installment_type IN ('full', 'custom')),
+            notes TEXT,
+            status TEXT NOT NULL DEFAULT 'unpaid'
+                CHECK(status IN ('unpaid', 'partially_paid', 'paid', 'cancelled')),
+            created_by INTEGER NOT NULL,
+            branch_id INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (created_by) REFERENCES users(id),
+            FOREIGN KEY (branch_id) REFERENCES branches(id)
+        )
+    """)
+
+    # ---------- INVOICE ITEMS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS invoice_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_id INTEGER NOT NULL,
+            course_id INTEGER,
+            description TEXT NOT NULL,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            unit_price REAL NOT NULL DEFAULT 0,
+            line_total REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+            FOREIGN KEY (course_id) REFERENCES courses(id)
+        )
+    """)
+
+    # ---------- INSTALLMENT PLANS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS installment_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_id INTEGER NOT NULL,
+            installment_no INTEGER NOT NULL,
+            due_date TEXT NOT NULL,
+            amount_due REAL NOT NULL DEFAULT 0,
+            amount_paid REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(status IN ('pending', 'partially_paid', 'paid', 'overdue')),
+            remarks TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+        )
+    """)
+
+    # ---------- RECEIPTS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS receipts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            receipt_no TEXT NOT NULL UNIQUE,
+            invoice_id INTEGER NOT NULL,
+            receipt_date TEXT NOT NULL,
+            amount_received REAL NOT NULL DEFAULT 0,
+            payment_mode TEXT DEFAULT 'cash',
+            notes TEXT,
+            created_by INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+
+    # ---------- EXPENSE CATEGORIES ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS expense_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category_name TEXT NOT NULL UNIQUE,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    # ---------- EXPENSES ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            expense_date TEXT NOT NULL,
+            branch_id INTEGER NOT NULL,
+            category_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            amount REAL NOT NULL DEFAULT 0,
+            payment_mode TEXT NOT NULL
+                CHECK(payment_mode IN ('cash', 'upi', 'bank_transfer', 'card')),
+            reference_no TEXT,
+            notes TEXT,
+            created_by INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            FOREIGN KEY (category_id) REFERENCES expense_categories(id),
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+
+    # ---------- ACTIVITY LOGS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS activity_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            branch_id INTEGER,
+            action_type TEXT NOT NULL,
+            module_name TEXT NOT NULL,
+            record_id INTEGER,
+            description TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (branch_id) REFERENCES branches(id)
+        )
+    """)
+
+    # ---------- SAFE MIGRATIONS ----------
+    add_column_if_not_exists(cur, "users", "phone", "TEXT")
+    add_column_if_not_exists(cur, "users", "branch_id", "INTEGER")
+    add_column_if_not_exists(cur, "users", "can_view_all_branches", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "users", "updated_at", "TEXT")
+
+    add_column_if_not_exists(cur, "students", "gender", "TEXT")
+    add_column_if_not_exists(cur, "students", "education_level", "TEXT")
+    add_column_if_not_exists(cur, "students", "qualification", "TEXT")
+    add_column_if_not_exists(cur, "students", "employment_status", "TEXT DEFAULT 'unemployed'")
+    add_column_if_not_exists(cur, "students", "branch_id", "INTEGER")
+
+    add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")
+
+    add_column_if_not_exists(cur, "invoices", "branch_id", "INTEGER")
+
+    add_column_if_not_exists(cur, "receipts", "payment_mode", "TEXT DEFAULT 'cash'")
+    add_column_if_not_exists(cur, "receipts", "notes", "TEXT")
+
+    # ---------- DEFAULT BRANCHES ----------
     cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HO",))
     ho_branch = cur.fetchone()
     if not ho_branch:
@@ -192,6 +363,149 @@ def init_db():
             1,
             now
         ))
+
+    cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HO",))
+    head_office = cur.fetchone()
+    head_office_id = head_office["id"] if head_office else 1
+
+    # ---------- DEFAULT ADMIN USER ----------
+    cur.execute("SELECT id FROM users WHERE username = ?", ("admin",))
+    existing_admin = cur.fetchone()
+
+    if not existing_admin:
+        cur.execute("""
+            INSERT INTO users (
+                full_name,
+                username,
+                password_hash,
+                role,
+                phone,
+                branch_id,
+                can_view_all_branches,
+                is_active,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            "Administrator",
+            "admin",
+            generate_password_hash("admin123"),
+            "admin",
+            "",
+            head_office_id,
+            1,
+            1,
+            now,
+            now
+        ))
+
+    # ---------- BACKFILL OLD DATA ----------
+    cur.execute("UPDATE users SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+    cur.execute("UPDATE users SET can_view_all_branches = 1 WHERE can_view_all_branches IS NULL")
+
+    cur.execute("UPDATE students SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+    cur.execute("UPDATE invoices SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+
+    # ---------- DEFAULT EXPENSE CATEGORIES ----------
+    default_categories = [
+        "Rent",
+        "Salary",
+        "Electricity",
+        "Internet",
+        "Marketing",
+        "Stationery",
+        "Travel",
+        "Maintenance",
+        "Tea/Snacks",
+        "Software/Tools",
+        "Miscellaneous"
+    ]
+
+    for category_name in default_categories:
+        cur.execute("SELECT id FROM expense_categories WHERE category_name = ?", (category_name,))
+        if not cur.fetchone():
+            cur.execute("""
+                INSERT INTO expense_categories (category_name, is_active, created_at)
+                VALUES (?, ?, ?)
+            """, (category_name, 1, now))
+
+    # ---------- RECEIPT DATE STANDARDIZATION ----------
+    try:
+        cur.execute("SELECT id, receipt_date FROM receipts WHERE receipt_date IS NOT NULL")
+        receipt_dates = cur.fetchall()
+
+        for receipt in receipt_dates:
+            date_str = receipt["receipt_date"]
+            if date_str and "-" in date_str:
+                parts = date_str.split("-")
+                if len(parts) == 3:
+                    try:
+                        first_part = int(parts[0])
+                        if first_part <= 31:
+                            day, month, year_val = parts
+                            normalized_date = f"{year_val}-{month}-{day}"
+                            cur.execute("""
+                                UPDATE receipts
+                                SET receipt_date = ?
+                                WHERE id = ?
+                            """, (normalized_date, receipt["id"]))
+                    except:
+                        pass
+    except:
+        pass
+
+    # ---------- RECEIPT NUMBER NORMALIZATION ----------
+    try:
+        cur.execute("""
+            SELECT id, receipt_no
+            FROM receipts
+            WHERE receipt_no LIKE 'GIT/P/%' OR receipt_no LIKE 'RCP%'
+            ORDER BY id ASC
+        """)
+        old_receipts = cur.fetchall()
+
+        for receipt in old_receipts:
+            new_receipt_no = f"GIT/{receipt['id']}"
+            cur.execute("""
+                UPDATE receipts
+                SET receipt_no = ?
+                WHERE id = ?
+            """, (new_receipt_no, receipt["id"]))
+    except:
+        pass
+
+    # ---------- RECALCULATE INVOICE STATUS ----------
+    try:
+        cur.execute("SELECT id, total_amount FROM invoices")
+        all_invoices = cur.fetchall()
+
+        for invoice in all_invoices:
+            invoice_id = invoice["id"]
+            total_amount = float(invoice["total_amount"] or 0)
+
+            cur.execute("""
+                SELECT IFNULL(SUM(amount_received), 0) AS total_received
+                FROM receipts
+                WHERE invoice_id = ?
+            """, (invoice_id,))
+            receipt_result = cur.fetchone()
+            total_received = float(receipt_result["total_received"] or 0)
+
+            if total_received >= total_amount and total_amount > 0:
+                new_status = "paid"
+            elif total_received > 0:
+                new_status = "partially_paid"
+            else:
+                new_status = "unpaid"
+
+            cur.execute("""
+                UPDATE invoices
+                SET status = ?, updated_at = ?
+                WHERE id = ?
+            """, (new_status, now, invoice_id))
+    except:
+        pass
 
     conn.commit()
     conn.close()

@@ -103,8 +103,8 @@
         👥 Leads Module
       </a>
 
-      <a class="nav-link"
-         href="#">
+      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('billing.') %}active{% endif %}"
+         href="{{ url_for('billing.dashboard') }}">
         💰 Billing Module
       </a>
 
