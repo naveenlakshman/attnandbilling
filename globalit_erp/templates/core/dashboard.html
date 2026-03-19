@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-5">
+
+    <div class="text-center mb-5">
+        <h1 class="fw-bold">Global IT ERP Dashboard</h1>
+        <p class="text-muted">
+            Welcome{% if session.get("full_name") %}, {{ session.get("full_name") }}{% endif %}.
+        </p>
+    </div>
+
+    <div class="row g-4 justify-content-center">
+        <div class="col-md-5 col-lg-4">
+            <div class="card shadow-sm border-0 rounded-4 h-100">
+                <div class="card-body text-center p-4">
+                    <h3 class="mb-3">Leads Module</h3>
+                    <p class="text-muted">Manage enquiries and follow-ups.</p>
+                    <a href="/leads/" class="btn btn-primary w-100">Open Leads</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-5 col-lg-4">
+            <div class="card shadow-sm border-0 rounded-4 h-100">
+                <div class="card-body text-center p-4">
+                    <h3 class="mb-3">Billing Module</h3>
+                    <p class="text-muted">Manage invoices, receipts, expenses, and reports.</p>
+                    <a href="/billing/" class="btn btn-success w-100">Open Billing</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="text-center mt-5">
+        <a href="{{ url_for('core.logout') }}" class="btn btn-outline-danger">Logout</a>
+    </div>
+</div>
+{% endblock %}
