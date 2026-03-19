@@ -1,6 +1,7 @@
 from flask import Flask
 from config import Config
 from db import init_db
+from modules.leads.routes import leads_bp
 
 def create_app():
     app = Flask(__name__)
@@ -10,6 +11,7 @@ def create_app():
 
     from modules.core.routes import core_bp
     app.register_blueprint(core_bp)
+    app.register_blueprint(leads_bp, url_prefix="/leads")
 
     return app
 

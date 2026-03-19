@@ -49,5 +49,68 @@ def init_db():
             datetime.now().isoformat(timespec="seconds")
         ))
 
+    # ---------- LEADS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS leads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            name TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            whatsapp TEXT,
+            gender TEXT,
+            age INTEGER,
+
+            education_status TEXT,
+            stream TEXT,
+            institute_name TEXT,
+
+            career_goal TEXT,
+            interested_courses TEXT,
+
+            lead_source TEXT,
+            decision_maker TEXT DEFAULT 'Self',
+
+            start_timeframe TEXT,
+            lead_score INTEGER DEFAULT 0,
+
+            stage TEXT DEFAULT 'New Lead',
+            status TEXT DEFAULT 'active',
+            lost_reason TEXT,
+
+            last_contact_date TEXT,
+            next_followup_date TEXT,
+            followup_count INTEGER DEFAULT 0,
+
+            notes TEXT,
+            is_deleted INTEGER DEFAULT 0,
+
+            assigned_to_id INTEGER,
+
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+
+            FOREIGN KEY (assigned_to_id) REFERENCES users(id)
+        )
+    """)
+    # ---------- FOLLOWUPS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS followups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            lead_id INTEGER NOT NULL,
+            user_id INTEGER,
+
+            method TEXT,
+            outcome TEXT,
+            note TEXT,
+
+            next_followup_date TEXT,
+
+            created_at TEXT NOT NULL,
+
+            FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
     conn.commit()
     conn.close()
