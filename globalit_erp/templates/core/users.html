@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Users - Global IT ERP{% endblock %}
+{% block page_title %}Users{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">Users</h2>
+  <a href="{{ url_for('core.user_new') }}" class="btn btn-primary">Add User</a>
+</div>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>ID</th>
+          <th>Full Name</th>
+          <th>Username</th>
+          <th>Role</th>
+          <th>Branch</th>
+          <th>All Branches</th>
+          <th>Status</th>
+          <th>Created At</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td>{{ user.id }}</td>
+          <td>{{ user.full_name }}</td>
+          <td>{{ user.username }}</td>
+          <td>
+            <span class="badge {% if user.role == 'admin' %}bg-dark{% else %}bg-secondary{% endif %}">
+              {{ user.role }}
+            </span>
+          </td>
+          <td>{{ user.branch_name or '-' }}</td>
+          <td>
+            {% if user.can_view_all_branches == 1 %}
+              <span class="badge bg-success">Yes</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">No</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if user.is_active == 1 %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-danger">Inactive</span>
+            {% endif %}
+          </td>
+          <td>{{ user.created_at }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('core.user_edit', user_id=user.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+
+            <form method="post" action="{{ url_for('core.user_toggle_status', user_id=user.id) }}" class="d-inline">
+              {% if user.is_active == 1 %}
+                <button type="submit" class="btn btn-sm btn-outline-danger">Deactivate</button>
+              {% else %}
+                <button type="submit" class="btn btn-sm btn-outline-success">Activate</button>
+              {% endif %}
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+
+        {% if not users %}
+        <tr>
+          <td colspan="9" class="text-center text-muted py-4">No users found.</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

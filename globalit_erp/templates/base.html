@@ -110,10 +110,10 @@
 
       {% if session.get('role') == 'admin' %}
       <hr>
-      <a class="nav-link"
-         href="#">
+        <a class="nav-link {% if request.endpoint in ['core.users', 'core.user_new', 'core.user_edit'] %}active{% endif %}"
+        href="{{ url_for('core.users') }}">
         👤 Users
-      </a>
+        </a>
       {% endif %}
 
       <hr>

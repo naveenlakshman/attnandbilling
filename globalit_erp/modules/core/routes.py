@@ -1,7 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
+from datetime import datetime
 from db import get_conn
-from .utils import login_required
+from .utils import login_required, admin_required
 
 core_bp = Blueprint("core", __name__)
 
@@ -11,8 +12,12 @@ def home():
         return redirect(url_for("core.dashboard"))
     return redirect(url_for("core.login"))
 
+
 @core_bp.route("/login", methods=["GET", "POST"])
 def login():
+    if "user_id" in session:
+        return redirect(url_for("core.dashboard"))
+
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
@@ -46,8 +51,238 @@ def login():
 def dashboard():
     return render_template("core/dashboard.html")
 
+
 @core_bp.route("/logout")
 def logout():
     session.clear()
     flash("You have been logged out.", "info")
     return redirect(url_for("core.login"))
+
+
+@core_bp.route("/users")
+@login_required
+@admin_required
+def users():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            u.*,
+            b.branch_name
+        FROM users u
+        LEFT JOIN branches b ON u.branch_id = b.id
+        ORDER BY u.id DESC
+    """)
+    users_list = cur.fetchall()
+
+    conn.close()
+    return render_template("core/users.html", users=users_list)
+
+
+@core_bp.route("/users/new", methods=["GET", "POST"])
+@login_required
+@admin_required
+def user_new():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        full_name = request.form.get("full_name", "").strip()
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
+        role = request.form.get("role", "").strip()
+        branch_id = request.form.get("branch_id", "").strip() or None
+        can_view_all_branches = 1 if request.form.get("can_view_all_branches") == "1" else 0
+
+        if not full_name or not username or not password or not role:
+            flash("Full name, username, password and role are required.", "danger")
+            conn.close()
+            return redirect(url_for("core.user_new"))
+
+        if role not in ["admin", "staff"]:
+            flash("Invalid role selected.", "danger")
+            conn.close()
+            return redirect(url_for("core.user_new"))
+
+        cur.execute("SELECT id FROM users WHERE username = ?", (username,))
+        existing_user = cur.fetchone()
+        if existing_user:
+            flash("Username already exists.", "danger")
+            conn.close()
+            return redirect(url_for("core.user_new"))
+
+        now = datetime.now().isoformat(timespec="seconds")
+
+        cur.execute("""
+            INSERT INTO users (
+                full_name,
+                username,
+                password_hash,
+                role,
+                branch_id,
+                can_view_all_branches,
+                is_active,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            full_name,
+            username,
+            generate_password_hash(password),
+            role,
+            branch_id,
+            can_view_all_branches,
+            1,
+            now
+        ))
+
+        conn.commit()
+        conn.close()
+
+        flash("User created successfully.", "success")
+        return redirect(url_for("core.users"))
+
+    cur.execute("""
+        SELECT id, branch_name
+        FROM branches
+        WHERE is_active = 1
+        ORDER BY branch_name
+    """)
+    branches = cur.fetchall()
+
+    conn.close()
+    return render_template("core/user_form.html", mode="create", user=None, branches=branches)
+
+
+@core_bp.route("/users/<int:user_id>/edit", methods=["GET", "POST"])
+@login_required
+@admin_required
+def user_edit(user_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    user = cur.fetchone()
+
+    if not user:
+        conn.close()
+        flash("User not found.", "danger")
+        return redirect(url_for("core.users"))
+
+    if request.method == "POST":
+        full_name = request.form.get("full_name", "").strip()
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
+        role = request.form.get("role", "").strip()
+        branch_id = request.form.get("branch_id", "").strip() or None
+        can_view_all_branches = 1 if request.form.get("can_view_all_branches") == "1" else 0
+
+        if not full_name or not username or not role:
+            flash("Full name, username and role are required.", "danger")
+            conn.close()
+            return redirect(url_for("core.user_edit", user_id=user_id))
+
+        if role not in ["admin", "staff"]:
+            flash("Invalid role selected.", "danger")
+            conn.close()
+            return redirect(url_for("core.user_edit", user_id=user_id))
+
+        cur.execute("SELECT id FROM users WHERE username = ? AND id != ?", (username, user_id))
+        existing_user = cur.fetchone()
+        if existing_user:
+            flash("Username already exists.", "danger")
+            conn.close()
+            return redirect(url_for("core.user_edit", user_id=user_id))
+
+        if password:
+            cur.execute("""
+                UPDATE users
+                SET full_name = ?,
+                    username = ?,
+                    password_hash = ?,
+                    role = ?,
+                    branch_id = ?,
+                    can_view_all_branches = ?
+                WHERE id = ?
+            """, (
+                full_name,
+                username,
+                generate_password_hash(password),
+                role,
+                branch_id,
+                can_view_all_branches,
+                user_id
+            ))
+        else:
+            cur.execute("""
+                UPDATE users
+                SET full_name = ?,
+                    username = ?,
+                    role = ?,
+                    branch_id = ?,
+                    can_view_all_branches = ?
+                WHERE id = ?
+            """, (
+                full_name,
+                username,
+                role,
+                branch_id,
+                can_view_all_branches,
+                user_id
+            ))
+
+        conn.commit()
+        conn.close()
+
+        flash("User updated successfully.", "success")
+        return redirect(url_for("core.users"))
+
+    cur.execute("""
+        SELECT id, branch_name
+        FROM branches
+        WHERE is_active = 1
+        ORDER BY branch_name
+    """)
+    branches = cur.fetchall()
+
+    conn.close()
+    return render_template("core/user_form.html", mode="edit", user=user, branches=branches)
+
+
+@core_bp.route("/users/<int:user_id>/toggle-status", methods=["POST"])
+@login_required
+@admin_required
+def user_toggle_status(user_id):
+    if user_id == session.get("user_id"):
+        flash("You cannot deactivate your own account.", "danger")
+        return redirect(url_for("core.users"))
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    user = cur.fetchone()
+
+    if not user:
+        conn.close()
+        flash("User not found.", "danger")
+        return redirect(url_for("core.users"))
+
+    new_status = 0 if user["is_active"] == 1 else 1
+
+    cur.execute("""
+        UPDATE users
+        SET is_active = ?
+        WHERE id = ?
+    """, (new_status, user_id))
+
+    conn.commit()
+    conn.close()
+
+    if new_status == 1:
+        flash("User activated successfully.", "success")
+    else:
+        flash("User deactivated successfully.", "warning")
+
+    return redirect(url_for("core.users"))

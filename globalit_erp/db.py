@@ -40,6 +40,7 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
+    now = datetime.now().isoformat(timespec="seconds")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -47,7 +48,7 @@ def init_db():
             full_name TEXT NOT NULL,
             username TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
-            role TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('admin', 'staff')),
             branch_id INTEGER,
             can_view_all_branches INTEGER NOT NULL DEFAULT 1,
             is_active INTEGER NOT NULL DEFAULT 1,
@@ -153,5 +154,44 @@ def init_db():
         created_at TEXT NOT NULL
         )
     """)
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS branches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        branch_name TEXT NOT NULL UNIQUE,
+        branch_code TEXT NOT NULL UNIQUE,
+        address TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+        )
+    """)
+    cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HO",))
+    ho_branch = cur.fetchone()
+    if not ho_branch:
+        cur.execute("""
+            INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            "Global IT Education Head Office",
+            "HO",
+            "T G Extension, Opposite to B M Lab, Hoskote",
+            1,
+            now
+        ))
+
+    cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HB",))
+    hb_branch = cur.fetchone()
+    if not hb_branch:
+        cur.execute("""
+            INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            "Global IT Education – Hoskote Branch",
+            "HB",
+            "College Road, Near Ayyappa Swamy Temple, Hoskote",
+            1,
+            now
+        ))
+
     conn.commit()
     conn.close()
