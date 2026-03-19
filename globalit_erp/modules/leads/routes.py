@@ -1486,3 +1486,191 @@ def activity_log():
         selected_action_type=action_type_filter,
         is_admin=(current_user_role == "admin")
     )
+
+@leads_bp.route("/<int:lead_id>/delete", methods=["POST"])
+@login_required
+def lead_delete(lead_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM leads
+        WHERE id = ? AND is_deleted = 0
+    """, (lead_id,))
+    lead = cur.fetchone()
+
+    if not lead:
+        conn.close()
+        flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
+
+    now = datetime.now().isoformat(timespec="seconds")
+
+    cur.execute("""
+        UPDATE leads
+        SET is_deleted = 1,
+            updated_at = ?
+        WHERE id = ?
+    """, (now, lead_id))
+
+    conn.commit()
+    conn.close()
+
+    log_activity(
+        user_id=session.get("user_id"),
+        branch_id=session.get("branch_id"),
+        action_type="lead_deleted",
+        module_name="leads",
+        record_id=lead_id,
+        description=f"Lead soft deleted: {lead['name']} ({lead['phone']})"
+    )
+
+    flash("Lead deleted successfully.", "success")
+    return redirect(url_for("leads.leads_list"))
+
+@leads_bp.route("/deleted")
+@login_required
+def deleted_leads():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    current_user_id = session.get("user_id")
+    current_user_role = session.get("role")
+
+    q = request.args.get("q", "").strip()
+
+    query = """
+        SELECT
+            l.*,
+            u.full_name AS owner_name,
+            u.username AS owner_username
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE l.is_deleted = 1
+    """
+    params = []
+
+    # Staff sees only own deleted leads
+    if current_user_role != "admin":
+        query += " AND l.assigned_to_id = ?"
+        params.append(current_user_id)
+
+    if q:
+        query += " AND (l.name LIKE ? OR l.phone LIKE ? OR l.whatsapp LIKE ?)"
+        like = f"%{q}%"
+        params.extend([like, like, like])
+
+    query += " ORDER BY l.updated_at DESC"
+
+    cur.execute(query, params)
+    leads = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "leads/deleted_leads.html",
+        leads=leads,
+        q=q,
+        is_admin=(current_user_role == "admin")
+    )
+@leads_bp.route("/<int:lead_id>/restore", methods=["POST"])
+@login_required
+def lead_restore(lead_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM leads
+        WHERE id = ? AND is_deleted = 1
+    """, (lead_id,))
+    lead = cur.fetchone()
+
+    if not lead:
+        conn.close()
+        flash("Deleted lead not found.", "danger")
+        return redirect(url_for("leads.deleted_leads"))
+
+    now = datetime.now().isoformat(timespec="seconds")
+
+    cur.execute("""
+        UPDATE leads
+        SET is_deleted = 0,
+            updated_at = ?
+        WHERE id = ?
+    """, (now, lead_id))
+
+    conn.commit()
+    conn.close()
+
+    log_activity(
+        user_id=session.get("user_id"),
+        branch_id=session.get("branch_id"),
+        action_type="lead_restored",
+        module_name="leads",
+        record_id=lead_id,
+        description=f"Lead restored: {lead['name']} ({lead['phone']})"
+    )
+
+    flash("Lead restored successfully.", "success")
+    return redirect(url_for("leads.deleted_leads"))
+
+@leads_bp.route("/<int:lead_id>/mark-lost", methods=["POST"])
+@login_required
+def lead_mark_lost(lead_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM leads
+        WHERE id = ? AND is_deleted = 0
+    """, (lead_id,))
+    lead = cur.fetchone()
+
+    if not lead:
+        conn.close()
+        flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
+
+    lost_reason = request.form.get("lost_reason", "").strip()
+
+    if not lost_reason:
+        conn.close()
+        flash("Lost reason is required.", "danger")
+        return redirect(url_for("leads.lead_detail", lead_id=lead_id))
+
+    now = datetime.now().isoformat(timespec="seconds")
+
+    cur.execute("""
+        UPDATE leads
+        SET stage = ?,
+            status = ?,
+            lost_reason = ?,
+            next_followup_date = NULL,
+            updated_at = ?
+        WHERE id = ?
+    """, (
+        "Lost",
+        "lost",
+        lost_reason,
+        now,
+        lead_id
+    ))
+
+    conn.commit()
+    conn.close()
+
+    log_activity(
+        user_id=session.get("user_id"),
+        branch_id=session.get("branch_id"),
+        action_type="lead_lost",
+        module_name="leads",
+        record_id=lead_id,
+        description=f"Lead marked as lost: {lead['name']} - Reason: {lost_reason}"
+    )
+
+    flash("Lead marked as lost.", "warning")
+    return redirect(url_for("leads.lead_detail", lead_id=lead_id))
+

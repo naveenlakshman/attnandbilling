@@ -1,0 +1,58 @@
+{% extends "leads/base.html" %}
+{% block title %}Deactivated Leads{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">Deactivated Leads</h2>
+  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('leads.leads_list') }}">Back to Leads</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-md-4">
+    <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Search name/phone">
+  </div>
+  <div class="col-md-2">
+    <button class="btn btn-secondary w-100" type="submit">Search</button>
+  </div>
+</form>
+
+{% if leads %}
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Sl No</th>
+          <th>Name</th>
+          <th>Phone</th>
+          <th>Stage</th>
+          <th>Owner</th>
+          <th>Deleted On</th>
+          <th class="text-end">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in leads %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ l.name }}</td>
+          <td>{{ l.phone }}</td>
+          <td>{{ l.stage }}</td>
+          <td><small class="text-muted">{{ l.owner_name or l.owner_username or 'Unassigned' }}</small></td>
+          <td><small class="text-muted">{{ l.updated_at or '' }}</small></td>
+          <td class="text-end">
+            <form method="post" action="{{ url_for('leads.lead_restore', lead_id=l.id) }}" class="d-inline">
+              <button class="btn btn-sm btn-success" type="submit" onclick="return confirm('Restore this lead?');">
+                Restore
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="alert alert-info">No deactivated leads found.</div>
+{% endif %}
+
+{% endblock %}
