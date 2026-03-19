@@ -84,17 +84,17 @@
         ➕ Add Lead
       </a>
 
-      <a
+        <a
         class="nav-link {{ 'active' if request.endpoint == 'leads.followups_today' else '' }}"
-        href="#">
+        href="{{ url_for('leads.followups_today') }}">
         📞 Follow-ups
-      </a>
+        </a>
 
-      <a
+        <a
         class="nav-link {{ 'active' if request.endpoint == 'leads.pipeline' else '' }}"
-        href="#">
+        href="{{ url_for('leads.pipeline') }}">
         🧩 Pipeline
-      </a>
+        </a>
 
       {% if session.get("role") == "admin" %}
       <hr>

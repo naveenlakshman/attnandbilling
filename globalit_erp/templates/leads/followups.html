@@ -1,0 +1,69 @@
+{% extends "leads/base.html" %}
+{% block title %}Follow-ups{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Follow-ups Due ({{ today }})</h5>
+</div>
+
+{% if is_admin %}
+<form method="get" class="row g-2 mb-3">
+  <div class="col-md-4">
+    <select name="user_id" class="form-select" onchange="this.form.submit()">
+      <option value="">All Counselors</option>
+      {% for user in all_users %}
+        <option value="{{ user.id }}" {% if selected_user_id == user.id|string %}selected{% endif %}>
+          {{ user.full_name or user.username }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+{% endif %}
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Phone</th>
+          {% if is_admin %}<th>Owner</th>{% endif %}
+          <th>Stage</th>
+          <th>Next Follow-up</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in leads %}
+        <tr>
+          <td>{{ l.name }}</td>
+          <td>{{ l.phone }}</td>
+          {% if is_admin %}
+          <td>
+            <small>{{ l.owner_name or l.owner_username or 'Unassigned' }}</small>
+          </td>
+          {% endif %}
+          <td>{{ l.stage }}</td>
+          <td>{{ l.next_followup_date }}</td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">
+              Open
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+
+        {% if not leads %}
+        <tr>
+          <td {% if is_admin %}colspan="6"{% else %}colspan="5"{% endif %} class="text-center text-muted py-4">
+            No follow-ups due 🎉
+          </td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

@@ -22,9 +22,10 @@
   <div class="d-flex gap-2">
     <a class="btn btn-outline-primary" href="{{ url_for('leads.lead_edit', lead_id=lead.id) }}">Edit</a>
 
-    <form method="post" action="#">
-      <button class="btn btn-success" type="submit">Convert</button>
-    </form>
+  <form method="post" action="{{ url_for('leads.lead_set_stage', lead_id=lead.id) }}">
+    <input type="hidden" name="stage" value="Converted">
+    <button class="btn btn-success" type="submit">Convert</button>
+  </form>
 
     <form method="post" action="#" onsubmit="return confirm('Delete this lead?');">
       <button class="btn btn-outline-danger" type="submit">Delete</button>
@@ -62,7 +63,7 @@
 
     <div class="card p-3 mt-3">
       <div class="fw-semibold mb-2">Lead Owner</div>
-      <form method="post" action="#">
+      <form method="post" action="{{ url_for('leads.lead_reassign', lead_id=lead.id) }}">
         <div class="input-group">
           <select class="form-select" name="assigned_to_id">
             <option value="">Unassigned</option>
@@ -79,7 +80,8 @@
 
     <div class="card p-3 mt-3">
       <div class="fw-semibold mb-2">Mark Lost</div>
-      <form method="post" action="#">
+      <form method="post" action="{{ url_for('leads.lead_set_stage', lead_id=lead.id) }}">
+        <input type="hidden" name="stage" value="Lost">
         <div class="input-group">
           <input class="form-control" name="lost_reason" placeholder="Reason (too expensive, joined elsewhere...)">
           <button class="btn btn-outline-warning" type="submit">Mark Lost</button>

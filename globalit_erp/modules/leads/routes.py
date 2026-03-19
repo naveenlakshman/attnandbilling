@@ -73,6 +73,21 @@ FOLLOWUP_OUTCOMES = [
     "Converted"
 ]
 
+def get_next_stages(current_stage):
+    stage_flow = {
+        "New Lead": [{"name": "Contacted", "color": "primary"}],
+        "Contacted": [{"name": "Interested", "color": "info"}],
+        "Interested": [{"name": "Counseling Done", "color": "warning"}],
+        "Counseling Done": [{"name": "Follow-up", "color": "secondary"}],
+        "Follow-up": [
+            {"name": "Converted", "color": "success"},
+            {"name": "Lost", "color": "danger"}
+        ],
+        "Converted": [],
+        "Lost": []
+    }
+    return stage_flow.get(current_stage, [])
+
 def parse_date(value):
     value = (value or "").strip()
     if not value:
@@ -875,4 +890,307 @@ def lead_edit(lead_id):
         lead_sources=LEAD_SOURCE_OPTIONS,
         decision_makers=DECISION_MAKER_OPTIONS,
         timeframes=TIMEFRAME_OPTIONS,
+    )
+
+@leads_bp.route("/<int:lead_id>/stage", methods=["POST"])
+@login_required
+def lead_set_stage(lead_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM leads
+        WHERE id = ? AND is_deleted = 0
+    """, (lead_id,))
+    lead = cur.fetchone()
+
+    if not lead:
+        conn.close()
+        flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
+
+    st = request.form.get("stage", "").strip()
+
+    valid_stages = [
+        "New Lead",
+        "Contacted",
+        "Interested",
+        "Counseling Done",
+        "Follow-up",
+        "Converted",
+        "Lost"
+    ]
+
+    if st not in valid_stages:
+        conn.close()
+        flash("Invalid stage selected.", "danger")
+        return redirect(request.referrer or url_for("leads.dashboard"))
+
+    old_stage = lead["stage"]
+
+    if st == "Converted":
+        status = "converted"
+        next_followup_date = None
+    elif st == "Lost":
+        status = "lost"
+        next_followup_date = None
+    else:
+        status = "active"
+        next_followup_date = lead["next_followup_date"]
+
+    now = datetime.now().isoformat(timespec="seconds")
+
+    cur.execute("""
+        UPDATE leads
+        SET stage = ?,
+            status = ?,
+            next_followup_date = ?,
+            updated_at = ?
+        WHERE id = ?
+    """, (
+        st,
+        status,
+        next_followup_date,
+        now,
+        lead_id
+    ))
+
+    conn.commit()
+    conn.close()
+
+    log_activity(
+        user_id=session.get("user_id"),
+        branch_id=session.get("branch_id"),
+        action_type="stage_changed",
+        module_name="leads",
+        record_id=lead_id,
+        description=f"Lead stage changed: {lead['name']} - {old_stage} → {st}"
+    )
+
+    flash("Lead stage updated.", "success")
+    return redirect(request.referrer or url_for("leads.dashboard"))
+
+@leads_bp.route("/<int:lead_id>/reassign", methods=["POST"])
+@login_required
+def lead_reassign(lead_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Check lead exists
+    cur.execute("""
+        SELECT *
+        FROM leads
+        WHERE id = ? AND is_deleted = 0
+    """, (lead_id,))
+    lead = cur.fetchone()
+
+    if not lead:
+        conn.close()
+        flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
+
+    assigned_to_id = request.form.get("assigned_to_id", "").strip() or None
+    now = datetime.now().isoformat(timespec="seconds")
+
+    if assigned_to_id:
+        # Verify user exists and is active
+        cur.execute("""
+            SELECT id, full_name, username, is_active
+            FROM users
+            WHERE id = ?
+        """, (assigned_to_id,))
+        user = cur.fetchone()
+
+        if not user or user["is_active"] != 1:
+            conn.close()
+            flash("Invalid user selected.", "danger")
+            return redirect(url_for("leads.lead_detail", lead_id=lead_id))
+
+        cur.execute("""
+            UPDATE leads
+            SET assigned_to_id = ?, updated_at = ?
+            WHERE id = ?
+        """, (assigned_to_id, now, lead_id))
+
+        conn.commit()
+        conn.close()
+
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=session.get("branch_id"),
+            action_type="lead_reassigned",
+            module_name="leads",
+            record_id=lead_id,
+            description=f"Lead reassigned: {lead['name']} → {user['full_name'] or user['username']}"
+        )
+
+        flash(f"Lead reassigned to {user['full_name'] or user['username']}.", "success")
+
+    else:
+        cur.execute("""
+            UPDATE leads
+            SET assigned_to_id = NULL, updated_at = ?
+            WHERE id = ?
+        """, (now, lead_id))
+
+        conn.commit()
+        conn.close()
+
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=session.get("branch_id"),
+            action_type="lead_unassigned",
+            module_name="leads",
+            record_id=lead_id,
+            description=f"Lead unassigned: {lead['name']}"
+        )
+
+        flash("Lead unassigned.", "info")
+
+    return redirect(url_for("leads.lead_detail", lead_id=lead_id))
+
+@leads_bp.route("/followups")
+@login_required
+def followups_today():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    today = date.today().strftime("%Y-%m-%d")
+    current_user_id = session.get("user_id")
+    current_user_role = session.get("role")
+    user_filter = request.args.get("user_id", "").strip()
+
+    query = """
+        SELECT
+            l.*,
+            u.full_name AS owner_name,
+            u.username AS owner_username
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE l.status = 'active'
+          AND l.is_deleted = 0
+          AND l.next_followup_date IS NOT NULL
+          AND l.next_followup_date <= ?
+    """
+    params = [today]
+
+    # Counselors see only their own leads
+    if current_user_role != "admin":
+        query += " AND l.assigned_to_id = ?"
+        params.append(current_user_id)
+
+    # Admin can filter by selected user
+    elif user_filter:
+        try:
+            query += " AND l.assigned_to_id = ?"
+            params.append(int(user_filter))
+        except (ValueError, TypeError):
+            pass
+
+    query += " ORDER BY l.next_followup_date ASC"
+
+    cur.execute(query, params)
+    leads = cur.fetchall()
+
+    # Admin dropdown users
+    if current_user_role == "admin":
+        cur.execute("""
+            SELECT id, full_name, username
+            FROM users
+            WHERE is_active = 1
+            ORDER BY full_name
+        """)
+        all_users = cur.fetchall()
+    else:
+        all_users = []
+
+    conn.close()
+
+    return render_template(
+        "leads/followups.html",
+        leads=leads,
+        today=today,
+        all_users=all_users,
+        selected_user_id=user_filter,
+        is_admin=(current_user_role == "admin")
+    )
+@leads_bp.route("/pipeline")
+@login_required
+def pipeline():
+    stages = ["New Lead", "Contacted", "Interested", "Counseling Done", "Follow-up", "Converted", "Lost"]
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    selected_user_id = request.args.get("user_id", "").strip()
+    current_user_id = session.get("user_id")
+    current_user_role = session.get("role")
+
+    # Users for admin filter
+    if current_user_role == "admin":
+        cur.execute("""
+            SELECT id, full_name, username
+            FROM users
+            ORDER BY full_name
+        """)
+        all_users = cur.fetchall()
+    else:
+        all_users = []
+
+    data = {}
+
+    for st in stages:
+        query = """
+            SELECT
+                l.*,
+                u.full_name AS owner_name,
+                u.username AS owner_username
+            FROM leads l
+            LEFT JOIN users u ON l.assigned_to_id = u.id
+            WHERE l.is_deleted = 0
+              AND l.stage = ?
+        """
+        params = [st]
+
+        if current_user_role != "admin":
+            query += " AND l.assigned_to_id = ?"
+            params.append(current_user_id)
+        elif selected_user_id:
+            try:
+                query += " AND l.assigned_to_id = ?"
+                params.append(int(selected_user_id))
+            except (ValueError, TypeError):
+                pass
+
+        query += " ORDER BY l.updated_at DESC LIMIT 50"
+
+        cur.execute(query, params)
+        rows = cur.fetchall()
+
+        processed_rows = []
+        for row in rows:
+            row_dict = dict(row)
+            lcd = row_dict.get("last_contact_date")
+            if lcd:
+                try:
+                    row_dict["last_contact_date_obj"] = datetime.strptime(lcd, "%Y-%m-%d").date()
+                except ValueError:
+                    row_dict["last_contact_date_obj"] = None
+            else:
+                row_dict["last_contact_date_obj"] = None
+            processed_rows.append(row_dict)
+
+        data[st] = processed_rows
+
+    conn.close()
+
+    return render_template(
+        "leads/pipeline.html",
+        stages=stages,
+        data=data,
+        get_next_stages=get_next_stages,
+        is_admin=(current_user_role == "admin"),
+        all_users=all_users,
+        selected_user_id=selected_user_id if selected_user_id else None
     )
