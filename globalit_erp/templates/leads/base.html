@@ -98,23 +98,17 @@
 
       {% if session.get("role") == "admin" %}
       <hr>
-      <a
+        <a
         class="nav-link {{ 'active' if request.endpoint == 'leads.reports' else '' }}"
-        href="#">
+        href="{{ url_for('leads.reports') }}">
         📊 Reports
-      </a>
+        </a>
 
-      <a
+        <a
         class="nav-link {{ 'active' if request.endpoint == 'leads.activity_log' else '' }}"
-        href="#">
-        📋 Activity Log
-      </a>
-
-      <a
-        class="nav-link {{ 'active' if request.endpoint == 'admin.users' else '' }}"
-        href="#">
-        👤 Users
-      </a>
+        href="{{ url_for('leads.activity_log') }}">
+        📋 My Activity
+        </a>
       {% else %}
       <hr>
       <a

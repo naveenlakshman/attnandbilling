@@ -1194,3 +1194,295 @@ def pipeline():
         all_users=all_users,
         selected_user_id=selected_user_id if selected_user_id else None
     )
+@leads_bp.route("/reports")
+@login_required
+def reports():
+    if session.get("role") != "admin":
+        flash("Access denied.", "danger")
+        return redirect(url_for("leads.dashboard"))
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    user_id_filter = request.args.get("user_id", "").strip()
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+
+    # Build WHERE conditions
+    where_clauses = ["l.is_deleted = 0"]
+    params = []
+
+    if user_id_filter:
+        try:
+            where_clauses.append("l.assigned_to_id = ?")
+            params.append(int(user_id_filter))
+        except (ValueError, TypeError):
+            user_id_filter = ""
+
+    if date_from:
+        try:
+            datetime.strptime(date_from, "%Y-%m-%d")
+            where_clauses.append("substr(l.created_at, 1, 10) >= ?")
+            params.append(date_from)
+        except ValueError:
+            date_from = ""
+
+    if date_to:
+        try:
+            datetime.strptime(date_to, "%Y-%m-%d")
+            where_clauses.append("substr(l.created_at, 1, 10) <= ?")
+            params.append(date_to)
+        except ValueError:
+            date_to = ""
+
+    where_sql = " AND ".join(where_clauses)
+
+    # Overall KPIs
+    cur.execute(f"SELECT COUNT(*) AS cnt FROM leads l WHERE {where_sql}", params)
+    total_leads = cur.fetchone()["cnt"]
+
+    cur.execute(f"SELECT COUNT(*) AS cnt FROM leads l WHERE {where_sql} AND l.status = 'active'", params)
+    active = cur.fetchone()["cnt"]
+
+    cur.execute(f"SELECT COUNT(*) AS cnt FROM leads l WHERE {where_sql} AND l.status = 'converted'", params)
+    converted_total = cur.fetchone()["cnt"]
+
+    cur.execute(f"SELECT COUNT(*) AS cnt FROM leads l WHERE {where_sql} AND l.status = 'lost'", params)
+    lost = cur.fetchone()["cnt"]
+
+    conversion_rate = round((converted_total / total_leads * 100), 1) if total_leads > 0 else 0
+
+    # Lead source performance
+    cur.execute(f"""
+        SELECT
+            l.lead_source,
+            COUNT(l.id) AS total_count,
+            SUM(CASE WHEN l.status = 'converted' THEN 1 ELSE 0 END) AS converted_count
+        FROM leads l
+        WHERE {where_sql} AND l.lead_source IS NOT NULL
+        GROUP BY l.lead_source
+    """, params)
+    source_query = cur.fetchall()
+
+    source_dict = {
+        row["lead_source"]: (row["total_count"], row["converted_count"])
+        for row in source_query
+    }
+
+    source_rows = []
+    for source in LEAD_SOURCE_OPTIONS:
+        total, converted = source_dict.get(source, (0, 0))
+        conv_rate = round((converted / total * 100), 1) if total > 0 else 0
+        source_rows.append((source, total, converted, conv_rate))
+
+    # Course interest performance
+    cur.execute(f"""
+        SELECT
+            l.interested_courses,
+            COUNT(l.id) AS total_count,
+            SUM(CASE WHEN l.status = 'converted' THEN 1 ELSE 0 END) AS converted_count
+        FROM leads l
+        WHERE {where_sql}
+        GROUP BY l.interested_courses
+    """, params)
+    raw_course_rows = cur.fetchall()
+
+    course_rows = []
+    for row in raw_course_rows:
+        course = row["interested_courses"]
+        total = row["total_count"]
+        converted = row["converted_count"]
+        conv_rate = round((converted / total * 100), 1) if total > 0 else 0
+        course_rows.append((course, total, converted, conv_rate))
+
+    # Users dropdown
+    cur.execute("""
+        SELECT id, full_name, username, is_active
+        FROM users
+        ORDER BY full_name
+    """)
+    all_users = cur.fetchall()
+
+    # User stats only when no specific user filter is selected
+    user_stats = []
+    if not user_id_filter:
+        for user in all_users:
+            user_where = ["assigned_to_id = ?", "is_deleted = 0"]
+            user_params = [user["id"]]
+
+            if date_from:
+                user_where.append("substr(created_at, 1, 10) >= ?")
+                user_params.append(date_from)
+
+            if date_to:
+                user_where.append("substr(created_at, 1, 10) <= ?")
+                user_params.append(date_to)
+
+            user_where_sql = " AND ".join(user_where)
+
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM leads WHERE {user_where_sql}", user_params)
+            user_total = cur.fetchone()["cnt"]
+
+            if user_total == 0:
+                continue
+
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM leads WHERE {user_where_sql} AND status = 'active'", user_params)
+            user_active = cur.fetchone()["cnt"]
+
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM leads WHERE {user_where_sql} AND status = 'converted'", user_params)
+            user_converted = cur.fetchone()["cnt"]
+
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM leads WHERE {user_where_sql} AND status = 'lost'", user_params)
+            user_lost = cur.fetchone()["cnt"]
+
+            cur.execute(f"SELECT MAX(last_contact_date) AS last_contact FROM leads WHERE {user_where_sql}", user_params)
+            last_contact = cur.fetchone()["last_contact"]
+
+            user_conv_rate = round((user_converted / user_total * 100), 1) if user_total > 0 else 0
+
+            cur.execute(f"""
+                SELECT stage, COUNT(id) AS cnt
+                FROM leads
+                WHERE {user_where_sql}
+                GROUP BY stage
+            """, user_params)
+            stage_breakdown_rows = cur.fetchall()
+            stage_breakdown = [(r["stage"], r["cnt"]) for r in stage_breakdown_rows]
+
+            # convert date string for template compatibility
+            last_contact_obj = None
+            if last_contact:
+                try:
+                    last_contact_obj = datetime.strptime(last_contact, "%Y-%m-%d").date()
+                except ValueError:
+                    last_contact_obj = None
+
+            user_stats.append({
+                "user": user,
+                "total": user_total,
+                "active": user_active,
+                "converted": user_converted,
+                "lost": user_lost,
+                "conversion_rate": user_conv_rate,
+                "last_contact": last_contact_obj,
+                "stage_breakdown": stage_breakdown
+            })
+
+        user_stats.sort(key=lambda x: x["conversion_rate"], reverse=True)
+
+    conn.close()
+
+    return render_template(
+        "leads/reports.html",
+        total_leads=total_leads,
+        active=active,
+        converted=converted_total,
+        lost=lost,
+        conversion_rate=conversion_rate,
+        source_rows=source_rows,
+        course_rows=course_rows,
+        all_users=all_users,
+        selected_user_id=user_id_filter if user_id_filter else None,
+        date_from=date_from,
+        date_to=date_to,
+        user_stats=user_stats
+    )
+
+@leads_bp.route("/activity-log")
+@login_required
+def activity_log():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+    user_id_filter = request.args.get("user_id", "").strip()
+    action_type_filter = request.args.get("action_type", "").strip()
+
+    current_user_id = session.get("user_id")
+    current_user_role = session.get("role")
+
+    query = """
+        SELECT
+            al.*,
+            u.full_name AS user_full_name,
+            u.username AS user_username,
+            l.name AS lead_name,
+            l.phone AS lead_phone
+        FROM activity_logs al
+        LEFT JOIN users u ON al.user_id = u.id
+        LEFT JOIN leads l ON al.record_id = l.id AND al.module_name = 'leads'
+        WHERE al.module_name = 'leads'
+    """
+    params = []
+
+    # Staff sees only own activities
+    if current_user_role != "admin":
+        query += " AND al.user_id = ?"
+        params.append(current_user_id)
+        all_users = []
+    else:
+        # Admin can filter by user
+        if user_id_filter:
+            try:
+                query += " AND al.user_id = ?"
+                params.append(int(user_id_filter))
+            except (ValueError, TypeError):
+                user_id_filter = ""
+
+        cur.execute("""
+            SELECT id, full_name, username
+            FROM users
+            ORDER BY full_name
+        """)
+        all_users = cur.fetchall()
+
+    # Date range filter
+    if date_from:
+        try:
+            datetime.strptime(date_from, "%Y-%m-%d")
+            query += " AND substr(al.created_at, 1, 10) >= ?"
+            params.append(date_from)
+        except ValueError:
+            date_from = ""
+
+    if date_to:
+        try:
+            datetime.strptime(date_to, "%Y-%m-%d")
+            query += " AND substr(al.created_at, 1, 10) <= ?"
+            params.append(date_to)
+        except ValueError:
+            date_to = ""
+
+    # Action type filter
+    if action_type_filter:
+        query += " AND al.action_type = ?"
+        params.append(action_type_filter)
+
+    query += " ORDER BY al.created_at DESC"
+
+    cur.execute(query, params)
+    activities = cur.fetchall()
+
+    # Unique action types for dropdown
+    cur.execute("""
+        SELECT DISTINCT action_type
+        FROM activity_logs
+        WHERE module_name = 'leads' AND action_type IS NOT NULL
+        ORDER BY action_type
+    """)
+    all_action_types = [row["action_type"] for row in cur.fetchall()]
+
+    conn.close()
+
+    return render_template(
+        "leads/activity_log.html",
+        activities=activities,
+        all_users=all_users,
+        all_action_types=all_action_types,
+        date_from=date_from,
+        date_to=date_to,
+        selected_user_id=user_id_filter if user_id_filter else None,
+        selected_action_type=action_type_filter,
+        is_admin=(current_user_role == "admin")
+    )
