@@ -1,0 +1,158 @@
+{% extends "leads/base.html" %}
+{% block title %}Lead {{ lead.name }}{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h5 class="mb-1">{{ lead.name }}</h5>
+    <div class="text-muted small">
+      Phone: <span class="fw-semibold">{{ lead.phone }}</span>
+      {% if lead.whatsapp %} | WhatsApp: {{ lead.whatsapp }}{% endif %}
+      | Stage: <span class="fw-semibold">{{ lead.stage }}</span>
+      | Score: <span class="badge {{ 'bg-danger' if lead.lead_score >= 60 else 'bg-secondary' }}">{{ lead.lead_score }}</span>
+      {% if lead.assigned_to_name or lead.assigned_to_username %}
+        | Owner: <span class="fw-semibold">{{ lead.assigned_to_name or lead.assigned_to_username }}</span>
+      {% endif %}
+    </div>
+    <div class="text-muted small">
+      Created: {{ lead.created_at or '' }} | Updated: {{ lead.updated_at or '' }}
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-primary" href="#">Edit</a>
+
+    <form method="post" action="#">
+      <button class="btn btn-success" type="submit">Convert</button>
+    </form>
+
+    <form method="post" action="#" onsubmit="return confirm('Delete this lead?');">
+      <button class="btn btn-outline-danger" type="submit">Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card p-3">
+      <div class="fw-semibold mb-2">Details</div>
+      <div class="small">
+        <div><span class="text-muted">Education:</span> {{ lead.education_status or '' }} {{ lead.stream or '' }}</div>
+        <div><span class="text-muted">Institute:</span> {{ lead.institute_name or '' }}</div>
+        <div><span class="text-muted">Goal:</span> {{ lead.career_goal or '' }}</div>
+        <div><span class="text-muted">Courses:</span> {{ lead.interested_courses or '' }}</div>
+        <div><span class="text-muted">Source:</span> {{ lead.lead_source or '' }}</div>
+        <div><span class="text-muted">Decision Maker:</span> {{ lead.decision_maker or 'Self' }}</div>
+        <div><span class="text-muted">Start:</span> {{ lead.start_timeframe or '' }}</div>
+        <div><span class="text-muted">Last Contact:</span> {{ lead.last_contact_date or '' }}</div>
+        <div><span class="text-muted">Next Follow-up:</span> {{ lead.next_followup_date or '' }}</div>
+        {% if lead.lost_reason %}
+        <div><span class="text-muted">Lost Reason:</span> {{ lead.lost_reason }}</div>
+        {% endif %}
+      </div>
+
+      {% if lead.notes %}
+      <hr>
+      <div class="small">
+        <span class="text-muted">Notes:</span><br>
+        {{ lead.notes }}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card p-3 mt-3">
+      <div class="fw-semibold mb-2">Lead Owner</div>
+      <form method="post" action="#">
+        <div class="input-group">
+          <select class="form-select" name="assigned_to_id">
+            <option value="">Unassigned</option>
+            {% for user in all_users %}
+              <option value="{{ user.id }}" {% if lead.assigned_to_id == user.id %}selected{% endif %}>
+                {{ user.full_name or user.username }}
+              </option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-outline-secondary" type="submit">Reassign</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card p-3 mt-3">
+      <div class="fw-semibold mb-2">Mark Lost</div>
+      <form method="post" action="#">
+        <div class="input-group">
+          <input class="form-control" name="lost_reason" placeholder="Reason (too expensive, joined elsewhere...)">
+          <button class="btn btn-outline-warning" type="submit">Mark Lost</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card p-3 mb-3">
+      <div class="fw-semibold mb-2">Add Follow-up</div>
+      <form method="post" action="#">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label">Follow-up Type</label>
+            <select class="form-select" name="method">
+              <option value="">(choose)</option>
+              {% for m in methods %}
+                <option value="{{ m }}">{{ m }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Outcome</label>
+            <select class="form-select" name="outcome">
+              <option value="">(choose)</option>
+              {% for o in outcomes %}
+                <option value="{{ o }}">{{ o }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Next Follow-up Date</label>
+            <input class="form-control" type="date" name="next_followup_date">
+          </div>
+
+          <div class="col-12">
+            <textarea class="form-control" name="note" rows="2" placeholder="Notes..."></textarea>
+          </div>
+        </div>
+        <button class="btn btn-primary mt-2">Save Follow-up</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-header fw-semibold">Timeline</div>
+      <div class="card-body">
+        {% if followups %}
+          <div class="list-group">
+            {% for f in followups %}
+              <div class="list-group-item">
+                <div class="small text-muted">
+                  {{ f.created_at }}
+                  {% if f.user_username or f.user_full_name %}
+                    | {{ f.user_full_name or f.user_username }}
+                  {% endif %}
+                </div>
+                <div class="fw-semibold">{{ f.method or 'Follow-up' }} - {{ f.outcome or '' }}</div>
+                <div class="small">{{ f.note or '' }}</div>
+                {% if f.next_followup_date %}
+                  <div class="small text-muted">Next: {{ f.next_followup_date }}</div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-muted">No follow-ups yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

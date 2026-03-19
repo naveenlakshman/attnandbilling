@@ -8,6 +8,35 @@ def get_conn():
     conn.row_factory = sqlite3.Row
     return conn
 
+def log_activity(user_id, branch_id, action_type, module_name, record_id, description):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        now = datetime.now().isoformat(timespec="seconds")
+        cur.execute("""
+            INSERT INTO activity_logs (
+                user_id,
+                branch_id,
+                action_type,
+                module_name,
+                record_id,
+                description,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            user_id,
+            branch_id,
+            action_type,
+            module_name,
+            record_id,
+            description,
+            now
+        ))
+        conn.commit()
+    finally:
+        conn.close()
+
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
@@ -110,6 +139,18 @@ def init_db():
 
             FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS activity_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        branch_id INTEGER,
+        action_type TEXT NOT NULL,
+        module_name TEXT NOT NULL,
+        record_id INTEGER,
+        description TEXT NOT NULL,
+        created_at TEXT NOT NULL
         )
     """)
     conn.commit()

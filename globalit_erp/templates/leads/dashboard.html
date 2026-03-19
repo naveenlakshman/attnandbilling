@@ -156,7 +156,7 @@
                   <td><strong>{{ l.name }}</strong></td>
                   <td><span class="badge bg-danger">{{ l.lead_score }}</span></td>
                   <td><small>{{ l.stage }}</small></td>
-                  <td><a class="btn btn-xs btn-outline-primary" href="{{ url_for('lead_detail', lead_id=l.id) }}">📋</a></td>
+                  <td><a class="btn btn-xs btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">📋</a></td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -194,7 +194,7 @@
                     {% endif %}
                   </td>
                   <td><span class="badge bg-info">{{ l.lead_score }}</span></td>
-                  <td><a class="btn btn-xs btn-outline-primary" href="{{ url_for('lead_detail', lead_id=l.id) }}">📋</a></td>
+                  <td><a class="btn btn-xs btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">📋</a></td>
                 </tr>
                 {% endfor %}
               </tbody>
