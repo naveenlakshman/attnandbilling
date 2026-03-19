@@ -1,0 +1,214 @@
+{% extends "leads/base.html" %}
+{% block title %}Leads - Global IT ERP{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">Leads</h2>
+  <div class="d-flex gap-2">
+    {% if is_admin %}
+    <a class="btn btn-sm btn-outline-secondary" href="#">Deactivated Leads</a>
+    {% endif %}
+    <a class="btn btn-sm btn-primary" href="{{ url_for('leads.lead_create') }}">New Lead</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <div class="card h-100 border-secondary-subtle">
+      <div class="card-body py-3">
+        <div class="text-muted small">Total Leads</div>
+        <div class="d-flex justify-content-between align-items-end">
+          <div>
+            <div class="fs-4 fw-bold text-dark">{{ metrics.total_overall }}</div>
+            <div class="small text-muted">Overall</div>
+          </div>
+          <div class="text-end">
+            <div class="fs-5 fw-semibold">{{ metrics.total_this_month }}</div>
+            <div class="small text-muted">This Month</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card h-100 border-primary-subtle">
+      <div class="card-body py-3">
+        <div class="text-muted small">Active Leads</div>
+        <div class="d-flex justify-content-between align-items-end">
+          <div>
+            <div class="fs-4 fw-bold text-primary">{{ metrics.active_overall }}</div>
+            <div class="small text-muted">Overall</div>
+          </div>
+          <div class="text-end">
+            <div class="fs-5 fw-semibold">{{ metrics.active_this_month }}</div>
+            <div class="small text-muted">This Month</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card h-100 border-success-subtle">
+      <div class="card-body py-3">
+        <div class="text-muted small">Converted</div>
+        <div class="d-flex justify-content-between align-items-end">
+          <div>
+            <div class="fs-4 fw-bold text-success">{{ metrics.converted_overall }}</div>
+            <div class="small text-muted">Overall</div>
+          </div>
+          <div class="text-end">
+            <div class="fs-5 fw-semibold">{{ metrics.converted_this_month }}</div>
+            <div class="small text-muted">This Month</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card h-100 border-danger-subtle">
+      <div class="card-body py-3">
+        <div class="text-muted small">Lost</div>
+        <div class="d-flex justify-content-between align-items-end">
+          <div>
+            <div class="fs-4 fw-bold text-danger">{{ metrics.lost_overall }}</div>
+            <div class="small text-muted">Overall</div>
+          </div>
+          <div class="text-end">
+            <div class="fs-5 fw-semibold">{{ metrics.lost_this_month }}</div>
+            <div class="small text-muted">This Month</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<form method="get" class="row g-2 mb-3" id="filterForm">
+  <div class="col-md-3">
+    <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Search name/phone">
+  </div>
+
+  {% if is_admin %}
+  <div class="col-md-2">
+    <select id="userFilter" name="user_id" class="form-select">
+      <option value="">All Users</option>
+      {% for user in all_users %}
+        <option value="{{ user.id }}" {% if selected_user_id == user.id|string %}selected{% endif %}>
+          {{ user.full_name or user.username }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="col-md-{% if is_admin %}2{% else %}3{% endif %}">
+    <select name="stage" id="stageFilter" class="form-select">
+      <option value="">All stages</option>
+      {% for s in stages %}
+        <option value="{{ s }}" {% if stage == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-md-{% if is_admin %}2{% else %}3{% endif %}">
+    <select name="source" id="sourceFilter" class="form-select">
+      <option value="">All sources</option>
+      {% for s in sources %}
+        <option value="{{ s }}" {% if source == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-md-1">
+    <button class="btn btn-secondary w-100" type="submit">Filter</button>
+  </div>
+</form>
+
+{% if leads %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>Sl No</th>
+          <th>Name</th>
+          <th>Phone</th>
+          <th>Stage</th>
+          <th>Score</th>
+          <th>Owner</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in leads %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ l.name }}</td>
+          <td>{{ l.phone }}</td>
+          <td>{{ l.stage }}</td>
+          <td>
+            <span class="badge {% if l.lead_score >= 60 %}bg-danger{% else %}bg-secondary{% endif %}">
+              {{ l.lead_score }}
+            </span>
+          </td>
+          <td>
+            <small class="text-muted">
+              {{ l.owner_name or l.owner_username or 'Unassigned' }}
+            </small>
+          </td>
+          <td>
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">
+              Open
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="text-muted">No leads found.</div>
+{% endif %}
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const filterForm = document.getElementById('filterForm');
+    const userFilterSelect = document.getElementById('userFilter');
+    const stageFilter = document.getElementById('stageFilter');
+    const sourceFilter = document.getElementById('sourceFilter');
+
+    if (userFilterSelect) {
+      const savedUserId = localStorage.getItem('leadsUserFilter');
+      if (savedUserId && !userFilterSelect.value) {
+        userFilterSelect.value = savedUserId;
+      }
+
+      userFilterSelect.addEventListener('change', function() {
+        const selectedUserId = this.value;
+
+        if (selectedUserId) {
+          localStorage.setItem('leadsUserFilter', selectedUserId);
+        } else {
+          localStorage.removeItem('leadsUserFilter');
+        }
+
+        filterForm.submit();
+      });
+    }
+
+    if (stageFilter) {
+      stageFilter.addEventListener('change', function() {
+        filterForm.submit();
+      });
+    }
+
+    if (sourceFilter) {
+      sourceFilter.addEventListener('change', function() {
+        filterForm.submit();
+      });
+    }
+  });
+</script>
+{% endblock %}

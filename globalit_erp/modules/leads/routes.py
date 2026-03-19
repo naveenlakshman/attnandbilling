@@ -548,3 +548,331 @@ def lead_detail(lead_id):
         methods=FOLLOWUP_METHODS,
         outcomes=FOLLOWUP_OUTCOMES,
     )
+
+@leads_bp.route("/list")
+@login_required
+def leads_list():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    q = request.args.get("q", "").strip()
+    stage = request.args.get("stage", "").strip()
+    source = request.args.get("source", "").strip()
+    user_id = request.args.get("user_id", "").strip()
+
+    current_user_id = session.get("user_id")
+    current_user_role = session.get("role")
+
+    # Base query
+    query = """
+        SELECT l.*, u.full_name AS owner_name, u.username AS owner_username
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE l.is_deleted = 0
+    """
+    params = []
+
+    # Role-based filter
+    if current_user_role != "admin":
+        query += " AND l.assigned_to_id = ?"
+        params.append(current_user_id)
+    elif user_id:
+        query += " AND l.assigned_to_id = ?"
+        params.append(user_id)
+
+    # Filters
+    if q:
+        query += " AND (l.name LIKE ? OR l.phone LIKE ? OR l.whatsapp LIKE ?)"
+        params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+
+    if stage:
+        query += " AND l.stage = ?"
+        params.append(stage)
+
+    if source:
+        query += " AND l.lead_source = ?"
+        params.append(source)
+
+    query += " ORDER BY l.updated_at DESC"
+
+    cur.execute(query, params)
+    leads = cur.fetchall()
+
+    # Users (for admin filter dropdown)
+    cur.execute("SELECT id, full_name, username FROM users ORDER BY full_name")
+    all_users = cur.fetchall()
+
+    # Simple metrics (basic version for now)
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0")
+    total = cur.fetchone()[0]
+
+    metrics = {
+        "total_overall": total,
+        "total_this_month": total,
+        "active_overall": total,
+        "active_this_month": total,
+        "converted_overall": 0,
+        "converted_this_month": 0,
+        "lost_overall": 0,
+        "lost_this_month": 0,
+    }
+
+    conn.close()
+
+    stages = ["New Lead", "Contacted", "Interested", "Counseling Done", "Follow-up", "Converted", "Lost"]
+    sources = ["Walk-in", "Instagram", "Reference", "Website"]
+
+    return render_template(
+        "leads/leads_list.html",
+        leads=leads,
+        q=q,
+        stage=stage,
+        source=source,
+        stages=stages,
+        sources=sources,
+        all_users=all_users,
+        selected_user_id=user_id,
+        is_admin=(current_user_role == "admin"),
+        metrics=metrics
+    )
+
+@leads_bp.route("/<int:lead_id>/followups/new", methods=["POST"])
+@login_required
+def followup_add(lead_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Check lead exists
+    cur.execute("""
+        SELECT *
+        FROM leads
+        WHERE id = ? AND is_deleted = 0
+    """, (lead_id,))
+    lead = cur.fetchone()
+
+    if not lead:
+        conn.close()
+        flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
+
+    method = request.form.get("method", "").strip() or None
+    outcome = request.form.get("outcome", "").strip() or None
+    note = request.form.get("note", "").strip() or None
+    next_dt = parse_date(request.form.get("next_followup_date"))
+
+    now = datetime.now().isoformat(timespec="seconds")
+    today_str = date.today().strftime("%Y-%m-%d")
+
+    # Insert follow-up
+    cur.execute("""
+        INSERT INTO followups (
+            lead_id,
+            user_id,
+            method,
+            outcome,
+            note,
+            next_followup_date,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        lead_id,
+        session.get("user_id"),
+        method,
+        outcome,
+        note,
+        next_dt,
+        now
+    ))
+
+    # Lead updates
+    current_followup_count = lead["followup_count"] or 0
+    current_stage = lead["stage"] or "New Lead"
+
+    new_stage = current_stage
+    if current_stage == "New Lead":
+        new_stage = "Contacted"
+
+    cur.execute("""
+        UPDATE leads
+        SET last_contact_date = ?,
+            followup_count = ?,
+            next_followup_date = ?,
+            stage = ?,
+            updated_at = ?
+        WHERE id = ?
+    """, (
+        today_str,
+        current_followup_count + 1,
+        next_dt,
+        new_stage,
+        now,
+        lead_id
+    ))
+
+    conn.commit()
+    conn.close()
+
+    log_activity(
+        user_id=session.get("user_id"),
+        branch_id=session.get("branch_id"),
+        action_type="followup_added",
+        module_name="leads",
+        record_id=lead_id,
+        description=f"Follow-up added for {lead['name']} - Method: {method or 'Not specified'}, Outcome: {outcome or 'Not specified'}"
+    )
+
+    flash("Follow-up saved.", "success")
+    return redirect(url_for("leads.lead_detail", lead_id=lead_id))
+
+@leads_bp.route("/<int:lead_id>/edit", methods=["GET", "POST"])
+@login_required
+def lead_edit(lead_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM leads
+        WHERE id = ? AND is_deleted = 0
+    """, (lead_id,))
+    lead = cur.fetchone()
+
+    if not lead:
+        conn.close()
+        flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        phone = request.form.get("phone", "").strip()
+        whatsapp = request.form.get("whatsapp", "").strip() or None
+        gender = request.form.get("gender", "").strip() or None
+        age = int(request.form.get("age")) if request.form.get("age") else None
+
+        education_status = request.form.get("education_status", "").strip() or None
+        stream = request.form.get("stream", "").strip() or None
+        institute_name = request.form.get("institute_name", "").strip() or None
+
+        career_goal = request.form.get("career_goal", "").strip() or None
+        interested_courses = request.form.get("interested_courses", "").strip() or None
+        lead_source = request.form.get("lead_source", "").strip() or None
+        decision_maker = request.form.get("decision_maker", "Self").strip() or "Self"
+        start_timeframe = request.form.get("start_timeframe", "").strip() or None
+
+        stage = request.form.get("stage", lead["stage"]).strip() or lead["stage"]
+        notes = request.form.get("notes", "").strip() or None
+
+        last_contact_date = parse_date(request.form.get("last_contact_date"))
+        next_followup_date = parse_date(request.form.get("next_followup_date"))
+
+        lead_score = compute_lead_score(
+            lead_source,
+            start_timeframe,
+            education_status,
+            career_goal
+        )
+
+        if stage == "Converted":
+            status = "converted"
+            next_followup_date = None
+        elif stage == "Lost":
+            status = "lost"
+            next_followup_date = None
+        else:
+            status = "active"
+
+        if not name or not phone:
+            conn.close()
+            flash("Name and Phone are required.", "danger")
+            return render_template(
+                "leads/lead_form.html",
+                lead=lead,
+                mode="edit",
+                genders=GENDER_OPTIONS,
+                educations=EDUCATION_OPTIONS,
+                streams=STREAM_OPTIONS,
+                career_goals=CAREER_GOAL_OPTIONS,
+                lead_sources=LEAD_SOURCE_OPTIONS,
+                decision_makers=DECISION_MAKER_OPTIONS,
+                timeframes=TIMEFRAME_OPTIONS,
+            )
+
+        now = datetime.now().isoformat(timespec="seconds")
+
+        cur.execute("""
+            UPDATE leads
+            SET name = ?,
+                phone = ?,
+                whatsapp = ?,
+                gender = ?,
+                age = ?,
+                education_status = ?,
+                stream = ?,
+                institute_name = ?,
+                career_goal = ?,
+                interested_courses = ?,
+                lead_source = ?,
+                decision_maker = ?,
+                start_timeframe = ?,
+                stage = ?,
+                notes = ?,
+                last_contact_date = ?,
+                next_followup_date = ?,
+                lead_score = ?,
+                status = ?,
+                updated_at = ?
+            WHERE id = ?
+        """, (
+            name,
+            phone,
+            whatsapp,
+            gender,
+            age,
+            education_status,
+            stream,
+            institute_name,
+            career_goal,
+            interested_courses,
+            lead_source,
+            decision_maker,
+            start_timeframe,
+            stage,
+            notes,
+            last_contact_date,
+            next_followup_date,
+            lead_score,
+            status,
+            now,
+            lead_id
+        ))
+
+        conn.commit()
+        conn.close()
+
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=session.get("branch_id"),
+            action_type="lead_edited",
+            module_name="leads",
+            record_id=lead_id,
+            description=f"Lead updated: {name} - Current Stage: {stage}"
+        )
+
+        flash("Lead updated.", "success")
+        return redirect(url_for("leads.lead_detail", lead_id=lead_id))
+
+    conn.close()
+
+    return render_template(
+        "leads/lead_form.html",
+        lead=lead,
+        mode="edit",
+        genders=GENDER_OPTIONS,
+        educations=EDUCATION_OPTIONS,
+        streams=STREAM_OPTIONS,
+        career_goals=CAREER_GOAL_OPTIONS,
+        lead_sources=LEAD_SOURCE_OPTIONS,
+        decision_makers=DECISION_MAKER_OPTIONS,
+        timeframes=TIMEFRAME_OPTIONS,
+    )

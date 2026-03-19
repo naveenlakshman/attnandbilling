@@ -20,7 +20,7 @@
   </div>
 
   <div class="d-flex gap-2">
-    <a class="btn btn-outline-primary" href="#">Edit</a>
+    <a class="btn btn-outline-primary" href="{{ url_for('leads.lead_edit', lead_id=lead.id) }}">Edit</a>
 
     <form method="post" action="#">
       <button class="btn btn-success" type="submit">Convert</button>
@@ -91,7 +91,7 @@
   <div class="col-lg-6">
     <div class="card p-3 mb-3">
       <div class="fw-semibold mb-2">Add Follow-up</div>
-      <form method="post" action="#">
+      <form method="post" action="{{ url_for('leads.followup_add', lead_id=lead.id) }}">
         <div class="row g-2">
           <div class="col-md-4">
             <label class="form-label">Follow-up Type</label>

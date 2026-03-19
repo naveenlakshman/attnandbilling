@@ -76,11 +76,7 @@
       </a>
 
       <!-- These links assume you will migrate these routes later -->
-      <a
-        class="nav-link {{ 'active' if request.endpoint in ['leads.leads_list', 'leads.lead_create', 'leads.lead_detail', 'leads.lead_edit'] else '' }}"
-        href="{{ url_for('leads.dashboard') }}">
-        👥 Leads
-      </a>
+      <a class="nav-link {{ 'active' if request.endpoint == 'leads.leads_list' else '' }}" href="{{ url_for('leads.leads_list') }}">👥 Leads</a>
 
       <a
         class="nav-link"

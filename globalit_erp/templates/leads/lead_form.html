@@ -10,10 +10,12 @@
       <label class="form-label">Name *</label>
       <input class="form-control" name="name" value="{{ lead.name if lead else '' }}" required>
     </div>
+
     <div class="col-md-4">
       <label class="form-label">Phone *</label>
       <input class="form-control" name="phone" value="{{ lead.phone if lead else '' }}" required>
     </div>
+
     <div class="col-md-4">
       <label class="form-label">WhatsApp</label>
       <input class="form-control" name="whatsapp" value="{{ lead.whatsapp if lead else '' }}">
@@ -24,29 +26,32 @@
       <select class="form-select" name="gender">
         <option value="">(none)</option>
         {% for g in genders %}
-          <option value="{{ g }}" {% if lead and lead.gender==g %}selected{% endif %}>{{ g }}</option>
+          <option value="{{ g }}" {% if lead and lead.gender == g %}selected{% endif %}>{{ g }}</option>
         {% endfor %}
       </select>
     </div>
+
     <div class="col-md-3">
       <label class="form-label">Age</label>
       <input class="form-control" name="age" type="number" value="{{ lead.age if lead else '' }}">
     </div>
+
     <div class="col-md-3">
       <label class="form-label">Education Status</label>
       <select class="form-select" name="education_status">
         <option value="">(none)</option>
         {% for e in educations %}
-          <option value="{{ e }}" {% if lead and lead.education_status==e %}selected{% endif %}>{{ e }}</option>
+          <option value="{{ e }}" {% if lead and lead.education_status == e %}selected{% endif %}>{{ e }}</option>
         {% endfor %}
       </select>
     </div>
+
     <div class="col-md-3">
       <label class="form-label">Stream</label>
       <select class="form-select" name="stream">
         <option value="">(none)</option>
         {% for s in streams %}
-          <option value="{{ s }}" {% if lead and lead.stream==s %}selected{% endif %}>{{ s }}</option>
+          <option value="{{ s }}" {% if lead and lead.stream == s %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
       </select>
     </div>
@@ -55,6 +60,7 @@
       <label class="form-label">School/College/Company</label>
       <input class="form-control" name="institute_name" value="{{ lead.institute_name if lead else '' }}">
     </div>
+
     <div class="col-md-6">
       <label class="form-label">Interested Courses</label>
       <input class="form-control" name="interested_courses" value="{{ lead.interested_courses if lead else '' }}" placeholder="Tally, Excel, CCOM...">
@@ -65,24 +71,31 @@
       <select class="form-select" name="career_goal">
         <option value="">(none)</option>
         {% for c in career_goals %}
-          <option value="{{ c }}" {% if lead and lead.career_goal==c %}selected{% endif %}>{{ c }}</option>
+          <option value="{{ c }}" {% if lead and lead.career_goal == c %}selected{% endif %}>{{ c }}</option>
         {% endfor %}
       </select>
     </div>
+
     <div class="col-md-4">
       <label class="form-label">Lead Source</label>
       <select class="form-select" name="lead_source">
         <option value="">(none)</option>
         {% for ls in lead_sources %}
-          <option value="{{ ls }}" {% if lead and lead.lead_source==ls %}selected{% endif %}>{{ ls }}</option>
+          <option value="{{ ls }}" {% if lead and lead.lead_source == ls %}selected{% endif %}>{{ ls }}</option>
         {% endfor %}
       </select>
     </div>
+
     <div class="col-md-4">
       <label class="form-label">Decision Maker</label>
       <select class="form-select" name="decision_maker">
         {% for dm in decision_makers %}
-          <option value="{{ dm }}" {% if lead and lead.decision_maker==dm %}selected{% elif not lead and dm=="Self" %}selected{% endif %}>{{ dm }}</option>
+          <option value="{{ dm }}"
+            {% if lead and lead.decision_maker == dm %}selected
+            {% elif not lead and dm == "Self" %}selected
+            {% endif %}>
+            {{ dm }}
+          </option>
         {% endfor %}
       </select>
     </div>
@@ -92,7 +105,7 @@
       <select class="form-select" name="start_timeframe">
         <option value="">(none)</option>
         {% for t in timeframes %}
-          <option value="{{ t }}" {% if lead and lead.start_timeframe==t %}selected{% endif %}>{{ t }}</option>
+          <option value="{{ t }}" {% if lead and lead.start_timeframe == t %}selected{% endif %}>{{ t }}</option>
         {% endfor %}
       </select>
     </div>
@@ -102,7 +115,7 @@
       {% set st = lead.stage if lead else 'New Lead' %}
       <select class="form-select" name="stage">
         {% for s in ["New Lead","Contacted","Interested","Counseling Done","Follow-up","Converted","Lost"] %}
-          <option value="{{ s }}" {% if st==s %}selected{% endif %}>{{ s }}</option>
+          <option value="{{ s }}" {% if st == s %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
       </select>
     </div>
@@ -124,8 +137,13 @@
   </div>
 
   <div class="mt-3 d-flex gap-2">
-    <button class="btn btn-primary">{{ 'Create' if mode=='create' else 'Save Changes' }}</button>
-    <a class="btn btn-outline-secondary" href="{{ url_for('leads.dashboard') }}">Cancel</a>
+    <button class="btn btn-primary" type="submit">
+      {{ 'Create' if mode=='create' else 'Save Changes' }}
+    </button>
+    <a class="btn btn-outline-secondary"
+       href="{% if lead %}{{ url_for('leads.lead_detail', lead_id=lead.id) }}{% else %}{{ url_for('leads.leads_list') }}{% endif %}">
+      Cancel
+    </a>
   </div>
 </form>
 
