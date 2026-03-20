@@ -1,0 +1,333 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Global IT ERP - Students{% endblock %}
+
+{% block content %}
+
+<style>
+  .search-filter-section {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .search-filter-form {
+    display: grid;
+    grid-template-columns: 1fr 140px 140px auto;
+    gap: 15px;
+    align-items: flex-end;
+    margin-bottom: 15px;
+  }
+
+  .form-group-inline {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group-inline label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #333;
+    font-size: 13px;
+  }
+
+  .form-group-inline input,
+  .form-group-inline select {
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+
+  .form-group-inline input:focus,
+  .form-group-inline select:focus {
+    outline: none;
+    border-color: #2c3e50;
+    box-shadow: 0 0 0 2px rgba(44, 62, 80, 0.1);
+  }
+
+  .search-hint {
+    color: #888;
+    font-size: 11px;
+    margin-top: 3px;
+  }
+
+  .button-group {
+    display: flex;
+    gap: 8px;
+  }
+
+  .button-group .btn {
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .filters-applied {
+    background-color: #e8f4f8;
+    border-left: 4px solid #2c3e50;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #333;
+  }
+
+  .filters-applied strong {
+    color: #2c3e50;
+  }
+
+  .results-count {
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: #666;
+    padding: 5px 0;
+  }
+
+  .billing-table {
+    border-collapse: collapse;
+  }
+
+  .billing-table thead tr {
+    background-color: #f5f6f7;
+  }
+
+  .billing-table th {
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+    border: 1px solid #ddd;
+  }
+
+  .billing-table td {
+    padding: 9px 8px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+  }
+
+  .billing-table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+
+  .billing-table tbody tr {
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .status-badge {
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+    white-space: nowrap;
+  }
+
+  .status-active {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .status-completed {
+    background-color: #cce5ff;
+    color: #004085;
+  }
+
+  .status-dropped {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+
+  @media (max-width: 1200px) {
+    .search-filter-form {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .button-group {
+      justify-content: flex-start;
+    }
+  }
+</style>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+  <h2 style="margin: 0; font-size: 28px;">Students</h2>
+  <div style="display: flex; gap: 10px;">
+        {% if session.get('role') == 'admin' %}
+        <a class="btn btn-warning"
+        href="{{ url_for('billing.export_students_csv') }}"
+        title="Export all students to CSV"
+        style="padding: 10px 18px; font-weight: 500; font-size: 14px; background-color: #FF9800; color: white;">
+        📥 Export CSV
+        </a>
+        {% endif %}
+
+   <a href="{{ url_for('billing.student_new') }}" class="btn btn-primary" style="padding: 10px 18px; font-weight: 500; font-size: 14px;">
+     + Add Student
+    </a>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
+  <div style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 8px;">Active Students</div>
+    <div style="font-size: 32px; font-weight: bold;">{{ stats.active_count or 0 }}</div>
+  </div>
+
+  <div style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 8px;">Completed Students</div>
+    <div style="font-size: 32px; font-weight: bold;">{{ stats.completed_count or 0 }}</div>
+  </div>
+
+  <div style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 8px;">Dropped Students</div>
+    <div style="font-size: 32px; font-weight: bold;">{{ stats.dropped_count or 0 }}</div>
+  </div>
+
+  <div style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 8px;">Total Students</div>
+    <div style="font-size: 32px; font-weight: bold;">{{ stats.total_count or 0 }}</div>
+  </div>
+</div>
+
+<div class="search-filter-section">
+  <form method="get">
+    <div class="search-filter-form">
+      <div class="form-group-inline">
+        <label for="search">Search</label>
+        <input type="text" id="search" name="search" placeholder="Name, phone, email, reg no" value="{{ search_query }}">
+        <span class="search-hint">Name, phone, email, or reg number</span>
+      </div>
+
+      <div class="form-group-inline">
+        <label for="branch">Branch</label>
+        <select id="branch" name="branch">
+          <option value="">All</option>
+          {% for b in branches %}
+            <option value="{{ b.id }}" {% if branch_filter|string == b.id|string %}selected{% endif %}>
+              {% if b.branch_code == 'HO' %}
+                Head Office
+              {% elif b.branch_code == 'HB' %}
+                Branch Office
+              {% else %}
+                {{ b.branch_code }}
+              {% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group-inline">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+          <option value="">All</option>
+          <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+          <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+          <option value="dropped" {% if status_filter == 'dropped' %}selected{% endif %}>Dropped</option>
+        </select>
+      </div>
+
+      <div class="button-group">
+        <button type="submit" class="btn btn-primary" style="padding: 8px 12px;">Search</button>
+        <a href="{{ url_for('billing.students') }}" class="btn" style="padding: 8px 12px; background-color: #6c757d; color: white;">Reset</a>
+      </div>
+    </div>
+
+    {% if search_query or branch_filter or status_filter %}
+      <div class="filters-applied">
+        <strong>Filters:</strong>
+
+        {% if search_query %}
+          Search: <strong>"{{ search_query }}"</strong>
+        {% endif %}
+
+        {% if branch_filter %}
+          {% if search_query %} • {% endif %}
+          Branch:
+          <strong>
+            {% for b in branches %}
+              {% if b.id|string == branch_filter|string %}
+                {% if b.branch_code == 'HO' %}
+                  Head Office
+                {% elif b.branch_code == 'HB' %}
+                  Branch Office
+                {% else %}
+                  {{ b.branch_code }}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+          </strong>
+        {% endif %}
+
+        {% if status_filter %}
+          {% if search_query or branch_filter %} • {% endif %}
+          Status: <strong>{{ status_filter | capitalize }}</strong>
+        {% endif %}
+      </div>
+    {% endif %}
+  </form>
+</div>
+
+<div class="results-count">
+  📊 <strong>{{ students | length }}</strong> student(s) found
+</div>
+
+<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
+  {% if students %}
+    <table border="1" width="100%" class="billing-table">
+      <thead>
+        <tr>
+          <th style="width: 60px;">ID</th>
+          <th style="width: 90px;">Reg. No</th>
+          <th style="width: 130px;">Name</th>
+          <th style="width: 120px;">Phone</th>
+          <th style="width: 70px;">Gender</th>
+          <th>Email</th>
+          <th style="width: 110px;">Education</th>
+          <th style="width: 90px;">Qualification</th>
+          <th style="width: 85px;">Status</th>
+          <th style="width: 110px;">Branch</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in students %}
+        <tr>
+          <td style="text-align: center; font-weight: 500;">{{ s.id }}</td>
+          <td style="font-weight: 500; color: #2c3e50;">{{ s.student_code or "—" }}</td>
+          <td>
+            <a href="{{ url_for('billing.student_edit', student_id=s.id) }}"
+            style="color: #0056b3; text-decoration: none; font-weight: 500;">
+            {{ s.full_name }}
+            </a>
+          </td>
+          <td>{{ s.phone or "—" }}</td>
+          <td style="text-align: center;">{{ s.gender or "—" }}</td>
+          <td style="color: #666;">{{ s.email or "—" }}</td>
+          <td>{{ s.education_level or "—" }}</td>
+          <td>{{ s.qualification or "—" }}</td>
+          <td>
+            <span class="status-badge
+              {% if s.status == 'active' %}status-active
+              {% elif s.status == 'completed' %}status-completed
+              {% elif s.status == 'dropped' %}status-dropped{% endif %}">
+              {{ s.status | capitalize }}
+            </span>
+          </td>
+          <td style="font-size: 12px;">{{ s.branch_name or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div style="padding: 40px; text-align: center; color: #999;">
+      <p style="font-size: 15px; margin: 0;">🔍 No students found matching your search criteria.</p>
+      <p style="font-size: 12px; margin: 8px 0 0 0;">Try adjusting your search or filters</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

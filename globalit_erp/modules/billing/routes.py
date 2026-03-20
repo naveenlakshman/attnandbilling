@@ -1,8 +1,59 @@
-from flask import Blueprint, render_template, request, session
+from flask import Blueprint, render_template, request, session, redirect, url_for, flash, Response
 from datetime import date, datetime
 import calendar
-from db import get_conn
-from modules.core.utils import login_required
+from db import get_conn, log_activity
+from modules.core.utils import login_required, admin_required
+import io
+import csv
+
+
+QUALIFICATION_LEVELS = {
+    "School": [
+        "5th Standard",
+        "6th Standard",
+        "7th Standard",
+        "8th Standard",
+        "9th Standard",
+        "10th Standard / SSLC"
+    ],
+    "Pre-University": [
+        "1st PUC",
+        "2nd PUC"
+    ],
+    "Diploma": [
+        "Diploma 1st Year",
+        "Diploma 2nd Year",
+        "Diploma 3rd Year",
+        "Diploma Completed"
+    ],
+    "Undergraduate": [
+        "B.Com",
+        "BBA",
+        "BBM",
+        "BA",
+        "BCA",
+        "B.Sc",
+        "BE",
+        "B.Tech",
+        "Degree 1st Year",
+        "Degree 2nd Year",
+        "Degree 3rd Year",
+        "Undergraduate Completed"
+    ],
+    "Technical": [
+        "ITI",
+        "Polytechnic",
+        "Certification Course"
+    ],
+    "Postgraduate": [
+        "M.Com",
+        "MBA",
+        "MCA",
+        "M.Sc",
+        "MA",
+        "Postgraduate Completed"
+    ]
+}
 
 billing_bp = Blueprint("billing", __name__)
 
@@ -330,3 +381,377 @@ def dashboard():
         receipts_data=receipts_data,
         expenses_data=expenses_data
     )
+
+@billing_bp.route("/students")
+@login_required
+def students():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Get search and filter parameters
+    search_query = request.args.get("search", "").strip()
+    branch_filter = request.args.get("branch", "").strip()
+    status_filter = request.args.get("status", "").strip()
+
+    # Get student statistics
+    cur.execute("""
+        SELECT 
+            SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_count,
+            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+            SUM(CASE WHEN status = 'dropped' THEN 1 ELSE 0 END) AS dropped_count,
+            COUNT(*) AS total_count
+        FROM students
+    """)
+    stats = cur.fetchone()
+
+    # Build student list query
+    query = """
+        SELECT
+            students.*,
+            branches.branch_name,
+            branches.branch_code
+        FROM students
+        LEFT JOIN branches
+            ON students.branch_id = branches.id
+        WHERE 1=1
+    """
+    params = []
+
+    # Search filter
+    if search_query:
+        query += """
+            AND (
+                students.full_name LIKE ?
+                OR students.phone LIKE ?
+                OR students.email LIKE ?
+                OR students.student_code LIKE ?
+            )
+        """
+        search_param = f"%{search_query}%"
+        params.extend([search_param, search_param, search_param, search_param])
+
+    # Branch filter
+    if branch_filter:
+        query += " AND students.branch_id = ?"
+        params.append(branch_filter)
+
+    # Status filter
+    if status_filter:
+        query += " AND students.status = ?"
+        params.append(status_filter)
+
+    query += " ORDER BY students.id DESC"
+
+    cur.execute(query, params)
+    students = cur.fetchall()
+
+    # Branches for filter dropdown
+    cur.execute("""
+        SELECT id, branch_name, branch_code
+        FROM branches
+        WHERE is_active = 1
+        ORDER BY branch_name
+    """)
+    branches = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "billing/students.html",
+        students=students,
+        branches=branches,
+        search_query=search_query,
+        branch_filter=branch_filter,
+        status_filter=status_filter,
+        stats=stats
+    )
+
+@billing_bp.route("/student/new", methods=["GET", "POST"])
+@login_required
+def student_new():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        branch_id = request.form["branch_id"]
+        full_name = request.form["full_name"].strip()
+        phone = request.form["phone"].strip()
+        gender = request.form.get("gender", "").strip()
+        email = request.form.get("email", "").strip()
+        address = request.form.get("address", "").strip()
+        education_level = request.form.get("education_level", "").strip()
+        qualification = request.form.get("qualification", "").strip()
+        employment_status = request.form.get("employment_status", "").strip()
+        status = request.form.get("status", "active").strip()
+
+        # Get next registration number
+        cur.execute("""
+            SELECT student_code
+            FROM students
+            ORDER BY CAST(student_code AS INTEGER) DESC
+            LIMIT 1
+        """)
+        result = cur.fetchone()
+
+        if result and result["student_code"]:
+            try:
+                max_reg = int(result["student_code"])
+                next_reg_no = max_reg + 1
+            except (ValueError, TypeError):
+                max_reg = 1515000
+                next_reg_no = max_reg + 1
+        else:
+            max_reg = 1515000
+            next_reg_no = max_reg + 1
+
+        now = datetime.now().isoformat(timespec="seconds")
+
+        cur.execute("""
+            INSERT INTO students (
+                student_code,
+                full_name,
+                phone,
+                gender,
+                email,
+                address,
+                education_level,
+                qualification,
+                employment_status,
+                joined_date,
+                status,
+                branch_id,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(next_reg_no),
+            full_name,
+            phone,
+            gender,
+            email,
+            address,
+            education_level,
+            qualification,
+            employment_status,
+            now,
+            status,
+            branch_id,
+            now,
+            now
+        ))
+
+        student_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=branch_id,
+            action_type="create",
+            module_name="students",
+            record_id=student_id,
+            description=f"Created student {full_name} (Reg No: {next_reg_no})"
+        )
+
+        flash("Student added successfully.", "success")
+        return redirect(url_for("billing.students"))
+
+    cur.execute("""
+        SELECT *
+        FROM branches
+        WHERE is_active = 1
+        ORDER BY branch_name
+    """)
+    branches = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "billing/student_form.html",
+        student=None,
+        branches=branches,
+        education_levels=QUALIFICATION_LEVELS.keys(),
+        qualification_levels=QUALIFICATION_LEVELS
+    )
+
+@billing_bp.route("/student/<int:student_id>/edit", methods=["GET", "POST"])
+@login_required
+def student_edit(student_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM students
+        WHERE id = ?
+    """, (student_id,))
+    student = cur.fetchone()
+
+    if not student:
+        conn.close()
+        flash("Student not found.", "danger")
+        return redirect(url_for("billing.students"))
+
+    if request.method == "POST":
+        branch_id = request.form["branch_id"]
+        full_name = request.form["full_name"].strip()
+        phone = request.form["phone"].strip()
+        gender = request.form.get("gender", "").strip()
+        email = request.form.get("email", "").strip()
+        address = request.form.get("address", "").strip()
+        education_level = request.form.get("education_level", "").strip()
+        qualification = request.form.get("qualification", "").strip()
+        employment_status = request.form.get("employment_status", "").strip()
+        status = request.form.get("status", "active").strip()
+
+        now = datetime.now().isoformat(timespec="seconds")
+
+        cur.execute("""
+            UPDATE students
+            SET branch_id = ?,
+                full_name = ?,
+                phone = ?,
+                gender = ?,
+                email = ?,
+                address = ?,
+                education_level = ?,
+                qualification = ?,
+                employment_status = ?,
+                status = ?,
+                updated_at = ?
+            WHERE id = ?
+        """, (
+            branch_id,
+            full_name,
+            phone,
+            gender,
+            email,
+            address,
+            education_level,
+            qualification,
+            employment_status,
+            status,
+            now,
+            student_id
+        ))
+
+        conn.commit()
+        conn.close()
+
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=branch_id,
+            action_type="update",
+            module_name="students",
+            record_id=student_id,
+            description=f"Updated student {full_name} ({student['student_code']})"
+        )
+
+        flash("Student updated successfully.", "success")
+        return redirect(url_for("billing.students"))
+
+    cur.execute("""
+        SELECT *
+        FROM branches
+        WHERE is_active = 1
+        ORDER BY branch_name
+    """)
+    branches = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "billing/student_form.html",
+        student=student,
+        branches=branches,
+        education_levels=QUALIFICATION_LEVELS.keys(),
+        qualification_levels=QUALIFICATION_LEVELS
+    )
+
+@billing_bp.route("/students/export-csv")
+@admin_required
+def export_students_csv():
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT
+                students.student_code,
+                students.full_name,
+                students.phone,
+                students.gender,
+                students.email,
+                students.address,
+                students.education_level,
+                students.qualification,
+                students.employment_status,
+                students.status,
+                branches.branch_name,
+                students.created_at
+            FROM students
+            LEFT JOIN branches
+                ON students.branch_id = branches.id
+            ORDER BY students.id DESC
+        """)
+        students_data = cur.fetchall()
+        conn.close()
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        writer.writerow([
+            "Student Code",
+            "Full Name",
+            "Phone",
+            "Gender",
+            "Email",
+            "Address",
+            "Education Level",
+            "Qualification",
+            "Employment Status",
+            "Status",
+            "Branch",
+            "Created Date"
+        ])
+
+        for student in students_data:
+            writer.writerow([
+                student["student_code"] or "",
+                student["full_name"] or "",
+                student["phone"] or "",
+                student["gender"] or "",
+                student["email"] or "",
+                student["address"] or "",
+                student["education_level"] or "",
+                student["qualification"] or "",
+                student["employment_status"] or "",
+                student["status"] or "",
+                student["branch_name"] or "",
+                student["created_at"] or ""
+            ])
+
+        csv_data = output.getvalue()
+        output.close()
+
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=None,
+            action_type="export",
+            module_name="students",
+            record_id=None,
+            description="Exported students data to CSV"
+        )
+
+        return Response(
+            csv_data,
+            mimetype="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=students_export.csv"
+            }
+        )
+
+    except Exception as e:
+        flash(f"Error exporting students: {str(e)}", "danger")
+        return redirect(url_for("billing.students"))

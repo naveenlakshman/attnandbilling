@@ -1,0 +1,287 @@
+{% extends "billing/base.html" %}
+
+{% block title %}
+  {% if student %}Edit Student{% else %}Add Student{% endif %} - Global IT ERP
+{% endblock %}
+
+{% block content %}
+
+<style>
+  .student-form-wrap {
+    max-width: 950px;
+  }
+
+  .student-form-card {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .student-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+
+  .student-form-grid .full-width {
+    grid-column: 1 / -1;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #333;
+    font-size: 14px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+  }
+
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+  }
+
+  .form-group textarea {
+    min-height: 100px;
+    resize: vertical;
+  }
+
+  .field-help {
+    color: #666;
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+  }
+
+  .page-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 12px;
+  }
+
+  .page-header-row h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  @media (max-width: 768px) {
+    .student-form-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="student-form-wrap">
+  <div class="page-header-row">
+    <h2>{% if student %}Edit Student{% else %}Add Student{% endif %}</h2>
+
+    <a href="{{ url_for('billing.students') }}" class="btn btn-secondary">
+      ← Back to Students
+    </a>
+  </div>
+
+  <div class="student-form-card">
+    <form method="post">
+      <div class="student-form-grid">
+        <div class="form-group">
+          <label>Branch</label>
+          <select name="branch_id" required>
+            <option value="">-- Select Branch --</option>
+            {% for b in branches %}
+              <option value="{{ b.id }}"
+                {% if student and student.branch_id == b.id %}selected{% endif %}>
+                {{ b.branch_name }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        {% if student %}
+        <div class="form-group">
+          <label>Registration Number</label>
+          <input type="text" value="{{ student.student_code }}" readonly style="background-color: #f5f5f5; cursor: not-allowed;">
+          <small class="field-help">System-assigned registration number. It cannot be changed.</small>
+        </div>
+        {% else %}
+        <div class="form-group">
+          <label>Registration Number</label>
+          <input type="text" id="reg_number_preview" readonly style="background-color: #f5f5f5; cursor: not-allowed;" placeholder="Will be auto-generated">
+          <small class="field-help">System will auto-generate the next registration number when you save.</small>
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" name="full_name" required {% if student %}value="{{ student.full_name }}"{% endif %}>
+        </div>
+
+        <div class="form-group">
+          <label>Phone</label>
+          <input type="text" name="phone" required {% if student %}value="{{ student.phone }}"{% endif %}>
+        </div>
+
+        <div class="form-group">
+          <label>Gender</label>
+          <select name="gender">
+            <option value="">-- Select --</option>
+            <option value="Male" {% if student and student.gender == 'Male' %}selected{% endif %}>Male</option>
+            <option value="Female" {% if student and student.gender == 'Female' %}selected{% endif %}>Female</option>
+            <option value="Other" {% if student and student.gender == 'Other' %}selected{% endif %}>Other</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="email" {% if student %}value="{{ student.email }}"{% endif %}>
+        </div>
+
+        <div class="form-group full-width">
+          <label>Address</label>
+          <textarea name="address">{% if student %}{{ student.address }}{% endif %}</textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Education Level</label>
+          <select name="education_level">
+            <option value="">-- Select --</option>
+            <option value="Pre-University" {% if student and student.education_level == 'Pre-University' %}selected{% endif %}>Pre-University</option>
+            <option value="Undergraduate" {% if student and student.education_level == 'Undergraduate' %}selected{% endif %}>Undergraduate</option>
+            <option value="School" {% if student and student.education_level == 'School' %}selected{% endif %}>School</option>
+            <option value="Diploma" {% if student and student.education_level == 'Diploma' %}selected{% endif %}>Diploma</option>
+            <option value="Technical" {% if student and student.education_level == 'Technical' %}selected{% endif %}>Technical</option>
+            <option value="Postgraduate" {% if student and student.education_level == 'Postgraduate' %}selected{% endif %}>Postgraduate</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Qualification</label>
+          <select id="qualification_select" name="qualification_select" style="margin-bottom: 10px;">
+            <option value="">-- Select from list or enter custom --</option>
+            <option value="custom">Other / Enter Custom</option>
+          </select>
+          <input type="text"
+                 id="qualification_custom"
+                 name="qualification"
+                 placeholder="Enter custom qualification or select from dropdown"
+                 {% if student %}value="{{ student.qualification }}"{% endif %}>
+          <small class="field-help">
+            Select from the dropdown list above or enter a custom qualification directly in the text field.
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>Employment Status</label>
+          <select name="employment_status">
+            <option value="">-- Select --</option>
+            <option value="unemployed" {% if student and student.employment_status == 'unemployed' %}selected{% endif %}>Unemployed</option>
+            <option value="employed" {% if student and student.employment_status == 'employed' %}selected{% endif %}>Employed</option>
+            <option value="self_employed" {% if student and student.employment_status == 'self_employed' %}selected{% endif %}>Self-Employed</option>
+            <option value="student" {% if student and student.employment_status == 'student' %}selected{% endif %}>Student</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Student Status</label>
+          <select name="status">
+            <option value="active" {% if student and student.status == 'active' %}selected{% elif not student %}selected{% endif %}>Active</option>
+            <option value="completed" {% if student and student.status == 'completed' %}selected{% endif %}>Completed</option>
+            <option value="dropped" {% if student and student.status == 'dropped' %}selected{% endif %}>Dropped</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Student</button>
+        <a href="{{ url_for('billing.students') }}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const qualificationLevels = {{ qualification_levels | tojson }};
+
+const educationLevelSelect = document.querySelector('select[name="education_level"]');
+const qualificationSelect = document.getElementById('qualification_select');
+const qualificationCustom = document.getElementById('qualification_custom');
+
+function updateQualifications() {
+  const selectedLevel = educationLevelSelect.value;
+
+  while (qualificationSelect.options.length > 2) {
+    qualificationSelect.remove(2);
+  }
+
+  if (selectedLevel && qualificationLevels[selectedLevel]) {
+    const qualifications = qualificationLevels[selectedLevel];
+
+    qualifications.forEach(qual => {
+      const option = document.createElement('option');
+      option.value = qual;
+      option.textContent = qual;
+      qualificationSelect.appendChild(option);
+    });
+  }
+}
+
+qualificationSelect.addEventListener('change', function() {
+  if (this.value && this.value !== 'custom') {
+    qualificationCustom.value = this.value;
+  } else if (this.value === 'custom') {
+    qualificationCustom.value = '';
+    qualificationCustom.focus();
+  }
+});
+
+educationLevelSelect.addEventListener('change', updateQualifications);
+
+document.addEventListener('DOMContentLoaded', function() {
+  updateQualifications();
+
+  {% if student and student.qualification %}
+    const existingQualification = {{ student.qualification | tojson }};
+    let found = false;
+
+    for (let i = 0; i < qualificationSelect.options.length; i++) {
+      if (qualificationSelect.options[i].value === existingQualification) {
+        qualificationSelect.value = existingQualification;
+        found = true;
+        break;
+      }
+    }
+
+    if (!found && existingQualification) {
+      qualificationSelect.value = "custom";
+    }
+  {% endif %}
+});
+</script>
+
+{% endblock %}

@@ -23,3 +23,4 @@ def admin_required(route_function):
 
         return route_function(*args, **kwargs)
     return wrapper
+

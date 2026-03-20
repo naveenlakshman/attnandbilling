@@ -1,397 +1,181 @@
-{% extends "base.html" %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Global IT ERP - Billing{% endblock %}</title>
 
-{% block title %}Billing - Global IT ERP{% endblock %}
-{% block page_title %}Global IT ERP - Billing{% endblock %}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.css">
 
-{% block extra_css %}
-<style>
-  .stat-card h3,
-  .receivable-card h3,
-  .dashboard-chart-card h3 {
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin-bottom: 14px;
-  }
-
-  .stat-card p,
-  .receivable-total,
-  .dashboard-total-value {
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 0;
-  }
-
-  .dashboard-filter-card,
-  .stat-card,
-  .receivable-card,
-  .dashboard-chart-card {
-    border: none;
-    border-radius: 18px;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.06);
-  }
-
-  .receivable-link {
-    text-decoration: none;
-    color: inherit;
-  }
-
-  .receivable-link:hover {
-    text-decoration: underline;
-  }
-
-  .receivable-bar {
-    display: flex;
-    height: 18px;
-    border-radius: 999px;
-    overflow: hidden;
-    background: #e9ecef;
-    margin: 20px 0;
-  }
-
-  .seg-link {
-    display: block;
-    height: 100%;
-  }
-
-  .seg-current { background: #3b82f6; }
-  .seg-1-15 { background: #60a5fa; }
-  .seg-16-30 { background: #facc15; }
-  .seg-31-45 { background: #fb923c; }
-  .seg-45plus { background: #ef4444; }
-
-  .receivable-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 16px;
-  }
-
-  .receivable-grid small {
-    display: block;
-    color: #6c757d;
-    margin-bottom: 6px;
-    font-weight: 600;
-  }
-
-  .receivable-grid p {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 700;
-  }
-
-  .dashboard-chart-layout {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 24px;
-    align-items: start;
-  }
-
-  .dashboard-chart-left canvas {
-    width: 100% !important;
-    height: 380px !important;
-  }
-
-  .dashboard-total-block {
-    padding: 18px;
-    background: #f8f9fa;
-    border-radius: 14px;
-    margin-bottom: 14px;
-  }
-
-  .dashboard-total-block h4 {
-    font-size: 1rem;
-    margin-bottom: 8px;
-    color: #495057;
-  }
-
-  .sales-text { color: #2563eb; }
-  .receipt-text { color: #16a34a; }
-  .expense-text { color: #dc2626; }
-  .net-positive { color: #16a34a; }
-  .net-negative { color: #dc2626; }
-
-  .dashboard-date-range {
-    color: #6c757d;
-    margin-top: 8px;
-  }
-
-  @media (max-width: 992px) {
-    .receivable-grid {
-      grid-template-columns: repeat(2, 1fr);
+  <style>
+    body {
+      background-color: #f8f9fa;
     }
 
-    .dashboard-chart-layout {
-      grid-template-columns: 1fr;
+    .sidebar {
+      width: 260px;
+      min-height: 100vh;
+      background: #ffffff;
+      border-right: 1px solid #dee2e6;
+      position: sticky;
+      top: 0;
     }
-  }
-</style>
-{% endblock %}
 
-{% block content %}
-<h2 class="mb-4">Dashboard</h2>
-
-<div class="card dashboard-filter-card p-4 mb-4">
-  <form method="get" class="row g-3 align-items-end">
-    <div class="col-md-4">
-      <label class="form-label">Branch</label>
-      <select name="branch_id" class="form-select">
-        <option value="">All Branches</option>
-        {% for b in branches %}
-        <option value="{{ b.id }}" {% if branch_id == (b.id|string) %}selected{% endif %}>
-          {{ b.branch_name }}
-        </option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="col-md-3">
-      <label class="form-label">Period</label>
-      <select name="period" class="form-select">
-        <option value="this_fy" {% if period == "this_fy" %}selected{% endif %}>This Fiscal Year</option>
-        <option value="last_fy" {% if period == "last_fy" %}selected{% endif %}>Previous Fiscal Year</option>
-        <option value="last_12_months" {% if period == "last_12_months" %}selected{% endif %}>Last 12 Months</option>
-      </select>
-    </div>
-
-    <div class="col-md-2">
-      <button type="submit" class="btn btn-primary w-100">Apply</button>
-    </div>
-  </form>
-</div>
-
-<div class="row g-4 mb-4">
-  <div class="col-md-3">
-    <div class="card stat-card p-4">
-      <h3>Total Students</h3>
-      <p>{{ total_students }}</p>
-    </div>
-  </div>
-
-  <div class="col-md-3">
-    <div class="card stat-card p-4">
-      <h3>Total Invoices</h3>
-      <p>{{ total_invoices }}</p>
-    </div>
-  </div>
-
-  <div class="col-md-3">
-    <div class="card stat-card p-4">
-      <h3>Total Sales</h3>
-      <p>₹ {{ "%.2f"|format(total_sales or 0) }}</p>
-    </div>
-  </div>
-
-  <div class="col-md-3">
-    <div class="card stat-card p-4">
-      <h3>Total Receipts</h3>
-      <p>₹ {{ "%.2f"|format(total_receipts or 0) }}</p>
-    </div>
-  </div>
-</div>
-
-<div class="card receivable-card p-4 mb-4">
-  <h3>Total Receivables</h3>
-  <p class="receivable-total">
-    <a href="{{ url_for('billing.receivables', branch_id=branch_id) }}" class="receivable-link">
-      ₹ {{ "%.2f"|format(total_receivables or 0) }}
-    </a>
-  </p>
-
-  {% set total = total_receivables if total_receivables > 0 else 1 %}
-  {% set current_pct = (current_amount / total * 100) %}
-  {% set b1_pct = (bucket_1_15 / total * 100) %}
-  {% set b2_pct = (bucket_16_30 / total * 100) %}
-  {% set b3_pct = (bucket_31_45 / total * 100) %}
-  {% set b4_pct = (bucket_above_45 / total * 100) %}
-
-  <div class="receivable-bar">
-    <a href="{{ url_for('billing.overdue_installments_report', age_range='current', branch_id=branch_id) }}" class="seg-current seg-link" style="width: {{ current_pct }}%;"></a>
-    <a href="{{ url_for('billing.overdue_installments_report', age_range='1-15', branch_id=branch_id) }}" class="seg-1-15 seg-link" style="width: {{ b1_pct }}%;"></a>
-    <a href="{{ url_for('billing.overdue_installments_report', age_range='16-30', branch_id=branch_id) }}" class="seg-16-30 seg-link" style="width: {{ b2_pct }}%;"></a>
-    <a href="{{ url_for('billing.overdue_installments_report', age_range='31-45', branch_id=branch_id) }}" class="seg-31-45 seg-link" style="width: {{ b3_pct }}%;"></a>
-    <a href="{{ url_for('billing.overdue_installments_report', age_range='above-45', branch_id=branch_id) }}" class="seg-45plus seg-link" style="width: {{ b4_pct }}%;"></a>
-  </div>
-
-  <div class="receivable-grid">
-    <div>
-      <small>CURRENT</small>
-      <p><a href="{{ url_for('billing.overdue_installments_report', age_range='current', branch_id=branch_id) }}" class="receivable-link">₹ {{ "%.2f"|format(current_amount or 0) }}</a></p>
-    </div>
-    <div>
-      <small>1-15 Days</small>
-      <p><a href="{{ url_for('billing.overdue_installments_report', age_range='1-15', branch_id=branch_id) }}" class="receivable-link">₹ {{ "%.2f"|format(bucket_1_15 or 0) }}</a></p>
-    </div>
-    <div>
-      <small>16-30 Days</small>
-      <p><a href="{{ url_for('billing.overdue_installments_report', age_range='16-30', branch_id=branch_id) }}" class="receivable-link">₹ {{ "%.2f"|format(bucket_16_30 or 0) }}</a></p>
-    </div>
-    <div>
-      <small>31-45 Days</small>
-      <p><a href="{{ url_for('billing.overdue_installments_report', age_range='31-45', branch_id=branch_id) }}" class="receivable-link">₹ {{ "%.2f"|format(bucket_31_45 or 0) }}</a></p>
-    </div>
-    <div>
-      <small>Above 45 Days</small>
-      <p><a href="{{ url_for('billing.overdue_installments_report', age_range='above-45', branch_id=branch_id) }}" class="receivable-link">₹ {{ "%.2f"|format(bucket_above_45 or 0) }}</a></p>
-    </div>
-  </div>
-</div>
-
-<div class="card dashboard-chart-card p-4">
-  <div class="dashboard-chart-layout">
-    <div class="dashboard-chart-left">
-      <h3>Sales, Receipts and Expenses</h3>
-      <canvas id="dashboardChart"></canvas>
-
-      <div id="clickInfo" class="mt-4 p-3 bg-light rounded" style="display: none;">
-        <div class="small text-muted mb-3">
-          <strong>Month:</strong> <span id="clickMonth"></span>
-        </div>
-        <div class="row g-3">
-          <div class="col-md-4">
-            <div class="small fw-bold text-primary mb-1">Sales</div>
-            <div id="clickSales" class="fw-bold"></div>
-          </div>
-          <div class="col-md-4">
-            <div class="small fw-bold text-success mb-1">Receipts</div>
-            <div id="clickReceipts" class="fw-bold"></div>
-          </div>
-          <div class="col-md-4">
-            <div class="small fw-bold text-danger mb-1">Expenses</div>
-            <div id="clickExpenses" class="fw-bold"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="dashboard-chart-right">
-      <div class="dashboard-total-block">
-        <h4>Total Sales</h4>
-        <p class="dashboard-total-value sales-text">₹ {{ "%.2f"|format(total_sales or 0) }}</p>
-      </div>
-
-      <div class="dashboard-total-block">
-        <h4>Total Receipts</h4>
-        <p class="dashboard-total-value receipt-text">₹ {{ "%.2f"|format(total_receipts or 0) }}</p>
-      </div>
-
-      <div class="dashboard-total-block">
-        <h4>Total Expenses</h4>
-        <p class="dashboard-total-value expense-text">₹ {{ "%.2f"|format(total_expenses or 0) }}</p>
-      </div>
-
-      <div class="dashboard-total-block">
-        <h4>Net Position</h4>
-        <p class="dashboard-total-value {% if net_position >= 0 %}net-positive{% else %}net-negative{% endif %}">
-          ₹ {{ "%.2f"|format(net_position or 0) }}
-        </p>
-      </div>
-
-      <div class="dashboard-date-range">
-        <small>{{ start_date }} to {{ end_date }}</small>
-      </div>
-    </div>
-  </div>
-</div>
-{% endblock %}
-
-{% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-const ctx = document.getElementById('dashboardChart');
-const monthLabels = {{ month_labels|tojson }};
-const salesData = {{ sales_data|tojson }};
-const receiptsData = {{ receipts_data|tojson }};
-const expensesData = {{ expenses_data|tojson }};
-
-let chartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-        labels: monthLabels,
-        datasets: [
-            {
-                label: 'Sales',
-                data: salesData,
-                backgroundColor: 'rgba(54, 162, 235, 0.7)',
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1
-            },
-            {
-                label: 'Receipts',
-                data: receiptsData,
-                backgroundColor: 'rgba(75, 192, 75, 0.7)',
-                borderColor: 'rgba(75, 192, 75, 1)',
-                borderWidth: 1
-            },
-            {
-                label: 'Expenses',
-                data: expensesData,
-                backgroundColor: 'rgba(255, 99, 99, 0.7)',
-                borderColor: 'rgba(255, 99, 99, 1)',
-                borderWidth: 1
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'top',
-                labels: {
-                    usePointStyle: true,
-                    padding: 15
-                }
-            },
-            tooltip: {
-                enabled: false
-            }
-        },
-        scales: {
-            y: {
-                beginAtZero: true,
-                ticks: {
-                    callback: function(value) {
-                        return '₹ ' + value.toLocaleString('en-IN');
-                    }
-                }
-            },
-            x: {
-                ticks: {
-                    maxRotation: 45,
-                    minRotation: 0
-                }
-            }
-        }
+    .sidebar .nav-link {
+      color: #212529;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-weight: 500;
     }
-});
 
-document.getElementById('dashboardChart').addEventListener('click', function(evt) {
-    try {
-        const canvasPosition = Chart.helpers.getRelativePosition(evt, chartInstance);
-        const xScale = chartInstance.scales.x;
-        const dataIndex = Math.round((canvasPosition.x - xScale.left) / ((xScale.right - xScale.left) / monthLabels.length));
-        const elements = chartInstance.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
-
-        let finalDataIndex = dataIndex;
-
-        if (elements && elements.length > 0) {
-            finalDataIndex = elements[0].index;
-        }
-
-        if (finalDataIndex >= 0 && finalDataIndex < monthLabels.length) {
-            const month = monthLabels[finalDataIndex];
-            const salesValue = salesData[finalDataIndex];
-            const receiptsValue = receiptsData[finalDataIndex];
-            const expensesValue = expensesData[finalDataIndex];
-
-            document.getElementById('clickMonth').textContent = month;
-            document.getElementById('clickSales').innerHTML = `₹ ${salesValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            document.getElementById('clickReceipts').innerHTML = `₹ ${receiptsValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            document.getElementById('clickExpenses').innerHTML = `₹ ${expensesValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            document.getElementById('clickInfo').style.display = 'block';
-        }
-    } catch(e) {
-        console.error('Error handling chart click:', e);
+    .sidebar .nav-link:hover {
+      background-color: #f1f3f5;
     }
-});
-</script>
-{% endblock %}
+
+    .sidebar .nav-link.active {
+      background-color: #0d6efd;
+      color: #fff;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .content-wrap {
+      min-width: 0;
+    }
+  </style>
+
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<div class="d-flex">
+  <!-- Sidebar -->
+  <aside class="sidebar p-3">
+    <div class="mb-3">
+      <div class="fw-bold">Global IT Education</div>
+      <div class="text-muted small">Billing Module</div>
+      <hr>
+    </div>
+
+    <nav class="nav flex-column gap-1">
+      <!-- ERP Home -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'core.dashboard' else '' }}"
+        href="{{ url_for('core.dashboard') }}">
+        🏠 ERP Dashboard
+      </a>
+
+      <!-- Billing Dashboard -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'billing.dashboard' else '' }}"
+        href="{{ url_for('billing.dashboard') }}">
+        💰 Billing Dashboard
+      </a>
+
+      <!-- Placeholder links for pages not yet built -->
+        <a
+          class="nav-link {{ 'active' if request.endpoint == 'billing.students' else '' }}"
+          href="{{ url_for('billing.students') }}">
+          🎓 Students
+        </a>
+
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'billing.courses' else '' }}"
+        href="#">
+        📘 Courses
+      </a>
+
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'billing.invoices' else '' }}"
+        href="#">
+        🧾 Invoices
+      </a>
+
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'billing.receipts' else '' }}"
+        href="#">
+        💵 Receipts
+      </a>
+
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'billing.receivables' else '' }}"
+        href="#">
+        📊 Receivables
+      </a>
+
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'billing.expenses' else '' }}"
+        href="#">
+        💸 Expenses
+      </a>
+
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'billing.reports' else '' }}"
+        href="#">
+        📈 Reports
+      </a>
+
+      {% if session.get("role") == "admin" %}
+      <hr>
+
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'billing.import_center' else '' }}"
+        href="#">
+        📥 Import
+      </a>
+
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'billing.activity_logs' else '' }}"
+        href="#">
+        📋 Activity Logs
+      </a>
+      {% endif %}
+
+      <hr>
+      <a class="nav-link text-danger" href="{{ url_for('core.logout') }}">
+        🚪 Logout
+      </a>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-grow-1 content-wrap">
+    <!-- Top bar -->
+    <div class="topbar px-3 py-2 bg-white border-bottom d-flex align-items-center justify-content-between">
+      <div class="fw-semibold">Global IT ERP - Billing</div>
+      <div class="small text-muted">
+        Logged in:
+        <span class="fw-semibold">{{ session.get("username", "User") }}</span>
+        ({{ session.get("role", "staff") }})
+      </div>
+    </div>
+
+    <div class="container-fluid p-3">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>
