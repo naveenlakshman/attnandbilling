@@ -1,0 +1,803 @@
+{% extends "billing/base.html" %}
+
+{% block title %}
+  {% if mode == "edit" %}Edit Invoice{% else %}Create Invoice{% endif %} - Global IT ERP
+{% endblock %}
+
+{% block content %}
+
+<style>
+  .invoice-form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .invoice-form-header h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .compact-card {
+    padding: 18px;
+  }
+
+  .invoice-top-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .invoice-layout-v3 {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) 360px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .invoice-main-area,
+  .invoice-summary-area {
+    min-width: 0;
+  }
+
+  .table-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .table-header-row h3 {
+    margin: 0;
+    font-size: 18px;
+  }
+
+  .installment-tools {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .item-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .billing-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .billing-table thead tr {
+    background-color: #f5f6f7;
+  }
+
+  .billing-table th,
+  .billing-table td {
+    border: 1px solid #ddd;
+    padding: 10px 8px;
+    font-size: 13px;
+    vertical-align: top;
+  }
+
+  .row-field-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .summary-box {
+    position: sticky;
+    top: 80px;
+  }
+
+  .summary-box h3 {
+    margin-top: 0;
+    margin-bottom: 18px;
+  }
+
+  .summary-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 14px;
+  }
+
+  .total-line {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .summary-actions {
+    margin-top: 20px;
+  }
+
+  .save-btn {
+    width: 100%;
+  }
+
+  .delete-btn {
+    background: #dc3545;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .delete-btn:hover {
+    background: #bb2d3b;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #333;
+    font-size: 14px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+  }
+
+  .form-group textarea {
+    resize: vertical;
+  }
+
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.08);
+  }
+
+  @media (max-width: 1200px) {
+    .invoice-layout-v3 {
+      grid-template-columns: 1fr;
+    }
+
+    .summary-box {
+      position: static;
+    }
+
+    .invoice-top-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .invoice-top-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="invoice-form-header">
+  <h2>{% if mode == "edit" %}Edit Invoice{% else %}Create Invoice{% endif %}</h2>
+
+  <a href="{{ url_for('billing.invoices') }}" class="btn btn-secondary">
+    ← Back to Invoices
+  </a>
+</div>
+
+<div class="card compact-card">
+  <form method="post" id="invoiceForm">
+
+    <!-- Top Header Section -->
+    <div class="invoice-top-grid">
+      <div class="form-group">
+        <label>Student</label>
+        <select name="student_id" id="student_id" required>
+          <option value="">Select Student</option>
+          {% for s in students %}
+          <option value="{{ s.id }}" {% if mode == "edit" and invoice.student_id == s.id %}selected{% endif %}>
+            {{ s.student_code }} - {{ s.full_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Invoice Date</label>
+        <input type="date" name="invoice_date"
+               value="{% if mode == 'edit' %}{{ invoice.invoice_date }}{% else %}{{ today }}{% endif %}" required>
+      </div>
+
+      <div class="form-group">
+        <label>Installment Type</label>
+        <select name="installment_type" id="installment_type" onchange="toggleInstallmentSections()" required>
+          <option value="full" {% if mode == "edit" and invoice.installment_type == "full" %}selected{% endif %}>Full Payment</option>
+          <option value="custom" {% if mode == "edit" and invoice.installment_type == "custom" %}selected{% endif %}>Custom Installments</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Full Payment Due Date</label>
+        <input type="date" name="full_due_date" id="full_due_date"
+               value="{% if installments and installments[0] %}{{ installments[0].due_date }}{% else %}{{ today }}{% endif %}">
+      </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="invoice-layout-v3">
+
+      <!-- Left Side -->
+      <div class="invoice-main-area">
+
+        <!-- Item Table -->
+        <div class="card">
+          <div class="table-header-row">
+            <h3>Bill Items</h3>
+            <button type="button" class="btn btn-primary btn-sm" onclick="addItemRow()">+ Add Row</button>
+          </div>
+
+          <div class="item-table-wrapper">
+            <table class="billing-table" id="itemsTable">
+              <thead>
+                <tr>
+                  <th style="width: 34%;">Fee Head / Description</th>
+                  <th style="width: 12%;">Qty</th>
+                  <th style="width: 16%;">Rate</th>
+                  <th style="width: 16%;">Discount</th>
+                  <th style="width: 16%;">Amount</th>
+                  <th style="width: 6%;">X</th>
+                </tr>
+              </thead>
+              <tbody id="itemsTableBody">
+                {% if mode == "edit" and items %}
+                  {% for item in items %}
+                  <tr class="item-row">
+                    <td>
+                      <div class="row-field-stack">
+                        <select name="item_course_id[]" class="item-course tom-course" onchange="handleCourseSelect(this)">
+                          <option value="">Custom Item</option>
+                          {% for c in courses %}
+                          <option value="{{ c.id }}" data-name="{{ c.course_name }}" data-fee="{{ c.fee }}"
+                                  {% if item.course_id == c.id %}selected{% endif %}>
+                            {{ c.course_name }} - ₹ {{ c.fee }}
+                          </option>
+                          {% endfor %}
+                        </select>
+                        <input type="text" name="item_description[]" placeholder="Fee head / description" required value="{{ item.description }}">
+                      </div>
+                    </td>
+
+                    <td>
+                      <input type="number" name="item_qty[]" class="item-qty" value="{{ item.quantity }}" min="1" step="1" oninput="calculateInvoiceTotals()">
+                    </td>
+
+                    <td>
+                      <input type="number" name="item_rate[]" class="item-rate" value="{{ "%.2f"|format(item.unit_price or 0) }}" min="0" step="0.01" oninput="calculateInvoiceTotals()">
+                    </td>
+
+                    <td>
+                      <input type="number" name="item_discount[]" class="item-discount"
+                             value="{% if mode == 'edit' %}{{ "%.2f"|format((item.quantity * item.unit_price) - (item.line_total or 0)) }}{% else %}0{% endif %}"
+                             min="0" step="0.01" oninput="calculateInvoiceTotals()">
+                    </td>
+
+                    <td>
+                      <input type="number" name="item_amount[]" class="item-amount" value="{{ "%.2f"|format(item.line_total or 0) }}" readonly>
+                    </td>
+
+                    <td>
+                      <button type="button" class="delete-btn" onclick="removeItemRow(this)">×</button>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                {% else %}
+                <tr class="item-row">
+                  <td>
+                    <div class="row-field-stack">
+                      <select name="item_course_id[]" class="item-course tom-course" onchange="handleCourseSelect(this)">
+                        <option value="">Custom Item</option>
+                        {% for c in courses %}
+                        <option value="{{ c.id }}" data-name="{{ c.course_name }}" data-fee="{{ c.fee }}">
+                          {{ c.course_name }} - ₹ {{ c.fee }}
+                        </option>
+                        {% endfor %}
+                      </select>
+                      <input type="text" name="item_description[]" placeholder="Fee head / description" required>
+                    </div>
+                  </td>
+
+                  <td>
+                    <input type="number" name="item_qty[]" class="item-qty" value="1" min="1" step="1" oninput="calculateInvoiceTotals()">
+                  </td>
+
+                  <td>
+                    <input type="number" name="item_rate[]" class="item-rate" value="0" min="0" step="0.01" oninput="calculateInvoiceTotals()">
+                  </td>
+
+                  <td>
+                    <input type="number" name="item_discount[]" class="item-discount" value="0" min="0" step="0.01" oninput="calculateInvoiceTotals()">
+                  </td>
+
+                  <td>
+                    <input type="number" name="item_amount[]" class="item-amount" value="0.00" readonly>
+                  </td>
+
+                  <td>
+                    <button type="button" class="delete-btn" onclick="removeItemRow(this)">×</button>
+                  </td>
+                </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Payment Summary - Edit Mode Only -->
+        {% if mode == "edit" %}
+        <div class="card" style="background-color: #f0f4f8; border-left: 4px solid #2196F3;">
+          <h3 style="margin-top: 0;">Payment Information</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div>
+              <p><strong>Invoice Total:</strong> ₹ {{ "%.2f"|format(invoice.total_amount or 0) }}</p>
+              <p><strong>Amount Paid:</strong> <span style="color: green; font-weight: bold;">₹ {{ "%.2f"|format(total_paid or 0) }}</span></p>
+              <p><strong>Balance Amount:</strong> <span style="color: {% if (invoice.total_amount or 0) - (total_paid or 0) > 0 %}#ff9800{% else %}green{% endif %}; font-weight: bold;">₹ {{ "%.2f"|format((invoice.total_amount or 0) - (total_paid or 0)) }}</span></p>
+            </div>
+            <div>
+              <p><strong>Invoice Date:</strong> {{ invoice.invoice_date }}</p>
+              <p><strong>Student:</strong> {{ invoice.student_code }} - {{ invoice.full_name }}</p>
+              <p><strong>Invoice No:</strong> {{ invoice.invoice_no }}</p>
+            </div>
+          </div>
+
+          {% if installments %}
+          <h4 style="margin-top: 20px;">Current Installment Plan</h4>
+          <table border="1" width="100%" cellpadding="10" class="billing-table" style="margin: 10px 0;">
+            <tr style="background-color: #e3f2fd;">
+              <th>No</th>
+              <th>Due Date</th>
+              <th>Amount Due</th>
+              <th>Amount Paid</th>
+              <th>Status</th>
+              <th>Remarks</th>
+            </tr>
+            {% for ins in installments %}
+            <tr>
+              <td>{{ ins.installment_no }}</td>
+              <td>{{ ins.due_date }}</td>
+              <td>₹ {{ "%.2f"|format(ins.amount_due or 0) }}</td>
+              <td><span style="color: green; font-weight: bold;">₹ {{ "%.2f"|format(ins.amount_paid or 0) }}</span></td>
+              <td>{{ ins.status }}</td>
+              <td>{{ ins.remarks or '-' }}</td>
+            </tr>
+            {% endfor %}
+          </table>
+          <p style="color: #ff9800; margin-top: 10px;">
+            <strong>Note:</strong> Before reducing the invoice total or installment amounts, ensure the new total is not less than the amount already paid (₹ {{ "%.2f"|format(total_paid or 0) }})
+          </p>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Installment Section -->
+        <div class="card" id="custom_installment_section" style="display:none;">
+          <div class="table-header-row">
+            <h3>{% if mode == "edit" %}Edit Installment Plan{% else %}Installment Plan{% endif %}</h3>
+            <div class="installment-tools">
+              <select id="quick_split" onchange="applyQuickSplit()">
+                <option value="">Quick Split</option>
+                <option value="2">Split into 2</option>
+                <option value="3">Split into 3</option>
+              </select>
+              <input type="number" name="installment_count" id="installment_count" min="1" max="6"
+                     value="{% if mode == 'edit' and installments %}{{ installments|length }}{% else %}2{% endif %}"
+                     oninput="renderInstallmentRows()" style="width:90px;">
+            </div>
+          </div>
+
+          <div class="item-table-wrapper">
+            <table class="billing-table" id="installmentTable">
+              <thead>
+                <tr>
+                  <th style="width: 10%;">No</th>
+                  <th style="width: 25%;">Due Date</th>
+                  <th style="width: 25%;">Amount</th>
+                  <th style="width: 34%;">Remarks</th>
+                  <th style="width: 6%;">X</th>
+                </tr>
+              </thead>
+              <tbody id="installmentTableBody">
+                {% if mode == "edit" and installments %}
+                  {% for ins in installments %}
+                  <tr>
+                    <td>{{ ins.installment_no }}</td>
+                    <td><input type="date" name="due_date_{{ ins.installment_no }}" value="{{ ins.due_date }}"></td>
+                    <td><input type="number" step="0.01" name="amount_due_{{ ins.installment_no }}" class="installment-amount" value="{{ "%.2f"|format(ins.amount_due or 0) }}" oninput="updateInstallmentSummary()"></td>
+                    <td><input type="text" name="remarks_{{ ins.installment_no }}" placeholder="Installment {{ ins.installment_no }} remarks" value="{{ ins.remarks or '' }}"></td>
+                    <td><button type="button" class="delete-btn" onclick="removeInstallmentRow(this)">×</button></td>
+                  </tr>
+                  {% endfor %}
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="card">
+          <div class="form-group">
+            <label>Notes</label>
+            <textarea name="notes" rows="3" placeholder="Optional notes">{% if mode == "edit" and invoice %}{{ invoice.notes or '' }}{% endif %}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Side Summary -->
+      <div class="invoice-summary-area">
+        <div class="card summary-box">
+          <h3>Invoice Summary</h3>
+
+          <div class="summary-line">
+            <span>Subtotal</span>
+            <strong>₹ <span id="summary_subtotal">{% if mode == 'edit' and invoice %}{{ "%.2f"|format(invoice.subtotal or 0) }}{% else %}0.00{% endif %}</span></strong>
+          </div>
+
+          <div class="summary-line">
+            <span>Total Discount</span>
+            <strong>₹ <span id="summary_discount">{% if mode == 'edit' and invoice %}{{ "%.2f"|format(invoice.discount_amount or 0) }}{% else %}0.00{% endif %}</span></strong>
+          </div>
+
+          <div class="summary-line total-line">
+            <span>Net Total</span>
+            <strong>₹ <span id="summary_total">{% if mode == 'edit' and invoice %}{{ "%.2f"|format(invoice.total_amount or 0) }}{% else %}0.00{% endif %}</span></strong>
+          </div>
+
+          <hr>
+
+          <div class="summary-line">
+            <span>Installment Total</span>
+            <strong>₹ <span id="installment_total">{% if mode == 'edit' and invoice %}{{ "%.2f"|format(invoice.total_amount or 0) }}{% else %}0.00{% endif %}</span></strong>
+          </div>
+
+          <div class="summary-line">
+            <span>Difference</span>
+            <strong>₹ <span id="difference_total">0.00</span></strong>
+          </div>
+
+          <div class="summary-line">
+            <span>Status</span>
+            <strong id="balance_status">Waiting...</strong>
+          </div>
+
+          <div class="summary-actions">
+            <button type="submit" class="btn btn-primary save-btn">
+              {% if mode == "edit" %}Save Changes{% else %}Save Invoice{% endif %}
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </form>
+</div>
+
+<script>
+function initStudentTomSelect() {
+    const studentSelect = document.getElementById("student_id");
+
+    if (studentSelect.tomselect) {
+        return;
+    }
+
+    new TomSelect("#student_id", {
+        create: false,
+        sortField: {
+            field: "text",
+            direction: "asc"
+        },
+        searchField: ["text"],
+        placeholder: "Search student by name or code"
+    });
+}
+
+function initCourseTomSelectForElement(selectElement) {
+    if (selectElement.tomselect) {
+        return;
+    }
+
+    new TomSelect(selectElement, {
+        create: false,
+        sortField: {
+            field: "text",
+            direction: "asc"
+        },
+        searchField: ["text"],
+        placeholder: "Search course",
+        onChange: function() {
+            handleCourseSelect(selectElement);
+        }
+    });
+}
+
+function initAllCourseTomSelects() {
+    document.querySelectorAll(".tom-course").forEach(function(selectElement) {
+        initCourseTomSelectForElement(selectElement);
+    });
+}
+
+function handleCourseSelect(selectEl) {
+    const row = selectEl.closest("tr");
+    const selected = selectEl.options[selectEl.selectedIndex];
+
+    const descInput = row.querySelector('input[name="item_description[]"]');
+    const rateInput = row.querySelector('input[name="item_rate[]"]');
+    const qtyInput = row.querySelector('input[name="item_qty[]"]');
+
+    const courseName = selected.getAttribute("data-name") || "";
+    const courseFee = parseFloat(selected.getAttribute("data-fee")) || 0;
+
+    if (courseName) {
+        descInput.value = courseName;
+    }
+
+    if (courseFee) {
+        rateInput.value = courseFee.toFixed(2);
+    }
+
+    if (!qtyInput.value || parseFloat(qtyInput.value) <= 0) {
+        qtyInput.value = 1;
+    }
+
+    calculateInvoiceTotals();
+}
+
+function addItemRow() {
+    const tbody = document.getElementById("itemsTableBody");
+    const firstRow = tbody.querySelector("tr");
+    const newRow = firstRow.cloneNode(true);
+
+    newRow.querySelectorAll("input").forEach(input => {
+        if (input.name === "item_qty[]") {
+            input.value = 1;
+        } else if (input.name === "item_amount[]") {
+            input.value = "0.00";
+        } else if (input.name === "item_description[]") {
+            input.value = "";
+        } else {
+            input.value = 0;
+        }
+    });
+
+    const select = newRow.querySelector("select");
+
+    if (select.tomselect) {
+        select.tomselect.destroy();
+    }
+
+    select.selectedIndex = 0;
+    select.classList.add("tom-course");
+
+    tbody.appendChild(newRow);
+
+    initCourseTomSelectForElement(select);
+    calculateInvoiceTotals();
+}
+
+function removeItemRow(btn) {
+    const tbody = document.getElementById("itemsTableBody");
+    if (tbody.querySelectorAll("tr").length === 1) {
+        alert("At least one item row is required.");
+        return;
+    }
+    btn.closest("tr").remove();
+    calculateInvoiceTotals();
+}
+
+function calculateInvoiceTotals() {
+    const rows = document.querySelectorAll("#itemsTableBody tr");
+    let subtotal = 0;
+    let totalDiscount = 0;
+    let netTotal = 0;
+
+    rows.forEach(row => {
+        const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+        const rate = parseFloat(row.querySelector('.item-rate').value) || 0;
+        let discount = parseFloat(row.querySelector('.item-discount').value) || 0;
+
+        const gross = qty * rate;
+        if (discount > gross) discount = gross;
+
+        const amount = gross - discount;
+
+        subtotal += gross;
+        totalDiscount += discount;
+        netTotal += amount;
+
+        row.querySelector('.item-amount').value = amount.toFixed(2);
+    });
+
+    document.getElementById("summary_subtotal").innerText = subtotal.toFixed(2);
+    document.getElementById("summary_discount").innerText = totalDiscount.toFixed(2);
+    document.getElementById("summary_total").innerText = netTotal.toFixed(2);
+
+    updateInstallmentSummary();
+}
+
+function toggleInstallmentSections() {
+    const type = document.getElementById("installment_type").value;
+    const customSection = document.getElementById("custom_installment_section");
+    const fullDueDate = document.getElementById("full_due_date");
+
+    if (type === "full") {
+        customSection.style.display = "none";
+        fullDueDate.disabled = false;
+    } else {
+        customSection.style.display = "block";
+        fullDueDate.disabled = true;
+
+        if (document.getElementById("installmentTableBody").children.length === 0) {
+            renderInstallmentRows();
+        }
+    }
+
+    updateInstallmentSummary();
+}
+
+function renderInstallmentRows() {
+    const tbody = document.getElementById("installmentTableBody");
+    const count = parseInt(document.getElementById("installment_count").value) || 0;
+    const todayValue = "{{ today }}";
+
+    tbody.innerHTML = "";
+
+    for (let i = 1; i <= count; i++) {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${i}</td>
+            <td><input type="date" name="due_date_${i}" value="${todayValue}"></td>
+            <td><input type="number" step="0.01" name="amount_due_${i}" class="installment-amount" value="0" oninput="updateInstallmentSummary()"></td>
+            <td><input type="text" name="remarks_${i}" placeholder="Installment ${i} remarks"></td>
+            <td><button type="button" class="delete-btn" onclick="removeInstallmentRow(this)">×</button></td>
+        `;
+        tbody.appendChild(row);
+    }
+
+    updateInstallmentSummary();
+}
+
+function removeInstallmentRow(btn) {
+    const tbody = document.getElementById("installmentTableBody");
+    if (tbody.querySelectorAll("tr").length === 1) {
+        alert("At least one installment row is required.");
+        return;
+    }
+
+    btn.closest("tr").remove();
+
+    const rows = tbody.querySelectorAll("tr");
+    document.getElementById("installment_count").value = rows.length;
+
+    rows.forEach((row, index) => {
+        row.cells[0].innerText = index + 1;
+        row.querySelector('input[type="date"]').name = `due_date_${index + 1}`;
+        row.querySelector('.installment-amount').name = `amount_due_${index + 1}`;
+        row.querySelector('input[type="text"]').name = `remarks_${index + 1}`;
+        row.querySelector('input[type="text"]').placeholder = `Installment ${index + 1} remarks`;
+    });
+
+    updateInstallmentSummary();
+}
+
+function applyQuickSplit() {
+    const split = parseInt(document.getElementById("quick_split").value) || 0;
+    const finalTotal = parseFloat(document.getElementById("summary_total").innerText) || 0;
+
+    if (!split || finalTotal <= 0) return;
+
+    document.getElementById("installment_count").value = split;
+    renderInstallmentRows();
+
+    const rows = document.querySelectorAll("#installmentTableBody tr");
+    const baseAmount = Math.floor((finalTotal / split) * 100) / 100;
+    let runningTotal = 0;
+
+    rows.forEach((row, index) => {
+        const amountInput = row.querySelector(".installment-amount");
+        if (index < split - 1) {
+            amountInput.value = baseAmount.toFixed(2);
+            runningTotal += baseAmount;
+        } else {
+            amountInput.value = (finalTotal - runningTotal).toFixed(2);
+        }
+    });
+
+    updateInstallmentSummary();
+}
+
+function updateInstallmentSummary() {
+    const type = document.getElementById("installment_type").value;
+    const finalTotal = parseFloat(document.getElementById("summary_total").innerText) || 0;
+
+    let installmentTotal = 0;
+
+    if (type === "full") {
+        installmentTotal = finalTotal;
+    } else {
+        document.querySelectorAll(".installment-amount").forEach(input => {
+            installmentTotal += parseFloat(input.value) || 0;
+        });
+    }
+
+    const difference = finalTotal - installmentTotal;
+
+    document.getElementById("installment_total").innerText = installmentTotal.toFixed(2);
+    document.getElementById("difference_total").innerText = difference.toFixed(2);
+
+    const statusEl = document.getElementById("balance_status");
+    if (Math.abs(difference) < 0.01) {
+        statusEl.innerText = "Balanced ✅";
+        statusEl.style.color = "green";
+    } else {
+        statusEl.innerText = "Not Balanced ❌";
+        statusEl.style.color = "red";
+    }
+}
+
+document.getElementById("invoiceForm").addEventListener("submit", function(e) {
+    const finalTotal = parseFloat(document.getElementById("summary_total").innerText) || 0;
+    const installmentTotal = parseFloat(document.getElementById("installment_total").innerText) || 0;
+    const type = document.getElementById("installment_type").value;
+
+    if (finalTotal <= 0) {
+        e.preventDefault();
+        alert("Please enter at least one valid bill item.");
+        return;
+    }
+
+    if (type === "custom" && Math.abs(finalTotal - installmentTotal) >= 0.01) {
+        e.preventDefault();
+        alert("Installment total must exactly match the net invoice total.");
+        return;
+    }
+});
+
+window.onload = function() {
+    calculateInvoiceTotals();
+    toggleInstallmentSections();
+    initStudentTomSelect();
+    initAllCourseTomSelects();
+    updateInstallmentSummary();
+};
+
+document.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+        const fields = Array.from(document.querySelectorAll("input, select, textarea, button"));
+        const index = fields.indexOf(document.activeElement);
+
+        if (index > -1 && index < fields.length - 1) {
+            e.preventDefault();
+            fields[index + 1].focus();
+        }
+    }
+});
+</script>
+
+{% endblock %}

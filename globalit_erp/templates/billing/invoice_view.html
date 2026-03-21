@@ -1,0 +1,243 @@
+{% extends "billing/base.html" %}
+
+{% block content %}
+<h2>Invoice Details</h2>
+
+<div class="page-actions">
+  {% if session.get("role") == "admin" %}
+  <a class="btn btn-warning" href="{{ url_for('billing.invoice_edit', invoice_id=invoice.id) }}">Edit Invoice</a>
+  {% endif %}
+  <a class="btn btn-primary" href="#">+ Record Payment</a>
+  <button class="btn btn-secondary" onclick="window.print()"> Print Invoice </button>
+</div>
+<div class="invoice-header">
+
+  <h1>Global IT Education</h1>
+  <p>Computer Training & Billing System</p>
+
+  <hr>
+
+</div>
+
+<div class="grid">
+    <div class="card">
+<h3>Invoice Summary</h3>
+    <p><strong>Invoice No:</strong> {{ invoice.invoice_no }}</p>
+    <p><strong>Invoice Date:</strong> {{ invoice.invoice_date }}</p>
+    <p><strong>Student:</strong> {{ invoice.student_code }} - {{ invoice.full_name }}</p>
+    <p><strong>Phone:</strong> {{ invoice.phone }}</p>
+    <p><strong>Branch:</strong> {{ invoice.branch_name or "-" }}</p>
+    <p><strong>Status:</strong> {{ invoice.status }}</p>
+  </div>
+
+  <div class="card">
+    <p><strong>Subtotal:</strong> ₹ {{ "%.2f"|format(invoice.subtotal or 0) }}</p>
+    <p><strong>Total Discount:</strong> ₹ {{ "%.2f"|format(invoice.discount_amount or 0) }}</p>
+    <p><strong>Net Total:</strong> ₹ {{ "%.2f"|format(invoice.total_amount or 0) }}</p>
+    <p><strong>Paid Amount:</strong> ₹ {{ "%.2f"|format(total_paid or 0) }}</p>
+    <p><strong>Balance Amount:</strong> ₹ {{ "%.2f"|format(balance_amount or 0) }}</p>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Invoice Items</h3>
+  <table border="1" width="100%" cellpadding="10" class="billing-table">
+    <tr>
+      <th>Description</th>
+      <th>Qty</th>
+      <th>Unit Price</th>
+      <th>Line Total</th>
+    </tr>
+
+    {% for item in items %}
+    <tr>
+      <td>{{ item.description }}</td>
+      <td>{{ item.quantity }}</td>
+      <td>₹ {{ "%.2f"|format(item.unit_price or 0) }}</td>
+      <td>₹ {{ "%.2f"|format(item.line_total or 0) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h3>Installment Plan</h3>
+  <table border="1" width="100%" cellpadding="10" class="billing-table">
+    <tr>
+      <th>No</th>
+      <th>Due Date</th>
+      <th>Amount Due</th>
+      <th>Amount Paid</th>
+      <th>Status</th>
+      <th>Remarks</th>
+      {% if session.get("role") == "admin" %}
+      <th class="no-print">Action</th>
+      {% endif %}
+    </tr>
+
+    {% for ins in installments %}
+    <tr>
+      <td>{{ ins.installment_no }}</td>
+      <td>{{ ins.due_date }}</td>
+      <td>₹ {{ "%.2f"|format(ins.amount_due or 0) }}</td>
+      <td>₹ {{ "%.2f"|format(ins.amount_paid or 0) }}</td>
+      <td>{{ ins.status }}</td>
+      <td>{{ ins.remarks }}</td>
+      {% if session.get("role") == "admin" %}
+      <td class="no-print">
+        <a href="javascript:void(0)" onclick="openEditModal({{ ins.id }}, '{{ ins.installment_no }}', '{{ ins.due_date }}', {{ ins.amount_due }}, {{ ins.amount_paid }}, '{{ ins.remarks or '' }}')">Edit</a>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h3>Payments</h3>
+  <table border="1" width="100%" cellpadding="10" class="billing-table">
+    <tr>
+      <th>Receipt No</th>
+      <th>Date</th>
+      <th>Amount</th>
+      <th>Created By</th>
+    </tr>
+
+    {% for p in payments %}
+    <tr>
+      <td><a href="#" style="color: #0066cc; text-decoration: underline; cursor: pointer;">{{ p.receipt_no }}</a></td>
+      <td>{{ p.receipt_date }}</td>
+      <td>₹ {{ "%.2f"|format(p.amount_received or 0) }}</td>
+      <td>{{ p.created_by_name }}</td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="4" style="text-align:center;">No payments recorded yet.</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <div class="invoice-footer">
+
+  <div style="margin-top:40px; display:flex; justify-content:space-between;">
+
+    <div>
+      <p><strong>Prepared By:</strong> {{ session.get("full_name") }}</p>
+    </div>
+
+    <div style="text-align:center; min-width:200px;">
+      <br><br>
+      <hr>
+      <p>Authorized Signature</p>
+    </div>
+
+  </div>
+
+</div>
+</div>
+
+<!-- Edit Installment Modal -->
+<div id="editInstallmentModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Edit Installment</h3>
+      <span class="close" onclick="closeEditModal()">&times;</span>
+    </div>
+
+    <form method="post" id="editInstallmentForm">
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Installment Number</label>
+          <input type="text" id="modal_installment_no" readonly style="background: #f0f0f0;">
+        </div>
+
+        <div class="form-group">
+          <label>Due Date *</label>
+          <input type="date" id="modal_due_date" name="due_date" required>
+        </div>
+
+        <div class="form-group">
+          <label>Amount Due * <small id="modal_amount_constraint"></small></label>
+          <input type="number" id="modal_amount_due" name="amount_due" step="0.01" min="0" required>
+        </div>
+
+        <div class="form-group">
+          <label>Remarks</label>
+          <textarea id="modal_remarks" name="remarks" rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn" onclick="closeEditModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let currentInstallmentId = null;
+let currentAmountPaid = 0;
+
+function openEditModal(installmentId, installmentNo, dueDate, amountDue, amountPaid, remarks) {
+  currentInstallmentId = installmentId;
+  currentAmountPaid = amountPaid;
+
+  // Populate form fields
+  document.getElementById('modal_installment_no').value = 'Installment #' + installmentNo;
+
+  // Convert date format if needed (DD-MM-YYYY to YYYY-MM-DD)
+  let formattedDate = dueDate;
+  if (dueDate.includes('-') && dueDate.split('-')[0].length === 2) {
+    const parts = dueDate.split('-');
+    formattedDate = parts[2] + '-' + parts[1] + '-' + parts[0];
+  }
+  document.getElementById('modal_due_date').value = formattedDate;
+
+  document.getElementById('modal_amount_due').value = amountDue;
+  document.getElementById('modal_amount_due').min = amountPaid;
+  document.getElementById('modal_remarks').value = remarks || '';
+
+  // Show constraint message
+  if (amountPaid > 0) {
+    document.getElementById('modal_amount_constraint').textContent =
+      '(Minimum: ₹' + amountPaid.toFixed(2) + ' - already paid)';
+    document.getElementById('modal_amount_constraint').style.color = '#c0392b';
+  } else {
+    document.getElementById('modal_amount_constraint').textContent = '';
+  }
+
+  // Set form action
+  document.getElementById('editInstallmentForm').action = '/billing/installment/' + installmentId + '/edit';
+
+  // Show modal
+  document.getElementById('editInstallmentModal').style.display = 'flex';
+}
+
+function closeEditModal() {
+  document.getElementById('editInstallmentModal').style.display = 'none';
+  currentInstallmentId = null;
+  currentAmountPaid = 0;
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+  const modal = document.getElementById('editInstallmentModal');
+  if (event.target === modal) {
+    closeEditModal();
+  }
+}
+
+// Form validation
+document.getElementById('editInstallmentForm').addEventListener('submit', function(e) {
+  const amountDue = parseFloat(document.getElementById('modal_amount_due').value);
+
+  if (amountDue < currentAmountPaid) {
+    e.preventDefault();
+    alert('Amount Due cannot be less than Amount Paid (₹' + currentAmountPaid.toFixed(2) + ')');
+    return false;
+  }
+});
+</script>
+
+{% endblock %}

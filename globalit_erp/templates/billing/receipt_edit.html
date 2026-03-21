@@ -1,0 +1,181 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Edit Receipt - Global IT ERP{% endblock %}
+
+{% block content %}
+
+<style>
+  .receipt-form-wrap {
+    max-width: 760px;
+  }
+
+  .page-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .page-header-row h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .receipt-form-card {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .receipt-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+
+  .receipt-form-grid .full-width {
+    grid-column: 1 / -1;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #333;
+    font-size: 14px;
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+  }
+
+  .form-control:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+  }
+
+  .form-control:disabled {
+    background-color: #f8f9fa;
+    color: #666;
+    cursor: not-allowed;
+  }
+
+  .field-help {
+    color: #666;
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 768px) {
+    .receipt-form-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="receipt-form-wrap">
+  <div class="page-header-row">
+    <h2>Edit Receipt</h2>
+
+    <a href="#" class="btn btn-secondary">
+      ← Back to Receipts
+    </a>
+  </div>
+
+  <div class="receipt-form-card">
+    <form method="POST" action="{{ url_for('billing.receipt_edit', receipt_id=receipt.id) }}">
+      <div class="receipt-form-grid">
+        <div class="form-group">
+          <label>Receipt No</label>
+          <input type="text" value="{{ receipt.receipt_no }}" disabled class="form-control">
+        </div>
+
+        <div class="form-group">
+          <label>Invoice No</label>
+          <input type="text" value="{{ receipt.invoice_no }}" disabled class="form-control">
+        </div>
+
+        <div class="form-group full-width">
+          <label>Student</label>
+          <input type="text" value="{{ receipt.full_name }}" disabled class="form-control">
+        </div>
+
+        <div class="form-group">
+          <label for="receipt_date">Receipt Date <span style="color: red;">*</span></label>
+          <input
+            type="date"
+            id="receipt_date"
+            name="receipt_date"
+            class="form-control"
+            value="{{ receipt.receipt_date|format_date_input }}"
+            required>
+        </div>
+
+        <div class="form-group">
+          <label for="amount_received">Amount Received <span style="color: red;">*</span></label>
+          <input
+            type="number"
+            id="amount_received"
+            name="amount_received"
+            step="0.01"
+            min="0.01"
+            class="form-control"
+            value="{{ "%.2f"|format(receipt.amount_received or 0) }}"
+            required>
+        </div>
+
+        <div class="form-group">
+          <label for="payment_mode">Payment Mode <span style="color: red;">*</span></label>
+          <select id="payment_mode" name="payment_mode" class="form-control" required>
+            <option value="cash" {% if receipt.payment_mode == 'cash' %}selected{% endif %}>Cash</option>
+            <option value="upi" {% if receipt.payment_mode == 'upi' %}selected{% endif %}>UPI</option>
+            <option value="bank_transfer" {% if receipt.payment_mode == 'bank_transfer' %}selected{% endif %}>Bank Transfer</option>
+            <option value="card" {% if receipt.payment_mode == 'card' %}selected{% endif %}>Card</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="notes">Notes / UTR / Transaction No</label>
+          <input
+            type="text"
+            id="notes"
+            name="notes"
+            class="form-control"
+            placeholder="e.g., UTR number, transaction ID, or reference number"
+            value="{{ receipt.notes or '' }}">
+          <small class="field-help">Optional</small>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Update Receipt</button>
+        <a href="#" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

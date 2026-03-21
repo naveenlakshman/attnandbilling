@@ -1,0 +1,104 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Global IT ERP - Courses{% endblock %}
+
+{% block content %}
+
+<style>
+  .courses-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 12px;
+  }
+
+  .courses-header h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .courses-table {
+    border-collapse: collapse;
+  }
+
+  .courses-table thead tr {
+    background-color: #f5f6f7;
+  }
+
+  .courses-table th {
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+    border: 1px solid #ddd;
+  }
+
+  .courses-table td {
+    padding: 10px 8px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  .courses-table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+
+  .courses-empty {
+    padding: 40px;
+    text-align: center;
+    color: #999;
+  }
+
+  .courses-empty p {
+    margin: 0;
+  }
+</style>
+
+<div class="courses-header">
+  <h2>Courses</h2>
+
+  <a class="btn btn-primary" href="{{ url_for('billing.course_new') }}">
+    + Add Course
+  </a>
+</div>
+
+<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
+  {% if courses %}
+    <table border="1" width="100%" class="courses-table">
+      <thead>
+        <tr>
+          <th style="width: 70px;">ID</th>
+          <th>Course Name</th>
+          <th style="width: 180px;">Duration</th>
+          <th style="width: 160px;">Fee</th>
+          <th style="width: 120px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in courses %}
+        <tr>
+          <td>{{ c.id }}</td>
+          <td style="font-weight: 600;">{{ c.course_name }}</td>
+          <td>{{ c.duration or "—" }}</td>
+          <td>₹ {{ "%.2f"|format(c.fee or 0) }}</td>
+          <td>
+            <a class="btn btn-secondary btn-sm" href="{{ url_for('billing.course_edit', id=c.id) }}">
+              Edit
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="courses-empty">
+      <p style="font-size: 15px;">📘 No courses found.</p>
+      <p style="font-size: 12px; margin-top: 8px;">Add your first course to get started.</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

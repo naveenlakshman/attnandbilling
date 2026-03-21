@@ -1,0 +1,203 @@
+{% extends "billing/base.html" %}
+
+{% block title %}
+  {% if course %}Edit Course{% else %}Add Course{% endif %} - Global IT ERP
+{% endblock %}
+
+{% block content %}
+
+<style>
+  .course-form-wrap {
+    max-width: 700px;
+  }
+
+  .course-form-card {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .page-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 12px;
+  }
+
+  .page-header-row h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 18px;
+  }
+
+  .form-group label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #333;
+    font-size: 14px;
+  }
+
+  .form-group input {
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+  }
+
+  .form-group input:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+  }
+</style>
+
+<div class="course-form-wrap">
+  <div class="page-header-row">
+    <h2>{% if course %}Edit Course{% else %}Add Course{% endif %}</h2>
+
+    <a href="{{ url_for('billing.courses') }}" class="btn btn-secondary">
+      ← Back to Courses
+    </a>
+  </div>
+
+  <div class="course-form-card">
+    <form method="post">
+
+      <div class="form-group">
+        <label>Course Name</label>
+        <input type="text" name="course_name" required value="{{ course.course_name if course else '' }}">
+      </div>
+
+      <div class="form-group">
+        <label>Duration</label>
+        <input type="text" name="duration" value="{{ course.duration if course else '' }}" placeholder="Example: 45 Days or 60 Hours">
+      </div>
+
+      <div class="form-group">
+        <label>Course Fee</label>
+        <input type="number" step="0.01" name="fee" required value="{{ course.fee if course else '' }}">
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Save Course</button>
+        <a href="{{ url_for('billing.courses') }}" class="btn btn-secondary">Cancel</a>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+@billing_bp.route("/invoices")
+@login_required
+def invoices():
+    search = request.args.get("search", "").strip()
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    today = datetime.now().date().isoformat()
+
+    # TODAY STATS
+    cur.execute("""
+        SELECT 
+            COUNT(*) as total_invoices,
+            SUM(invoices.total_amount) as total_amount,
+            SUM(CASE WHEN invoices.status = 'paid' THEN 1 ELSE 0 END) as paid_count,
+            SUM(CASE WHEN invoices.status = 'partially_paid' THEN 1 ELSE 0 END) as partially_paid_count,
+            SUM(CASE WHEN invoices.status = 'unpaid' THEN 1 ELSE 0 END) as unpaid_count,
+            SUM(invoices.total_amount - IFNULL((
+                SELECT SUM(receipts.amount_received) 
+                FROM receipts 
+                WHERE receipts.invoice_id = invoices.id
+            ), 0)) as outstanding_amount
+        FROM invoices
+        WHERE DATE(invoices.created_at) = ?
+    """, (today,))
+    today_stats = cur.fetchone()
+
+    # OVERALL STATS
+    cur.execute("""
+        SELECT 
+            COUNT(*) as total_all_invoices,
+            SUM(invoices.total_amount) as total_all_amount,
+            SUM(CASE WHEN invoices.status = 'paid' THEN 1 ELSE 0 END) as all_paid_count,
+            SUM(CASE WHEN invoices.status = 'partially_paid' THEN 1 ELSE 0 END) as all_partially_paid_count,
+            SUM(CASE WHEN invoices.status = 'unpaid' THEN 1 ELSE 0 END) as all_unpaid_count,
+            SUM(invoices.total_amount - IFNULL((
+                SELECT SUM(receipts.amount_received) 
+                FROM receipts 
+                WHERE receipts.invoice_id = invoices.id
+            ), 0)) as all_outstanding_amount
+        FROM invoices
+    """)
+    overall_stats = cur.fetchone()
+
+    query = """
+    SELECT
+        invoices.id,
+        invoices.invoice_no,
+        invoices.invoice_date,
+        invoices.total_amount,
+        invoices.status,
+        students.id AS student_id,
+        students.student_code,
+        students.full_name,
+        branches.branch_name,
+        IFNULL(SUM(receipts.amount_received), 0) AS paid_amount
+    FROM invoices
+    JOIN students
+        ON invoices.student_id = students.id
+    LEFT JOIN branches
+        ON invoices.branch_id = branches.id
+    LEFT JOIN receipts
+        ON receipts.invoice_id = invoices.id
+    """
+
+    params = []
+
+    if search:
+        query += """
+        WHERE
+            invoices.invoice_no LIKE ?
+            OR students.full_name LIKE ?
+            OR students.student_code LIKE ?
+        """
+        like = f"%{search}%"
+        params.extend([like, like, like])
+
+    query += """
+    GROUP BY invoices.id
+    ORDER BY invoices.id DESC
+    """
+
+    cur.execute(query, params)
+    invoices = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "billing/invoices.html",
+        invoices=invoices,
+        search=search,
+        today_stats=today_stats,
+        overall_stats=overall_stats
+    )
+    

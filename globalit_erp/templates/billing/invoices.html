@@ -1,0 +1,305 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Global IT ERP - Invoices{% endblock %}
+
+{% block content %}
+
+<style>
+  .invoice-page-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .invoice-page-actions h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .invoice-action-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .invoice-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+  }
+
+  .invoice-search-card {
+    margin-top: 20px;
+    margin-bottom: 20px;
+  }
+
+  .invoice-search-form {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .invoice-search-form input {
+    flex: 1;
+    min-width: 260px;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+
+  .invoice-search-form input:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+  }
+
+  .invoice-table {
+    border-collapse: collapse;
+  }
+
+  .invoice-table thead tr {
+    background-color: #f5f6f7;
+  }
+
+  .invoice-table th {
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+    border: 1px solid #ddd;
+  }
+
+  .invoice-table td {
+    padding: 10px 8px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  .invoice-table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+
+  .status-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-block;
+    text-transform: capitalize;
+    white-space: nowrap;
+  }
+
+  .status-paid {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .status-partially-paid {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  .status-unpaid {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+
+  .invoice-empty {
+    padding: 40px;
+    text-align: center;
+    color: #999;
+  }
+
+  .invoice-empty p {
+    margin: 0;
+  }
+</style>
+
+<div class="invoice-page-actions">
+  <h2>Invoices</h2>
+
+  <div class="invoice-action-buttons">
+    <a class="btn btn-primary" href="{{ url_for('billing.invoice_new') }}">
+      Create Invoice
+    </a>
+
+    {% if session.get('role') == 'admin' %}
+    <form method="post" action="#" style="display: inline;">
+      <button type="submit" class="btn btn-warning" title="Fix payment allocation for invoices with custom installments">
+        🔧 Fix Installment Payments
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if session.get('role') == 'admin' %}
+<div style="margin-bottom: 25px;">
+  <h3 style="margin-top: 0; margin-bottom: 15px; color: #333;">📊 Invoice Dashboard</h3>
+
+  <div style="margin-bottom: 20px;">
+    <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">Today</h4>
+    <div class="invoice-stats-grid">
+      <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
+        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Invoices</div>
+        <div style="font-size: 24px; font-weight: bold;">{{ today_stats.total_invoices or 0 }}</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
+        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
+        <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.total_amount or 0) }}</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, #f39c12 0%, #d68910 100%); color: white; padding: 15px; border-radius: 6px;">
+        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Paid</div>
+        <div style="font-size: 20px; font-weight: bold;">{{ today_stats.paid_count or 0 }}</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 15px; border-radius: 6px;">
+        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Partially Paid</div>
+        <div style="font-size: 20px; font-weight: bold;">{{ today_stats.partially_paid_count or 0 }}</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
+        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Unpaid</div>
+        <div style="font-size: 20px; font-weight: bold;">{{ today_stats.unpaid_count or 0 }}</div>
+      </div>
+
+      <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
+        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Outstanding</div>
+        <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.outstanding_amount or 0) }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">Overall Statistics</h4>
+    <div class="invoice-stats-grid">
+      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #3498db;">
+        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Total Invoices</div>
+        <div style="font-size: 24px; font-weight: bold; color: #2c3e50;">{{ overall_stats.total_all_invoices or 0 }}</div>
+      </div>
+
+      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #2ecc71;">
+        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Total Amount</div>
+        <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">₹ {{ "%.2f"|format(overall_stats.total_all_amount or 0) }}</div>
+      </div>
+
+      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #f39c12;">
+        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Paid</div>
+        <div style="font-size: 20px; font-weight: bold; color: #2c3e50;">{{ overall_stats.all_paid_count or 0 }}</div>
+      </div>
+
+      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #e74c3c;">
+        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Partially Paid</div>
+        <div style="font-size: 20px; font-weight: bold; color: #2c3e50;">{{ overall_stats.all_partially_paid_count or 0 }}</div>
+      </div>
+
+      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #9b59b6;">
+        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Unpaid</div>
+        <div style="font-size: 20px; font-weight: bold; color: #2c3e50;">{{ overall_stats.all_unpaid_count or 0 }}</div>
+      </div>
+
+      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #1abc9c;">
+        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Outstanding</div>
+        <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">₹ {{ "%.2f"|format(overall_stats.all_outstanding_amount or 0) }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card invoice-search-card">
+  <form method="get" class="invoice-search-form">
+    <input
+      type="text"
+      name="search"
+      value="{{ search or '' }}"
+      placeholder="Search by invoice no, student name, or student code"
+    >
+    <button type="submit" class="btn btn-primary">Search</button>
+
+    {% if search %}
+    <a href="{{ url_for('billing.invoices') }}" class="btn btn-secondary">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
+  {% if invoices %}
+    <table border="1" width="100%" cellpadding="10" class="invoice-table">
+      <thead>
+        <tr>
+          <th style="width: 70px;">ID</th>
+          <th style="width: 120px;">Invoice No</th>
+          <th>Student</th>
+          <th style="width: 120px;">Date</th>
+          <th style="width: 130px;">Total</th>
+          <th style="width: 130px;">Paid</th>
+          <th style="width: 130px;">Balance</th>
+          <th style="width: 120px;">Status</th>
+          <th style="width: 100px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
+        {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
+        <tr>
+          <td>{{ inv.id }}</td>
+
+          <td>
+            <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="text-decoration: none; font-weight: 600; color: #0066cc;">
+              {{ inv.invoice_no }}
+            </a>
+          </td>
+
+          <td>
+            <a href="#" style="text-decoration: none;">
+              {{ inv.student_code }} - {{ inv.full_name }}
+            </a>
+          </td>
+
+          <td>{{ inv.invoice_date }}</td>
+
+          <td>₹ {{ "%.2f"|format(inv.total_amount or 0) }}</td>
+
+          <td style="color: green;">
+            ₹ {{ "%.2f"|format(inv.paid_amount or 0) }}
+          </td>
+
+          <td style="color: #c0392b;">
+            ₹ {{ "%.2f"|format(balance) }}
+          </td>
+
+          <td>
+            <span class="status-badge
+              {% if inv.status == 'paid' %}status-paid
+              {% elif inv.status == 'partially_paid' %}status-partially-paid
+              {% else %}status-unpaid{% endif %}">
+              {{ inv.status.replace('_', ' ') if inv.status else '—' }}
+            </span>
+          </td>
+
+          <td>
+            <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="color: #0066cc;">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="invoice-empty">
+      <p style="font-size: 15px;">🧾 No invoices found.</p>
+      <p style="font-size: 12px; margin-top: 8px;">Try a different search or create an invoice later.</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

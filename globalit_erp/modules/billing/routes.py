@@ -755,3 +755,1327 @@ def export_students_csv():
     except Exception as e:
         flash(f"Error exporting students: {str(e)}", "danger")
         return redirect(url_for("billing.students"))
+    
+@billing_bp.route("/courses")
+@login_required
+def courses():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM courses
+        ORDER BY id DESC
+    """)
+    courses = cur.fetchall()
+
+    conn.close()
+
+    return render_template("billing/courses.html", courses=courses)
+
+
+@billing_bp.route("/course/new", methods=["GET", "POST"])
+@login_required
+def course_new():
+    if request.method == "POST":
+        course_name = request.form["course_name"].strip()
+        duration = request.form["duration"].strip()
+        fee = request.form["fee"].strip()
+
+        conn = get_conn()
+        cur = conn.cursor()
+
+        now = datetime.now().isoformat(timespec="seconds")
+
+        cur.execute("""
+            INSERT INTO courses (
+                course_name,
+                duration,
+                fee,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            course_name,
+            duration,
+            fee,
+            now,
+            now
+        ))
+
+        course_id = cur.lastrowid
+        conn.commit()
+        conn.close()
+
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=session.get("branch_id"),
+            action_type="create",
+            module_name="courses",
+            record_id=course_id,
+            description=f"Created course {course_name}"
+        )
+
+        flash("Course added successfully.", "success")
+        return redirect(url_for("billing.courses"))
+
+    return render_template("billing/course_form.html", course=None)
+
+
+@billing_bp.route("/course/<int:id>/edit", methods=["GET", "POST"])
+@login_required
+def course_edit(id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM courses
+        WHERE id = ?
+    """, (id,))
+    course = cur.fetchone()
+
+    if not course:
+        conn.close()
+        flash("Course not found.", "danger")
+        return redirect(url_for("billing.courses"))
+
+    if request.method == "POST":
+        course_name = request.form["course_name"].strip()
+        duration = request.form["duration"].strip()
+        fee = request.form["fee"].strip()
+
+        now = datetime.now().isoformat(timespec="seconds")
+
+        cur.execute("""
+            UPDATE courses
+            SET course_name = ?,
+                duration = ?,
+                fee = ?,
+                updated_at = ?
+            WHERE id = ?
+        """, (
+            course_name,
+            duration,
+            fee,
+            now,
+            id
+        ))
+
+        conn.commit()
+        conn.close()
+
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=session.get("branch_id"),
+            action_type="update",
+            module_name="courses",
+            record_id=id,
+            description=f"Updated course {course_name}"
+        )
+
+        flash("Course updated successfully.", "success")
+        return redirect(url_for("billing.courses"))
+
+    conn.close()
+    return render_template("billing/course_form.html", course=course)
+
+@billing_bp.route("/invoices")
+@login_required
+def invoices():
+    search = request.args.get("search", "").strip()
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    today = datetime.now().date().isoformat()
+
+    # TODAY STATS
+    cur.execute("""
+        SELECT 
+            COUNT(*) as total_invoices,
+            SUM(invoices.total_amount) as total_amount,
+            SUM(CASE WHEN invoices.status = 'paid' THEN 1 ELSE 0 END) as paid_count,
+            SUM(CASE WHEN invoices.status = 'partially_paid' THEN 1 ELSE 0 END) as partially_paid_count,
+            SUM(CASE WHEN invoices.status = 'unpaid' THEN 1 ELSE 0 END) as unpaid_count,
+            SUM(invoices.total_amount - IFNULL((
+                SELECT SUM(receipts.amount_received) 
+                FROM receipts 
+                WHERE receipts.invoice_id = invoices.id
+            ), 0)) as outstanding_amount
+        FROM invoices
+        WHERE DATE(invoices.created_at) = ?
+    """, (today,))
+    today_stats = cur.fetchone()
+
+    # OVERALL STATS
+    cur.execute("""
+        SELECT 
+            COUNT(*) as total_all_invoices,
+            SUM(invoices.total_amount) as total_all_amount,
+            SUM(CASE WHEN invoices.status = 'paid' THEN 1 ELSE 0 END) as all_paid_count,
+            SUM(CASE WHEN invoices.status = 'partially_paid' THEN 1 ELSE 0 END) as all_partially_paid_count,
+            SUM(CASE WHEN invoices.status = 'unpaid' THEN 1 ELSE 0 END) as all_unpaid_count,
+            SUM(invoices.total_amount - IFNULL((
+                SELECT SUM(receipts.amount_received) 
+                FROM receipts 
+                WHERE receipts.invoice_id = invoices.id
+            ), 0)) as all_outstanding_amount
+        FROM invoices
+    """)
+    overall_stats = cur.fetchone()
+
+    query = """
+    SELECT
+        invoices.id,
+        invoices.invoice_no,
+        invoices.invoice_date,
+        invoices.total_amount,
+        invoices.status,
+        students.id AS student_id,
+        students.student_code,
+        students.full_name,
+        branches.branch_name,
+        IFNULL(SUM(receipts.amount_received), 0) AS paid_amount
+    FROM invoices
+    JOIN students
+        ON invoices.student_id = students.id
+    LEFT JOIN branches
+        ON invoices.branch_id = branches.id
+    LEFT JOIN receipts
+        ON receipts.invoice_id = invoices.id
+    """
+
+    params = []
+
+    if search:
+        query += """
+        WHERE
+            invoices.invoice_no LIKE ?
+            OR students.full_name LIKE ?
+            OR students.student_code LIKE ?
+        """
+        like = f"%{search}%"
+        params.extend([like, like, like])
+
+    query += """
+    GROUP BY invoices.id
+    ORDER BY invoices.id DESC
+    """
+
+    cur.execute(query, params)
+    invoices = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "billing/invoices.html",
+        invoices=invoices,
+        search=search,
+        today_stats=today_stats,
+        overall_stats=overall_stats
+    )
+
+@billing_bp.route("/invoice/<int:invoice_id>")
+@login_required
+def invoice_view(invoice_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Fetch invoice details with student and branch info
+    cur.execute("""
+        SELECT
+            invoices.id,
+            invoices.invoice_no,
+            invoices.invoice_date,
+            invoices.subtotal,
+            invoices.discount_amount,
+            invoices.total_amount,
+            invoices.status,
+            invoices.notes,
+            invoices.created_at,
+            students.id AS student_id,
+            students.student_code,
+            students.full_name,
+            students.phone,
+            students.email,
+            students.address,
+            branches.branch_name
+        FROM invoices
+        JOIN students ON invoices.student_id = students.id
+        LEFT JOIN branches ON invoices.branch_id = branches.id
+        WHERE invoices.id = ?
+    """, (invoice_id,))
+    invoice = cur.fetchone()
+
+    if not invoice:
+        conn.close()
+        flash("Invoice not found.", "danger")
+        return redirect(url_for("billing.invoices"))
+
+    # Fetch invoice items
+    cur.execute("""
+        SELECT
+            id,
+            course_id,
+            description,
+            quantity,
+            unit_price,
+            line_total
+        FROM invoice_items
+        WHERE invoice_id = ?
+        ORDER BY id ASC
+    """, (invoice_id,))
+    items = cur.fetchall()
+
+    # Fetch installment plans
+    cur.execute("""
+        SELECT
+            id,
+            installment_no,
+            due_date,
+            amount_due,
+            amount_paid,
+            status,
+            remarks
+        FROM installment_plans
+        WHERE invoice_id = ?
+        ORDER BY installment_no ASC
+    """, (invoice_id,))
+    installments = cur.fetchall()
+
+    # Fetch payments (receipts) with user info
+    cur.execute("""
+        SELECT
+            receipts.id,
+            receipts.receipt_no,
+            receipts.receipt_date,
+            receipts.amount_received,
+            receipts.created_at,
+            receipts.created_by,
+            users.full_name AS created_by_name
+        FROM receipts
+        JOIN users ON receipts.created_by = users.id
+        WHERE receipts.invoice_id = ?
+        ORDER BY receipts.id DESC
+    """, (invoice_id,))
+    payments = cur.fetchall()
+
+    # Calculate totals
+    cur.execute("""
+        SELECT
+            IFNULL(SUM(amount_received), 0) AS total_paid
+        FROM receipts
+        WHERE invoice_id = ?
+    """, (invoice_id,))
+    paid_result = cur.fetchone()
+    total_paid = float(paid_result["total_paid"] or 0) if paid_result else 0.0
+
+    balance_amount = float(invoice["total_amount"] or 0) - total_paid
+
+    conn.close()
+
+    return render_template(
+        "billing/invoice_view.html",
+        invoice=invoice,
+        items=items,
+        installments=installments,
+        payments=payments,
+        total_paid=total_paid,
+        balance_amount=balance_amount
+    )
+
+@billing_bp.route("/installment/<int:installment_id>/edit", methods=["POST"])
+@login_required
+@admin_required
+def installment_edit(installment_id):
+    conn = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+
+        # Get current installment details
+        cur.execute("""
+            SELECT id, invoice_id, amount_paid
+            FROM installment_plans
+            WHERE id = ?
+        """, (installment_id,))
+        installment = cur.fetchone()
+
+        if not installment:
+            flash("Installment not found.", "danger")
+            return redirect(url_for("billing.invoices"))
+
+        invoice_id = installment["invoice_id"]
+        amount_paid = float(installment["amount_paid"] or 0)
+
+        # Get form data
+        due_date = request.form.get("due_date", "").strip()
+        amount_due_raw = request.form.get("amount_due", "0").strip()
+        remarks = request.form.get("remarks", "").strip()
+
+        # Validation
+        if not due_date:
+            flash("Due date is required.", "danger")
+            return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
+        try:
+            amount_due = float(amount_due_raw or 0)
+        except ValueError:
+            flash("Amount due must be a valid number.", "danger")
+            return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
+        if amount_due < amount_paid:
+            flash(f"Amount due cannot be less than amount paid (₹{amount_paid:.2f}).", "danger")
+            return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
+        # Update installment
+        now = datetime.now().isoformat(timespec="seconds")
+        cur.execute("""
+            UPDATE installment_plans
+            SET
+                due_date = ?,
+                amount_due = ?,
+                remarks = ?,
+                updated_at = ?
+            WHERE id = ?
+        """, (due_date, amount_due, remarks, now, installment_id))
+
+        conn.commit()
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=None,  # Can fetch from invoice if needed
+            action_type="update",
+            module_name="installment_plans",
+            record_id=installment_id,
+            description=f"Updated installment plan #{installment_id}"
+        )
+
+        flash("Installment updated successfully.", "success")
+        return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
+    except Exception as e:
+        flash(f"Error updating installment: {str(e)}", "danger")
+        return redirect(url_for("billing.invoices"))
+
+    finally:
+        if conn:
+            conn.close()
+
+@billing_bp.route("/invoice/new", methods=["GET", "POST"])
+@login_required
+def invoice_new():
+    student_full_name = None
+    
+    if request.method == "POST":
+        conn = None
+        try:
+            conn = get_conn()
+            cur = conn.cursor()
+            
+            student_id = request.form["student_id"]
+            invoice_date = request.form["invoice_date"]
+            installment_type = request.form["installment_type"]
+            notes = request.form.get("notes", "").strip()
+
+            item_course_ids = request.form.getlist("item_course_id[]")
+            item_descriptions = request.form.getlist("item_description[]")
+            item_qtys = request.form.getlist("item_qty[]")
+            item_rates = request.form.getlist("item_rate[]")
+            item_discounts = request.form.getlist("item_discount[]")
+
+            if not student_id:
+                flash("Please select a student.", "danger")
+                return redirect(url_for("billing.invoice_new"))
+
+            if not item_descriptions:
+                flash("Please add at least one bill item.", "danger")
+                return redirect(url_for("billing.invoice_new"))
+
+            cur.execute("""
+                SELECT id, branch_id, full_name
+                FROM students
+                WHERE id = ?
+            """, (student_id,))
+            student = cur.fetchone()
+
+            if not student:
+                flash("Selected student not found.", "danger")
+                return redirect(url_for("billing.invoice_new"))
+
+            branch_id = student["branch_id"]
+
+            if not branch_id:
+                flash("Selected student does not have a branch assigned.", "danger")
+                return redirect(url_for("billing.invoice_new"))
+
+            now = datetime.now().isoformat(timespec="seconds")
+
+            invoice_items_to_save = []
+            subtotal = 0.0
+            discount_amount = 0.0
+            total_amount = 0.0
+
+            for i in range(len(item_descriptions)):
+                description = (item_descriptions[i] or "").strip()
+                course_id_raw = (item_course_ids[i] or "").strip()
+                qty_raw = (item_qtys[i] or "0").strip()
+                rate_raw = (item_rates[i] or "0").strip()
+                discount_raw = (item_discounts[i] or "0").strip()
+
+                qty = float(qty_raw or 0)
+                rate = float(rate_raw or 0)
+                row_discount = float(discount_raw or 0)
+
+                if not description and qty == 0 and rate == 0:
+                    continue
+
+                if not description:
+                    flash(f"Description is required in item row {i + 1}.", "danger")
+                    return redirect(url_for("billing.invoice_new"))
+
+                if qty <= 0:
+                    flash(f"Quantity must be greater than 0 in item row {i + 1}.", "danger")
+                    return redirect(url_for("billing.invoice_new"))
+
+                if rate < 0:
+                    flash(f"Rate cannot be negative in item row {i + 1}.", "danger")
+                    return redirect(url_for("billing.invoice_new"))
+
+                gross = qty * rate
+
+                if row_discount < 0:
+                    row_discount = 0
+
+                if row_discount > gross:
+                    row_discount = gross
+
+                line_total = gross - row_discount
+
+                subtotal += gross
+                discount_amount += row_discount
+                total_amount += line_total
+
+                course_id = int(course_id_raw) if course_id_raw else None
+
+                invoice_items_to_save.append({
+                    "course_id": course_id,
+                    "description": description,
+                    "quantity": qty,
+                    "unit_price": rate,
+                    "line_total": line_total
+                })
+
+            if not invoice_items_to_save:
+                flash("Please enter at least one valid bill item.", "danger")
+                return redirect(url_for("billing.invoice_new"))
+
+            cur.execute("""
+                INSERT INTO invoices (
+                    invoice_no,
+                    student_id,
+                    branch_id,
+                    invoice_date,
+                    subtotal,
+                    discount_type,
+                    discount_value,
+                    discount_amount,
+                    total_amount,
+                    installment_type,
+                    notes,
+                    status,
+                    created_by,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                "TEMP",
+                student_id,
+                branch_id,
+                invoice_date,
+                subtotal,
+                "none",
+                0,
+                discount_amount,
+                total_amount,
+                installment_type,
+                notes,
+                "unpaid",
+                session["user_id"],
+                now,
+                now
+            ))
+
+            invoice_id = cur.lastrowid
+
+            cur.execute("""
+                SELECT invoice_no
+                FROM invoices
+                WHERE invoice_no NOT LIKE 'INV-%'
+                  AND invoice_no NOT LIKE 'TEMP'
+                ORDER BY invoice_no DESC
+                LIMIT 1
+            """)
+            result = cur.fetchone()
+
+            if result and result["invoice_no"]:
+                existing_no = result["invoice_no"]
+                try:
+                    parts = existing_no.split("/")
+                    if len(parts) >= 2:
+                        numeric_part = int(parts[-1])
+                        prefix = "/".join(parts[:-1])
+                        next_number = numeric_part + 1
+                        invoice_no = f"{prefix}/{next_number}"
+                    else:
+                        invoice_no = f"INV-{str(invoice_id).zfill(4)}"
+                except (ValueError, IndexError, TypeError):
+                    invoice_no = f"INV-{str(invoice_id).zfill(4)}"
+            else:
+                invoice_no = f"INV-{str(invoice_id).zfill(4)}"
+
+            cur.execute("""
+                UPDATE invoices
+                SET invoice_no = ?
+                WHERE id = ?
+            """, (invoice_no, invoice_id))
+
+            for item in invoice_items_to_save:
+                cur.execute("""
+                    INSERT INTO invoice_items (
+                        invoice_id,
+                        course_id,
+                        description,
+                        quantity,
+                        unit_price,
+                        line_total,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    invoice_id,
+                    item["course_id"],
+                    item["description"],
+                    item["quantity"],
+                    item["unit_price"],
+                    item["line_total"],
+                    now
+                ))
+
+            if installment_type == "full":
+                due_date = request.form.get("full_due_date", "").strip()
+
+                if not due_date:
+                    flash("Please enter full payment due date.", "danger")
+                    return redirect(url_for("billing.invoice_new"))
+
+                cur.execute("""
+                    INSERT INTO installment_plans (
+                        invoice_id,
+                        installment_no,
+                        due_date,
+                        amount_due,
+                        amount_paid,
+                        status,
+                        remarks,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    invoice_id,
+                    1,
+                    due_date,
+                    total_amount,
+                    0,
+                    "pending",
+                    "Full payment",
+                    now,
+                    now
+                ))
+
+            elif installment_type == "custom":
+                installment_count = int(request.form.get("installment_count", 0) or 0)
+
+                if installment_count <= 0:
+                    flash("Please enter valid installment count.", "danger")
+                    return redirect(url_for("billing.invoice_new"))
+
+                installment_total = 0.0
+
+                for i in range(1, installment_count + 1):
+                    due_date = request.form.get(f"due_date_{i}", "").strip()
+                    amount_due_raw = request.form.get(f"amount_due_{i}", "0").strip()
+                    remarks = request.form.get(f"remarks_{i}", "").strip()
+
+                    amount_due = float(amount_due_raw or 0)
+
+                    if not due_date:
+                        flash(f"Due date is required for installment {i}.", "danger")
+                        return redirect(url_for("billing.invoice_new"))
+
+                    if amount_due <= 0:
+                        flash(f"Amount must be greater than 0 for installment {i}.", "danger")
+                        return redirect(url_for("billing.invoice_new"))
+
+                    installment_total += amount_due
+
+                    cur.execute("""
+                        INSERT INTO installment_plans (
+                            invoice_id,
+                            installment_no,
+                            due_date,
+                            amount_due,
+                            amount_paid,
+                            status,
+                            remarks,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        invoice_id,
+                        i,
+                        due_date,
+                        amount_due,
+                        0,
+                        "pending",
+                        remarks,
+                        now,
+                        now
+                    ))
+
+                if round(installment_total, 2) != round(total_amount, 2):
+                    flash("Installment total must exactly match the net invoice total.", "danger")
+                    return redirect(url_for("billing.invoice_new"))
+
+            else:
+                flash("Invalid installment type selected.", "danger")
+                return redirect(url_for("billing.invoice_new"))
+
+            conn.commit()
+
+            # Extract student name before closing connection to avoid Row access after close
+            student_full_name = str(student['full_name'])
+
+            log_activity(
+                user_id=session["user_id"],
+                branch_id=branch_id,
+                action_type="create",
+                module_name="invoices",
+                record_id=invoice_id,
+                description=f"Created invoice {invoice_no} for student {student_full_name}"
+            )
+            flash("Invoice created successfully.", "success")
+            return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
+        except ValueError:
+            flash("Please enter valid numeric values in invoice rows.", "danger")
+            return redirect(url_for("billing.invoice_new"))
+
+        except Exception as e:
+            flash(f"Error while creating invoice: {str(e)}", "danger")
+            return redirect(url_for("billing.invoice_new"))
+        
+        finally:
+            if conn:
+                conn.close()
+    
+    # Load form data for both GET and successful POST responses
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT students.*, branches.branch_name
+        FROM students
+        LEFT JOIN branches ON students.branch_id = branches.id
+        ORDER BY students.full_name ASC
+    """)
+    students = cur.fetchall()
+
+    cur.execute("""
+        SELECT *
+        FROM courses
+        WHERE is_active = 1
+        ORDER BY course_name ASC
+    """)
+    courses = cur.fetchall()
+
+    conn.close()
+    today = datetime.today().strftime("%Y-%m-%d")
+    return render_template(
+        "billing/invoice_form.html",
+        students=students,
+        courses=courses,
+        today=today,
+        mode="create"
+    )
+
+@billing_bp.route("/invoice/<int:invoice_id>/edit", methods=["GET", "POST"])
+@login_required
+@admin_required
+def invoice_edit(invoice_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Fetch the invoice
+    cur.execute("""
+        SELECT
+            invoices.*,
+            students.student_code,
+            students.full_name,
+            students.phone,
+            students.email,
+            students.address,
+            branches.branch_name
+        FROM invoices
+        JOIN students
+            ON invoices.student_id = students.id
+        LEFT JOIN branches
+            ON invoices.branch_id = branches.id
+        WHERE invoices.id = ?
+    """, (invoice_id,))
+    invoice = cur.fetchone()
+
+    if not invoice:
+        conn.close()
+        flash("Invoice not found.", "danger")
+        return redirect(url_for("billing.invoices"))
+
+    # Check if invoice has any payments
+    cur.execute("""
+        SELECT IFNULL(SUM(amount_received), 0) AS total_paid
+        FROM receipts
+        WHERE invoice_id = ?
+    """, (invoice_id,))
+    total_paid = float(cur.fetchone()["total_paid"] or 0)
+
+    # Fetch invoice items
+    cur.execute("""
+        SELECT
+            invoice_items.*,
+            courses.course_name
+        FROM invoice_items
+        LEFT JOIN courses
+            ON invoice_items.course_id = courses.id
+        WHERE invoice_items.invoice_id = ?
+    """, (invoice_id,))
+    items = cur.fetchall()
+
+    # Fetch installment plans
+    cur.execute("""
+        SELECT *
+        FROM installment_plans
+        WHERE invoice_id = ?
+        ORDER BY installment_no ASC
+    """, (invoice_id,))
+    installments = cur.fetchall()
+
+    if request.method == "POST":
+        try:
+            student_id_form = int(request.form.get("student_id", 0))
+            invoice_date = request.form["invoice_date"]
+            installment_type = request.form.get("installment_type", "").strip()
+            notes = request.form.get("notes", "").strip()
+
+            # Validate student exists
+            cur.execute("SELECT id FROM students WHERE id = ?", (student_id_form,))
+            if not cur.fetchone():
+                conn.close()
+                flash("Selected student does not exist.", "danger")
+                return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+            # Re-check payments
+            cur.execute("""
+                SELECT IFNULL(SUM(amount_received), 0) AS total_paid
+                FROM receipts
+                WHERE invoice_id = ?
+            """, (invoice_id,))
+            total_paid = float(cur.fetchone()["total_paid"] or 0)
+
+            item_course_ids = request.form.getlist("item_course_id[]")
+            item_descriptions = request.form.getlist("item_description[]")
+            item_qtys = request.form.getlist("item_qty[]")
+            item_rates = request.form.getlist("item_rate[]")
+            item_discounts = request.form.getlist("item_discount[]")
+
+            if not item_descriptions:
+                flash("Please add at least one bill item.", "danger")
+                conn.close()
+                return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+            now = datetime.now().isoformat(timespec="seconds")
+
+            invoice_items_to_save = []
+            subtotal = 0.0
+            discount_amount = 0.0
+            total_amount = 0.0
+
+            for i in range(len(item_descriptions)):
+                description = (item_descriptions[i] or "").strip()
+                course_id_raw = (item_course_ids[i] or "").strip()
+                qty_raw = (item_qtys[i] or "0").strip()
+                rate_raw = (item_rates[i] or "0").strip()
+                discount_raw = (item_discounts[i] or "0").strip()
+
+                qty = float(qty_raw or 0)
+                rate = float(rate_raw or 0)
+                row_discount = float(discount_raw or 0)
+
+                if not description and qty == 0 and rate == 0:
+                    continue
+
+                if not description:
+                    conn.close()
+                    flash(f"Description is required in item row {i + 1}.", "danger")
+                    return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+                if qty <= 0:
+                    conn.close()
+                    flash(f"Quantity must be greater than 0 in item row {i + 1}.", "danger")
+                    return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+                if rate < 0:
+                    conn.close()
+                    flash(f"Rate cannot be negative in item row {i + 1}.", "danger")
+                    return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+                gross = qty * rate
+
+                if row_discount < 0:
+                    row_discount = 0
+
+                if row_discount > gross:
+                    row_discount = gross
+
+                line_total = gross - row_discount
+
+                subtotal += gross
+                discount_amount += row_discount
+                total_amount += line_total
+
+                course_id = int(course_id_raw) if course_id_raw else None
+
+                invoice_items_to_save.append({
+                    "course_id": course_id,
+                    "description": description,
+                    "quantity": qty,
+                    "unit_price": rate,
+                    "line_total": line_total
+                })
+
+            if not invoice_items_to_save:
+                conn.close()
+                flash("Please enter at least one valid bill item.", "danger")
+                return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+            # Prevent reducing total below paid amount
+            if total_amount < total_paid:
+                conn.close()
+                flash(f"Cannot reduce invoice total below ₹{total_paid:.2f}", "danger")
+                return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+            # Update invoice
+            cur.execute("""
+                UPDATE invoices
+                SET student_id = ?,
+                    invoice_date = ?,
+                    subtotal = ?,
+                    discount_amount = ?,
+                    total_amount = ?,
+                    installment_type = ?,
+                    notes = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """, (
+                student_id_form,
+                invoice_date,
+                subtotal,
+                discount_amount,
+                total_amount,
+                installment_type,
+                notes,
+                now,
+                invoice_id
+            ))
+
+            # Replace invoice items
+            cur.execute("DELETE FROM invoice_items WHERE invoice_id = ?", (invoice_id,))
+
+            for item in invoice_items_to_save:
+                cur.execute("""
+                    INSERT INTO invoice_items (
+                        invoice_id,
+                        course_id,
+                        description,
+                        quantity,
+                        unit_price,
+                        line_total,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    invoice_id,
+                    item["course_id"],
+                    item["description"],
+                    item["quantity"],
+                    item["unit_price"],
+                    item["line_total"],
+                    now
+                ))
+
+            # Update installments
+            if installment_type == "full":
+                due_date = request.form.get("full_due_date", "").strip()
+
+                if not due_date:
+                    conn.rollback()
+                    conn.close()
+                    flash("Please enter full payment due date.", "danger")
+                    return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+                cur.execute("""
+                    UPDATE installment_plans
+                    SET due_date = ?,
+                        amount_due = ?,
+                        updated_at = ?
+                    WHERE invoice_id = ? AND installment_no = 1
+                """, (due_date, total_amount, now, invoice_id))
+
+            elif installment_type == "custom":
+                installment_count = int(request.form.get("installment_count", 0) or 0)
+
+                if installment_count <= 0:
+                    conn.rollback()
+                    conn.close()
+                    flash("Please enter valid installment count.", "danger")
+                    return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+                installment_total = 0.0
+
+                for i in range(1, installment_count + 1):
+                    due_date = request.form.get(f"due_date_{i}", "").strip()
+                    amount_due_raw = request.form.get(f"amount_due_{i}", "0").strip()
+                    remarks = request.form.get(f"remarks_{i}", "").strip()
+
+                    amount_due = float(amount_due_raw or 0)
+
+                    if not due_date:
+                        conn.rollback()
+                        conn.close()
+                        flash(f"Due date is required for installment {i}.", "danger")
+                        return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+                    if amount_due <= 0:
+                        conn.rollback()
+                        conn.close()
+                        flash(f"Amount must be greater than 0 for installment {i}.", "danger")
+                        return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+                    installment_total += amount_due
+
+                    cur.execute("""
+                        SELECT id
+                        FROM installment_plans
+                        WHERE invoice_id = ? AND installment_no = ?
+                    """, (invoice_id, i))
+                    existing = cur.fetchone()
+
+                    if existing:
+                        cur.execute("""
+                            UPDATE installment_plans
+                            SET due_date = ?,
+                                amount_due = ?,
+                                remarks = ?,
+                                updated_at = ?
+                            WHERE invoice_id = ? AND installment_no = ?
+                        """, (due_date, amount_due, remarks, now, invoice_id, i))
+                    else:
+                        cur.execute("""
+                            INSERT INTO installment_plans (
+                                invoice_id,
+                                installment_no,
+                                due_date,
+                                amount_due,
+                                amount_paid,
+                                status,
+                                remarks,
+                                created_at,
+                                updated_at
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            invoice_id,
+                            i,
+                            due_date,
+                            amount_due,
+                            0,
+                            "pending",
+                            remarks,
+                            now,
+                            now
+                        ))
+
+                cur.execute("""
+                    DELETE FROM installment_plans
+                    WHERE invoice_id = ? AND installment_no > ?
+                """, (invoice_id, installment_count))
+
+                if abs(installment_total - total_amount) > 0.01:
+                    conn.rollback()
+                    conn.close()
+                    flash("Installment total must equal invoice total amount.", "danger")
+                    return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+                # Reallocate existing payments
+                cur.execute("""
+                    SELECT IFNULL(SUM(amount_received), 0) AS total_received
+                    FROM receipts
+                    WHERE invoice_id = ?
+                """, (invoice_id,))
+                total_received = float(cur.fetchone()["total_received"] or 0)
+
+                if total_received > 0:
+                    cur.execute("""
+                        SELECT id, installment_no, amount_due
+                        FROM installment_plans
+                        WHERE invoice_id = ?
+                        ORDER BY installment_no ASC
+                    """, (invoice_id,))
+                    new_installments = cur.fetchall()
+
+                    remaining_payment = total_received
+
+                    for installment in new_installments:
+                        inst_id = installment["id"]
+                        inst_amount_due = float(installment["amount_due"] or 0)
+
+                        if remaining_payment <= 0:
+                            cur.execute("""
+                                UPDATE installment_plans
+                                SET amount_paid = ?, status = 'pending', updated_at = ?
+                                WHERE id = ?
+                            """, (0, now, inst_id))
+
+                        elif remaining_payment >= inst_amount_due:
+                            cur.execute("""
+                                UPDATE installment_plans
+                                SET amount_paid = ?, status = 'paid', remarks = 'Fully paid', updated_at = ?
+                                WHERE id = ?
+                            """, (inst_amount_due, now, inst_id))
+                            remaining_payment -= inst_amount_due
+
+                        else:
+                            cur.execute("""
+                                UPDATE installment_plans
+                                SET amount_paid = ?, status = 'partially_paid', remarks = ?, updated_at = ?
+                                WHERE id = ?
+                            """, (remaining_payment, f"Partial payment of {remaining_payment}", now, inst_id))
+                            remaining_payment = 0
+
+            conn.commit()
+            conn.close()
+
+            # Log activity
+            log_description = f"Updated invoice {invoice['invoice_no']}"
+
+            if student_id_form != invoice["student_id"]:
+                tmp_conn = get_conn()
+                tmp_cur = tmp_conn.cursor()
+                tmp_cur.execute("""
+                    SELECT student_code, full_name
+                    FROM students
+                    WHERE id = ?
+                """, (student_id_form,))
+                new_student = tmp_cur.fetchone()
+                tmp_conn.close()
+
+                if new_student:
+                    log_description += f" - Changed student from {invoice['student_code']} to {new_student['student_code']}"
+
+            log_activity(
+                user_id=session["user_id"],
+                branch_id=invoice["branch_id"],
+                action_type="update",
+                module_name="invoices",
+                record_id=invoice_id,
+                description=log_description
+            )
+
+            if student_id_form != invoice["student_id"]:
+                flash("Invoice updated successfully. Invoice student changed. All payments and installments now linked to new student.", "warning")
+            else:
+                flash("Invoice updated successfully.", "success")
+
+            return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            flash(f"An error occurred: {str(e)}", "danger")
+            return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
+
+    # Fetch courses for dropdown
+    cur.execute("""
+        SELECT *
+        FROM courses
+        WHERE is_active = 1
+        ORDER BY course_name ASC
+    """)
+    courses = cur.fetchall()
+
+    # Fetch students for dropdown
+    cur.execute("""
+        SELECT *
+        FROM students
+        ORDER BY student_code ASC
+    """)
+    students = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "billing/invoice_form.html",
+        invoice=invoice,
+        items=items,
+        installments=installments,
+        courses=courses,
+        students=students,
+        total_paid=total_paid,
+        today=datetime.now().date().isoformat(),
+        mode="edit"
+    )
+
+@billing_bp.route("/receipt/<int:receipt_id>/edit", methods=["GET", "POST"])
+@login_required
+@admin_required
+def receipt_edit(receipt_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Fetch the receipt
+    cur.execute("""
+        SELECT
+            receipts.*,
+            invoices.invoice_no,
+            invoices.student_id,
+            invoices.branch_id,
+            students.full_name
+        FROM receipts
+        JOIN invoices
+            ON receipts.invoice_id = invoices.id
+        JOIN students
+            ON invoices.student_id = students.id
+        WHERE receipts.id = ?
+    """, (receipt_id,))
+    receipt = cur.fetchone()
+
+    if not receipt:
+        conn.close()
+        flash("Receipt not found.", "danger")
+        return redirect(url_for("billing.receipts"))
+
+    if request.method == "POST":
+        try:
+            now = datetime.now().isoformat(timespec="seconds")
+
+            receipt_date = request.form.get("receipt_date", "").strip()
+            amount_received = float(request.form.get("amount_received", 0) or 0)
+            payment_mode = request.form.get("payment_mode", "cash").strip()
+            notes = request.form.get("notes", "").strip()
+
+            if amount_received <= 0:
+                flash("Amount must be greater than 0.", "danger")
+                conn.close()
+                return redirect(url_for("billing.receipt_edit", receipt_id=receipt_id))
+
+            # Get invoice total
+            cur.execute("""
+                SELECT total_amount
+                FROM invoices
+                WHERE id = ?
+            """, (receipt["invoice_id"],))
+            invoice_row = cur.fetchone()
+            invoice_total = float(invoice_row["total_amount"] or 0)
+
+            # Get total of all other receipts except current one
+            cur.execute("""
+                SELECT IFNULL(SUM(amount_received), 0) AS total_received
+                FROM receipts
+                WHERE invoice_id = ? AND id != ?
+            """, (receipt["invoice_id"], receipt_id))
+            other_receipts_total = float(cur.fetchone()["total_received"] or 0)
+
+            # Validate total receipts do not exceed invoice total
+            if (amount_received + other_receipts_total) > invoice_total:
+                conn.close()
+                flash(f"Total receipts cannot exceed invoice amount of ₹{invoice_total:.2f}", "danger")
+                return redirect(url_for("billing.receipt_edit", receipt_id=receipt_id))
+
+            # Update receipt
+            cur.execute("""
+                UPDATE receipts
+                SET
+                    receipt_date = ?,
+                    amount_received = ?,
+                    payment_mode = ?,
+                    notes = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """, (
+                receipt_date,
+                amount_received,
+                payment_mode,
+                notes,
+                now,
+                receipt_id
+            ))
+
+            # Recalculate invoice status
+            cur.execute("""
+                SELECT IFNULL(SUM(amount_received), 0) AS total_received
+                FROM receipts
+                WHERE invoice_id = ?
+            """, (receipt["invoice_id"],))
+            total_received = float(cur.fetchone()["total_received"] or 0)
+
+            if total_received >= invoice_total:
+                new_status = "paid"
+            elif total_received > 0:
+                new_status = "partially_paid"
+            else:
+                new_status = "unpaid"
+
+            cur.execute("""
+                UPDATE invoices
+                SET status = ?, updated_at = ?
+                WHERE id = ?
+            """, (new_status, now, receipt["invoice_id"]))
+
+            conn.commit()
+            conn.close()
+
+            log_activity(
+                user_id=session.get("user_id"),
+                branch_id=receipt["branch_id"],
+                action_type="update",
+                module_name="receipts",
+                record_id=receipt_id,
+                description=f"Updated receipt {receipt['receipt_no']}"
+            )
+
+            flash(f"Receipt {receipt['receipt_no']} updated successfully.", "success")
+            return redirect(url_for("billing.receipt_edit", receipt_id=receipt_id))
+
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            flash(f"Error while updating receipt: {str(e)}", "danger")
+            return redirect(url_for("billing.receipt_edit", receipt_id=receipt_id))
+
+    conn.close()
+
+    return render_template("billing/receipt_edit.html", receipt=receipt)
+

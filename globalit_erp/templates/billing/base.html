@@ -87,13 +87,13 @@
 
       <a
         class="nav-link {{ 'active' if request.endpoint == 'billing.courses' else '' }}"
-        href="#">
+        href="{{ url_for('billing.courses') }}">
         📘 Courses
       </a>
 
       <a
         class="nav-link {{ 'active' if request.endpoint == 'billing.invoices' else '' }}"
-        href="#">
+        href="{{ url_for('billing.invoices') }}">
         🧾 Invoices
       </a>
 
