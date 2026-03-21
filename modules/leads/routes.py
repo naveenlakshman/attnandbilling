@@ -386,6 +386,7 @@ def lead_create():
         interested_courses = request.form.get("interested_courses", "").strip() or None
         lead_source = request.form.get("lead_source", "").strip() or None
         decision_maker = request.form.get("decision_maker", "Self").strip() or "Self"
+        lead_location = request.form.get("lead_location", "").strip() or None
         start_timeframe = request.form.get("start_timeframe", "").strip() or None
         stage = request.form.get("stage", "New Lead").strip() or "New Lead"
         notes = request.form.get("notes", "").strip() or None
@@ -444,6 +445,7 @@ def lead_create():
                 interested_courses,
                 lead_source,
                 decision_maker,
+                lead_location,
                 start_timeframe,
                 lead_score,
                 stage,
@@ -456,7 +458,7 @@ def lead_create():
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             name,
             phone,
@@ -470,6 +472,7 @@ def lead_create():
             interested_courses,
             lead_source,
             decision_maker,
+            lead_location,
             start_timeframe,
             lead_score,
             stage,
@@ -773,6 +776,7 @@ def lead_edit(lead_id):
         interested_courses = request.form.get("interested_courses", "").strip() or None
         lead_source = request.form.get("lead_source", "").strip() or None
         decision_maker = request.form.get("decision_maker", "Self").strip() or "Self"
+        lead_location = request.form.get("lead_location", "").strip() or None
         start_timeframe = request.form.get("start_timeframe", "").strip() or None
 
         stage = request.form.get("stage", lead["stage"]).strip() or lead["stage"]
@@ -829,6 +833,7 @@ def lead_edit(lead_id):
                 interested_courses = ?,
                 lead_source = ?,
                 decision_maker = ?,
+                lead_location = ?,
                 start_timeframe = ?,
                 stage = ?,
                 notes = ?,
@@ -851,6 +856,7 @@ def lead_edit(lead_id):
             interested_courses,
             lead_source,
             decision_maker,
+            lead_location,
             start_timeframe,
             stage,
             notes,

@@ -197,6 +197,15 @@
         </div>
 
         <div class="form-group">
+          <label>Student From</label>
+          <select name="student_location">
+            <option value="">-- Select --</option>
+            <option value="Rural" {% if student and student.student_location == 'Rural' %}selected{% endif %}>Rural</option>
+            <option value="Urban" {% if student and student.student_location == 'Urban' %}selected{% endif %}>Urban</option>
+          </select>
+        </div>
+
+        <div class="form-group">
           <label>Employment Status</label>
           <select name="employment_status">
             <option value="">-- Select --</option>

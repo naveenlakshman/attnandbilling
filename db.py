@@ -327,6 +327,8 @@ def init_db():
     add_column_if_not_exists(cur, "students", "qualification", "TEXT")
     add_column_if_not_exists(cur, "students", "employment_status", "TEXT DEFAULT 'unemployed'")
     add_column_if_not_exists(cur, "students", "branch_id", "INTEGER")
+    add_column_if_not_exists(cur, "students", "student_location", "TEXT")
+    add_column_if_not_exists(cur, "leads", "lead_location", "TEXT")
 
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")
 

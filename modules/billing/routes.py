@@ -517,6 +517,7 @@ def student_new():
                 address,
                 education_level,
                 qualification,
+                student_location,
                 employment_status,
                 joined_date,
                 status,
@@ -524,7 +525,7 @@ def student_new():
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(next_reg_no),
             full_name,
@@ -534,6 +535,7 @@ def student_new():
             address,
             education_level,
             qualification,
+            student_location,
             employment_status,
             now,
             status,
@@ -603,6 +605,7 @@ def student_edit(student_id):
         address = request.form.get("address", "").strip()
         education_level = request.form.get("education_level", "").strip()
         qualification = request.form.get("qualification", "").strip()
+        student_location = request.form.get("student_location", "").strip()
         employment_status = request.form.get("employment_status", "").strip()
         status = request.form.get("status", "active").strip()
 
@@ -618,6 +621,7 @@ def student_edit(student_id):
                 address = ?,
                 education_level = ?,
                 qualification = ?,
+                student_location = ?,
                 employment_status = ?,
                 status = ?,
                 updated_at = ?
@@ -631,6 +635,7 @@ def student_edit(student_id):
             address,
             education_level,
             qualification,
+            student_location,
             employment_status,
             status,
             now,
@@ -762,6 +767,7 @@ def export_students_csv():
                 students.address,
                 students.education_level,
                 students.qualification,
+                students.student_location,
                 students.employment_status,
                 students.status,
                 branches.branch_name,
@@ -786,6 +792,7 @@ def export_students_csv():
             "Address",
             "Education Level",
             "Qualification",
+            "Student Location",
             "Employment Status",
             "Status",
             "Branch",
@@ -802,6 +809,7 @@ def export_students_csv():
                 student["address"] or "",
                 student["education_level"] or "",
                 student["qualification"] or "",
+                student["student_location"] or "",
                 student["employment_status"] or "",
                 student["status"] or "",
                 student["branch_name"] or "",

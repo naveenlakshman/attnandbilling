@@ -43,8 +43,7 @@
         <div><span class="text-muted">Goal:</span> {{ lead.career_goal or '' }}</div>
         <div><span class="text-muted">Courses:</span> {{ lead.interested_courses or '' }}</div>
         <div><span class="text-muted">Source:</span> {{ lead.lead_source or '' }}</div>
-        <div><span class="text-muted">Decision Maker:</span> {{ lead.decision_maker or 'Self' }}</div>
-        <div><span class="text-muted">Start:</span> {{ lead.start_timeframe or '' }}</div>
+        <div><span class="text-muted">Decision Maker:</span> {{ lead.decision_maker or 'Self' }}</div>        <div><span class=\"text-muted\">Lead From:</span> {{ lead.lead_location or '' }}</div>        <div><span class="text-muted">Start:</span> {{ lead.start_timeframe or '' }}</div>
         <div><span class="text-muted">Last Contact:</span> {{ lead.last_contact_date or '' }}</div>
         <div><span class="text-muted">Next Follow-up:</span> {{ lead.next_followup_date or '' }}</div>
         {% if lead.lost_reason %}

@@ -101,6 +101,15 @@
     </div>
 
     <div class="col-md-4">
+      <label class="form-label">Lead From</label>
+      <select class="form-select" name="lead_location">
+        <option value="">(none)</option>
+        <option value="Rural" {% if lead and lead.lead_location == 'Rural' %}selected{% endif %}>Rural</option>
+        <option value="Urban" {% if lead and lead.lead_location == 'Urban' %}selected{% endif %}>Urban</option>
+      </select>
+    </div>
+
+    <div class="col-md-4">
       <label class="form-label">Start Timeframe</label>
       <select class="form-select" name="start_timeframe">
         <option value="">(none)</option>
