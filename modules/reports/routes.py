@@ -460,11 +460,25 @@ def upload_csv():
         return redirect(url_for("reports.import_page"))
     
     try:
-        stream = io.TextIOWrapper(file.stream, encoding='utf-8')
+        # Read file content as bytes and decode to string
+        file_content = file.read()
+        if not file_content:
+            flash("❌ CSV file is empty. Please upload a file with data.", "danger")
+            return redirect(url_for("reports.import_page"))
+        
+        # Decode bytes to string
+        try:
+            text_content = file_content.decode('utf-8')
+        except UnicodeDecodeError:
+            flash("❌ File encoding error. Please save your CSV file as UTF-8 format.", "danger")
+            return redirect(url_for("reports.import_page"))
+        
+        # Parse CSV from string content
+        stream = io.StringIO(text_content)
         reader = csv.DictReader(stream)
         
         if not reader.fieldnames:
-            flash("CSV file is empty or invalid", "danger")
+            flash("❌ CSV file has no headers. First row must contain column names.", "danger")
             return redirect(url_for("reports.import_page"))
         
         conn = get_conn()
@@ -650,12 +664,28 @@ def upload_csv():
         conn.close()
         
         if errors:
-            flash(f"Imported {rows_imported} rows with {len(errors)} errors: {', '.join(errors[:5])}", "warning")
+            error_message = f"✓ Imported {rows_imported} rows, but {len(errors)} row(s) failed:\n"
+            for err in errors[:3]:
+                error_message += f"\n  • {err}"
+            if len(errors) > 3:
+                error_message += f"\n  ... and {len(errors) - 3} more errors"
+            flash(error_message, "warning")
         else:
-            flash(f"Successfully imported {rows_imported} rows to {table_name}!", "success")
+            flash(f"✅ Successfully imported {rows_imported} rows into {table_name}!", "success")
         
         return redirect(url_for("reports.import_page"))
     
     except Exception as e:
-        flash(f"Error importing CSV: {str(e)}", "danger")
+        error_detail = str(e)
+        
+        # Provide helpful error messages
+        if "no column named" in error_detail.lower():
+            flash(f"❌ Column mismatch error.\n\nThe CSV file has a column that doesn't exist in the {table_name} table.\n\nError: {error_detail}\n\n📋 Tip: Download the sample CSV to see correct column names.", "danger")
+        elif "constraint" in error_detail.lower() or "foreign key" in error_detail.lower():
+            flash(f"❌ Data relationship error.\n\nA record references data that doesn't exist (e.g., student_id without student).\n\nError: {error_detail}", "danger")
+        elif "not null" in error_detail.lower():
+            flash(f"❌ Missing required data.\n\nA required field is empty or missing.\n\nError: {error_detail}\n\n📋 Tip: Check that all required columns have values.", "danger")
+        else:
+            flash(f"❌ Error importing CSV:\n\n{error_detail}\n\n📋 Try downloading a sample CSV and comparing your format.", "danger")
+        
         return redirect(url_for("reports.import_page"))
