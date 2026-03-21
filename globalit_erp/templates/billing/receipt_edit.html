@@ -100,7 +100,7 @@
   <div class="page-header-row">
     <h2>Edit Receipt</h2>
 
-    <a href="#" class="btn btn-secondary">
+    <a href="{{ url_for('billing.receipts') }}" class="btn btn-secondary">
       ← Back to Receipts
     </a>
   </div>
@@ -130,7 +130,7 @@
             id="receipt_date"
             name="receipt_date"
             class="form-control"
-            value="{{ receipt.receipt_date|format_date_input }}"
+            value="{{ receipt.receipt_date }}"
             required>
         </div>
 
@@ -172,7 +172,7 @@
 
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Update Receipt</button>
-        <a href="#" class="btn btn-secondary">Cancel</a>
+        <a href="{{ url_for('billing.receipts') }}" class="btn btn-secondary">Cancel</a>
       </div>
     </form>
   </div>

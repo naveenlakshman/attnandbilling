@@ -1,0 +1,191 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Global IT ERP - Receipts{% endblock %}
+
+{% block content %}
+
+<style>
+  .receipt-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .receipt-page-header h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .receipt-search-card {
+    margin-bottom: 20px;
+  }
+
+  .receipt-search-form {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .receipt-search-form input {
+    flex: 1;
+    min-width: 260px;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+
+  .receipt-search-form input:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+  }
+
+  .receipts-table {
+    border-collapse: collapse;
+  }
+
+  .receipts-table thead tr {
+    background-color: #f5f6f7;
+  }
+
+  .receipts-table th {
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+    border: 1px solid #ddd;
+  }
+
+  .receipts-table td {
+    padding: 10px 8px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  .receipts-table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+
+  .receipt-empty {
+    padding: 40px;
+    text-align: center;
+    color: #999;
+  }
+
+  .receipt-empty p {
+    margin: 0;
+  }
+
+  .amount-green {
+    color: green;
+    font-weight: 600;
+  }
+</style>
+
+<div class="receipt-page-header">
+  <h2>Receipts</h2>
+</div>
+
+<div class="card receipt-search-card">
+  <form method="get" class="receipt-search-form">
+    <input
+      type="text"
+      name="search"
+      value="{{ search or '' }}"
+      placeholder="Search by receipt no, invoice no, student name, or student code"
+    >
+    <button type="submit" class="btn btn-primary">Search</button>
+
+    {% if search %}
+    <a href="{{ url_for('billing.receipts') }}" class="btn btn-secondary">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
+  {% if receipts %}
+    <table border="1" width="100%" cellpadding="10" class="receipts-table">
+      <thead>
+        <tr>
+          <th style="width: 70px;">ID</th>
+          <th style="width: 130px;">Receipt No</th>
+          <th style="width: 130px;">Invoice No</th>
+          <th>Student</th>
+          <th style="width: 120px;">Date</th>
+          <th style="width: 130px;">Amount</th>
+          <th style="width: 130px;">Payment Mode</th>
+          <th>Notes</th>
+          <th style="width: 140px;">Created By</th>
+          <th style="width: 120px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for receipt in receipts %}
+        <tr>
+          <td>{{ receipt.id }}</td>
+
+          <td>
+            <a href="{{ url_for('billing.receipt_view', receipt_id=receipt.id) }}" style="text-decoration: none; font-weight: 600;">
+              {{ receipt.receipt_no }}
+            </a>
+          </td>
+
+          <td>
+            <a href="{{ url_for('billing.invoice_view', invoice_id=receipt.invoice_id) }}" style="text-decoration: none;">
+              {{ receipt.invoice_no }}
+            </a>
+          </td>
+
+          <td>
+            {{ receipt.student_code or "" }}
+            {% if receipt.student_code %} - {% endif %}
+            {{ receipt.full_name }}
+          </td>
+
+          <td>{{ receipt.receipt_date }}</td>
+
+          <td class="amount-green">
+            ₹ {{ "%.2f"|format(receipt.amount_received or 0) }}
+          </td>
+
+          <td>
+            {% set mode_labels = {
+              'cash': 'Cash',
+              'upi': 'UPI',
+              'bank_transfer': 'Bank Transfer',
+              'card': 'Card'
+            } %}
+            {{ mode_labels.get(receipt.payment_mode, receipt.payment_mode) }}
+          </td>
+
+          <td>{{ receipt.notes or '-' }}</td>
+
+          <td>{{ receipt.created_by_name or 'System' }}</td>
+
+          <td>
+            {% if session.get("role") == "admin" %}
+              <a href="{{ url_for('billing.receipt_edit', receipt_id=receipt.id) }}">Edit</a>
+            {% else %}
+              -
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="receipt-empty">
+      <p style="font-size: 15px;">💵 No receipts found.</p>
+      <p style="font-size: 12px; margin-top: 8px;">Try another search term.</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

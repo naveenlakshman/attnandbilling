@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, session, redirect, url_for, flash, Response
 from datetime import date, datetime
 import calendar
+import uuid
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
 import io
@@ -1948,6 +1949,266 @@ def invoice_edit(invoice_id):
         mode="edit"
     )
 
+@billing_bp.route("/receipts")
+@login_required
+def receipts():
+    search = request.args.get("search", "").strip()
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    query = """
+    SELECT
+        receipts.id,
+        receipts.receipt_no,
+        receipts.receipt_date,
+        receipts.amount_received,
+        receipts.payment_mode,
+        receipts.notes,
+        receipts.invoice_id,
+        invoices.invoice_no,
+        invoices.branch_id,
+        students.full_name,
+        students.student_code,
+        users.full_name AS created_by_name
+    FROM receipts
+    JOIN invoices
+        ON receipts.invoice_id = invoices.id
+    JOIN students
+        ON invoices.student_id = students.id
+    LEFT JOIN users
+        ON receipts.created_by = users.id
+    """
+
+    params = []
+
+    if search:
+        query += """
+        WHERE
+            receipts.receipt_no LIKE ?
+            OR invoices.invoice_no LIKE ?
+            OR students.full_name LIKE ?
+            OR students.student_code LIKE ?
+        """
+        like = f"%{search}%"
+        params.extend([like, like, like, like])
+
+    query += """
+    ORDER BY receipts.id DESC
+    """
+
+    cur.execute(query, params)
+    all_receipts = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "billing/receipts.html",
+        receipts=all_receipts,
+        search=search
+    )
+
+@billing_bp.route("/receipt/new", methods=["GET", "POST"])
+@login_required
+def receipt_new():
+    invoice_id = request.args.get("invoice_id", type=int)
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        try:
+            now = datetime.now().isoformat(timespec="seconds")
+
+            amount_received = float(request.form.get("amount_received", 0) or 0)
+
+            if amount_received <= 0:
+                flash("Amount must be greater than 0.", "danger")
+                conn.close()
+                return redirect(url_for("billing.receipt_new", invoice_id=invoice_id))
+
+            # Get invoice details
+            cur.execute("""
+                SELECT id, total_amount, branch_id
+                FROM invoices
+                WHERE id = ?
+            """, (invoice_id,))
+            invoice_data = cur.fetchone()
+
+            if not invoice_data:
+                conn.close()
+                flash("Invoice not found.", "danger")
+                return redirect(url_for("billing.invoices"))
+
+            # Calculate balance
+            cur.execute("""
+                SELECT IFNULL(SUM(amount_received), 0) AS total_received
+                FROM receipts
+                WHERE invoice_id = ?
+            """, (invoice_id,))
+            total_received = float(cur.fetchone()["total_received"] or 0)
+            balance_amount = float(invoice_data["total_amount"] or 0) - total_received
+
+            if amount_received > balance_amount:
+                conn.close()
+                flash(f"Amount cannot exceed balance ₹{balance_amount:.2f}", "danger")
+                return redirect(url_for("billing.receipt_new", invoice_id=invoice_id))
+
+            payment_mode = request.form.get("payment_mode", "cash").strip()
+            notes = request.form.get("notes", "").strip()
+            receipt_date = request.form.get("receipt_date")
+
+            # Temporary receipt number
+            temp_receipt_no = f"TEMP_{uuid.uuid4().hex[:8]}"
+
+            cur.execute("""
+                INSERT INTO receipts (
+                    receipt_no,
+                    invoice_id,
+                    receipt_date,
+                    amount_received,
+                    payment_mode,
+                    notes,
+                    created_by,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                temp_receipt_no,
+                invoice_id,
+                receipt_date,
+                amount_received,
+                payment_mode,
+                notes,
+                session.get("user_id"),
+                now
+            ))
+
+            receipt_id = cur.lastrowid
+
+            # Final receipt number
+            receipt_no = f"GIT/{receipt_id}"
+
+            cur.execute("""
+                UPDATE receipts
+                SET receipt_no = ?
+                WHERE id = ?
+            """, (receipt_no, receipt_id))
+
+            # Update invoice status
+            cur.execute("""
+                SELECT IFNULL(SUM(amount_received), 0) AS total_received
+                FROM receipts
+                WHERE invoice_id = ?
+            """, (invoice_id,))
+            total_received = float(cur.fetchone()["total_received"] or 0)
+
+            if total_received >= invoice_data["total_amount"]:
+                new_status = "paid"
+            elif total_received > 0:
+                new_status = "partially_paid"
+            else:
+                new_status = "unpaid"
+
+            cur.execute("""
+                UPDATE invoices
+                SET status = ?, updated_at = ?
+                WHERE id = ?
+            """, (new_status, now, invoice_id))
+
+            # Installment allocation logic (unchanged, ERP compatible)
+            cur.execute("""
+                SELECT id, installment_no, amount_due
+                FROM installment_plans
+                WHERE invoice_id = ?
+                ORDER BY installment_no ASC
+            """, (invoice_id,))
+            installments = cur.fetchall()
+
+            remaining_payment = total_received
+
+            for inst in installments:
+                inst_id = inst["id"]
+                inst_due = inst["amount_due"]
+
+                if remaining_payment <= 0:
+                    cur.execute("""
+                        UPDATE installment_plans
+                        SET status = 'pending', updated_at = ?
+                        WHERE id = ?
+                    """, (now, inst_id))
+
+                elif remaining_payment >= inst_due:
+                    cur.execute("""
+                        UPDATE installment_plans
+                        SET amount_paid = ?, status = 'paid',
+                            remarks = 'Fully paid', updated_at = ?
+                        WHERE id = ?
+                    """, (inst_due, now, inst_id))
+                    remaining_payment -= inst_due
+
+                else:
+                    cur.execute("""
+                        UPDATE installment_plans
+                        SET amount_paid = ?, status = 'partially_paid',
+                            remarks = ?, updated_at = ?
+                        WHERE id = ?
+                    """, (remaining_payment, f"Partial payment of {remaining_payment}", now, inst_id))
+                    remaining_payment = 0
+
+            conn.commit()
+            conn.close()
+
+            # 🔥 ERP LOGGING
+            log_activity(
+                user_id=session.get("user_id"),
+                branch_id=invoice_data["branch_id"],
+                action_type="create",
+                module_name="receipts",
+                record_id=receipt_id,
+                description=f"Created receipt {receipt_no}"
+            )
+
+            flash(f"Receipt {receipt_no} recorded successfully.", "success")
+            return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            flash(f"Error recording payment: {str(e)}", "danger")
+            return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
+    # ---------- GET ----------
+    cur.execute("""
+        SELECT invoices.*, students.full_name
+        FROM invoices
+        JOIN students ON invoices.student_id = students.id
+        WHERE invoices.id = ?
+    """, (invoice_id,))
+    invoice = cur.fetchone()
+
+    if not invoice:
+        conn.close()
+        flash("Invoice not found.", "danger")
+        return redirect(url_for("billing.invoices"))
+
+    cur.execute("""
+        SELECT IFNULL(SUM(amount_received), 0) AS total_paid
+        FROM receipts
+        WHERE invoice_id = ?
+    """, (invoice_id,))
+    total_paid = float(cur.fetchone()["total_paid"] or 0)
+    balance_amount = float(invoice["total_amount"] or 0) - total_paid
+
+    conn.close()
+
+    return render_template(
+        "billing/receipt_new.html",
+        invoice=invoice,
+        total_paid=total_paid,
+        balance_amount=balance_amount
+    )
+
 @billing_bp.route("/receipt/<int:receipt_id>/edit", methods=["GET", "POST"])
 @login_required
 @admin_required
@@ -2021,15 +2282,13 @@ def receipt_edit(receipt_id):
                     receipt_date = ?,
                     amount_received = ?,
                     payment_mode = ?,
-                    notes = ?,
-                    updated_at = ?
+                    notes = ?
                 WHERE id = ?
             """, (
                 receipt_date,
                 amount_received,
                 payment_mode,
                 notes,
-                now,
                 receipt_id
             ))
 
@@ -2079,3 +2338,46 @@ def receipt_edit(receipt_id):
 
     return render_template("billing/receipt_edit.html", receipt=receipt)
 
+@billing_bp.route("/receipt/<int:receipt_id>")
+@login_required
+def receipt_view(receipt_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Fetch the receipt with all details
+    cur.execute("""
+        SELECT
+            receipts.*,
+            invoices.id AS invoice_id,
+            invoices.invoice_no,
+            invoices.total_amount,
+            invoices.invoice_date,
+            invoices.branch_id,
+            students.student_code,
+            students.full_name,
+            students.phone,
+            students.email,
+            students.address,
+            users.full_name AS created_by_name,
+            branches.branch_name
+        FROM receipts
+        JOIN invoices
+            ON receipts.invoice_id = invoices.id
+        JOIN students
+            ON invoices.student_id = students.id
+        LEFT JOIN users
+            ON receipts.created_by = users.id
+        LEFT JOIN branches
+            ON invoices.branch_id = branches.id
+        WHERE receipts.id = ?
+    """, (receipt_id,))
+    receipt = cur.fetchone()
+
+    if not receipt:
+        conn.close()
+        flash("Receipt not found.", "danger")
+        return redirect(url_for("billing.receipts"))
+
+    conn.close()
+
+    return render_template("billing/receipt_view.html", receipt=receipt)

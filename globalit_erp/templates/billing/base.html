@@ -99,7 +99,7 @@
 
       <a
         class="nav-link {{ 'active' if request.endpoint == 'billing.receipts' else '' }}"
-        href="#">
+        href="{{ url_for('billing.receipts') }}">
         💵 Receipts
       </a>
 

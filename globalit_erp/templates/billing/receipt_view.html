@@ -1,0 +1,332 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Receipt View - Global IT ERP{% endblock %}
+
+{% block content %}
+<div class="receipt-page-wrap">
+  <div class="receipt-toolbar">
+    <div class="receipt-toolbar-left">
+      <h2>Receipt View</h2>
+      <p class="receipt-subtitle">Payment receipt details</p>
+    </div>
+
+    <div class="receipt-actions">
+      <button onclick="window.print()" class="btn btn-primary">🖨️ Print Receipt</button>
+
+      {% if session.get("role") == "admin" %}
+      <a href="{{ url_for('billing.receipt_edit', receipt_id=receipt.id) }}" class="btn btn-secondary">✎ Edit</a>
+      {% endif %}
+
+      <a href="{{ url_for('billing.receipts') }}" class="btn btn-secondary">← Back</a>
+    </div>
+  </div>
+
+  <div class="receipt-paper">
+    <!-- Header -->
+    <div class="receipt-header">
+      <div class="receipt-title">RECEIPT</div>
+      <div class="receipt-info">
+        <div><strong>Receipt No:</strong> {{ receipt.receipt_no }}</div>
+        <div><strong>Date:</strong> {{ receipt.receipt_date }}</div>
+      </div>
+    </div>
+
+    <!-- Organization Info -->
+    <div class="receipt-org-info">
+      <div class="org-name">Global IT Education</div>
+      {% if receipt.branch_name %}
+        <div class="org-branch">{{ receipt.branch_name }}</div>
+      {% endif %}
+    </div>
+
+    <!-- Student Details -->
+    <div class="receipt-section">
+      <div class="section-title">Student Details</div>
+
+      <div class="detail-row">
+        <div class="label">Student Code:</div>
+        <div class="value">{{ receipt.student_code }}</div>
+      </div>
+
+      <div class="detail-row">
+        <div class="label">Student Name:</div>
+        <div class="value">{{ receipt.full_name }}</div>
+      </div>
+
+      {% if receipt.phone %}
+      <div class="detail-row">
+        <div class="label">Phone:</div>
+        <div class="value">{{ receipt.phone }}</div>
+      </div>
+      {% endif %}
+
+      {% if receipt.email %}
+      <div class="detail-row">
+        <div class="label">Email:</div>
+        <div class="value">{{ receipt.email }}</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Invoice Details -->
+    <div class="receipt-section">
+      <div class="section-title">Invoice Details</div>
+
+      <div class="detail-row">
+        <div class="label">Invoice No:</div>
+        <div class="value">{{ receipt.invoice_no }}</div>
+      </div>
+
+      <div class="detail-row">
+        <div class="label">Invoice Date:</div>
+        <div class="value">{{ receipt.invoice_date }}</div>
+      </div>
+
+      <div class="detail-row">
+        <div class="label">Invoice Amount:</div>
+        <div class="value">₹ {{ "%.2f"|format(receipt.total_amount or 0) }}</div>
+      </div>
+    </div>
+
+    <!-- Payment Details -->
+    <div class="receipt-section">
+      <div class="section-title">Payment Details</div>
+
+      <div class="detail-row">
+        <div class="label">Amount Received:</div>
+        <div class="value amount-highlight">₹ {{ "%.2f"|format(receipt.amount_received or 0) }}</div>
+      </div>
+
+      <div class="detail-row">
+        <div class="label">Payment Mode:</div>
+        <div class="value">
+          {% set mode_labels = {
+            'cash': 'Cash',
+            'upi': 'UPI',
+            'bank_transfer': 'Bank Transfer',
+            'card': 'Card'
+          } %}
+          {{ mode_labels.get(receipt.payment_mode, receipt.payment_mode) }}
+        </div>
+      </div>
+
+      {% if receipt.notes %}
+      <div class="detail-row">
+        <div class="label">Reference No:</div>
+        <div class="value">{{ receipt.notes }}</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Created By -->
+    <div class="receipt-section">
+      <div class="detail-row">
+        <div class="label">Recorded By:</div>
+        <div class="value">{{ receipt.created_by_name or 'System' }}</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="receipt-footer">
+      <div class="footer-text">Thank you for your payment</div>
+      <div class="footer-text smaller">This is a computer-generated receipt</div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .receipt-page-wrap {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .receipt-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .receipt-toolbar-left h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .receipt-subtitle {
+    margin: 4px 0 0 0;
+    color: #6b7280;
+    font-size: 14px;
+  }
+
+  .receipt-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .receipt-paper {
+    background: white;
+    padding: 30px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-family: Georgia, serif;
+    max-width: 100%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+
+  .receipt-header {
+    text-align: center;
+    margin-bottom: 30px;
+    border-bottom: 2px solid #333;
+    padding-bottom: 15px;
+  }
+
+  .receipt-title {
+    font-size: 24px;
+    font-weight: bold;
+    color: #1e3a8a;
+    margin-bottom: 10px;
+  }
+
+  .receipt-info {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+    font-size: 14px;
+  }
+
+  .receipt-org-info {
+    text-align: center;
+    margin-bottom: 25px;
+  }
+
+  .org-name {
+    font-size: 18px;
+    font-weight: bold;
+    color: #333;
+  }
+
+  .org-branch {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+  }
+
+  .receipt-section {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .receipt-section:last-of-type {
+    border-bottom: 2px solid #333;
+  }
+
+  .section-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #1e3a8a;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+
+  .detail-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .label {
+    font-weight: 600;
+    color: #333;
+    min-width: 180px;
+  }
+
+  .value {
+    text-align: right;
+    color: #555;
+    flex: 1;
+  }
+
+  .amount-highlight {
+    font-size: 16px;
+    font-weight: bold;
+    color: #27ae60;
+  }
+
+  .receipt-footer {
+    text-align: center;
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #ddd;
+  }
+
+  .footer-text {
+    font-size: 12px;
+    color: #666;
+    margin: 5px 0;
+  }
+
+  .footer-text.smaller {
+    font-size: 10px;
+    color: #999;
+  }
+
+  @media (max-width: 768px) {
+    .detail-row {
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .label,
+    .value {
+      min-width: auto;
+      text-align: left;
+    }
+
+    .receipt-paper {
+      padding: 20px;
+    }
+  }
+
+  @media print {
+    .sidebar,
+    .topbar,
+    .receipt-toolbar {
+      display: none !important;
+    }
+
+    .content-wrap,
+    .container-fluid {
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .receipt-page-wrap {
+      max-width: 100%;
+      margin: 0;
+    }
+
+    .receipt-paper {
+      border: none;
+      box-shadow: none;
+      padding: 0;
+      max-width: 100%;
+    }
+
+    body {
+      background: white !important;
+    }
+  }
+</style>
+{% endblock %}

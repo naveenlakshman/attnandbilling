@@ -1,13 +1,235 @@
 {% extends "billing/base.html" %}
 
 {% block content %}
+<style>
+  /* Screen View Styling */
+  .invoice-header {
+    margin-bottom: 25px;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 15px;
+  }
+
+  .invoice-header h1 {
+    margin: 0 0 5px 0;
+    color: #2c3e50;
+  }
+
+  .invoice-header p {
+    margin: 0;
+    color: #666;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 25px;
+  }
+
+  .card {
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 20px;
+    background: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+
+  .card h3 {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 10px;
+    font-size: 16px;
+  }
+
+  .card p {
+    margin: 8px 0;
+    line-height: 1.6;
+  }
+
+  .card p strong {
+    color: #333;
+  }
+
+  .billing-table {
+    margin: 15px 0;
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .billing-table th {
+    background-color: #007bff;
+    color: white;
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  .billing-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .billing-table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+
+  .invoice-footer {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #dee2e6;
+  }
+
+  @media print {
+    /* Hide all page navigation and controls */
+    .page-actions,
+    .sidebar,
+    nav,
+    .navbar,
+    aside,
+    [role="navigation"],
+    .no-print,
+    header,
+    .page-header,
+    .app-header {
+      display: none !important;
+    }
+
+    /* Hide browser header bar (Logged in: admin, Global IT ERP - Billing) */
+    body::before {
+      display: none !important;
+    }
+
+    /* Hide page info at top */
+    @page {
+      margin-top: 0;
+    }
+
+    /* Ensure main content is visible */
+    body,
+    html {
+      margin: 0 !important;
+      padding: 5mm !important;
+      background: white !important;
+    }
+
+    h2 {
+      display: none !important;
+    }
+
+    /* Invoice styling for print - ONE PAGE */
+    .invoice-header {
+      margin: 0 0 10mm 0;
+      padding-bottom: 5mm;
+    }
+
+    .invoice-header h1 {
+      margin: 0;
+      font-size: 20px;
+      padding: 5px 0;
+    }
+
+    .invoice-header p {
+      margin: 2px 0;
+      font-size: 12px;
+    }
+
+    .invoice-header hr {
+      margin: 5px 0;
+    }
+
+    .grid {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10mm;
+      page-break-inside: avoid;
+    }
+
+    .card {
+      page-break-inside: avoid;
+      border: 1px solid #000;
+      padding: 8px;
+      margin: 0;
+      font-size: 12px;
+    }
+
+    .card h3 {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 3px;
+    }
+
+    .card p {
+      margin: 2px 0;
+      font-size: 11px;
+    }
+
+    /* Table styling - compact */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0;
+      page-break-inside: avoid;
+      font-size: 10px;
+    }
+
+    table th {
+      background-color: #f5f5f5;
+      border: 1px solid #000;
+      padding: 4px;
+      text-align: left;
+      font-weight: bold;
+      font-size: 10px;
+    }
+
+    table td {
+      border: 1px solid #000;
+      padding: 3px 4px;
+      font-size: 10px;
+    }
+
+    table tbody tr:hover {
+      background-color: transparent !important;
+    }
+
+    .billing-table {
+      margin: 8px 0;
+    }
+
+    .invoice-footer {
+      margin-top: 10mm;
+      page-break-inside: avoid;
+      font-size: 10px;
+    }
+
+    .invoice-footer p {
+      margin: 2px 0;
+    }
+
+    /* Remove hyperlink underline for print */
+    a {
+      text-decoration: none;
+      color: #000;
+    }
+
+    /* Force single page */
+    @page {
+      size: A4;
+      margin: 5mm;
+    }
+  }
+</style>
+
 <h2>Invoice Details</h2>
 
 <div class="page-actions">
   {% if session.get("role") == "admin" %}
   <a class="btn btn-warning" href="{{ url_for('billing.invoice_edit', invoice_id=invoice.id) }}">Edit Invoice</a>
   {% endif %}
-  <a class="btn btn-primary" href="#">+ Record Payment</a>
+  <a class="btn btn-primary" href="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">+ Record Payment</a>
   <button class="btn btn-secondary" onclick="window.print()"> Print Invoice </button>
 </div>
 <div class="invoice-header">
@@ -21,22 +243,27 @@
 
 <div class="grid">
     <div class="card">
-<h3>Invoice Summary</h3>
-    <p><strong>Invoice No:</strong> {{ invoice.invoice_no }}</p>
-    <p><strong>Invoice Date:</strong> {{ invoice.invoice_date }}</p>
-    <p><strong>Student:</strong> {{ invoice.student_code }} - {{ invoice.full_name }}</p>
-    <p><strong>Phone:</strong> {{ invoice.phone }}</p>
-    <p><strong>Branch:</strong> {{ invoice.branch_name or "-" }}</p>
-    <p><strong>Status:</strong> {{ invoice.status }}</p>
-  </div>
+      <h3>Invoice Summary</h3>
+      <p><strong>Invoice No:</strong> {{ invoice.invoice_no }}</p>
+      <p><strong>Invoice Date:</strong> {{ invoice.invoice_date }}</p>
+      <p><strong>Student:</strong> {{ invoice.student_code }} - {{ invoice.full_name }}</p>
+      <p><strong>Phone:</strong> {{ invoice.phone }}</p>
+      <p><strong>Branch:</strong> {{ invoice.branch_name or "-" }}</p>
+      <p><strong>Status:</strong> <span style="padding: 2px 8px; border-radius: 4px; 
+        {% if invoice.status == 'paid' %}background-color: #d4edda; color: #155724;
+        {% elif invoice.status == 'partially_paid' %}background-color: #fff3cd; color: #856404;
+        {% else %}background-color: #f8d7da; color: #721c24;{% endif %}">
+        {{ invoice.status }}</span></p>
+    </div>
 
-  <div class="card">
-    <p><strong>Subtotal:</strong> ₹ {{ "%.2f"|format(invoice.subtotal or 0) }}</p>
-    <p><strong>Total Discount:</strong> ₹ {{ "%.2f"|format(invoice.discount_amount or 0) }}</p>
-    <p><strong>Net Total:</strong> ₹ {{ "%.2f"|format(invoice.total_amount or 0) }}</p>
-    <p><strong>Paid Amount:</strong> ₹ {{ "%.2f"|format(total_paid or 0) }}</p>
-    <p><strong>Balance Amount:</strong> ₹ {{ "%.2f"|format(balance_amount or 0) }}</p>
-  </div>
+    <div class="card">
+      <h3>Financial Summary</h3>
+      <p><strong>Subtotal:</strong> <span style="float: right;">₹ {{ "%.2f"|format(invoice.subtotal or 0) }}</span></p>
+      <p><strong>Total Discount:</strong> <span style="float: right;">₹ {{ "%.2f"|format(invoice.discount_amount or 0) }}</span></p>
+      <p style="border-top: 1px solid #ddd; padding-top: 8px; margin-top: 8px;"><strong>Net Total:</strong> <span style="float: right; font-weight: bold; font-size: 14px;">₹ {{ "%.2f"|format(invoice.total_amount or 0) }}</span></p>
+      <p><strong>Paid Amount:</strong> <span style="float: right; color: green;">₹ {{ "%.2f"|format(total_paid or 0) }}</span></p>
+      <p style="border-top: 1px solid #ddd; padding-top: 8px; margin-top: 8px;"><strong>Balance Amount:</strong> <span style="float: right; color: #d9534f; font-weight: bold;">₹ {{ "%.2f"|format(balance_amount or 0) }}</span></p>
+    </div>
 </div>
 
 <div class="card">
@@ -105,7 +332,7 @@
 
     {% for p in payments %}
     <tr>
-      <td><a href="#" style="color: #0066cc; text-decoration: underline; cursor: pointer;">{{ p.receipt_no }}</a></td>
+      <td><a href="{{ url_for('billing.receipt_view', receipt_id=p.id) }}" style="color: #0066cc; text-decoration: underline; cursor: pointer;">{{ p.receipt_no }}</a></td>
       <td>{{ p.receipt_date }}</td>
       <td>₹ {{ "%.2f"|format(p.amount_received or 0) }}</td>
       <td>{{ p.created_by_name }}</td>

@@ -1,0 +1,227 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Record Receipt - Global IT ERP{% endblock %}
+
+{% block content %}
+
+<style>
+  .receipt-form-wrap {
+    max-width: 760px;
+  }
+
+  .page-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .page-header-row h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .receipt-form-card {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .receipt-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+
+  .receipt-form-grid .full-width {
+    grid-column: 1 / -1;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #333;
+    font-size: 14px;
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+  }
+
+  .form-control:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+  }
+
+  .form-control:disabled {
+    background-color: #f8f9fa;
+    color: #666;
+    cursor: not-allowed;
+  }
+
+  .highlight-balance {
+    background-color: #fff3cd !important;
+    font-weight: 700;
+    color: #856404;
+  }
+
+  .field-help {
+    color: #666;
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 768px) {
+    .receipt-form-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="receipt-form-wrap">
+  <div class="page-header-row">
+    <h2>Record Receipt</h2>
+
+    <a href="{{ url_for('billing.invoice_view', invoice_id=invoice.id) }}" class="btn btn-secondary">
+      ← Back to Invoice
+    </a>
+  </div>
+
+  <div class="receipt-form-card">
+    <form method="POST" action="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">
+      <div class="receipt-form-grid">
+        <div class="form-group">
+          <label>Invoice No</label>
+          <input type="text" value="{{ invoice.invoice_no }}" disabled class="form-control">
+        </div>
+
+        <div class="form-group">
+          <label>Student</label>
+          <input type="text" value="{{ invoice.full_name }}" disabled class="form-control">
+        </div>
+
+        <div class="form-group">
+          <label>Invoice Amount</label>
+          <input type="text" value="₹ {{ "%.2f"|format(invoice.total_amount or 0) }}" disabled class="form-control">
+        </div>
+
+        <div class="form-group">
+          <label>Total Paid</label>
+          <input type="text" value="₹ {{ "%.2f"|format(total_paid or 0) }}" disabled class="form-control">
+        </div>
+
+        <div class="form-group full-width">
+          <label style="color: #d9534f; font-weight: bold;">Balance Amount</label>
+          <input type="text" value="₹ {{ "%.2f"|format(balance_amount or 0) }}" disabled class="form-control highlight-balance">
+        </div>
+
+        <div class="form-group">
+          <label for="receipt_date">Receipt Date <span style="color: red;">*</span></label>
+          <input type="date" id="receipt_date" name="receipt_date" class="form-control" required>
+        </div>
+
+        <div class="form-group">
+          <label for="amount_received">Amount Received <span style="color: red;">*</span></label>
+          <input
+            type="number"
+            id="amount_received"
+            name="amount_received"
+            step="0.01"
+            min="0.01"
+            max="{{ "%.2f"|format(balance_amount or 0) }}"
+            class="form-control"
+            required
+            placeholder="Enter amount (max: ₹{{ "%.2f"|format(balance_amount or 0) }})">
+          <small class="field-help">Maximum allowed: ₹ {{ "%.2f"|format(balance_amount or 0) }}</small>
+        </div>
+
+        <div class="form-group">
+          <label for="payment_mode">Payment Mode <span style="color: red;">*</span></label>
+          <select id="payment_mode" name="payment_mode" class="form-control" required>
+            <option value="">-- Select Payment Mode --</option>
+            <option value="cash">Cash</option>
+            <option value="upi">UPI</option>
+            <option value="bank_transfer">Bank Transfer</option>
+            <option value="card">Card</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="notes">Notes / UTR / Transaction No</label>
+          <input
+            type="text"
+            id="notes"
+            name="notes"
+            class="form-control"
+            placeholder="e.g., UTR number, transaction ID, or reference number">
+          <small class="field-help">Optional</small>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Record Receipt</button>
+        <a href="{{ url_for('billing.invoice_view', invoice_id=invoice.id) }}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.getElementById('receipt_date').valueAsDate = new Date();
+
+  const balanceAmount = {{ balance_amount or 0 }};
+  const amountInput = document.getElementById('amount_received');
+
+  amountInput.addEventListener('change', function() {
+    const amount = parseFloat(this.value) || 0;
+
+    if (amount > balanceAmount) {
+      alert(`Amount cannot exceed balance amount of ₹${balanceAmount.toFixed(2)}. Please enter an amount <= ₹${balanceAmount.toFixed(2)}`);
+      this.value = '';
+      this.focus();
+    }
+  });
+
+  document.querySelector('form').addEventListener('submit', function(e) {
+    const amount = parseFloat(amountInput.value) || 0;
+
+    if (amount <= 0) {
+      alert('Please enter a valid amount greater than 0');
+      e.preventDefault();
+      return false;
+    }
+
+    if (amount > balanceAmount) {
+      alert(`Amount cannot exceed balance amount of ₹${balanceAmount.toFixed(2)}`);
+      amountInput.focus();
+      e.preventDefault();
+      return false;
+    }
+  });
+</script>
+
+{% endblock %}
