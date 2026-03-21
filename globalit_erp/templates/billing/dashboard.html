@@ -191,7 +191,7 @@
 <div class="card receivable-card p-4 mb-4">
   <h3>Total Receivables</h3>
   <p class="receivable-total">
-    <a href="#" class="receivable-link">
+    <a href="{{ url_for('billing.receivables') }}" class="receivable-link">
       ₹ {{ "%.2f"|format(total_receivables or 0) }}
     </a>
   </p>

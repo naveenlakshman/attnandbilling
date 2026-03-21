@@ -1,0 +1,332 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Global IT ERP - Receivables{% endblock %}
+
+{% block content %}
+
+<style>
+  .receivables-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .receivables-header h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .receivables-filter-card {
+    margin-bottom: 20px;
+  }
+
+  .receivables-filter-form {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .receivables-filter-form label {
+    font-weight: 600;
+    margin: 0;
+    color: #333;
+  }
+
+  .receivables-filter-form select {
+    min-width: 220px;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
+  }
+
+  .receivables-filter-form select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+  }
+
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .summary-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+    border: 1px solid #e5e7eb;
+  }
+
+  .summary-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: #555;
+  }
+
+  .summary-amount {
+    font-size: 28px;
+    font-weight: bold;
+    margin: 10px 0;
+    color: #2c3e50;
+  }
+
+  .summary-count {
+    font-size: 14px;
+    color: #7f8c8d;
+    margin: 5px 0 0 0;
+  }
+
+  .receivables-table {
+    border-collapse: collapse;
+  }
+
+  .receivables-table th {
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+    border: 1px solid #ddd;
+    background-color: #f5f6f7;
+  }
+
+  .receivables-table td {
+    padding: 10px 8px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  .receivables-table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+
+  .section-empty {
+    padding: 20px;
+    text-align: center;
+    color: #7f8c8d;
+  }
+
+  .amount-overdue {
+    color: #c0392b;
+    font-weight: bold;
+  }
+
+  .amount-today {
+    color: #e67e22;
+    font-weight: bold;
+  }
+
+  .amount-upcoming {
+    color: #3498db;
+    font-weight: bold;
+  }
+</style>
+
+<div class="receivables-header">
+  <h2>Receivables - Student Installments</h2>
+</div>
+
+<!-- Branch Filter -->
+<div class="card receivables-filter-card">
+  <form method="get" class="receivables-filter-form">
+    <label for="branch_id">Filter by Branch:</label>
+
+    <select name="branch_id" id="branch_id" onchange="this.form.submit()">
+      <option value="">All Branches</option>
+      {% for branch in branches %}
+      <option value="{{ branch.id }}" {% if branch_id|string == branch.id|string %}selected{% endif %}>
+        {{ branch.branch_name }}
+      </option>
+      {% endfor %}
+    </select>
+
+    {% if branch_id %}
+    <a href="{{ url_for('billing.receivables') }}" class="btn btn-secondary">Clear Filter</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="summary-cards">
+  <div class="summary-card" style="border-left: 4px solid #e74c3c;">
+    <h3>Past Due</h3>
+    <p class="summary-amount">₹ {{ "%.2f"|format(total_past_due or 0) }}</p>
+    <p class="summary-count">{{ past_dues|length }} installment(s)</p>
+  </div>
+
+  <div class="summary-card" style="border-left: 4px solid #f39c12;">
+    <h3>Due Today</h3>
+    <p class="summary-amount">₹ {{ "%.2f"|format(total_today_due or 0) }}</p>
+    <p class="summary-count">{{ todays_dues|length }} installment(s)</p>
+  </div>
+
+  <div class="summary-card" style="border-left: 4px solid #3498db;">
+    <h3>Upcoming</h3>
+    <p class="summary-amount">₹ {{ "%.2f"|format(total_upcoming_due or 0) }}</p>
+    <p class="summary-count">{{ upcoming_dues|length }} installment(s)</p>
+  </div>
+</div>
+
+<!-- Past Dues Section -->
+<div class="card" style="margin-top: 20px;">
+  <h3 style="color: #e74c3c; margin-bottom: 15px;">Past Due (Overdue)</h3>
+
+  {% if past_dues %}
+  <table border="1" width="100%" cellpadding="10" class="receivables-table">
+    <thead>
+      <tr>
+        <th>Due Date</th>
+        <th>Student</th>
+        <th>Phone</th>
+        <th>Invoice No</th>
+        <th>Remarks</th>
+        <th>Balance Due</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in past_dues %}
+      <tr style="background-color: #ffe6e6;">
+        <td><strong>{{ item.due_date }}</strong></td>
+        <td>{{ item.student_code }} - {{ item.student_name }}</td>
+        <td>{{ item.student_phone or "-" }}</td>
+        <td>
+          <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}">
+            {{ item.invoice_no }}
+          </a>
+        </td>
+        <td>{{ item.remarks or '-' }}</td>
+        <td class="amount-overdue">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
+        <td>
+          <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
+             class="btn btn-sm btn-primary"
+             style="padding: 6px 12px; font-size: 12px;">
+            Record Payment
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+
+      <tr style="background-color: #f8f9fa; font-weight: bold;">
+        <td colspan="6" style="text-align: right;">Total Past Due:</td>
+        <td class="amount-overdue">₹ {{ "%.2f"|format(total_past_due or 0) }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <p class="section-empty" style="color: #27ae60;">No past due installments.</p>
+  {% endif %}
+</div>
+
+<!-- Today's Dues Section -->
+<div class="card" style="margin-top: 20px;">
+  <h3 style="color: #f39c12; margin-bottom: 15px;">Due Today</h3>
+
+  {% if todays_dues %}
+  <table border="1" width="100%" cellpadding="10" class="receivables-table">
+    <thead>
+      <tr>
+        <th>Due Date</th>
+        <th>Student</th>
+        <th>Phone</th>
+        <th>Invoice No</th>
+        <th>Remarks</th>
+        <th>Balance Due</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in todays_dues %}
+      <tr style="background-color: #fff8e6;">
+        <td><strong>{{ item.due_date }}</strong></td>
+        <td>{{ item.student_code }} - {{ item.student_name }}</td>
+        <td>{{ item.student_phone or "-" }}</td>
+        <td>
+          <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}">
+            {{ item.invoice_no }}
+          </a>
+        </td>
+        <td>{{ item.remarks or '-' }}</td>
+        <td class="amount-today">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
+        <td>
+          <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
+             class="btn btn-sm btn-primary"
+             style="padding: 6px 12px; font-size: 12px;">
+            Record Payment
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+
+      <tr style="background-color: #f8f9fa; font-weight: bold;">
+        <td colspan="6" style="text-align: right;">Total Due Today:</td>
+        <td class="amount-today">₹ {{ "%.2f"|format(total_today_due or 0) }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <p class="section-empty">No installments due today.</p>
+  {% endif %}
+</div>
+
+<!-- Upcoming Dues Section -->
+<div class="card" style="margin-top: 20px;">
+  <h3 style="color: #3498db; margin-bottom: 15px;">Upcoming Dues (Next 50)</h3>
+
+  {% if upcoming_dues %}
+  <table border="1" width="100%" cellpadding="10" class="receivables-table">
+    <thead>
+      <tr>
+        <th>Due Date</th>
+        <th>Student</th>
+        <th>Phone</th>
+        <th>Invoice No</th>
+        <th>Remarks</th>
+        <th>Balance Due</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in upcoming_dues %}
+      <tr>
+        <td><strong>{{ item.due_date }}</strong></td>
+        <td>{{ item.student_code }} - {{ item.student_name }}</td>
+        <td>{{ item.student_phone or "-" }}</td>
+        <td>
+          <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}">
+            {{ item.invoice_no }}
+          </a>
+        </td>
+        <td>{{ item.remarks or '-' }}</td>
+        <td class="amount-upcoming">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
+        <td>
+          <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
+             class="btn btn-sm btn-primary"
+             style="padding: 6px 12px; font-size: 12px;">
+            Record Payment
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+
+      <tr style="background-color: #f8f9fa; font-weight: bold;">
+        <td colspan="6" style="text-align: right;">Total Upcoming:</td>
+        <td class="amount-upcoming">₹ {{ "%.2f"|format(total_upcoming_due or 0) }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {% else %}
+  <p class="section-empty">No upcoming installments.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

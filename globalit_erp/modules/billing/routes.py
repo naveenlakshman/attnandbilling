@@ -2381,3 +2381,154 @@ def receipt_view(receipt_id):
     conn.close()
 
     return render_template("billing/receipt_view.html", receipt=receipt)
+
+@billing_bp.route("/receivables")
+@login_required
+def receivables():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    today = datetime.now().date().isoformat()
+    branch_id = request.args.get("branch_id", "").strip()
+
+    # Branches for filter
+    cur.execute("""
+        SELECT *
+        FROM branches
+        WHERE is_active = 1
+        ORDER BY branch_name
+    """)
+    branches = cur.fetchall()
+
+    # Past dues
+    past_dues_query = """
+        SELECT
+            ip.id,
+            ip.due_date,
+            ip.amount_due,
+            ip.amount_paid,
+            ip.status,
+            ip.remarks,
+            i.invoice_no,
+            i.id AS invoice_id,
+            i.branch_id,
+            s.full_name AS student_name,
+            s.student_code,
+            s.phone AS student_phone,
+            b.branch_name,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i
+            ON ip.invoice_id = i.id
+        JOIN students s
+            ON i.student_id = s.id
+        LEFT JOIN branches b
+            ON i.branch_id = b.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) < ?
+    """
+    past_dues_params = [today]
+
+    if branch_id:
+        past_dues_query += " AND i.branch_id = ?"
+        past_dues_params.append(branch_id)
+
+    past_dues_query += " ORDER BY parse_date(ip.due_date) ASC"
+
+    cur.execute(past_dues_query, past_dues_params)
+    past_dues = cur.fetchall()
+
+    # Today's dues
+    todays_dues_query = """
+        SELECT
+            ip.id,
+            ip.due_date,
+            ip.amount_due,
+            ip.amount_paid,
+            ip.status,
+            ip.remarks,
+            i.invoice_no,
+            i.id AS invoice_id,
+            i.branch_id,
+            s.full_name AS student_name,
+            s.student_code,
+            s.phone AS student_phone,
+            b.branch_name,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i
+            ON ip.invoice_id = i.id
+        JOIN students s
+            ON i.student_id = s.id
+        LEFT JOIN branches b
+            ON i.branch_id = b.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) = ?
+    """
+    todays_dues_params = [today]
+
+    if branch_id:
+        todays_dues_query += " AND i.branch_id = ?"
+        todays_dues_params.append(branch_id)
+
+    todays_dues_query += " ORDER BY s.full_name ASC"
+
+    cur.execute(todays_dues_query, todays_dues_params)
+    todays_dues = cur.fetchall()
+
+    # Upcoming dues
+    upcoming_dues_query = """
+        SELECT
+            ip.id,
+            ip.due_date,
+            ip.amount_due,
+            ip.amount_paid,
+            ip.status,
+            ip.remarks,
+            i.invoice_no,
+            i.id AS invoice_id,
+            i.branch_id,
+            s.full_name AS student_name,
+            s.student_code,
+            s.phone AS student_phone,
+            b.branch_name,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i
+            ON ip.invoice_id = i.id
+        JOIN students s
+            ON i.student_id = s.id
+        LEFT JOIN branches b
+            ON i.branch_id = b.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) > ?
+    """
+    upcoming_dues_params = [today]
+
+    if branch_id:
+        upcoming_dues_query += " AND i.branch_id = ?"
+        upcoming_dues_params.append(branch_id)
+
+    upcoming_dues_query += " ORDER BY parse_date(ip.due_date) ASC LIMIT 50"
+
+    cur.execute(upcoming_dues_query, upcoming_dues_params)
+    upcoming_dues = cur.fetchall()
+
+    total_past_due = sum(float(row["balance_due"] or 0) for row in past_dues)
+    total_today_due = sum(float(row["balance_due"] or 0) for row in todays_dues)
+    total_upcoming_due = sum(float(row["balance_due"] or 0) for row in upcoming_dues)
+
+    conn.close()
+
+    return render_template(
+        "billing/receivables.html",
+        past_dues=past_dues,
+        todays_dues=todays_dues,
+        upcoming_dues=upcoming_dues,
+        total_past_due=total_past_due,
+        total_today_due=total_today_due,
+        total_upcoming_due=total_upcoming_due,
+        today=today,
+        branches=branches,
+        branch_id=branch_id
+    )
