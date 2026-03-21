@@ -299,7 +299,7 @@
           <td style="text-align: center; font-weight: 500;">{{ s.id }}</td>
           <td style="font-weight: 500; color: #2c3e50;">{{ s.student_code or "—" }}</td>
           <td>
-            <a href="{{ url_for('billing.student_edit', student_id=s.id) }}"
+            <a href="{{ url_for('billing.student_profile', student_id=s.id) }}"
             style="color: #0056b3; text-decoration: none; font-weight: 500;">
             {{ s.full_name }}
             </a>

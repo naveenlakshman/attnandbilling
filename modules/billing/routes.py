@@ -670,6 +670,81 @@ def student_edit(student_id):
         qualification_levels=QUALIFICATION_LEVELS
     )
 
+@billing_bp.route("/student/<int:student_id>")
+@login_required
+def student_profile(student_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            students.*,
+            branches.branch_name
+        FROM students
+        LEFT JOIN branches
+            ON students.branch_id = branches.id
+        WHERE students.id = ?
+    """, (student_id,))
+    student = cur.fetchone()
+
+    if not student:
+        conn.close()
+        flash("Student not found.", "danger")
+        return redirect(url_for("billing.students"))
+
+    cur.execute("""
+        SELECT
+            invoices.id,
+            invoices.invoice_no,
+            invoices.invoice_date,
+            invoices.total_amount,
+            invoices.status,
+            IFNULL(SUM(receipts.amount_received), 0) AS paid_amount
+        FROM invoices
+        LEFT JOIN receipts
+            ON receipts.invoice_id = invoices.id
+        WHERE invoices.student_id = ?
+        GROUP BY invoices.id
+        ORDER BY invoices.id DESC
+    """, (student_id,))
+    invoices = cur.fetchall()
+
+    cur.execute("""
+        SELECT
+            COUNT(*) AS total_invoices,
+            IFNULL(SUM(total_amount), 0) AS total_billed
+        FROM invoices
+        WHERE student_id = ?
+    """, (student_id,))
+    invoice_summary = cur.fetchone()
+
+    cur.execute("""
+        SELECT
+            IFNULL(SUM(receipts.amount_received), 0) AS total_paid
+        FROM receipts
+        JOIN invoices
+            ON receipts.invoice_id = invoices.id
+        WHERE invoices.student_id = ?
+    """, (student_id,))
+    payment_summary = cur.fetchone()
+
+    total_invoices = int(invoice_summary["total_invoices"] or 0)
+    total_billed = float(invoice_summary["total_billed"] or 0)
+    total_paid = float(payment_summary["total_paid"] or 0)
+    total_balance = total_billed - total_paid
+
+    conn.close()
+
+    return render_template(
+        "billing/student_profile.html",
+        student=student,
+        invoices=invoices,
+        total_invoices=total_invoices,
+        total_billed=total_billed,
+        total_paid=total_paid,
+        total_balance=total_balance
+    )
+
 @billing_bp.route("/students/export-csv")
 @admin_required
 def export_students_csv():
@@ -2532,3 +2607,331 @@ def receivables():
         branches=branches,
         branch_id=branch_id
     )
+
+@billing_bp.route("/expenses")
+@login_required
+def expenses():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            expenses.*,
+            branches.branch_name,
+            expense_categories.category_name,
+            users.full_name AS created_by_name
+        FROM expenses
+        JOIN branches
+            ON expenses.branch_id = branches.id
+        JOIN expense_categories
+            ON expenses.category_id = expense_categories.id
+        LEFT JOIN users
+            ON expenses.created_by = users.id
+        ORDER BY expenses.expense_date DESC, expenses.id DESC
+    """)
+    expenses = cur.fetchall()
+
+    cur.execute("""
+        SELECT IFNULL(SUM(amount), 0) AS total_expense
+        FROM expenses
+    """)
+    total_expense = float(cur.fetchone()["total_expense"] or 0)
+
+    conn.close()
+
+    return render_template(
+        "billing/expenses.html",
+        expenses=expenses,
+        total_expense=total_expense
+    )
+
+@billing_bp.route("/expense/new", methods=["GET", "POST"])
+@login_required
+def expense_new():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        try:
+            expense_date = request.form.get("expense_date")
+            branch_id = request.form.get("branch_id")
+            category_id = request.form.get("category_id")
+            title = request.form.get("title", "").strip()
+            amount = float(request.form.get("amount", 0))
+            payment_mode = request.form.get("payment_mode")
+            reference_no = request.form.get("reference_no", "").strip()
+            notes = request.form.get("notes", "").strip()
+
+            # ✅ Validations
+            if not title:
+                flash("Expense title is required.", "danger")
+                return redirect(url_for("billing.expense_new"))
+
+            if amount <= 0:
+                flash("Expense amount must be greater than 0.", "danger")
+                return redirect(url_for("billing.expense_new"))
+
+            now = datetime.now().isoformat(timespec="seconds")
+
+            cur.execute("""
+                INSERT INTO expenses (
+                    expense_date,
+                    branch_id,
+                    category_id,
+                    title,
+                    amount,
+                    payment_mode,
+                    reference_no,
+                    notes,
+                    created_by,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                expense_date,
+                branch_id,
+                category_id,
+                title,
+                amount,
+                payment_mode,
+                reference_no,
+                notes,
+                session.get("user_id"),
+                now,
+                now
+            ))
+
+            expense_id = cur.lastrowid
+            conn.commit()
+
+            # ✅ Activity Log (ERP Standard)
+            log_activity(
+                user_id=session.get("user_id"),
+                branch_id=branch_id,
+                action_type="create",
+                module_name="expense",
+                record_id=expense_id,
+                description=f"Created expense '{title}' of ₹{amount:.2f}"
+            )
+
+            flash("Expense recorded successfully.", "success")
+            return redirect(url_for("billing.expenses"))
+
+        except Exception as e:
+            conn.rollback()
+            flash(f"Error: {str(e)}", "danger")
+            return redirect(url_for("billing.expense_new"))
+
+        finally:
+            conn.close()
+
+    # ✅ GET Data
+    cur.execute("""
+        SELECT *
+        FROM branches
+        WHERE is_active = 1
+        ORDER BY branch_name
+    """)
+    branches = cur.fetchall()
+
+    cur.execute("""
+        SELECT *
+        FROM expense_categories
+        WHERE is_active = 1
+        ORDER BY category_name
+    """)
+    categories = cur.fetchall()
+
+    conn.close()
+
+    today = datetime.today().strftime("%Y-%m-%d")
+
+    return render_template(
+        "billing/expense_form.html",
+        branches=branches,
+        categories=categories,
+        today=today
+    )
+
+@billing_bp.route("/expense-categories")
+@login_required
+def expense_categories():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM expense_categories
+        ORDER BY category_name ASC
+    """)
+    categories = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "billing/expense_categories.html",
+        categories=categories
+    )
+
+@billing_bp.route("/expense-category/new", methods=["GET", "POST"])
+@login_required
+def expense_category_new():
+
+    if request.method == "POST":
+        category_name = request.form.get("category_name", "").strip()
+
+        if not category_name:
+            flash("Category name is required.", "danger")
+            return redirect(url_for("billing.expense_category_new"))
+
+        conn = get_conn()
+        cur = conn.cursor()
+
+        # Check duplicate
+        cur.execute("""
+            SELECT id FROM expense_categories 
+            WHERE category_name = ?
+        """, (category_name,))
+        existing = cur.fetchone()
+
+        if existing:
+            conn.close()
+            flash("Category already exists.", "danger")
+            return redirect(url_for("billing.expense_category_new"))
+
+        try:
+            now = datetime.now().isoformat(timespec="seconds")
+
+            cur.execute("""
+                INSERT INTO expense_categories (
+                    category_name,
+                    is_active,
+                    created_at
+                )
+                VALUES (?, ?, ?)
+            """, (
+                category_name,
+                1,
+                now
+            ))
+
+            category_id = cur.lastrowid
+            conn.commit()
+
+            # ✅ ERP logging (as you requested)
+            log_activity(
+                user_id=session.get("user_id"),
+                branch_id=session.get("branch_id"),
+                action_type="create",
+                module_name="expense_category",
+                record_id=category_id,
+                description=f"Created expense category '{category_name}'"
+            )
+
+            flash("Expense category created successfully.", "success")
+            return redirect(url_for("billing.expense_categories"))
+
+        except Exception as e:
+            conn.rollback()
+            flash(f"Error: {str(e)}", "danger")
+            return redirect(url_for("billing.expense_category_new"))
+
+        finally:
+            conn.close()
+
+    return render_template("billing/expense_category_form.html")
+
+@billing_bp.route("/activity-logs", methods=["GET"])
+@login_required
+def activity_logs():
+    if session.get("role") != "admin":
+        flash("Access denied.", "danger")
+        return redirect(url_for("billing.dashboard"))
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    from_date = request.args.get("from_date", "").strip()
+    to_date = request.args.get("to_date", "").strip()
+    user_id = request.args.get("user_id", "").strip()
+    branch_id = request.args.get("branch_id", "").strip()
+    module_name = request.args.get("module_name", "").strip()
+
+    today = datetime.today().strftime("%Y-%m-%d")
+
+    if not from_date:
+        from_date = today
+    if not to_date:
+        to_date = today
+
+    cur.execute("""
+        SELECT id, full_name, username
+        FROM users
+        WHERE is_active = 1
+        ORDER BY full_name
+    """)
+    users = cur.fetchall()
+
+    cur.execute("""
+        SELECT *
+        FROM branches
+        WHERE is_active = 1
+        ORDER BY branch_name
+    """)
+    branches = cur.fetchall()
+
+    cur.execute("""
+        SELECT DISTINCT module_name
+        FROM activity_logs
+        ORDER BY module_name
+    """)
+    modules = cur.fetchall()
+
+    query = """
+        SELECT
+            activity_logs.*,
+            users.full_name,
+            users.username,
+            branches.branch_name
+        FROM activity_logs
+        LEFT JOIN users
+            ON activity_logs.user_id = users.id
+        LEFT JOIN branches
+            ON activity_logs.branch_id = branches.id
+        WHERE substr(activity_logs.created_at, 1, 10) BETWEEN ? AND ?
+    """
+    params = [from_date, to_date]
+
+    if user_id:
+        query += " AND activity_logs.user_id = ? "
+        params.append(user_id)
+
+    if branch_id:
+        query += " AND activity_logs.branch_id = ? "
+        params.append(branch_id)
+
+    if module_name:
+        query += " AND activity_logs.module_name = ? "
+        params.append(module_name)
+
+    query += " ORDER BY activity_logs.id DESC "
+
+    cur.execute(query, params)
+    logs = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "billing/activity_logs.html",
+        logs=logs,
+        users=users,
+        branches=branches,
+        modules=modules,
+        from_date=from_date,
+        to_date=to_date,
+        user_id=user_id,
+        branch_id=branch_id,
+        module_name=module_name
+    )
+

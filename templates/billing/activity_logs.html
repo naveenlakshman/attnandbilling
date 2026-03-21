@@ -1,0 +1,240 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Global IT ERP - Activity Logs{% endblock %}
+
+{% block content %}
+
+<style>
+  .activity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .activity-header h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .activity-filter-card {
+    margin-bottom: 20px;
+  }
+
+  .activity-filter-form {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(160px, 1fr)) auto;
+    gap: 14px;
+    align-items: end;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .filter-group label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #333;
+    font-size: 13px;
+  }
+
+  .filter-group input,
+  .filter-group select {
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
+  }
+
+  .filter-group input:focus,
+  .filter-group select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+  }
+
+  .activity-table {
+    border-collapse: collapse;
+  }
+
+  .activity-table thead tr {
+    background-color: #f5f6f7;
+  }
+
+  .activity-table th {
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+    border: 1px solid #ddd;
+  }
+
+  .activity-table td {
+    padding: 10px 8px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+    vertical-align: top;
+  }
+
+  .activity-table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+
+  .action-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: capitalize;
+    white-space: nowrap;
+  }
+
+  .action-create {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .action-update {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .action-delete {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .action-export {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  @media (max-width: 1200px) {
+    .activity-filter-form {
+      grid-template-columns: repeat(2, minmax(180px, 1fr));
+    }
+  }
+
+  @media (max-width: 768px) {
+    .activity-filter-form {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="activity-header">
+  <h2>Activity Logs</h2>
+</div>
+
+<div class="card activity-filter-card">
+  <form method="get" class="activity-filter-form">
+    <div class="filter-group">
+      <label>From Date</label>
+      <input type="date" name="from_date" value="{{ from_date }}">
+    </div>
+
+    <div class="filter-group">
+      <label>To Date</label>
+      <input type="date" name="to_date" value="{{ to_date }}">
+    </div>
+
+    <div class="filter-group">
+      <label>User</label>
+      <select name="user_id">
+        <option value="">All Users</option>
+        {% for u in users %}
+        <option value="{{ u.id }}" {% if user_id == (u.id|string) %}selected{% endif %}>
+          {{ u.full_name }} ({{ u.username }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label>Branch</label>
+      <select name="branch_id">
+        <option value="">All Branches</option>
+        {% for b in branches %}
+        <option value="{{ b.id }}" {% if branch_id == (b.id|string) %}selected{% endif %}>
+          {{ b.branch_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label>Module</label>
+      <select name="module_name">
+        <option value="">All Modules</option>
+        {% for m in modules %}
+        <option value="{{ m.module_name }}" {% if module_name == m.module_name %}selected{% endif %}>
+          {{ m.module_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <button type="submit" class="btn btn-primary">Filter</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
+  <table border="1" width="100%" cellpadding="10" class="activity-table">
+    <thead>
+      <tr>
+        <th style="width: 70px;">ID</th>
+        <th style="width: 170px;">Date & Time</th>
+        <th style="width: 180px;">User</th>
+        <th style="width: 140px;">Branch</th>
+        <th style="width: 110px;">Action</th>
+        <th style="width: 140px;">Module</th>
+        <th style="width: 100px;">Record ID</th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td>{{ log.id }}</td>
+        <td>{{ log.created_at }}</td>
+        <td>
+          {% if log.full_name %}
+            {{ log.full_name }} ({{ log.username }})
+          {% else %}
+            -
+          {% endif %}
+        </td>
+        <td>{{ log.branch_name or "-" }}</td>
+        <td>
+          <span class="action-badge
+            {% if log.action_type == 'create' %}action-create
+            {% elif log.action_type == 'update' %}action-update
+            {% elif log.action_type == 'delete' %}action-delete
+            {% elif log.action_type == 'export' %}action-export
+            {% endif %}">
+            {{ log.action_type }}
+          </span>
+        </td>
+        <td>{{ log.module_name }}</td>
+        <td>{{ log.record_id or "-" }}</td>
+        <td>{{ log.description }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="8" style="text-align:center; padding: 24px;">No activity logs found.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

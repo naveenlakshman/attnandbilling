@@ -1,0 +1,107 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Expense Categories - ERP{% endblock %}
+
+{% block content %}
+
+<style>
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .category-table {
+    border-collapse: collapse;
+  }
+
+  .category-table thead tr {
+    background-color: #f5f6f7;
+  }
+
+  .category-table th,
+  .category-table td {
+    padding: 10px 8px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+  }
+
+  .status-active {
+    color: green;
+    font-weight: 600;
+  }
+
+  .status-inactive {
+    color: #c0392b;
+    font-weight: 600;
+  }
+
+  .actions {
+    display: flex;
+    gap: 6px;
+  }
+</style>
+
+<div class="page-header">
+  <h2>Expense Categories</h2>
+
+  <div>
+    <a class="btn btn-primary" href="{{ url_for('billing.expense_category_new') }}">
+      + Add Category
+    </a>
+    <a class="btn btn-secondary" href="{{ url_for('billing.expenses') }}">
+      Back to Expenses
+    </a>
+  </div>
+</div>
+
+<div class="card" style="padding: 0; overflow: hidden;">
+  <table border="1" width="100%" class="category-table">
+    <thead>
+      <tr>
+        <th style="width:80px;">ID</th>
+        <th>Category Name</th>
+        <th style="width:120px;">Status</th>
+        <th style="width:120px;">Action</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for c in categories %}
+      <tr>
+        <td>{{ c.id }}</td>
+
+        <td>
+          <strong>{{ c.category_name }}</strong>
+        </td>
+
+        <td>
+          {% if c.is_active %}
+            <span class="status-active">Active</span>
+          {% else %}
+            <span class="status-inactive">Inactive</span>
+          {% endif %}
+        </td>
+
+        <td>
+          <div class="actions">
+            <a href="#" class="btn btn-sm">Edit</a>
+          </div>
+        </td>
+
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" style="text-align:center; padding: 20px;">
+          No categories found.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

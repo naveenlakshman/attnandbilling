@@ -1,0 +1,142 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Global IT ERP - Expenses{% endblock %}
+
+{% block content %}
+
+<style>
+  .expense-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .expense-page-header h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .expense-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .expense-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .expense-summary-card {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .expense-summary-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    color: #555;
+  }
+
+  .expense-summary-card p {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    color: #c0392b;
+  }
+
+  .expenses-table {
+    border-collapse: collapse;
+  }
+
+  .expenses-table thead tr {
+    background-color: #f5f6f7;
+  }
+
+  .expenses-table th {
+    padding: 10px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+    border: 1px solid #ddd;
+  }
+
+  .expenses-table td {
+    padding: 10px 8px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  .expenses-table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+</style>
+
+<div class="expense-page-header">
+  <h2>Expenses</h2>
+
+  <div class="expense-actions">
+    <a class="btn btn-primary" href="{{ url_for('billing.expense_new') }}">
+      Add Expense
+    </a>
+    <a class="btn btn-secondary" href="{{ url_for('billing.expense_categories') }}">
+      Expense Categories
+    </a>
+  </div>
+</div>
+
+<div class="expense-summary-grid">
+  <div class="expense-summary-card">
+    <h3>Total Expenses</h3>
+    <p>₹ {{ "%.2f"|format(total_expense or 0) }}</p>
+  </div>
+</div>
+
+<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
+  <table border="1" width="100%" cellpadding="10" class="expenses-table">
+    <thead>
+      <tr>
+        <th style="width: 70px;">ID</th>
+        <th style="width: 120px;">Date</th>
+        <th style="width: 140px;">Branch</th>
+        <th style="width: 160px;">Category</th>
+        <th>Title</th>
+        <th style="width: 130px;">Amount</th>
+        <th style="width: 120px;">Mode</th>
+        <th style="width: 150px;">Reference No</th>
+        <th style="width: 150px;">Created By</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr>
+        <td>{{ e.id }}</td>
+        <td>{{ e.expense_date }}</td>
+        <td>{{ e.branch_name }}</td>
+        <td>{{ e.category_name }}</td>
+        <td>{{ e.title }}</td>
+        <td style="color:#c0392b; font-weight: 600;">₹ {{ "%.2f"|format(e.amount or 0) }}</td>
+        <td>{{ e.payment_mode }}</td>
+        <td>{{ e.reference_no or "-" }}</td>
+        <td>{{ e.created_by_name or "-" }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="9" style="text-align:center; padding: 24px;">No expenses recorded yet.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Add Expense Category - ERP{% endblock %}
+
+{% block content %}
+
+<style>
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-group label {
+    font-weight: 500;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+
+  .form-actions {
+    margin-top: 20px;
+  }
+</style>
+
+<div class="page-header">
+  <h2>Add Expense Category</h2>
+</div>
+
+<div class="card">
+  <form method="POST">
+
+    <div class="form-group">
+      <label>Category Name *</label>
+      <input 
+        type="text" 
+        name="category_name" 
+        class="form-control"
+        placeholder="Example: Electricity, Rent, Salary"
+        required>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save Category</button>
+      <a href="{{ url_for('billing.expense_categories') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+
+  </form>
+</div>
+
+{% endblock %}

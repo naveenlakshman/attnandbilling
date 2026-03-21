@@ -68,7 +68,7 @@
       <a
         class="nav-link {{ 'active' if request.endpoint == 'core.dashboard' else '' }}"
         href="{{ url_for('core.dashboard') }}">
-        🏠 ERP Dashboard
+        🏠 Main Menu
       </a>
 
       <!-- Billing Dashboard -->
@@ -111,31 +111,15 @@
 
       <a
         class="nav-link {{ 'active' if request.endpoint == 'billing.expenses' else '' }}"
-        href="#">
+        href="{{ url_for('billing.expenses') }}">
         💸 Expenses
       </a>
 
       <a
-        class="nav-link {{ 'active' if request.endpoint == 'billing.reports' else '' }}"
-        href="#">
-        📈 Reports
-      </a>
-
-      {% if session.get("role") == "admin" %}
-      <hr>
-
-      <a
-        class="nav-link {{ 'active' if request.endpoint == 'billing.import_center' else '' }}"
-        href="#">
-        📥 Import
-      </a>
-
-      <a
         class="nav-link {{ 'active' if request.endpoint == 'billing.activity_logs' else '' }}"
-        href="#">
+        href="{{ url_for('billing.activity_logs') }}">
         📋 Activity Logs
       </a>
-      {% endif %}
 
       <hr>
       <a class="nav-link text-danger" href="{{ url_for('core.logout') }}">

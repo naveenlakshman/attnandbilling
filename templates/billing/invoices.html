@@ -129,14 +129,6 @@
     <a class="btn btn-primary" href="{{ url_for('billing.invoice_new') }}">
       Create Invoice
     </a>
-
-    {% if session.get('role') == 'admin' %}
-    <form method="post" action="#" style="display: inline;">
-      <button type="submit" class="btn btn-warning" title="Fix payment allocation for invoices with custom installments">
-        🔧 Fix Installment Payments
-      </button>
-    </form>
-    {% endif %}
   </div>
 </div>
 
@@ -261,7 +253,7 @@
           </td>
 
           <td>
-            <a href="#" style="text-decoration: none;">
+            <a href="{{ url_for('billing.student_profile', student_id=inv.student_id) }}" style="text-decoration: none;">
               {{ inv.student_code }} - {{ inv.full_name }}
             </a>
           </td>
