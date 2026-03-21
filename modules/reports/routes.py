@@ -1,7 +1,7 @@
 import io
 import csv
-from flask import Blueprint, render_template, send_file, flash, redirect, url_for, session
-from db import get_conn
+from flask import Blueprint, render_template, send_file, flash, redirect, url_for, session, request
+from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
 from datetime import datetime
 
@@ -323,3 +323,339 @@ def export_students_detailed():
         conn.close()
         flash(f"Error exporting students: {str(e)}", "danger")
         return redirect(url_for("reports.dashboard"))
+
+
+@reports_bp.route("/import")
+@login_required
+@admin_required
+def import_page():
+    """CSV Import Management Page"""
+    return render_template("reports/import.html")
+
+
+@reports_bp.route("/sample/<table_name>")
+@login_required
+@admin_required
+def download_sample(table_name):
+    """Download sample CSV file for a table"""
+    
+    samples = {
+        "branches": {
+            "headers": ["branch_name", "branch_code", "address", "is_active"],
+            "rows": [
+                ["Head Office", "HO", "Main branch address", "1"],
+                ["Branch 1", "B1", "Branch 1 address", "1"],
+            ]
+        },
+        "courses": {
+            "headers": ["course_name", "duration", "fee", "course_type", "is_active"],
+            "rows": [
+                ["Tally", "45 Days", "5000", "standard", "1"],
+                ["Excel Advanced", "30 Days", "4000", "standard", "1"],
+            ]
+        },
+        "leads": {
+            "headers": ["name", "phone", "whatsapp", "gender", "age", "education_status", "stream", "career_goal", "lead_source", "decision_maker", "lead_location", "start_timeframe", "stage", "notes"],
+            "rows": [
+                ["John Doe", "9876543210", "9876543210", "Male", "25", "Graduate", "Commerce", "Job", "Walk-in", "Self", "Urban", "Immediately", "New Lead", "Interested in Tally"],
+                ["Jane Smith", "9123456789", "9123456789", "Female", "22", "School", "Science", "Skill Development", "Referral", "Parents", "Rural", "Within 1 Month", "New Lead", ""],
+            ]
+        },
+        "students": {
+            "headers": ["student_code", "full_name", "phone", "email", "gender", "address", "education_level", "qualification", "student_location", "employment_status", "status", "branch_id", "joined_date"],
+            "rows": [
+                ["1515001", "Student Name", "9876543210", "student@example.com", "Male", "Address", "Undergraduate", "BE", "Urban", "student", "active", "1", "2026-03-21"],
+                ["1515002", "Another Student", "9123456789", "student2@example.com", "Female", "Address", "School", "12th", "Rural", "unemployed", "active", "1", "2026-03-21"],
+            ]
+        },
+        "invoices": {
+            "headers": ["invoice_number", "student_id", "amount", "due_date", "status", "notes"],
+            "rows": [
+                ["INV001", "1", "5000", "2026-04-21", "pending", "Course Fee"],
+                ["INV002", "2", "4000", "2026-04-15", "paid", ""],
+            ]
+        },
+        "receipts": {
+            "headers": ["receipt_number", "student_id", "invoice_id", "amount", "payment_date", "payment_method", "notes"],
+            "rows": [
+                ["RCP001", "1", "1", "5000", "2026-03-21", "cash", "Full payment"],
+                ["RCP002", "2", "2", "2000", "2026-03-20", "bank_transfer", "First installment"],
+            ]
+        },
+        "installments": {
+            "headers": ["invoice_id", "installment_number", "due_date", "amount", "status"],
+            "rows": [
+                ["1", "1", "2026-04-21", "2500", "pending"],
+                ["1", "2", "2026-05-21", "2500", "pending"],
+            ]
+        },
+        "expenses": {
+            "headers": ["expense_type", "category", "amount", "description", "expense_date", "branch_id"],
+            "rows": [
+                ["rent", "office", "20000", "Monthly office rent", "2026-03-21", "1"],
+                ["utilities", "office", "5000", "Electricity bill", "2026-03-21", "1"],
+            ]
+        },
+    }
+    
+    if table_name not in samples:
+        flash(f"No sample available for {table_name}", "warning")
+        return redirect(url_for("reports.import_page"))
+    
+    sample = samples[table_name]
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write headers
+    writer.writerow(sample["headers"])
+    
+    # Write sample rows
+    for row in sample["rows"]:
+        writer.writerow(row)
+    
+    csv_data = output.getvalue()
+    output.close()
+    
+    response_file = io.BytesIO()
+    response_file.write(csv_data.encode())
+    response_file.seek(0)
+    
+    filename = f"{table_name}_sample.csv"
+    
+    return send_file(
+        response_file,
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@reports_bp.route("/upload", methods=["POST"])
+@login_required
+@admin_required
+def upload_csv():
+    """Handle CSV file upload and import"""
+    
+    if "csv_file" not in request.files:
+        flash("No file selected", "danger")
+        return redirect(url_for("reports.import_page"))
+    
+    file = request.files["csv_file"]
+    table_name = request.form.get("table_name", "").strip()
+    
+    if not file or not file.filename:
+        flash("No file selected", "danger")
+        return redirect(url_for("reports.import_page"))
+    
+    if not table_name:
+        flash("No table selected", "danger")
+        return redirect(url_for("reports.import_page"))
+    
+    # Allowed tables for import
+    allowed_tables = ["branches", "courses", "leads", "students", "invoices", "receipts", "installments", "expenses"]
+    
+    if table_name not in allowed_tables:
+        flash(f"Invalid table: {table_name}", "danger")
+        return redirect(url_for("reports.import_page"))
+    
+    try:
+        stream = io.TextIOWrapper(file.stream, encoding='utf-8')
+        reader = csv.DictReader(stream)
+        
+        if not reader.fieldnames:
+            flash("CSV file is empty or invalid", "danger")
+            return redirect(url_for("reports.import_page"))
+        
+        conn = get_conn()
+        cur = conn.cursor()
+        
+        rows_imported = 0
+        errors = []
+        
+        for idx, row in enumerate(reader, start=2):  # Start from row 2 (row 1 is headers)
+            try:
+                if table_name == "branches":
+                    cur.execute("""
+                        INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        row.get("branch_name", "").strip(),
+                        row.get("branch_code", "").strip(),
+                        row.get("address", "").strip(),
+                        int(row.get("is_active", 1)),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "courses":
+                    cur.execute("""
+                        INSERT INTO courses (course_name, duration, fee, course_type, is_active, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row.get("course_name", "").strip(),
+                        row.get("duration", "").strip(),
+                        float(row.get("fee", 0)) if row.get("fee") else 0,
+                        row.get("course_type", "standard").strip(),
+                        int(row.get("is_active", 1)),
+                        datetime.now().isoformat(timespec="seconds"),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "leads":
+                    cur.execute("""
+                        INSERT INTO leads (
+                            name, phone, whatsapp, gender, age, education_status, stream,
+                            career_goal, lead_source, decision_maker, lead_location, start_timeframe,
+                            stage, notes, status, is_deleted, assigned_to_id, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row.get("name", "").strip(),
+                        row.get("phone", "").strip(),
+                        row.get("whatsapp", "").strip() or None,
+                        row.get("gender", "").strip() or None,
+                        int(row.get("age", 0)) if row.get("age") else None,
+                        row.get("education_status", "").strip() or None,
+                        row.get("stream", "").strip() or None,
+                        row.get("career_goal", "").strip() or None,
+                        row.get("lead_source", "").strip() or None,
+                        row.get("decision_maker", "Self").strip() or "Self",
+                        row.get("lead_location", "").strip() or None,
+                        row.get("start_timeframe", "").strip() or None,
+                        row.get("stage", "New Lead").strip() or "New Lead",
+                        row.get("notes", "").strip() or None,
+                        "active",
+                        0,
+                        session.get("user_id"),
+                        datetime.now().isoformat(timespec="seconds"),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "students":
+                    cur.execute("""
+                        INSERT INTO students (
+                            student_code, full_name, phone, email, gender, address,
+                            education_level, qualification, student_location, employment_status,
+                            status, branch_id, joined_date, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row.get("student_code", "").strip(),
+                        row.get("full_name", "").strip(),
+                        row.get("phone", "").strip(),
+                        row.get("email", "").strip() or None,
+                        row.get("gender", "").strip() or None,
+                        row.get("address", "").strip() or None,
+                        row.get("education_level", "").strip() or None,
+                        row.get("qualification", "").strip() or None,
+                        row.get("student_location", "").strip() or None,
+                        row.get("employment_status", "unemployed").strip() or "unemployed",
+                        row.get("status", "active").strip() or "active",
+                        int(row.get("branch_id", 1)) if row.get("branch_id") else 1,
+                        row.get("joined_date", "").strip() or datetime.now().isoformat(timespec="seconds"),
+                        datetime.now().isoformat(timespec="seconds"),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "invoices":
+                    cur.execute("""
+                        INSERT INTO invoices (
+                            invoice_number, student_id, amount, due_date, status, notes, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row.get("invoice_number", "").strip(),
+                        int(row.get("student_id", 0)) if row.get("student_id") else 0,
+                        float(row.get("amount", 0)) if row.get("amount") else 0,
+                        row.get("due_date", "").strip() or None,
+                        row.get("status", "pending").strip() or "pending",
+                        row.get("notes", "").strip() or None,
+                        datetime.now().isoformat(timespec="seconds"),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "receipts":
+                    cur.execute("""
+                        INSERT INTO receipts (
+                            receipt_number, student_id, invoice_id, amount, payment_date, payment_method, notes, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row.get("receipt_number", "").strip(),
+                        int(row.get("student_id", 0)) if row.get("student_id") else 0,
+                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
+                        float(row.get("amount", 0)) if row.get("amount") else 0,
+                        row.get("payment_date", "").strip() or None,
+                        row.get("payment_method", "").strip() or None,
+                        row.get("notes", "").strip() or None,
+                        datetime.now().isoformat(timespec="seconds"),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "installments":
+                    cur.execute("""
+                        INSERT INTO installments (
+                            invoice_id, installment_number, due_date, amount, status, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
+                        int(row.get("installment_number", 0)) if row.get("installment_number") else 0,
+                        row.get("due_date", "").strip() or None,
+                        float(row.get("amount", 0)) if row.get("amount") else 0,
+                        row.get("status", "pending").strip() or "pending",
+                        datetime.now().isoformat(timespec="seconds"),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "expenses":
+                    cur.execute("""
+                        INSERT INTO expenses (
+                            expense_type, category, amount, description, expense_date, branch_id, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row.get("expense_type", "").strip() or "other",
+                        row.get("category", "").strip() or None,
+                        float(row.get("amount", 0)) if row.get("amount") else 0,
+                        row.get("description", "").strip() or None,
+                        row.get("expense_date", "").strip() or datetime.now().isoformat(timespec="seconds"),
+                        int(row.get("branch_id", 1)) if row.get("branch_id") else 1,
+                        datetime.now().isoformat(timespec="seconds"),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+            
+            except Exception as e:
+                errors.append(f"Row {idx}: {str(e)}")
+        
+        conn.commit()
+        
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=session.get("branch_id"),
+            action_type="import",
+            module_name="reports",
+            record_id=None,
+            description=f"Imported {rows_imported} rows to {table_name}"
+        )
+        
+        conn.close()
+        
+        if errors:
+            flash(f"Imported {rows_imported} rows with {len(errors)} errors: {', '.join(errors[:5])}", "warning")
+        else:
+            flash(f"Successfully imported {rows_imported} rows to {table_name}!", "success")
+        
+        return redirect(url_for("reports.import_page"))
+    
+    except Exception as e:
+        flash(f"Error importing CSV: {str(e)}", "danger")
+        return redirect(url_for("reports.import_page"))

@@ -119,6 +119,11 @@
         href="{{ url_for('reports.dashboard') }}">
         📊 Reports
         </a>
+
+        <a class="nav-link {% if request.endpoint == 'reports.import_page' %}active{% endif %}"
+        href="{{ url_for('reports.import_page') }}">
+        📥 Import Data
+        </a>
       {% endif %}
 
       <hr>

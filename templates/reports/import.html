@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}CSV Import - Global IT ERP{% endblock %}
+
+{% block page_title %}CSV Data Import{% endblock %}
+
+{% block extra_css %}
+<style>
+  .import-container {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .import-header {
+    margin-bottom: 20px;
+  }
+
+  .import-header h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+    color: #212529;
+  }
+
+  .import-header p {
+    color: #6c757d;
+    font-size: 0.95rem;
+    margin-bottom: 0;
+  }
+
+  .section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-top: 20px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #0d6efd;
+    color: #212529;
+  }
+
+  .info-box {
+    background: #e7f3ff;
+    border-left: 4px solid #0d6efd;
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    color: #004085;
+    font-size: 0.9rem;
+  }
+
+  .info-box strong {
+    color: #002752;
+  }
+
+  .import-card {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+
+  .form-section {
+    margin-bottom: 14px;
+  }
+
+  .form-section label {
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 5px;
+    display: block;
+    font-size: 0.9rem;
+  }
+
+  .form-section select,
+  .form-section input[type="file"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+
+  .form-section input[type="file"]:focus,
+  .form-section select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.1);
+  }
+
+  .form-section small {
+    color: #6c757d;
+    display: block;
+    margin-top: 4px;
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .btn-submit {
+    background: #28a745;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+    flex: 1;
+  }
+
+  .btn-submit:hover {
+    background: #218838;
+  }
+
+  .btn-reset {
+    background: #6c757d;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+    flex: 1;
+  }
+
+  .btn-reset:hover {
+    background: #5a6268;
+  }
+
+  .sample-section {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .sample-title {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #212529;
+    font-size: 0.9rem;
+  }
+
+  .sample-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px;
+  }
+
+  .sample-link {
+    display: block;
+    padding: 8px 12px;
+    background: white;
+    border: 1px solid #0d6efd;
+    border-radius: 4px;
+    color: #0d6efd;
+    text-decoration: none;
+    text-align: center;
+    font-weight: 500;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+
+  .sample-link:hover {
+    background: #0d6efd;
+    color: white;
+  }
+
+  .instructions-list {
+    color: #212529;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin: 0;
+    padding-left: 20px;
+  }
+
+  .instructions-list li {
+    margin-bottom: 6px;
+  }
+
+  .warning-box {
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 12px;
+    color: #856404;
+    font-size: 0.9rem;
+  }
+
+  .warning-box strong {
+    color: #533f03;
+  }
+
+  .warning-box ul {
+    margin: 6px 0 0 0;
+    padding-left: 18px;
+    font-size: 0.85rem;
+  }
+
+  .warning-box li {
+    margin-bottom: 4px;
+  }
+
+  @media (max-width: 768px) {
+    .import-header h2 {
+      font-size: 1.4rem;
+    }
+
+    .sample-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .btn-group {
+      flex-direction: row;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="import-container">
+  <div class="import-header">
+    <h2>📥 CSV Import</h2>
+    <p>Bulk import data from CSV files to the system</p>
+  </div>
+
+  <div class="info-box">
+    <strong>💡 Tip:</strong> Download a sample CSV file first to see the correct format and column names for your data.
+  </div>
+
+  <!-- Upload Form -->
+  <div class="import-card">
+    <div class="section-title">Upload CSV File</div>
+
+    <form method="post" action="{{ url_for('reports.upload_csv') }}" enctype="multipart/form-data">
+      <div class="form-section">
+        <label for="table_select">Select Table *</label>
+        <select id="table_select" name="table_name" required>
+          <option value="">-- Choose a table --</option>
+          <optgroup label="Masters">
+            <option value="branches">Branches</option>
+            <option value="courses">Courses</option>
+          </optgroup>
+          <optgroup label="People">
+            <option value="leads">Leads</option>
+            <option value="students">Students</option>
+          </optgroup>
+          <optgroup label="Billing & Finance">
+            <option value="invoices">Invoices</option>
+            <option value="receipts">Receipts</option>
+            <option value="installments">Installments</option>
+            <option value="expenses">Expenses</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div class="form-section">
+        <label for="csv_file">CSV File *</label>
+        <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+        <small>
+          ✓ Upload .csv files only<br>
+          ✓ Use same column names as samples<br>
+          ✓ First row should be headers
+        </small>
+      </div>
+
+      <div class="btn-group">
+        <button type="submit" class="btn-submit">⬆️ Import</button>
+        <button type="reset" class="btn-reset">Clear</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Sample Files -->
+  <div class="import-card">
+    <div class="section-title">Download Sample CSV Files</div>
+
+    <div class="sample-section">
+      <div class="sample-title">📊 Masters & Settings</div>
+      <div class="sample-grid">
+        <a href="{{ url_for('reports.download_sample', table_name='branches') }}" class="sample-link">
+          📥 Branches
+        </a>
+        <a href="{{ url_for('reports.download_sample', table_name='courses') }}" class="sample-link">
+          📥 Courses
+        </a>
+      </div>
+    </div>
+
+    <div class="sample-section">
+      <div class="sample-title">👥 People</div>
+      <div class="sample-grid">
+        <a href="{{ url_for('reports.download_sample', table_name='leads') }}" class="sample-link">
+          📥 Leads
+        </a>
+        <a href="{{ url_for('reports.download_sample', table_name='students') }}" class="sample-link">
+          📥 Students
+        </a>
+      </div>
+    </div>
+
+    <div class="sample-section">
+      <div class="sample-title">💳 Billing & Finance</div>
+      <div class="sample-grid">
+        <a href="{{ url_for('reports.download_sample', table_name='invoices') }}" class="sample-link">
+          📥 Invoices
+        </a>
+        <a href="{{ url_for('reports.download_sample', table_name='receipts') }}" class="sample-link">
+          📥 Receipts
+        </a>
+        <a href="{{ url_for('reports.download_sample', table_name='installments') }}" class="sample-link">
+          📥 Installments
+        </a>
+        <a href="{{ url_for('reports.download_sample', table_name='expenses') }}" class="sample-link">
+          📥 Expenses
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Instructions -->
+  <div class="import-card">
+    <div class="section-title">How to Import</div>
+
+    <ol class="instructions-list">
+      <li><strong>Download Sample:</strong> Click the sample link for the table you want to import</li>
+      <li><strong>Prepare Data:</strong> Update the sample file with your own data (keep column names)</li>
+      <li><strong>Select Table:</strong> Choose which table from the dropdown above</li>
+      <li><strong>Upload:</strong> Select your CSV file and click Import</li>
+      <li><strong>Check Results:</strong> View success/error count in the notification message</li>
+    </ol>
+
+    <div class="warning-box">
+      <strong>⚠️ Important:</strong>
+      <ul>
+        <li>Column names must exactly match the samples</li>
+        <li>Dates should be in YYYY-MM-DD format</li>
+        <li>Numbers without currency symbols (e.g., 5000, not $5,000)</li>
+        <li>Empty cells are allowed and become NULL</li>
+        <li>Failed rows are reported with error messages</li>
+        <li>Data is inserted in order, so relationships may fail if referenced data doesn't exist</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

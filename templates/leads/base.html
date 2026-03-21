@@ -123,6 +123,12 @@
         </a>
 
         <a
+        class="nav-link {{ 'active' if request.endpoint == 'reports.import_page' else '' }}"
+        href="{{ url_for('reports.import_page') }}">
+        📥 Import Data
+        </a>
+
+        <a
         class="nav-link {{ 'active' if request.endpoint == 'leads.activity_log' else '' }}"
         href="{{ url_for('leads.activity_log') }}">
         📋 My Activity
