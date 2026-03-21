@@ -114,6 +114,11 @@
         href="{{ url_for('core.users') }}">
         👤 Users
         </a>
+
+        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}"
+        href="{{ url_for('reports.dashboard') }}">
+        📊 Reports
+        </a>
       {% endif %}
 
       <hr>

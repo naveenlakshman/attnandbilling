@@ -113,7 +113,13 @@
         <a
         class="nav-link {{ 'active' if request.endpoint == 'leads.reports' else '' }}"
         href="{{ url_for('leads.reports') }}">
-        📊 Reports
+        📊 Leads Reports
+        </a>
+
+        <a
+        class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('reports.') else '' }}"
+        href="{{ url_for('reports.dashboard') }}">
+        📈 Analytics
         </a>
 
         <a

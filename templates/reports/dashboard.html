@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+
+{% block title %}Reports & Analytics - Global IT ERP{% endblock %}
+
+{% block page_title %}Reports & Analytics{% endblock %}
+
+{% block extra_css %}
+<style>
+  .reports-container {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .reports-header {
+    margin-bottom: 32px;
+  }
+
+  .reports-header h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #212529;
+  }
+
+  .reports-header p {
+    color: #6c757d;
+    font-size: 1.05rem;
+  }
+
+  .reports-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+
+  .report-card {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .report-card:hover {
+    border-color: #0d6efd;
+    box-shadow: 0 8px 16px rgba(13, 110, 253, 0.15);
+    transform: translateY(-4px);
+  }
+
+  .report-card-icon {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+  }
+
+  .report-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 8px;
+  }
+
+  .report-card-count {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0d6efd;
+    margin-bottom: 16px;
+  }
+
+  .report-card-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+    flex-grow: 1;
+  }
+
+  .report-card-action {
+    display: flex;
+    gap: 8px;
+  }
+
+  .report-card-action .btn {
+    flex: 1;
+    font-size: 0.9rem;
+    padding: 8px 12px;
+    border-radius: 6px;
+  }
+
+  .export-btn {
+    background: #0d6efd;
+    color: white;
+    text-decoration: none;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+
+  .export-btn:hover {
+    background: #0a58ca;
+    color: white;
+    text-decoration: none;
+  }
+
+  .section-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-top: 40px;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #0d6efd;
+    color: #212529;
+  }
+
+  .export-info {
+    background: #e7f3ff;
+    border-left: 4px solid #0d6efd;
+    padding: 16px;
+    border-radius: 6px;
+    margin-bottom: 24px;
+    color: #004085;
+    font-size: 0.95rem;
+  }
+
+  .export-info strong {
+    color: #002752;
+  }
+
+  @media (max-width: 768px) {
+    .reports-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .reports-header h2 {
+      font-size: 1.5rem;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="reports-container">
+  <div class="reports-header">
+    <h2>📊 Reports & Analytics</h2>
+    <p>Export data from all database tables for analysis and reporting</p>
+  </div>
+
+  <div class="export-info">
+    <strong>💡 Tip:</strong> Click the "Export CSV" button on any card to download the data. Files are timestamped to prevent overwrites.
+  </div>
+
+  <!-- Core Tables Section -->
+  <div class="section-title">📁 Core Data Tables</div>
+  <div class="reports-grid">
+    <!-- Branches -->
+    <div class="report-card">
+      <div class="report-card-icon">🏢</div>
+      <div class="report-card-title">Branches</div>
+      <div class="report-card-count">{{ stats.branches.count }}</div>
+      <div class="report-card-description">All registered branches and locations</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_csv', table_name='branches') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+
+    <!-- Users -->
+    <div class="report-card">
+      <div class="report-card-icon">👤</div>
+      <div class="report-card-title">Users</div>
+      <div class="report-card-count">{{ stats.users.count }}</div>
+      <div class="report-card-description">All system users and administrators</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_csv', table_name='users') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+
+    <!-- Courses -->
+    <div class="report-card">
+      <div class="report-card-icon">📚</div>
+      <div class="report-card-title">Courses</div>
+      <div class="report-card-count">{{ stats.courses.count }}</div>
+      <div class="report-card-description">Available courses and programs</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_csv', table_name='courses') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+
+    <!-- Expense Categories -->
+    <div class="report-card">
+      <div class="report-card-icon">🏷️</div>
+      <div class="report-card-title">Expense Categories</div>
+      <div class="report-card-count">{{ stats.expenses.count }}</div>
+      <div class="report-card-description">All expense categories in the system</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_csv', table_name='expenses') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leads & Students Section -->
+  <div class="section-title">👥 Leads & Students</div>
+  <div class="reports-grid">
+    <!-- Leads (Simple) -->
+    <div class="report-card">
+      <div class="report-card-icon">🔴</div>
+      <div class="report-card-title">Leads (Basic)</div>
+      <div class="report-card-count">{{ stats.leads.count }}</div>
+      <div class="report-card-description">All leads with basic information</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_csv', table_name='leads') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+
+    <!-- Leads (Detailed) -->
+    <div class="report-card">
+      <div class="report-card-icon">🟢</div>
+      <div class="report-card-title">Leads (Detailed)</div>
+      <div class="report-card-count">{{ stats.leads.count }}</div>
+      <div class="report-card-description">Leads with extended information and assignments</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_leads_detailed') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+
+    <!-- Students (Basic) -->
+    <div class="report-card">
+      <div class="report-card-icon">🎓</div>
+      <div class="report-card-title">Students (Basic)</div>
+      <div class="report-card-count">{{ stats.students.count }}</div>
+      <div class="report-card-description">All students with basic information</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_csv', table_name='students') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+
+    <!-- Students (Detailed) -->
+    <div class="report-card">
+      <div class="report-card-icon">📖</div>
+      <div class="report-card-title">Students (Detailed)</div>
+      <div class="report-card-count">{{ stats.students.count }}</div>
+      <div class="report-card-description">Students with extended information</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_students_detailed') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Billing & Transactions Section -->
+  <div class="section-title">💳 Billing & Transactions</div>
+  <div class="reports-grid">
+    <!-- Invoices -->
+    <div class="report-card">
+      <div class="report-card-icon">📄</div>
+      <div class="report-card-title">Invoices</div>
+      <div class="report-card-count">{{ stats.invoices.count }}</div>
+      <div class="report-card-description">All generated invoices and billing records</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_csv', table_name='invoices') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+
+    <!-- Receipts -->
+    <div class="report-card">
+      <div class="report-card-icon">🧾</div>
+      <div class="report-card-title">Receipts</div>
+      <div class="report-card-count">{{ stats.receipts.count }}</div>
+      <div class="report-card-description">All payment receipts and confirmations</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_csv', table_name='receipts') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+
+    <!-- Expenses -->
+    <div class="report-card">
+      <div class="report-card-icon">💰</div>
+      <div class="report-card-title">Expenses</div>
+      <div class="report-card-count">{{ stats.expenses.count }}</div>
+      <div class="report-card-description">All business expenses and costs</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_csv', table_name='expenses') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit & Logs Section -->
+  <div class="section-title">📋 Audit & Logs</div>
+  <div class="reports-grid">
+    <!-- Activity Logs -->
+    <div class="report-card">
+      <div class="report-card-icon">📝</div>
+      <div class="report-card-title">Activity Logs</div>
+      <div class="report-card-count">{{ stats.activity_logs.count }}</div>
+      <div class="report-card-description">Complete audit trail of system activities</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.export_csv', table_name='activity_logs') }}" class="export-btn">
+          ⬇️ Export CSV
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
