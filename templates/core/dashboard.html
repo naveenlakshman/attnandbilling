@@ -5,5 +5,31 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
-<!-- Dashboard content goes here -->
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h3 class="mb-4">Welcome, {{ session.get('full_name') }}!</h3>
+        </div>
+    </div>
+
+    {% if session.get('role') == 'admin' %}
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">📤 Quick Export</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">Export all database tables to a single Excel workbook with one click.</p>
+                    <a href="{{ url_for('import_export.export_all_tables') }}" class="btn btn-primary">
+                        <i class="fas fa-download"></i> Export All Tables
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Dashboard content goes here -->
+</div>
 {% endblock %}

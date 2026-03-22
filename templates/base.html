@@ -115,6 +115,11 @@
         👤 Users
         </a>
 
+        <a class="nav-link {% if request.endpoint in ['core.branches', 'core.branch_new', 'core.branch_edit'] %}active{% endif %}"
+        href="{{ url_for('core.branches') }}">
+        🏢 Branches
+        </a>
+
         <a class="nav-link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}"
         href="{{ url_for('reports.dashboard') }}">
         📊 Reports
@@ -123,6 +128,11 @@
         <a class="nav-link {% if request.endpoint == 'reports.import_page' %}active{% endif %}"
         href="{{ url_for('reports.import_page') }}">
         📥 Import Data
+        </a>
+
+        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('import_export.') %}active{% endif %}"
+        href="{{ url_for('import_export.import_export_dashboard') }}">
+        📤 Export Data
         </a>
       {% endif %}
 

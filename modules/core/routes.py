@@ -286,3 +286,163 @@ def user_toggle_status(user_id):
         flash("User deactivated successfully.", "warning")
 
     return redirect(url_for("core.users"))
+
+
+# ============== BRANCH MANAGEMENT ==============
+
+@core_bp.route("/branches")
+@login_required
+@admin_required
+def branches():
+    """List all branches"""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT * FROM branches
+        ORDER BY branch_name DESC
+    """)
+    branches_list = cur.fetchall()
+
+    conn.close()
+    return render_template("core/branches.html", branches=branches_list)
+
+
+@core_bp.route("/branches/new", methods=["GET", "POST"])
+@login_required
+@admin_required
+def branch_new():
+    """Create new branch"""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        branch_name = request.form.get("branch_name", "").strip()
+        branch_code = request.form.get("branch_code", "").strip()
+        address = request.form.get("address", "").strip()
+
+        if not branch_name or not branch_code:
+            flash("Branch name and branch code are required.", "danger")
+            conn.close()
+            return redirect(url_for("core.branch_new"))
+
+        cur.execute("SELECT id FROM branches WHERE branch_name = ? OR branch_code = ?", (branch_name, branch_code))
+        existing_branch = cur.fetchone()
+        if existing_branch:
+            flash("Branch name or code already exists.", "danger")
+            conn.close()
+            return redirect(url_for("core.branch_new"))
+
+        now = datetime.now().isoformat(timespec="seconds")
+
+        cur.execute("""
+            INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            branch_name,
+            branch_code,
+            address,
+            1,
+            now
+        ))
+
+        conn.commit()
+        conn.close()
+
+        flash("Branch created successfully.", "success")
+        return redirect(url_for("core.branches"))
+
+    conn.close()
+    return render_template("core/branch_form.html", mode="create", branch=None)
+
+
+@core_bp.route("/branches/<int:branch_id>/edit", methods=["GET", "POST"])
+@login_required
+@admin_required
+def branch_edit(branch_id):
+    """Edit branch"""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM branches WHERE id = ?", (branch_id,))
+    branch = cur.fetchone()
+
+    if not branch:
+        conn.close()
+        flash("Branch not found.", "danger")
+        return redirect(url_for("core.branches"))
+
+    if request.method == "POST":
+        branch_name = request.form.get("branch_name", "").strip()
+        branch_code = request.form.get("branch_code", "").strip()
+        address = request.form.get("address", "").strip()
+
+        if not branch_name or not branch_code:
+            flash("Branch name and branch code are required.", "danger")
+            conn.close()
+            return redirect(url_for("core.branch_edit", branch_id=branch_id))
+
+        cur.execute("SELECT id FROM branches WHERE (branch_name = ? OR branch_code = ?) AND id != ?", 
+                   (branch_name, branch_code, branch_id))
+        existing_branch = cur.fetchone()
+        if existing_branch:
+            flash("Branch name or code already exists.", "danger")
+            conn.close()
+            return redirect(url_for("core.branch_edit", branch_id=branch_id))
+
+        cur.execute("""
+            UPDATE branches
+            SET branch_name = ?,
+                branch_code = ?,
+                address = ?
+            WHERE id = ?
+        """, (
+            branch_name,
+            branch_code,
+            address,
+            branch_id
+        ))
+
+        conn.commit()
+        conn.close()
+
+        flash("Branch updated successfully.", "success")
+        return redirect(url_for("core.branches"))
+
+    conn.close()
+    return render_template("core/branch_form.html", mode="edit", branch=branch)
+
+
+@core_bp.route("/branches/<int:branch_id>/toggle-status", methods=["POST"])
+@login_required
+@admin_required
+def branch_toggle_status(branch_id):
+    """Toggle branch active/inactive status"""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM branches WHERE id = ?", (branch_id,))
+    branch = cur.fetchone()
+
+    if not branch:
+        conn.close()
+        flash("Branch not found.", "danger")
+        return redirect(url_for("core.branches"))
+
+    new_status = 0 if branch["is_active"] == 1 else 1
+
+    cur.execute("""
+        UPDATE branches
+        SET is_active = ?
+        WHERE id = ?
+    """, (new_status, branch_id))
+
+    conn.commit()
+    conn.close()
+
+    if new_status == 1:
+        flash("Branch activated successfully.", "success")
+    else:
+        flash("Branch deactivated successfully.", "warning")
+
+    return redirect(url_for("core.branches"))

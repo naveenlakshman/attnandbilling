@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Branches - Global IT ERP{% endblock %}
+
+{% block page_title %}Manage Branches{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <h3>Branches</h3>
+        </div>
+        <div class="col-md-6 text-end">
+            <a href="{{ url_for('core.branch_new') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add New Branch
+            </a>
+        </div>
+    </div>
+
+    {% if branches %}
+    <div class="table-responsive">
+        <table class="table table-hover table-striped">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Branch Name</th>
+                    <th>Branch Code</th>
+                    <th>Address</th>
+                    <th>Status</th>
+                    <th>Created At</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for branch in branches %}
+                <tr>
+                    <td>{{ branch.id }}</td>
+                    <td><strong>{{ branch.branch_name }}</strong></td>
+                    <td><code>{{ branch.branch_code }}</code></td>
+                    <td>{{ branch.address or '-' }}</td>
+                    <td>
+                        {% if branch.is_active == 1 %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ branch.created_at }}</td>
+                    <td>
+                        <a href="{{ url_for('core.branch_edit', branch_id=branch.id) }}" class="btn btn-sm btn-warning">
+                            <i class="fas fa-edit"></i> Edit
+                        </a>
+                        <form method="post" action="{{ url_for('core.branch_toggle_status', branch_id=branch.id) }}" style="display: inline;">
+                            {% if branch.is_active == 1 %}
+                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Deactivate this branch?')">
+                                    <i class="fas fa-ban"></i> Deactivate
+                                </button>
+                            {% else %}
+                                <button type="submit" class="btn btn-sm btn-success">
+                                    <i class="fas fa-check"></i> Activate
+                                </button>
+                            {% endif %}
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info" role="alert">
+        <i class="fas fa-info-circle"></i> No branches found. 
+        <a href="{{ url_for('core.branch_new') }}">Create the first branch</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

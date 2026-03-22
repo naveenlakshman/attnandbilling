@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Import/Export{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <h1>Import & Export</h1>
+            <hr>
+            
+            <div class="card mt-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Export Database</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Download all database tables into a single Excel workbook. Each table will be in a separate sheet with the same column headings and table names as sheet names.</p>
+                    
+                    <div class="alert alert-info" role="alert">
+                        <strong>What you'll get:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>Single Excel workbook with all database tables</li>
+                            <li>Each table in a separate sheet</li>
+                            <li>Sheet names match the original table names</li>
+                            <li>Column headings match the database columns</li>
+                            <li>Ready to use for backup or analysis</li>
+                        </ul>
+                    </div>
+
+                    <a href="{{ url_for('import_export.export_all_tables') }}" class="btn btn-success btn-lg">
+                        <i class="fas fa-download"></i> Export All Tables to Excel
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

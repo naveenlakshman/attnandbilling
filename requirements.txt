@@ -1,2 +1,4 @@
-# Add project dependencies here.
+Flask==2.3.0
+openpyxl==3.1.5
+Werkzeug==2.3.0
 

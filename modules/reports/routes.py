@@ -3,6 +3,7 @@ import csv
 from flask import Blueprint, render_template, send_file, flash, redirect, url_for, session, request
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
+from werkzeug.security import generate_password_hash
 from datetime import datetime
 
 reports_bp = Blueprint("reports", __name__)
@@ -27,6 +28,10 @@ def dashboard():
         ("invoices", "Invoices"),
         ("receipts", "Receipts"),
         ("expenses", "Expenses"),
+        ("expense_categories", "Expense Categories"),
+        ("followups", "Followups"),
+        ("installment_plans", "Installment Plans"),
+        ("invoice_items", "Invoice Items"),
         ("activity_logs", "Activity Logs")
     ]
     
@@ -58,15 +63,19 @@ def export_csv(table_name):
     
     # Allowed tables for export
     allowed_tables = {
+        "activity_logs": "activity_logs",
         "branches": "branches",
-        "users": "users",
-        "leads": "leads",
-        "students": "students",
         "courses": "courses",
-        "invoices": "invoices",
-        "receipts": "receipts",
+        "expense_categories": "expense_categories",
         "expenses": "expenses",
-        "activity_logs": "activity_logs"
+        "followups": "followups",
+        "installment_plans": "installment_plans",
+        "invoice_items": "invoice_items",
+        "invoices": "invoices",
+        "leads": "leads",
+        "receipts": "receipts",
+        "students": "students",
+        "users": "users"
     }
     
     if table_name not in allowed_tables:
@@ -396,6 +405,49 @@ def download_sample(table_name):
                 ["utilities", "office", "5000", "Electricity bill", "2026-03-21", "1"],
             ]
         },
+        "activity_logs": {
+            "headers": ["user_id", "branch_id", "action_type", "module_name", "record_id", "description"],
+            "rows": [
+                ["1", "1", "create", "leads", "1", "Created new lead"],
+                ["1", "1", "update", "students", "1", "Updated student record"],
+            ]
+        },
+        "expense_categories": {
+            "headers": ["category_name", "is_active"],
+            "rows": [
+                ["Rent", "1"],
+                ["Utilities", "1"],
+                ["Office Supplies", "1"],
+            ]
+        },
+        "followups": {
+            "headers": ["lead_id", "user_id", "method", "outcome", "note", "next_followup_date"],
+            "rows": [
+                ["1", "1", "call", "interested", "Discussed course options", "2026-03-28"],
+                ["2", "1", "email", "not_interested", "Student declined", ""],
+            ]
+        },
+        "installment_plans": {
+            "headers": ["invoice_id", "installment_no", "due_date", "amount_due", "amount_paid", "status", "remarks"],
+            "rows": [
+                ["1", "1", "2026-04-21", "2500", "2500", "paid", "First payment received"],
+                ["1", "2", "2026-05-21", "2500", "0", "pending", ""],
+            ]
+        },
+        "invoice_items": {
+            "headers": ["invoice_id", "course_id", "description", "quantity", "unit_price", "line_total"],
+            "rows": [
+                ["1", "1", "Tally Course", "1", "5000", "5000"],
+                ["2", "2", "Excel Advanced", "1", "4000", "4000"],
+            ]
+        },
+        "users": {
+            "headers": ["full_name", "username", "role", "phone", "branch_id", "can_view_all_branches", "is_active"],
+            "rows": [
+                ["Admin User", "admin", "admin", "9876543210", "1", "1", "1"],
+                ["Staff User", "staff", "staff", "9123456789", "1", "0", "1"],
+            ]
+        },
     }
     
     if table_name not in samples:
@@ -453,7 +505,7 @@ def upload_csv():
         return redirect(url_for("reports.import_page"))
     
     # Allowed tables for import
-    allowed_tables = ["branches", "courses", "leads", "students", "invoices", "receipts", "installments", "expenses"]
+    allowed_tables = ["activity_logs", "branches", "courses", "expense_categories", "expenses", "followups", "installment_plans", "invoice_items", "invoices", "leads", "receipts", "students", "users"]
     
     if table_name not in allowed_tables:
         flash(f"Invalid table: {table_name}", "danger")
@@ -614,17 +666,120 @@ def upload_csv():
                 
                 elif table_name == "installments":
                     cur.execute("""
-                        INSERT INTO installments (
-                            invoice_id, installment_number, due_date, amount, status, created_at, updated_at
+                        INSERT INTO installment_plans (
+                            invoice_id, installment_no, due_date, amount_due, amount_paid, status, remarks, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
                         int(row.get("installment_number", 0)) if row.get("installment_number") else 0,
                         row.get("due_date", "").strip() or None,
                         float(row.get("amount", 0)) if row.get("amount") else 0,
+                        float(row.get("amount_paid", 0)) if row.get("amount_paid") else 0,
                         row.get("status", "pending").strip() or "pending",
+                        row.get("remarks", "").strip() or None,
                         datetime.now().isoformat(timespec="seconds"),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "installment_plans":
+                    cur.execute("""
+                        INSERT INTO installment_plans (
+                            invoice_id, installment_no, due_date, amount_due, amount_paid, status, remarks, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
+                        int(row.get("installment_no", 0)) if row.get("installment_no") else 0,
+                        row.get("due_date", "").strip() or None,
+                        float(row.get("amount_due", 0)) if row.get("amount_due") else 0,
+                        float(row.get("amount_paid", 0)) if row.get("amount_paid") else 0,
+                        row.get("status", "pending").strip() or "pending",
+                        row.get("remarks", "").strip() or None,
+                        datetime.now().isoformat(timespec="seconds"),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "activity_logs":
+                    cur.execute("""
+                        INSERT INTO activity_logs (
+                            user_id, branch_id, action_type, module_name, record_id, description, created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        int(row.get("user_id", session.get("user_id"))) if row.get("user_id") else session.get("user_id"),
+                        int(row.get("branch_id", session.get("branch_id"))) if row.get("branch_id") else session.get("branch_id"),
+                        row.get("action_type", "").strip() or "import",
+                        row.get("module_name", "").strip() or "import_export",
+                        int(row.get("record_id", 0)) if row.get("record_id") else None,
+                        row.get("description", "").strip(),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "expense_categories":
+                    cur.execute("""
+                        INSERT INTO expense_categories (category_name, is_active, created_at)
+                        VALUES (?, ?, ?)
+                    """, (
+                        row.get("category_name", "").strip(),
+                        int(row.get("is_active", 1)),
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "followups":
+                    cur.execute("""
+                        INSERT INTO followups (
+                            lead_id, user_id, method, outcome, note, next_followup_date, created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        int(row.get("lead_id", 0)) if row.get("lead_id") else 0,
+                        int(row.get("user_id")) if row.get("user_id") else session.get("user_id"),
+                        row.get("method", "").strip() or None,
+                        row.get("outcome", "").strip() or None,
+                        row.get("note", "").strip() or None,
+                        row.get("next_followup_date", "").strip() or None,
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "invoice_items":
+                    cur.execute("""
+                        INSERT INTO invoice_items (
+                            invoice_id, course_id, description, quantity, unit_price, line_total, created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
+                        int(row.get("course_id")) if row.get("course_id") else None,
+                        row.get("description", "").strip(),
+                        int(row.get("quantity", 1)) if row.get("quantity") else 1,
+                        float(row.get("unit_price", 0)) if row.get("unit_price") else 0,
+                        float(row.get("line_total", 0)) if row.get("line_total") else 0,
+                        datetime.now().isoformat(timespec="seconds")
+                    ))
+                    rows_imported += 1
+                
+                elif table_name == "users":
+                    cur.execute("""
+                        INSERT INTO users (
+                            full_name, username, password_hash, role, phone, branch_id, 
+                            can_view_all_branches, is_active, created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row.get("full_name", "").strip(),
+                        row.get("username", "").strip(),
+                        generate_password_hash(row.get("username", "")),  # Default password = username
+                        row.get("role", "staff").strip() or "staff",
+                        row.get("phone", "").strip() or None,
+                        int(row.get("branch_id")) if row.get("branch_id") else 1,
+                        int(row.get("can_view_all_branches", 0)),
+                        int(row.get("is_active", 1)),
                         datetime.now().isoformat(timespec="seconds")
                     ))
                     rows_imported += 1

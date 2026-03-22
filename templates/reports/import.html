@@ -250,19 +250,26 @@
         <label for="table_select">Select Table *</label>
         <select id="table_select" name="table_name" required>
           <option value="">-- Choose a table --</option>
-          <optgroup label="Masters">
+          <optgroup label="📋 Settings & Configuration">
             <option value="branches">Branches</option>
             <option value="courses">Courses</option>
+            <option value="expense_categories">Expense Categories</option>
+            <option value="users">Users</option>
           </optgroup>
-          <optgroup label="People">
+          <optgroup label="👥 People & Leads">
             <option value="leads">Leads</option>
             <option value="students">Students</option>
+            <option value="followups">Follow-ups</option>
           </optgroup>
-          <optgroup label="Billing & Finance">
+          <optgroup label="💳 Billing & Finance">
             <option value="invoices">Invoices</option>
+            <option value="invoice_items">Invoice Items</option>
             <option value="receipts">Receipts</option>
-            <option value="installments">Installments</option>
+            <option value="installment_plans">Installment Plans</option>
             <option value="expenses">Expenses</option>
+          </optgroup>
+          <optgroup label="📊 Audit & Logs">
+            <option value="activity_logs">Activity Logs</option>
           </optgroup>
         </select>
       </div>
@@ -289,7 +296,7 @@
     <div class="section-title">Download Sample CSV Files</div>
 
     <div class="sample-section">
-      <div class="sample-title">📊 Masters & Settings</div>
+      <div class="sample-title">� Settings & Configuration</div>
       <div class="sample-grid">
         <a href="{{ url_for('reports.download_sample', table_name='branches') }}" class="sample-link">
           📥 Branches
@@ -297,17 +304,26 @@
         <a href="{{ url_for('reports.download_sample', table_name='courses') }}" class="sample-link">
           📥 Courses
         </a>
+        <a href="{{ url_for('reports.download_sample', table_name='expense_categories') }}" class="sample-link">
+          📥 Expense Categories
+        </a>
+        <a href="{{ url_for('reports.download_sample', table_name='users') }}" class="sample-link">
+          📥 Users
+        </a>
       </div>
     </div>
 
     <div class="sample-section">
-      <div class="sample-title">👥 People</div>
+      <div class="sample-title">👥 People & Leads</div>
       <div class="sample-grid">
         <a href="{{ url_for('reports.download_sample', table_name='leads') }}" class="sample-link">
           📥 Leads
         </a>
         <a href="{{ url_for('reports.download_sample', table_name='students') }}" class="sample-link">
           📥 Students
+        </a>
+        <a href="{{ url_for('reports.download_sample', table_name='followups') }}" class="sample-link">
+          📥 Follow-ups
         </a>
       </div>
     </div>
@@ -318,14 +334,26 @@
         <a href="{{ url_for('reports.download_sample', table_name='invoices') }}" class="sample-link">
           📥 Invoices
         </a>
+        <a href="{{ url_for('reports.download_sample', table_name='invoice_items') }}" class="sample-link">
+          📥 Invoice Items
+        </a>
         <a href="{{ url_for('reports.download_sample', table_name='receipts') }}" class="sample-link">
           📥 Receipts
         </a>
-        <a href="{{ url_for('reports.download_sample', table_name='installments') }}" class="sample-link">
-          📥 Installments
+        <a href="{{ url_for('reports.download_sample', table_name='installment_plans') }}" class="sample-link">
+          📥 Installment Plans
         </a>
         <a href="{{ url_for('reports.download_sample', table_name='expenses') }}" class="sample-link">
           📥 Expenses
+        </a>
+      </div>
+    </div>
+
+    <div class="sample-section">
+      <div class="sample-title">📊 Audit & Logs</div>
+      <div class="sample-grid">
+        <a href="{{ url_for('reports.download_sample', table_name='activity_logs') }}" class="sample-link">
+          📥 Activity Logs
         </a>
       </div>
     </div>
