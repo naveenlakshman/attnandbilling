@@ -226,6 +226,7 @@ def init_db():
             description TEXT NOT NULL,
             quantity INTEGER NOT NULL DEFAULT 1,
             unit_price REAL NOT NULL DEFAULT 0,
+            discount REAL NOT NULL DEFAULT 0,
             line_total REAL NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
@@ -333,6 +334,8 @@ def init_db():
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")
 
     add_column_if_not_exists(cur, "invoices", "branch_id", "INTEGER")
+
+    add_column_if_not_exists(cur, "invoice_items", "discount", "REAL NOT NULL DEFAULT 0")
 
     add_column_if_not_exists(cur, "receipts", "payment_mode", "TEXT DEFAULT 'cash'")
     add_column_if_not_exists(cur, "receipts", "notes", "TEXT")

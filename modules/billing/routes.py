@@ -1414,11 +1414,11 @@ def invoice_new():
                         next_number = numeric_part + 1
                         invoice_no = f"{prefix}/{next_number}"
                     else:
-                        invoice_no = f"INV-{str(invoice_id).zfill(4)}"
+                        invoice_no = f"GIT/B/{invoice_id}"
                 except (ValueError, IndexError, TypeError):
-                    invoice_no = f"INV-{str(invoice_id).zfill(4)}"
+                    invoice_no = f"GIT/B/{invoice_id}"
             else:
-                invoice_no = f"INV-{str(invoice_id).zfill(4)}"
+                invoice_no = f"GIT/B/{invoice_id}"
 
             cur.execute("""
                 UPDATE invoices
@@ -2169,7 +2169,7 @@ def receipt_new():
 
             receipt_id = cur.lastrowid
 
-            # Final receipt number
+            # Final receipt number - Keep GIT/ prefix for receipts
             receipt_no = f"GIT/{receipt_id}"
 
             cur.execute("""

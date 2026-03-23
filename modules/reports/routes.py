@@ -378,10 +378,10 @@ def download_sample(table_name):
             ]
         },
         "invoices": {
-            "headers": ["invoice_number", "student_id", "amount", "due_date", "status", "notes"],
+            "headers": ["invoice_number", "student_id", "invoice_date", "subtotal", "discount_type", "discount_value", "discount_amount", "total_amount", "installment_type", "notes", "status", "created_by", "branch_id"],
             "rows": [
-                ["INV001", "1", "5000", "2026-04-21", "pending", "Course Fee"],
-                ["INV002", "2", "4000", "2026-04-15", "paid", ""],
+                ["GIT/B/001", "1", "2026-03-21", "5000", "percentage", "10", "500", "4500", "full", "Course Fee", "unpaid", "1", "1"],
+                ["GIT/B/002", "2", "2026-03-20", "4000", "fixed", "300", "300", "3700", "installment", "Excel training", "unpaid", "1", "1"],
             ]
         },
         "receipts": {
@@ -435,10 +435,10 @@ def download_sample(table_name):
             ]
         },
         "invoice_items": {
-            "headers": ["invoice_id", "course_id", "description", "quantity", "unit_price", "line_total"],
+            "headers": ["invoice_id", "course_id", "description", "quantity", "unit_price", "discount", "line_total"],
             "rows": [
-                ["1", "1", "Tally Course", "1", "5000", "5000"],
-                ["2", "2", "Excel Advanced", "1", "4000", "4000"],
+                ["1", "1", "Tally Course", "1", "5000", "0", "5000"],
+                ["2", "2", "Excel Advanced", "1", "4000", "200", "3800"],
             ]
         },
         "users": {
@@ -628,22 +628,78 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "invoices":
-                    cur.execute("""
-                        INSERT INTO invoices (
-                            invoice_number, student_id, amount, due_date, status, notes, created_at, updated_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        row.get("invoice_number", "").strip(),
-                        int(row.get("student_id", 0)) if row.get("student_id") else 0,
-                        float(row.get("amount", 0)) if row.get("amount") else 0,
-                        row.get("due_date", "").strip() or None,
-                        row.get("status", "pending").strip() or "pending",
-                        row.get("notes", "").strip() or None,
-                        datetime.now().isoformat(timespec="seconds"),
-                        datetime.now().isoformat(timespec="seconds")
-                    ))
-                    rows_imported += 1
+                    try:
+                        # Validate required fields for 13-column invoice import
+                        invoice_number = row.get("invoice_number", "").strip()
+                        student_id = row.get("student_id", "").strip()
+                        invoice_date = row.get("invoice_date", "").strip()
+                        subtotal = row.get("subtotal", "0").strip()
+                        discount_type = row.get("discount_type", "none").strip().lower()
+                        discount_value = row.get("discount_value", "0").strip()
+                        discount_amount = row.get("discount_amount", "0").strip()
+                        total_amount = row.get("total_amount", "0").strip()
+                        installment_type = row.get("installment_type", "full").strip().lower()
+                        notes = row.get("notes", "").strip()
+                        status = row.get("status", "unpaid").strip().lower()
+                        created_by = row.get("created_by", "").strip()
+                        branch_id = row.get("branch_id", "").strip()
+                        
+                        # Validation
+                        if not invoice_number:
+                            errors.append(f"Row {idx}: invoice_number is required")
+                            continue
+                        if not student_id:
+                            errors.append(f"Row {idx}: student_id is required")
+                            continue
+                        if not invoice_date:
+                            errors.append(f"Row {idx}: invoice_date is required")
+                            continue
+                        
+                        # Validate date format
+                        try:
+                            datetime.strptime(invoice_date, "%Y-%m-%d")
+                        except ValueError:
+                            errors.append(f"Row {idx}: invalid invoice_date format (use YYYY-MM-DD)")
+                            continue
+                        
+                        # Validate numbers
+                        try:
+                            subtotal = float(subtotal)
+                            discount_value = float(discount_value)
+                            discount_amount = float(discount_amount)
+                            total_amount = float(total_amount)
+                        except ValueError as e:
+                            errors.append(f"Row {idx}: invalid number format - {str(e)}")
+                            continue
+                        
+                        # Convert IDs
+                        try:
+                            student_id = int(student_id)
+                            created_by = int(created_by)
+                            branch_id = int(branch_id)
+                        except ValueError:
+                            errors.append(f"Row {idx}: student_id, created_by, and branch_id must be valid integers")
+                            continue
+                        
+                        # Insert invoice with all 13 columns
+                        cur.execute("""
+                            INSERT INTO invoices (
+                                invoice_number, student_id, invoice_date, subtotal, 
+                                discount_type, discount_value, discount_amount, total_amount,
+                                installment_type, notes, status, created_by, branch_id, created_at, updated_at
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            invoice_number, student_id, invoice_date, subtotal,
+                            discount_type, discount_value, discount_amount, total_amount,
+                            installment_type, notes, status, created_by, branch_id,
+                            datetime.now().isoformat(timespec="seconds"),
+                            datetime.now().isoformat(timespec="seconds")
+                        ))
+                        rows_imported += 1
+                    except Exception as e:
+                        errors.append(f"Row {idx}: {str(e)}")
+                        continue
                 
                 elif table_name == "receipts":
                     cur.execute("""
@@ -750,15 +806,16 @@ def upload_csv():
                 elif table_name == "invoice_items":
                     cur.execute("""
                         INSERT INTO invoice_items (
-                            invoice_id, course_id, description, quantity, unit_price, line_total, created_at
+                            invoice_id, course_id, description, quantity, unit_price, discount, line_total, created_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
                         int(row.get("course_id")) if row.get("course_id") else None,
                         row.get("description", "").strip(),
                         int(row.get("quantity", 1)) if row.get("quantity") else 1,
                         float(row.get("unit_price", 0)) if row.get("unit_price") else 0,
+                        float(row.get("discount", 0)) if row.get("discount") else 0,
                         float(row.get("line_total", 0)) if row.get("line_total") else 0,
                         datetime.now().isoformat(timespec="seconds")
                     ))

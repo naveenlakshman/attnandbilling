@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Import Invoices{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-10 mx-auto">
+            <h1><i class="fas fa-file-upload"></i> Import Invoices from CSV</h1>
+            <hr>
+
+            <!-- Instructions Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Instructions</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Step 1: Download Template</h6>
+                    <p>Click the button below to download the CSV template with the correct column headers and example data.</p>
+                    <a href="{{ url_for('import_export.download_invoice_template') }}" class="btn btn-sm btn-info mb-3">
+                        <i class="fas fa-download"></i> Download CSV Template
+                    </a>
+
+                    <h6>Step 2: Fill in Your Data</h6>
+                    <p>Open the CSV file in Excel or a text editor and add your invoice data. Keep all columns as provided in the template.</p>
+                    
+                    <div class="alert alert-info">
+                        <strong>Invoice Number Format:</strong> Use <code>GIT/B/1</code>, <code>GIT/B/2</code>, <code>GIT/B/3</code>, etc. for invoice numbers (not INV001, etc)
+                    </div>
+
+                    <h6>Step 3: Upload and Import</h6>
+                    <p>Upload the completed CSV file using the form below. The system will validate all data before importing.</p>
+
+                    <div class="alert alert-warning" role="alert">
+                        <strong>Important:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>All columns must be present (even if some are empty)</li>
+                            <li>invoice_date must be in YYYY-MM-DD format</li>
+                            <li>student_id must exist in the database</li>
+                            <li>created_by (user ID) must be a valid user ID</li>
+                            <li>branch_id must be a valid branch (if provided)</li>
+                            <li>discount_type must be: none, fixed, or percentage</li>
+                            <li>installment_type must be: full or custom</li>
+                            <li>status must be: unpaid, partially_paid, paid, or cancelled</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CSV Column Details Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">CSV Column Reference</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Column Name</th>
+                                    <th>Type</th>
+                                    <th>Required</th>
+                                    <th>Description</th>
+                                    <th>Example</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>invoice_number</code></td>
+                                    <td>Text</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>Unique invoice identifier (format: GIT/B/{number})</td>
+                                    <td>GIT/B/1</td>
+                                </tr>
+                                <tr>
+                                    <td><code>student_id</code></td>
+                                    <td>Number</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>Student ID (must exist in database)</td>
+                                    <td>1</td>
+                                </tr>
+                                <tr>
+                                    <td><code>invoice_date</code></td>
+                                    <td>Date</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>When the invoice was issued (YYYY-MM-DD)</td>
+                                    <td>2026-04-21</td>
+                                </tr>
+                                <tr>
+                                    <td><code>subtotal</code></td>
+                                    <td>Decimal</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>Amount before discounts</td>
+                                    <td>5000</td>
+                                </tr>
+                                <tr>
+                                    <td><code>discount_type</code></td>
+                                    <td>Text</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>Type of discount: none, fixed, or percentage</td>
+                                    <td>percentage</td>
+                                </tr>
+                                <tr>
+                                    <td><code>discount_value</code></td>
+                                    <td>Decimal</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>Discount amount or percentage value</td>
+                                    <td>5</td>
+                                </tr>
+                                <tr>
+                                    <td><code>discount_amount</code></td>
+                                    <td>Decimal</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>Calculated final discount amount</td>
+                                    <td>250</td>
+                                </tr>
+                                <tr>
+                                    <td><code>total_amount</code></td>
+                                    <td>Decimal</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>Total after discounts applied</td>
+                                    <td>4750</td>
+                                </tr>
+                                <tr>
+                                    <td><code>installment_type</code></td>
+                                    <td>Text</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>Payment type: full or custom installments</td>
+                                    <td>full</td>
+                                </tr>
+                                <tr>
+                                    <td><code>notes</code></td>
+                                    <td>Text</td>
+                                    <td><span class="badge badge-success">No</span></td>
+                                    <td>Additional notes or remarks</td>
+                                    <td>Course Fee</td>
+                                </tr>
+                                <tr>
+                                    <td><code>status</code></td>
+                                    <td>Text</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>Status: unpaid, partially_paid, paid, or cancelled</td>
+                                    <td>pending</td>
+                                </tr>
+                                <tr>
+                                    <td><code>created_by</code></td>
+                                    <td>Number</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>User ID who created the invoice</td>
+                                    <td>1</td>
+                                </tr>
+                                <tr>
+                                    <td><code>branch_id</code></td>
+                                    <td>Number</td>
+                                    <td><span class="badge badge-danger">Yes</span></td>
+                                    <td>Branch ID where invoice was created</td>
+                                    <td>1</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Form Card -->
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Upload CSV File</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label for="csv_file">Select CSV File</label>
+                            <div class="custom-file">
+                                <input type="file" class="custom-file-input" id="csv_file" name="csv_file" accept=".csv" required>
+                                <label class="custom-file-label" for="csv_file">Choose file...</label>
+                            </div>
+                            <small class="form-text text-muted">Only CSV files are accepted. Max file size: 10MB</small>
+                        </div>
+
+                        <div class="alert alert-info" role="alert">
+                            <strong>Validation Rules:</strong>
+                            <ul class="mb-0 mt-2 small">
+                                <li>Duplicate invoice_number values will be rejected</li>
+                                <li>Invalid student_id, user_id, or branch_id references will be rejected</li>
+                                <li>Invalid date formats will be rejected</li>
+                                <li>Invalid numeric values will be rejected</li>
+                                <li>Invalid dropdown values (discount_type, status, etc.) will be rejected</li>
+                            </ul>
+                        </div>
+
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-success btn-lg btn-block">
+                                <i class="fas fa-upload"></i> Import Invoices
+                            </button>
+                            <a href="{{ url_for('import_export.import_export_dashboard') }}" class="btn btn-secondary btn-lg btn-block mt-2">
+                                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+// Update file label when file is selected
+document.getElementById('csv_file').addEventListener('change', function(e) {
+    const fileName = e.target.files[0] ? e.target.files[0].name : 'Choose file...';
+    e.target.nextElementSibling.textContent = fileName;
+});
+</script>
+{% endblock %}
