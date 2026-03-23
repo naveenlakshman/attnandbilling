@@ -127,6 +127,8 @@ def init_db():
             last_contact_date TEXT,
             next_followup_date TEXT,
             followup_count INTEGER DEFAULT 0,
+            lead_location TEXT
+                CHECK(lead_location IN ('rural', 'urban')),
             notes TEXT,
             is_deleted INTEGER DEFAULT 0,
             assigned_to_id INTEGER,

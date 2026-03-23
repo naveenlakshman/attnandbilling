@@ -200,8 +200,8 @@
           <label>Student From</label>
           <select name="student_location">
             <option value="">-- Select --</option>
-            <option value="Rural" {% if student and student.student_location == 'Rural' %}selected{% endif %}>Rural</option>
-            <option value="Urban" {% if student and student.student_location == 'Urban' %}selected{% endif %}>Urban</option>
+          <option value="rural" {% if student and student.student_location == 'rural' %}selected{% endif %}>Rural</option>
+          <option value="urban" {% if student and student.student_location == 'urban' %}selected{% endif %}>Urban</option>
           </select>
         </div>
 

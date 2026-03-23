@@ -9,47 +9,6 @@
             <h1>Import & Export</h1>
             <hr>
             
-            <!-- Import Invoices Section -->
-            <div class="card mt-4">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">Import Invoices from CSV</h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">Import invoices from a CSV file with all required details including student info, dates, discounts, and amounts.</p>
-                    
-                    <div class="alert alert-info" role="alert">
-                        <strong>Required columns:</strong>
-                        <ul class="mb-0 mt-2 small">
-                            <li><code>invoice_number</code> - Unique invoice identifier (format: GIT/B/1, GIT/B/2, etc.)</li>
-                            <li><code>student_id</code> - Student ID (must exist in database)</li>
-                            <li><code>invoice_date</code> - Invoice date (YYYY-MM-DD format)</li>
-                            <li><code>subtotal</code> - Amount before discounts</li>
-                            <li><code>discount_type</code> - Type: 'none', 'fixed', or 'percentage'</li>
-                            <li><code>discount_value</code> - Discount amount or percentage</li>
-                            <li><code>discount_amount</code> - Calculated discount amount</li>
-                            <li><code>total_amount</code> - Total after discounts</li>
-                            <li><code>installment_type</code> - Type: 'full' or 'custom'</li>
-                            <li><code>notes</code> - Additional notes (optional)</li>
-                            <li><code>status</code> - Status: 'unpaid', 'partially_paid', 'paid', or 'cancelled'</li>
-                            <li><code>created_by</code> - User ID who created the invoice</li>
-                            <li><code>branch_id</code> - Branch ID</li>
-                        </ul>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <a href="{{ url_for('import_export.download_invoice_template') }}" class="btn btn-info btn-lg btn-block mb-2">
-                                <i class="fas fa-download"></i> Download CSV Template
-                            </a>
-                        </div>
-                        <div class="col-md-6">
-                            <a href="{{ url_for('import_export.import_invoices') }}" class="btn btn-success btn-lg btn-block mb-2">
-                                <i class="fas fa-upload"></i> Import CSV File
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             <!-- Export Database Section -->
             <div class="card mt-4">

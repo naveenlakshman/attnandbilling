@@ -399,17 +399,17 @@ def download_sample(table_name):
             ]
         },
         "leads": {
-            "headers": ["name", "phone", "whatsapp", "gender", "age", "education_status", "stream", "career_goal", "lead_source", "decision_maker", "lead_location", "start_timeframe", "stage", "notes"],
+            "headers": ["name", "phone", "whatsapp", "gender", "age", "education_status", "stream", "institute_name", "career_goal", "interested_courses", "lead_source", "decision_maker", "lead_location", "start_timeframe", "lead_score", "stage", "status", "lost_reason", "last_contact_date", "next_followup_date", "followup_count", "notes", "assigned_to_id"],
             "rows": [
-                ["John Doe", "9876543210", "9876543210", "Male", "25", "Graduate", "Commerce", "Job", "Walk-in", "Self", "Urban", "Immediately", "New Lead", "Interested in Tally"],
-                ["Jane Smith", "9123456789", "9123456789", "Female", "22", "School", "Science", "Skill Development", "Referral", "Parents", "Rural", "Within 1 Month", "New Lead", ""],
+                ["John Doe", "9876543210", "9876543210", "Male", "25", "Graduate", "Commerce", "ABC Institute", "Job", "Tally,Excel", "Walk-in", "Self", "urban", "Immediately", "8", "New Lead", "active", "", "21-03-2026", "28-03-2026", "1", "Interested in Tally", "1"],
+                ["Jane Smith", "9123456789", "9123456789", "Female", "22", "School", "Science", "XYZ School", "Skill Development", "Excel,Power BI", "Referral", "Parents", "rural", "Within 1 Month", "7", "Converted", "active", "", "20-03-2026", "27-03-2026", "3", "Converted to student", ""],
             ]
         },
         "students": {
             "headers": ["student_code", "full_name", "phone", "email", "gender", "address", "education_level", "qualification", "student_location", "employment_status", "status", "branch_id", "joined_date"],
             "rows": [
-                ["1515001", "Student Name", "9876543210", "student@example.com", "Male", "Address", "Undergraduate", "BE", "Urban", "student", "active", "1", "21-03-2026"],
-                ["1515002", "Another Student", "9123456789", "student2@example.com", "Female", "Address", "School", "12th", "Rural", "unemployed", "active", "1", "21-03-2026"],
+                ["1515001", "Student Name", "9876543210", "student@example.com", "Male", "Address", "Undergraduate", "BE", "urban", "student", "active", "1", "21-03-2026"],
+                ["1515002", "Another Student", "9123456789", "student2@example.com", "Female", "Address", "School", "12th", "rural", "unemployed", "active", "1", "21-03-2026"],
             ]
         },
         "invoices": {
@@ -605,13 +605,38 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "leads":
+                    # Validate lead_location field
+                    lead_location = row.get("lead_location", "").strip() if row.get("lead_location") else None
+                    if lead_location and lead_location.lower() not in ['rural', 'urban']:
+                        error_msg = f"Row {idx + 1}: lead_location must be 'rural' or 'urban' (got '{lead_location}')"
+                        errors.append(error_msg)
+                        continue
+                    
+                    # Normalize location to lowercase
+                    if lead_location:
+                        lead_location = lead_location.lower()
+                    
+                    # Handle assigned_to_id (optional, defaults to current user)
+                    assigned_to_id = None
+                    if row.get("assigned_to_id"):
+                        try:
+                            assigned_to_id = int(row.get("assigned_to_id"))
+                        except (ValueError, TypeError):
+                            error_msg = f"Row {idx + 1}: assigned_to_id must be a valid user ID (got '{row.get('assigned_to_id')}')"
+                            errors.append(error_msg)
+                            continue
+                    else:
+                        assigned_to_id = session.get("user_id")
+                    
                     cur.execute("""
                         INSERT INTO leads (
                             name, phone, whatsapp, gender, age, education_status, stream,
-                            career_goal, lead_source, decision_maker, lead_location, start_timeframe,
-                            stage, notes, status, is_deleted, assigned_to_id, created_at, updated_at
+                            institute_name, career_goal, interested_courses, lead_source, decision_maker, 
+                            lead_location, start_timeframe, lead_score, stage, status, lost_reason,
+                            last_contact_date, next_followup_date, followup_count, notes, 
+                            is_deleted, assigned_to_id, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         row.get("name", "").strip(),
                         row.get("phone", "").strip(),
@@ -620,22 +645,40 @@ def upload_csv():
                         int(row.get("age", 0)) if row.get("age") else None,
                         row.get("education_status", "").strip() or None,
                         row.get("stream", "").strip() or None,
+                        row.get("institute_name", "").strip() or None,
                         row.get("career_goal", "").strip() or None,
+                        row.get("interested_courses", "").strip() or None,
                         row.get("lead_source", "").strip() or None,
                         row.get("decision_maker", "Self").strip() or "Self",
-                        row.get("lead_location", "").strip() or None,
+                        lead_location,
                         row.get("start_timeframe", "").strip() or None,
+                        int(row.get("lead_score", 0)) if row.get("lead_score") else None,
                         row.get("stage", "New Lead").strip() or "New Lead",
+                        row.get("status", "active").strip() or "active",
+                        row.get("lost_reason", "").strip() or None,
+                        parse_date(row.get("last_contact_date", "")) or None,
+                        parse_date(row.get("next_followup_date", "")) or None,
+                        int(row.get("followup_count", 0)) if row.get("followup_count") else 0,
                         row.get("notes", "").strip() or None,
-                        "active",
                         0,
-                        session.get("user_id"),
+                        assigned_to_id,
                         datetime.now().isoformat(timespec="seconds"),
                         datetime.now().isoformat(timespec="seconds")
                     ))
                     rows_imported += 1
                 
                 elif table_name == "students":
+                    # Validate student_location field
+                    student_location = row.get("student_location", "").strip() if row.get("student_location") else None
+                    if student_location and student_location.lower() not in ['rural', 'urban']:
+                        error_msg = f"Row {idx + 1}: student_location must be 'rural' or 'urban' (got '{student_location}')"
+                        errors.append(error_msg)
+                        continue
+                    
+                    # Normalize location to lowercase
+                    if student_location:
+                        student_location = student_location.lower()
+                    
                     cur.execute("""
                         INSERT INTO students (
                             student_code, full_name, phone, email, gender, address,
@@ -652,7 +695,7 @@ def upload_csv():
                         row.get("address", "").strip() or None,
                         row.get("education_level", "").strip() or None,
                         row.get("qualification", "").strip() or None,
-                        row.get("student_location", "").strip() or None,
+                        student_location,
                         row.get("employment_status", "unemployed").strip() or "unemployed",
                         row.get("status", "active").strip() or "active",
                         int(row.get("branch_id", 1)) if row.get("branch_id") else 1,

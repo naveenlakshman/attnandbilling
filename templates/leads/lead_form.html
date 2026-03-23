@@ -104,8 +104,8 @@
       <label class="form-label">Lead From</label>
       <select class="form-select" name="lead_location">
         <option value="">(none)</option>
-        <option value="Rural" {% if lead and lead.lead_location == 'Rural' %}selected{% endif %}>Rural</option>
-        <option value="Urban" {% if lead and lead.lead_location == 'Urban' %}selected{% endif %}>Urban</option>
+        <option value="rural" {% if lead and lead.lead_location == 'rural' %}selected{% endif %}>Rural</option>
+        <option value="urban" {% if lead and lead.lead_location == 'urban' %}selected{% endif %}>Urban</option>
       </select>
     </div>
 
