@@ -8,6 +8,41 @@ from datetime import datetime
 
 reports_bp = Blueprint("reports", __name__)
 
+
+def parse_date(date_str):
+    """
+    Parse date in multiple formats: DD-MM-YYYY or YYYY-MM-DD
+    Returns date in YYYY-MM-DD format for database storage
+    """
+    if not date_str:
+        return None
+    
+    date_str = date_str.strip()
+    
+    # Try YYYY-MM-DD format first
+    try:
+        parsed = datetime.strptime(date_str, "%Y-%m-%d")
+        return parsed.strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+    
+    # Try DD-MM-YYYY format
+    try:
+        parsed = datetime.strptime(date_str, "%d-%m-%Y")
+        return parsed.strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+    
+    # Try DD/MM/YYYY format
+    try:
+        parsed = datetime.strptime(date_str, "%d/%m/%Y")
+        return parsed.strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+    
+    # If all fail, return None indicating invalid format
+    return None
+
 @reports_bp.route("/")
 @login_required
 @admin_required
@@ -373,36 +408,36 @@ def download_sample(table_name):
         "students": {
             "headers": ["student_code", "full_name", "phone", "email", "gender", "address", "education_level", "qualification", "student_location", "employment_status", "status", "branch_id", "joined_date"],
             "rows": [
-                ["1515001", "Student Name", "9876543210", "student@example.com", "Male", "Address", "Undergraduate", "BE", "Urban", "student", "active", "1", "2026-03-21"],
-                ["1515002", "Another Student", "9123456789", "student2@example.com", "Female", "Address", "School", "12th", "Rural", "unemployed", "active", "1", "2026-03-21"],
+                ["1515001", "Student Name", "9876543210", "student@example.com", "Male", "Address", "Undergraduate", "BE", "Urban", "student", "active", "1", "21-03-2026"],
+                ["1515002", "Another Student", "9123456789", "student2@example.com", "Female", "Address", "School", "12th", "Rural", "unemployed", "active", "1", "21-03-2026"],
             ]
         },
         "invoices": {
             "headers": ["invoice_number", "student_id", "invoice_date", "subtotal", "discount_type", "discount_value", "discount_amount", "total_amount", "installment_type", "notes", "status", "created_by", "branch_id"],
             "rows": [
-                ["GIT/B/001", "1", "2026-03-21", "5000", "percentage", "10", "500", "4500", "full", "Course Fee", "unpaid", "1", "1"],
-                ["GIT/B/002", "2", "2026-03-20", "4000", "fixed", "300", "300", "3700", "installment", "Excel training", "unpaid", "1", "1"],
+                ["GIT/B/001", "1", "21-03-2026", "5000", "percentage", "10", "500", "4500", "full", "Course Fee", "unpaid", "1", "1"],
+                ["GIT/B/002", "2", "20-03-2026", "4000", "fixed", "300", "300", "3700", "installment", "Excel training", "unpaid", "1", "1"],
             ]
         },
         "receipts": {
-            "headers": ["receipt_number", "student_id", "invoice_id", "amount", "payment_date", "payment_method", "notes"],
+            "headers": ["receipt_number", "invoice_id", "receipt_date", "amount_received", "payment_mode", "notes"],
             "rows": [
-                ["RCP001", "1", "1", "5000", "2026-03-21", "cash", "Full payment"],
-                ["RCP002", "2", "2", "2000", "2026-03-20", "bank_transfer", "First installment"],
+                ["GIT/RCP/001", "1", "21-03-2026", "5000", "cash", "Full payment"],
+                ["GIT/RCP/002", "2", "20-03-2026", "2000", "bank_transfer", "First installment"],
             ]
         },
         "installments": {
             "headers": ["invoice_id", "installment_number", "due_date", "amount", "status"],
             "rows": [
-                ["1", "1", "2026-04-21", "2500", "pending"],
-                ["1", "2", "2026-05-21", "2500", "pending"],
+                ["1", "1", "21-04-2026", "2500", "pending"],
+                ["1", "2", "21-05-2026", "2500", "pending"],
             ]
         },
         "expenses": {
             "headers": ["expense_type", "category", "amount", "description", "expense_date", "branch_id"],
             "rows": [
-                ["rent", "office", "20000", "Monthly office rent", "2026-03-21", "1"],
-                ["utilities", "office", "5000", "Electricity bill", "2026-03-21", "1"],
+                ["rent", "office", "20000", "Monthly office rent", "21-03-2026", "1"],
+                ["utilities", "office", "5000", "Electricity bill", "21-03-2026", "1"],
             ]
         },
         "activity_logs": {
@@ -423,15 +458,15 @@ def download_sample(table_name):
         "followups": {
             "headers": ["lead_id", "user_id", "method", "outcome", "note", "next_followup_date"],
             "rows": [
-                ["1", "1", "call", "interested", "Discussed course options", "2026-03-28"],
+                ["1", "1", "call", "interested", "Discussed course options", "28-03-2026"],
                 ["2", "1", "email", "not_interested", "Student declined", ""],
             ]
         },
         "installment_plans": {
             "headers": ["invoice_id", "installment_no", "due_date", "amount_due", "amount_paid", "status", "remarks"],
             "rows": [
-                ["1", "1", "2026-04-21", "2500", "2500", "paid", "First payment received"],
-                ["1", "2", "2026-05-21", "2500", "0", "pending", ""],
+                ["1", "1", "21-04-2026", "2500", "2500", "paid", "First payment received"],
+                ["1", "2", "21-05-2026", "2500", "0", "pending", ""],
             ]
         },
         "invoice_items": {
@@ -621,7 +656,7 @@ def upload_csv():
                         row.get("employment_status", "unemployed").strip() or "unemployed",
                         row.get("status", "active").strip() or "active",
                         int(row.get("branch_id", 1)) if row.get("branch_id") else 1,
-                        row.get("joined_date", "").strip() or datetime.now().isoformat(timespec="seconds"),
+                        parse_date(row.get("joined_date", "")) or datetime.now().isoformat(timespec="seconds"),
                         datetime.now().isoformat(timespec="seconds"),
                         datetime.now().isoformat(timespec="seconds")
                     ))
@@ -655,12 +690,12 @@ def upload_csv():
                             errors.append(f"Row {idx}: invoice_date is required")
                             continue
                         
-                        # Validate date format
-                        try:
-                            datetime.strptime(invoice_date, "%Y-%m-%d")
-                        except ValueError:
-                            errors.append(f"Row {idx}: invalid invoice_date format (use YYYY-MM-DD)")
+                        # Validate and parse date (supports DD-MM-YYYY or YYYY-MM-DD)
+                        parsed_invoice_date = parse_date(invoice_date)
+                        if not parsed_invoice_date:
+                            errors.append(f"Row {idx}: invalid invoice_date format (use DD-MM-YYYY or YYYY-MM-DD)")
                             continue
+                        invoice_date = parsed_invoice_date
                         
                         # Validate numbers
                         try:
@@ -684,16 +719,15 @@ def upload_csv():
                         # Insert invoice with all 13 columns
                         cur.execute("""
                             INSERT INTO invoices (
-                                invoice_number, student_id, invoice_date, subtotal, 
+                                invoice_no, student_id, invoice_date, subtotal, 
                                 discount_type, discount_value, discount_amount, total_amount,
-                                installment_type, notes, status, created_by, branch_id, created_at, updated_at
+                                installment_type, notes, status, created_by, branch_id, created_at
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (
                             invoice_number, student_id, invoice_date, subtotal,
                             discount_type, discount_value, discount_amount, total_amount,
                             installment_type, notes, status, created_by, branch_id,
-                            datetime.now().isoformat(timespec="seconds"),
                             datetime.now().isoformat(timespec="seconds")
                         ))
                         rows_imported += 1
@@ -702,22 +736,56 @@ def upload_csv():
                         continue
                 
                 elif table_name == "receipts":
+                    receipt_invoice_id = int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0
+                    receipt_amount = float(row.get("amount_received", 0)) if row.get("amount_received") else 0
+                    
                     cur.execute("""
                         INSERT INTO receipts (
-                            receipt_number, student_id, invoice_id, amount, payment_date, payment_method, notes, created_at, updated_at
+                            receipt_no, invoice_id, receipt_date, amount_received, payment_mode, notes, created_by, created_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         row.get("receipt_number", "").strip(),
-                        int(row.get("student_id", 0)) if row.get("student_id") else 0,
-                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
-                        float(row.get("amount", 0)) if row.get("amount") else 0,
-                        row.get("payment_date", "").strip() or None,
-                        row.get("payment_method", "").strip() or None,
+                        receipt_invoice_id,
+                        parse_date(row.get("receipt_date", "")) or None,
+                        receipt_amount,
+                        row.get("payment_mode", "cash").strip() or "cash",
                         row.get("notes", "").strip() or None,
-                        datetime.now().isoformat(timespec="seconds"),
+                        session.get("user_id"),
                         datetime.now().isoformat(timespec="seconds")
                     ))
+                    
+                    # Update invoice status based on total receipts
+                    if receipt_invoice_id > 0:
+                        cur.execute("""
+                            SELECT total_amount FROM invoices WHERE id = ?
+                        """, (receipt_invoice_id,))
+                        invoice_row = cur.fetchone()
+                        
+                        if invoice_row:
+                            invoice_total = float(invoice_row["total_amount"] or 0)
+                            
+                            cur.execute("""
+                                SELECT IFNULL(SUM(amount_received), 0) AS total_received
+                                FROM receipts
+                                WHERE invoice_id = ?
+                            """, (receipt_invoice_id,))
+                            total_received = float(cur.fetchone()["total_received"] or 0)
+                            
+                            # Determine new status
+                            if total_received >= invoice_total:
+                                new_status = "paid"
+                            elif total_received > 0:
+                                new_status = "partially_paid"
+                            else:
+                                new_status = "unpaid"
+                            
+                            cur.execute("""
+                                UPDATE invoices
+                                SET status = ?, updated_at = ?
+                                WHERE id = ?
+                            """, (new_status, datetime.now().isoformat(timespec="seconds"), receipt_invoice_id))
+                    
                     rows_imported += 1
                 
                 elif table_name == "installments":
@@ -748,7 +816,7 @@ def upload_csv():
                     """, (
                         int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
                         int(row.get("installment_no", 0)) if row.get("installment_no") else 0,
-                        row.get("due_date", "").strip() or None,
+                        parse_date(row.get("due_date", "")) or None,
                         float(row.get("amount_due", 0)) if row.get("amount_due") else 0,
                         float(row.get("amount_paid", 0)) if row.get("amount_paid") else 0,
                         row.get("status", "pending").strip() or "pending",
@@ -798,7 +866,7 @@ def upload_csv():
                         row.get("method", "").strip() or None,
                         row.get("outcome", "").strip() or None,
                         row.get("note", "").strip() or None,
-                        row.get("next_followup_date", "").strip() or None,
+                        row.get("next_followup_date", "") and parse_date(row.get("next_followup_date", "")) or None,
                         datetime.now().isoformat(timespec="seconds")
                     ))
                     rows_imported += 1
@@ -852,7 +920,7 @@ def upload_csv():
                         row.get("category", "").strip() or None,
                         float(row.get("amount", 0)) if row.get("amount") else 0,
                         row.get("description", "").strip() or None,
-                        row.get("expense_date", "").strip() or datetime.now().isoformat(timespec="seconds"),
+                        parse_date(row.get("expense_date", "")) or datetime.now().isoformat(timespec="seconds"),
                         int(row.get("branch_id", 1)) if row.get("branch_id") else 1,
                         datetime.now().isoformat(timespec="seconds"),
                         datetime.now().isoformat(timespec="seconds")
