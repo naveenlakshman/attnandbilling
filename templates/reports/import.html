@@ -378,6 +378,20 @@
         <li>Dates should be in DD-MM-YYYY format (e.g., 21-03-2026)</li>
         <li>Numbers without currency symbols (e.g., 5000, not $5,000)</li>
         <li>Empty cells are allowed and become NULL</li>
+        <li><strong>CSV Export Tips:</strong>
+          <ul>
+            <li>Save Excel/Sheets as "CSV UTF-8 (.csv)" format</li>
+            <li>Multi-line text in cells must be enclosed in quotes</li>
+            <li>Avoid trailing spaces in column headers</li>
+            <li>If text contains commas, Excel will auto-quote—this is normal</li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+
+    <div class="warning-box">
+      <strong>ℹ️ Additional Notes:</strong>
+      <ul>
         <li>Failed rows are reported with error messages</li>
         <li>Data is inserted in order, so relationships may fail if referenced data doesn't exist</li>
       </ul>

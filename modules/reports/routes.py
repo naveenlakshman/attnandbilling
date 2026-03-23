@@ -142,7 +142,29 @@ def export_csv(table_name):
         
         # Write data
         for row in rows:
-            writer.writerow([row[col] if row[col] is not None else "" for col in columns])
+            row_data = []
+            for col in columns:
+                value = row[col]
+                
+                # Format created_at for followups table to match import format
+                if table_name == "followups" and col == "created_at" and value:
+                    try:
+                        if 'T' in str(value):
+                            dt = datetime.fromisoformat(value)
+                            value = dt.strftime("%d-%m-%Y %I:%M %p")  # 23-03-2026 02:30 PM
+                    except (ValueError, AttributeError):
+                        pass
+                
+                # Format next_followup_date for followups table
+                if table_name == "followups" and col == "next_followup_date" and value:
+                    try:
+                        dt = datetime.strptime(str(value), "%Y-%m-%d")
+                        value = dt.strftime("%d-%m-%Y")  # 23-03-2026
+                    except (ValueError, AttributeError):
+                        pass
+                
+                row_data.append(value if value is not None else "")
+            writer.writerow(row_data)
         
         csv_data = output.getvalue()
         output.close()
@@ -456,10 +478,12 @@ def download_sample(table_name):
             ]
         },
         "followups": {
-            "headers": ["lead_id", "user_id", "method", "outcome", "note", "next_followup_date"],
+            "headers": ["lead_id", "user_id", "method", "outcome", "note", "next_followup_date", "created_at"],
             "rows": [
-                ["1", "1", "call", "interested", "Discussed course options", "28-03-2026"],
-                ["2", "1", "email", "not_interested", "Student declined", ""],
+                ["1", "", "call", "interested", "Discussed Tally course, interested in classes", "28-03-2026", "23-03-2026 02:30 PM"],
+                ["1", "", "whatsapp", "callback_later", "Sent course details, waiting for response", "31-03-2026", "22-03-2026 10:15 AM"],
+                ["2", "", "email", "not_interested", "Student declined, pursuing other options", "", "21-03-2026 04:45 PM"],
+                ["3", "", "walk_in", "converted", "Student enrolled in Excel course", "", "20-03-2026 09:00 AM"],
             ]
         },
         "installment_plans": {
@@ -568,6 +592,10 @@ def upload_csv():
             flash("❌ CSV file has no headers. First row must contain column names.", "danger")
             return redirect(url_for("reports.import_page"))
         
+        # Normalize fieldnames (strip whitespace and BOM from headers)
+        if reader.fieldnames:
+            reader.fieldnames = [name.replace('\ufeff', '').strip() if name else name for name in reader.fieldnames]
+        
         conn = get_conn()
         cur = conn.cursor()
         
@@ -575,6 +603,16 @@ def upload_csv():
         errors = []
         
         for idx, row in enumerate(reader, start=2):  # Start from row 2 (row 1 is headers)
+            # Normalize row keys (in case of whitespace or BOM in headers)
+            normalized_row = {k.replace('\ufeff', '').strip() if k else k: v for k, v in row.items()} if row else {}
+            row = normalized_row
+            
+            # Debug: Log raw row data if empty
+            if not row or not any(row.values()):
+                error_msg = f"Row {idx}: Empty/blank row detected - skipping"
+                errors.append(error_msg)
+                continue
+            
             try:
                 if table_name == "branches":
                     cur.execute("""
@@ -898,19 +936,99 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "followups":
+                    # Skip completely empty rows
+                    if not any(row.values()):
+                        continue
+                    
+                    # Validate lead_id exists
+                    lead_id_str = row.get("lead_id", "").strip()
+                    if not lead_id_str:
+                        # Show available columns for debugging
+                        available_cols = ", ".join([k for k in row.keys() if k])
+                        non_empty_values = {k: v for k, v in row.items() if v and v.strip()}
+                        error_msg = f"Row {idx}: lead_id is required (available: {available_cols} | data: {non_empty_values})"
+                        errors.append(error_msg)
+                        continue
+                    
+                    try:
+                        lead_id = int(lead_id_str)
+                    except ValueError:
+                        error_msg = f"Row {idx + 1}: lead_id must be a valid number (got '{lead_id_str}')"
+                        errors.append(error_msg)
+                        continue
+                    
+                    # Check if lead exists
+                    cur.execute("SELECT id FROM leads WHERE id = ? AND is_deleted = 0", (lead_id,))
+                    if not cur.fetchone():
+                        error_msg = f"Row {idx + 1}: Lead ID {lead_id} not found or is deleted"
+                        errors.append(error_msg)
+                        continue
+                    
+                    # Validate user_id if provided
+                    user_id = session.get("user_id")
+                    if row.get("user_id", "").strip():
+                        try:
+                            user_id = int(row.get("user_id"))
+                            cur.execute("SELECT id FROM users WHERE id = ? AND is_active = 1", (user_id,))
+                            if not cur.fetchone():
+                                error_msg = f"Row {idx + 1}: User ID {user_id} not found or is inactive"
+                                errors.append(error_msg)
+                                continue
+                        except ValueError:
+                            error_msg = f"Row {idx + 1}: user_id must be a valid number (got '{row.get('user_id')}')"
+                            errors.append(error_msg)
+                            continue
+                    
+                    # Insert followup
+                    # Handle created_at: parse from CSV if provided, otherwise use current time
+                    created_at_str = row.get("created_at", "").strip()
+                    if created_at_str:
+                        # Try to parse datetime from CSV (multiple formats supported)
+                        try:
+                            # Try format with time: DD-MM-YYYY HH:MM AM/PM
+                            created_at_parsed = datetime.strptime(created_at_str, "%d-%m-%Y %I:%M %p")
+                            created_at_value = created_at_parsed.isoformat()
+                        except ValueError:
+                            try:
+                                # Try format with time: DD-MM-YYYY HH:MM
+                                created_at_parsed = datetime.strptime(created_at_str, "%d-%m-%Y %H:%M")
+                                created_at_value = created_at_parsed.isoformat()
+                            except ValueError:
+                                try:
+                                    # Try abbreviated month format: DD-Mon-YYYY HH:MM (e.g., 03-Mar-2026 15:09)
+                                    created_at_parsed = datetime.strptime(created_at_str, "%d-%b-%Y %H:%M")
+                                    created_at_value = created_at_parsed.isoformat()
+                                except ValueError:
+                                    try:
+                                        # Try abbreviated month format with AM/PM: DD-Mon-YYYY HH:MM AM/PM (e.g., 03-Mar-2026 3:09 PM)
+                                        created_at_parsed = datetime.strptime(created_at_str, "%d-%b-%Y %I:%M %p")
+                                        created_at_value = created_at_parsed.isoformat()
+                                    except ValueError:
+                                        # Try date only: DD-MM-YYYY
+                                        try:
+                                            created_at_parsed = datetime.strptime(created_at_str, "%d-%m-%Y")
+                                            created_at_value = created_at_parsed.isoformat()
+                                        except ValueError:
+                                            # Invalid format, use current time
+                                            errors.append(f"Row {rows_imported + 1}: Invalid created_at format '{created_at_str}', using current timestamp")
+                                            created_at_value = datetime.now().isoformat(timespec="seconds")
+                    else:
+                        # Empty created_at, use current time
+                        created_at_value = datetime.now().isoformat(timespec="seconds")
+                    
                     cur.execute("""
                         INSERT INTO followups (
                             lead_id, user_id, method, outcome, note, next_followup_date, created_at
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        int(row.get("lead_id", 0)) if row.get("lead_id") else 0,
-                        int(row.get("user_id")) if row.get("user_id") else session.get("user_id"),
+                        lead_id,
+                        user_id,
                         row.get("method", "").strip() or None,
                         row.get("outcome", "").strip() or None,
                         row.get("note", "").strip() or None,
-                        row.get("next_followup_date", "") and parse_date(row.get("next_followup_date", "")) or None,
-                        datetime.now().isoformat(timespec="seconds")
+                        parse_date(row.get("next_followup_date", "")) if row.get("next_followup_date", "").strip() else None,
+                        created_at_value
                     ))
                     rows_imported += 1
                 

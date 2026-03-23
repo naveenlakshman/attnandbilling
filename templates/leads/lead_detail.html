@@ -134,7 +134,7 @@
             {% for f in followups %}
               <div class="list-group-item">
                 <div class="small text-muted">
-                  {{ f.created_at }}
+                  {{ f.created_at | format_datetime }}
                   {% if f.user_username or f.user_full_name %}
                     | {{ f.user_full_name or f.user_username }}
                   {% endif %}
@@ -142,7 +142,7 @@
                 <div class="fw-semibold">{{ f.method or 'Follow-up' }} - {{ f.outcome or '' }}</div>
                 <div class="small">{{ f.note or '' }}</div>
                 {% if f.next_followup_date %}
-                  <div class="small text-muted">Next: {{ f.next_followup_date }}</div>
+                  <div class="small text-muted">Next: {{ f.next_followup_date | format_datetime }}</div>
                 {% endif %}
               </div>
             {% endfor %}
