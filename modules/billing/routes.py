@@ -482,6 +482,7 @@ def student_new():
         address = request.form.get("address", "").strip()
         education_level = request.form.get("education_level", "").strip()
         qualification = request.form.get("qualification", "").strip()
+        student_location = request.form.get("student_location", "").strip()
         employment_status = request.form.get("employment_status", "").strip()
         status = request.form.get("status", "active").strip()
 
