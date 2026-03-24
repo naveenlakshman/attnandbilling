@@ -72,11 +72,13 @@
       </a>
 
       <!-- Billing Dashboard -->
+      {% if session.get('role') == 'admin' %}
       <a
         class="nav-link {{ 'active' if request.endpoint == 'billing.dashboard' else '' }}"
         href="{{ url_for('billing.dashboard') }}">
         💰 Billing Dashboard
       </a>
+      {% endif %}
 
       <!-- Placeholder links for pages not yet built -->
         <a

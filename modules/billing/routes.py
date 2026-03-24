@@ -60,6 +60,7 @@ billing_bp = Blueprint("billing", __name__)
 
 @billing_bp.route("/dashboard")
 @login_required
+@admin_required
 def dashboard():
     conn = get_conn()
     cur = conn.cursor()
