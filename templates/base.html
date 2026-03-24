@@ -173,7 +173,7 @@
       </a>
 
       <a class="nav-link {% if request.endpoint and request.endpoint.startswith('billing.') %}active{% endif %}"
-         href="{{ url_for('billing.dashboard') }}">
+         href="{% if session.get('role') == 'admin' %}{{ url_for('billing.dashboard') }}{% else %}{{ url_for('billing.menu') }}{% endif %}">
         💰 Billing Module
       </a>
 
