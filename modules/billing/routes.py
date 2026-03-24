@@ -58,6 +58,12 @@ QUALIFICATION_LEVELS = {
 
 billing_bp = Blueprint("billing", __name__)
 
+@billing_bp.route("/")
+@login_required
+def menu():
+    """Staff menu page - simple overview for staff members"""
+    return render_template("billing/menu.html")
+
 @billing_bp.route("/dashboard")
 @login_required
 @admin_required

@@ -1,0 +1,118 @@
+{% extends "billing/base.html" %}
+
+{% block title %}Billing Module - Menu{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-4">
+  <div class="row">
+    <div class="col-12">
+      <h2 class="mb-4">Billing Module Menu</h2>
+      <p class="text-muted">Welcome to the Billing Module. Select an option below to get started.</p>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Students Card -->
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <h5 class="card-title">
+            <span style="font-size: 2rem;">🎓</span>
+          </h5>
+          <h6 class="card-subtitle mb-3">Students</h6>
+          <p class="card-text text-muted">View and manage student information and profiles.</p>
+          <a href="{{ url_for('billing.students') }}" class="btn btn-primary mt-3">Go to Students</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Courses Card -->
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <h5 class="card-title">
+            <span style="font-size: 2rem;">📘</span>
+          </h5>
+          <h6 class="card-subtitle mb-3">Courses</h6>
+          <p class="card-text text-muted">View and manage course details and pricing.</p>
+          <a href="{{ url_for('billing.courses') }}" class="btn btn-primary mt-3">Go to Courses</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Invoices Card -->
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <h5 class="card-title">
+            <span style="font-size: 2rem;">🧾</span>
+          </h5>
+          <h6 class="card-subtitle mb-3">Invoices</h6>
+          <p class="card-text text-muted">View and manage invoices and billing records.</p>
+          <a href="{{ url_for('billing.invoices') }}" class="btn btn-primary mt-3">Go to Invoices</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Receivables Card -->
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <h5 class="card-title">
+            <span style="font-size: 2rem;">💳</span>
+          </h5>
+          <h6 class="card-subtitle mb-3">Receivables</h6>
+          <p class="card-text text-muted">Track outstanding payments and due amount.</p>
+          <a href="{{ url_for('billing.receivables') }}" class="btn btn-primary mt-3">Go to Receivables</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Expenses Card -->
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <h5 class="card-title">
+            <span style="font-size: 2rem;">💸</span>
+          </h5>
+          <h6 class="card-subtitle mb-3">Expenses</h6>
+          <p class="card-text text-muted">View and manage expense categories and records.</p>
+          <a href="{{ url_for('billing.expenses') }}" class="btn btn-primary mt-3">Go to Expenses</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Logs Card -->
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100 text-center">
+        <div class="card-body">
+          <h5 class="card-title">
+            <span style="font-size: 2rem;">📋</span>
+          </h5>
+          <h6 class="card-subtitle mb-3">Activity Logs</h6>
+          <p class="card-text text-muted">View system activity and change logs.</p>
+          <a href="{{ url_for('billing.activity_logs') }}" class="btn btn-primary mt-3">View Logs</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .card {
+    border: 1px solid #dee2e6;
+    transition: all 0.3s ease;
+  }
+
+  .card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+  }
+
+  .card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+</style>
+{% endblock %}
