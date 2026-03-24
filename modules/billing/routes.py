@@ -1238,6 +1238,12 @@ def installment_edit(installment_id):
         )
 
         flash("Installment updated successfully.", "success")
+        
+        # Check if redirect_to parameter is set
+        redirect_to = request.form.get("redirect_to", "").strip()
+        if redirect_to == "receivables":
+            return redirect(url_for("billing.receivables"))
+        
         return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
 
     except Exception as e:
