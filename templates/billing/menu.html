@@ -9,5 +9,120 @@
       <h2 class="mb-4">Welcome, {{ session.get('username', 'User') }}</h2>
     </div>
   </div>
+
+  <!-- Summary Cards -->
+  <div class="row g-4 mb-4">
+    <!-- Past Due Card -->
+    <div class="col-md-6">
+      <div class="card h-100" style="border-left: 4px solid #e74c3c;">
+        <div class="card-body">
+          <h5 class="card-title">Past Due</h5>
+          <p class="card-text">
+            <strong style="font-size: 24px; color: #e74c3c;">₹ {{ "%.2f"|format(total_past_due or 0) }}</strong>
+          </p>
+          <p class="text-muted">{{ past_dues|length }} installment(s)</p>
+          <a href="{{ url_for('billing.receivables') }}" class="btn btn-sm btn-danger">View & Collect</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Today's Due Card -->
+    <div class="col-md-6">
+      <div class="card h-100" style="border-left: 4px solid #f39c12;">
+        <div class="card-body">
+          <h5 class="card-title">Due Today</h5>
+          <p class="card-text">
+            <strong style="font-size: 24px; color: #f39c12;">₹ {{ "%.2f"|format(total_today_due or 0) }}</strong>
+          </p>
+          <p class="text-muted">{{ todays_dues|length }} installment(s)</p>
+          <a href="{{ url_for('billing.receivables') }}" class="btn btn-sm btn-warning">View & Collect</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Past Due Details Table -->
+  {% if past_dues %}
+  <div class="card mb-4">
+    <div class="card-header" style="background-color: #e74c3c; color: white;">
+      <h5 class="mb-0">Past Due Installments</h5>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0">
+        <thead style="background-color: #f8f9fa;">
+          <tr>
+            <th>Student</th>
+            <th>Phone</th>
+            <th>Due Date</th>
+            <th>Balance Due</th>
+            <th>Remarks</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in past_dues %}
+          <tr style="background-color: #ffe6e6;">
+            <td><strong>{{ item.student_code }} - {{ item.student_name }}</strong></td>
+            <td>{{ item.student_phone or '-' }}</td>
+            <td>{{ item.due_date }}</td>
+            <td style="color: #c0392b; font-weight: bold;">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
+            <td>{{ item.remarks or '-' }}</td>
+            <td>
+              <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}" class="btn btn-sm btn-primary">Record Payment</a>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr style="background-color: #f8f9fa; font-weight: bold;">
+            <td colspan="3" style="text-align: right;">Total Past Due:</td>
+            <td style="color: #c0392b;">₹ {{ "%.2f"|format(total_past_due or 0) }}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Today's Due Details Table -->
+  {% if todays_dues %}
+  <div class="card">
+    <div class="card-header" style="background-color: #f39c12; color: white;">
+      <h5 class="mb-0">Due Today</h5>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0">
+        <thead style="background-color: #f8f9fa;">
+          <tr>
+            <th>Student</th>
+            <th>Phone</th>
+            <th>Due Date</th>
+            <th>Balance Due</th>
+            <th>Remarks</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in todays_dues %}
+          <tr style="background-color: #fff8e6;">
+            <td><strong>{{ item.student_code }} - {{ item.student_name }}</strong></td>
+            <td>{{ item.student_phone or '-' }}</td>
+            <td>{{ item.due_date }}</td>
+            <td style="color: #e67e22; font-weight: bold;">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
+            <td>{{ item.remarks or '-' }}</td>
+            <td>
+              <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}" class="btn btn-sm btn-primary">Record Payment</a>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr style="background-color: #f8f9fa; font-weight: bold;">
+            <td colspan="3" style="text-align: right;">Total Due Today:</td>
+            <td style="color: #e67e22;">₹ {{ "%.2f"|format(total_today_due or 0) }}</td>
+            <td colspan="2"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

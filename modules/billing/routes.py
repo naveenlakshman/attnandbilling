@@ -62,7 +62,80 @@ billing_bp = Blueprint("billing", __name__)
 @login_required
 def menu():
     """Staff menu page - simple overview for staff members"""
-    return render_template("billing/menu.html")
+    conn = get_conn()
+    cur = conn.cursor()
+
+    today = datetime.now().date().isoformat()
+
+    # Past dues
+    past_dues_query = """
+        SELECT
+            ip.id,
+            ip.due_date,
+            ip.amount_due,
+            ip.amount_paid,
+            ip.status,
+            ip.remarks,
+            i.invoice_no,
+            i.id AS invoice_id,
+            s.full_name AS student_name,
+            s.student_code,
+            s.phone AS student_phone,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i
+            ON ip.invoice_id = i.id
+        JOIN students s
+            ON i.student_id = s.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) < ?
+        ORDER BY parse_date(ip.due_date) ASC
+    """
+
+    cur.execute(past_dues_query, [today])
+    past_dues = cur.fetchall()
+
+    # Today's dues
+    todays_dues_query = """
+        SELECT
+            ip.id,
+            ip.due_date,
+            ip.amount_due,
+            ip.amount_paid,
+            ip.status,
+            ip.remarks,
+            i.invoice_no,
+            i.id AS invoice_id,
+            s.full_name AS student_name,
+            s.student_code,
+            s.phone AS student_phone,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i
+            ON ip.invoice_id = i.id
+        JOIN students s
+            ON i.student_id = s.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) = ?
+        ORDER BY s.full_name ASC
+    """
+
+    cur.execute(todays_dues_query, [today])
+    todays_dues = cur.fetchall()
+
+    total_past_due = sum(float(row["balance_due"] or 0) for row in past_dues)
+    total_today_due = sum(float(row["balance_due"] or 0) for row in todays_dues)
+
+    conn.close()
+
+    return render_template(
+        "billing/menu.html",
+        past_dues=past_dues,
+        todays_dues=todays_dues,
+        total_past_due=total_past_due,
+        total_today_due=total_today_due,
+        today=today
+    )
 
 @billing_bp.route("/dashboard")
 @login_required
