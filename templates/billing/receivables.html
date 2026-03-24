@@ -206,10 +206,16 @@
         </td>
         <td>{{ item.remarks or '-' }}</td>
         <td class="amount-overdue">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
-        <td>
+        <td style="display: flex; gap: 8px; align-items: center;">
+          <a href="javascript:void(0)" 
+             onclick="openEditModal({{ item.id }}, '{{ item.due_date }}', {{ item.amount_due }}, {{ item.amount_paid }}, '{{ (item.remarks or '')|replace("'", "&#39;") }}')"
+             class="btn btn-sm btn-secondary"
+             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
+            Edit
+          </a>
           <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
              class="btn btn-sm btn-primary"
-             style="padding: 6px 12px; font-size: 12px;">
+             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
             Record Payment
           </a>
         </td>
@@ -257,10 +263,16 @@
         </td>
         <td>{{ item.remarks or '-' }}</td>
         <td class="amount-today">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
-        <td>
+        <td style="display: flex; gap: 8px; align-items: center;">
+          <a href="javascript:void(0)" 
+             onclick="openEditModal({{ item.id }}, '{{ item.due_date }}', {{ item.amount_due }}, {{ item.amount_paid }}, '{{ (item.remarks or '')|replace("'", "&#39;") }}')"
+             class="btn btn-sm btn-secondary"
+             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
+            Edit
+          </a>
           <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
              class="btn btn-sm btn-primary"
-             style="padding: 6px 12px; font-size: 12px;">
+             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
             Record Payment
           </a>
         </td>
@@ -308,10 +320,16 @@
         </td>
         <td>{{ item.remarks or '-' }}</td>
         <td class="amount-upcoming">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
-        <td>
+        <td style="display: flex; gap: 8px; align-items: center;">
+          <a href="javascript:void(0)" 
+             onclick="openEditModal({{ item.id }}, '{{ item.due_date }}', {{ item.amount_due }}, {{ item.amount_paid }}, '{{ (item.remarks or '')|replace("'", "&#39;") }}')"
+             class="btn btn-sm btn-secondary"
+             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
+            Edit
+          </a>
           <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
              class="btn btn-sm btn-primary"
-             style="padding: 6px 12px; font-size: 12px;">
+             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
             Record Payment
           </a>
         </td>
@@ -328,5 +346,103 @@
   <p class="section-empty">No upcoming installments.</p>
   {% endif %}
 </div>
+
+<!-- Edit Installment Modal -->
+<div id="editInstallmentModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+  <div class="modal-content" style="background-color: #fefefe; margin: 5% auto; padding: 0; border: 1px solid #888; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center;">
+      <h3 style="margin: 0; font-size: 18px; color: #333;">Edit Installment</h3>
+      <span class="close" onclick="closeEditModal()" style="font-size: 28px; font-weight: bold; color: #aaa; cursor: pointer; padding: 0; line-height: 20px;">&times;</span>
+    </div>
+
+    <form method="post" id="editInstallmentForm">
+      <div class="modal-body" style="padding: 20px;">
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px;">Due Date *</label>
+          <input type="date" id="modal_due_date" name="due_date" required style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px;">Amount Due * <small id="modal_amount_constraint" style="color: #c0392b; font-weight: normal;"></small></label>
+          <input type="number" id="modal_amount_due" name="amount_due" step="0.01" min="0" required style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px;">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px;">Remarks</label>
+          <textarea id="modal_remarks" name="remarks" rows="3" style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="padding: 12px 20px; border-top: 1px solid #e0e0e0; display: flex; justify-content: flex-end; gap: 8px;">
+        <button type="button" class="btn" onclick="closeEditModal()" style="padding: 8px 16px; border: 1px solid #ced4da; background-color: #fff; color: #333; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px;">
+          Cancel
+        </button>
+        <button type="submit" class="btn btn-primary" style="padding: 8px 16px; background-color: #0d6efd; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px;">
+          Save Changes
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let currentInstallmentId = null;
+let currentAmountPaid = 0;
+
+function openEditModal(installmentId, dueDate, amountDue, amountPaid, remarks) {
+  currentInstallmentId = installmentId;
+  currentAmountPaid = amountPaid;
+
+  // Convert date format if needed (DD-MM-YYYY to YYYY-MM-DD)
+  let formattedDate = dueDate;
+  if (dueDate.includes('-') && dueDate.split('-')[0].length === 2) {
+    const parts = dueDate.split('-');
+    formattedDate = parts[2] + '-' + parts[1] + '-' + parts[0];
+  }
+  document.getElementById('modal_due_date').value = formattedDate;
+
+  document.getElementById('modal_amount_due').value = amountDue;
+  document.getElementById('modal_amount_due').min = amountPaid;
+  document.getElementById('modal_remarks').value = remarks || '';
+
+  // Show constraint message
+  if (amountPaid > 0) {
+    document.getElementById('modal_amount_constraint').textContent =
+      '(Minimum: ₹' + parseFloat(amountPaid).toFixed(2) + ' - already paid)';
+    document.getElementById('modal_amount_constraint').style.color = '#c0392b';
+  } else {
+    document.getElementById('modal_amount_constraint').textContent = '';
+  }
+
+  // Set form action
+  document.getElementById('editInstallmentForm').action = '/billing/installment/' + installmentId + '/edit';
+
+  // Show modal
+  document.getElementById('editInstallmentModal').style.display = 'flex';
+}
+
+function closeEditModal() {
+  document.getElementById('editInstallmentModal').style.display = 'none';
+  currentInstallmentId = null;
+  currentAmountPaid = 0;
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+  const modal = document.getElementById('editInstallmentModal');
+  if (event.target === modal) {
+    closeEditModal();
+  }
+};
+
+// Validate form submission
+document.getElementById('editInstallmentForm').addEventListener('submit', function(e) {
+  const amountDue = parseFloat(document.getElementById('modal_amount_due').value || 0);
+  if (amountDue < currentAmountPaid) {
+    e.preventDefault();
+    alert('Amount due cannot be less than amount already paid (₹' + currentAmountPaid.toFixed(2) + ')');
+  }
+});
+</script>
 
 {% endblock %}
