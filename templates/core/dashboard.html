@@ -30,6 +30,266 @@
     </div>
     {% endif %}
 
-    <!-- Dashboard content goes here -->
+    <!-- Receivables Summary Section -->
+    <div class="row g-4 mb-4">
+        <!-- Past Due Card -->
+        <div class="col-md-6">
+            <div class="card h-100" style="border-left: 4px solid #e74c3c;">
+                <div class="card-body">
+                    <h5 class="card-title">Past Due</h5>
+                    <p class="card-text">
+                        <strong style="font-size: 24px; color: #e74c3c;">₹ {{ "%.2f"|format(total_past_due or 0) }}</strong>
+                    </p>
+                    <p class="text-muted">{{ past_dues|length }} installment(s)</p>
+                    <a href="{{ url_for('billing.receivables') }}" class="btn btn-sm btn-danger">View & Collect</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today's Due Card -->
+        <div class="col-md-6">
+            <div class="card h-100" style="border-left: 4px solid #f39c12;">
+                <div class="card-body">
+                    <h5 class="card-title">Due Today</h5>
+                    <p class="card-text">
+                        <strong style="font-size: 24px; color: #f39c12;">₹ {{ "%.2f"|format(total_today_due or 0) }}</strong>
+                    </p>
+                    <p class="text-muted">{{ todays_dues|length }} installment(s)</p>
+                    <a href="{{ url_for('billing.receivables') }}" class="btn btn-sm btn-warning">View & Collect</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Past Due Details Table -->
+    {% if past_dues %}
+    <div class="card mb-4">
+        <div class="card-header" style="background-color: #e74c3c; color: white; display: flex; justify-content: space-between; align-items: center;">
+            <h5 class="mb-0">Past Due Installments</h5>
+            <button type="button" class="btn btn-sm btn-light" onclick="togglePastDuesTable()" style="font-weight: bold;">
+                <span id="pastDuesIcon">▶</span> Show Details
+            </button>
+        </div>
+        <div class="card-body p-0" id="pastDuesBody" style="display: none;">
+            <table class="table table-hover mb-0" id="pastDuesTable">
+                <thead style="background-color: #f8f9fa;">
+                    <tr>
+                        <th>Student</th>
+                        <th>Phone</th>
+                        <th>Due Date</th>
+                        <th>Balance Due</th>
+                        <th>Remarks</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in past_dues %}
+                    <tr style="background-color: #ffe6e6;">
+                        <td><strong>{{ item.student_code }} - {{ item.student_name }}</strong></td>
+                        <td>{{ item.student_phone or '-' }}</td>
+                        <td>{{ item.due_date }}</td>
+                        <td style="color: #c0392b; font-weight: bold;">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
+                        <td>{{ item.remarks or '-' }}</td>
+                        <td>
+                            <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}" class="btn btn-sm btn-primary">Record Payment</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let pastDuesExpanded = false;
+        
+        function togglePastDuesTable() {
+            const body = document.getElementById('pastDuesBody');
+            const btn = event.target.closest('button');
+            const icon = document.getElementById('pastDuesIcon');
+            
+            pastDuesExpanded = !pastDuesExpanded;
+            
+            body.style.display = pastDuesExpanded ? 'block' : 'none';
+            
+            icon.textContent = pastDuesExpanded ? '▼' : '▶';
+            btn.textContent = (pastDuesExpanded ? '▼ Hide Details' : '▶ Show Details');
+        }
+    </script>
+    {% endif %}
+
+    <!-- Today's Due Details Table -->
+    {% if todays_dues %}
+    <div class="card mb-4">
+        <div class="card-header" style="background-color: #f39c12; color: white; display: flex; justify-content: space-between; align-items: center;">
+            <h5 class="mb-0">Due Today</h5>
+            <button type="button" class="btn btn-sm btn-light" onclick="toggleTodaysDuesTable()" style="font-weight: bold;">
+                <span id="todaysDuesIcon">▶</span> Show Details
+            </button>
+        </div>
+        <div class="card-body p-0" id="todaysDuesBody" style="display: none;">
+            <table class="table table-hover mb-0" id="todaysDuesTable">
+                <thead style="background-color: #f8f9fa;">
+                    <tr>
+                        <th>Student</th>
+                        <th>Phone</th>
+                        <th>Due Date</th>
+                        <th>Balance Due</th>
+                        <th>Remarks</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in todays_dues %}
+                    <tr style="background-color: #fff8e6;">
+                        <td><strong>{{ item.student_code }} - {{ item.student_name }}</strong></td>
+                        <td>{{ item.student_phone or '-' }}</td>
+                        <td>{{ item.due_date }}</td>
+                        <td style="color: #e67e22; font-weight: bold;">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
+                        <td>{{ item.remarks or '-' }}</td>
+                        <td>
+                            <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}" class="btn btn-sm btn-primary">Record Payment</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let todaysDuesExpanded = false;
+        
+        function toggleTodaysDuesTable() {
+            const body = document.getElementById('todaysDuesBody');
+            const btn = event.target.closest('button');
+            const icon = document.getElementById('todaysDuesIcon');
+            
+            todaysDuesExpanded = !todaysDuesExpanded;
+            
+            body.style.display = todaysDuesExpanded ? 'block' : 'none';
+            
+            icon.textContent = todaysDuesExpanded ? '▼' : '▶';
+            btn.textContent = (todaysDuesExpanded ? '▼ Hide Details' : '▶ Show Details');
+        }
+    </script>
+    {% endif %}
+
+    <!-- LEADS FOLLOWUP SECTION -->
+    <div style="margin-top: 40px; padding-top: 30px; border-top: 2px solid #dee2e6;">
+        <h4 class="mb-4" style="color: #333;">📞 Leads Followup Status</h4>
+
+        <div class="row g-4 mb-4">
+            <!-- Past Due Leads Card -->
+            <div class="col-md-6">
+                <div class="card h-100" style="border-left: 4px solid #c0392b;">
+                    <div class="card-body">
+                        <h5 class="card-title">Past Due Followups</h5>
+                        <p class="card-text">
+                            <strong style="font-size: 24px; color: #c0392b;">{{ past_due_leads|length }}</strong>
+                        </p>
+                        <p class="text-muted">Leads requiring followup</p>
+                        <a href="{{ url_for('leads.followups_today') }}" class="btn btn-sm btn-danger">View All Leads</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Today's Due Leads Card -->
+            <div class="col-md-6">
+                <div class="card h-100" style="border-left: 4px solid #e67e22;">
+                    <div class="card-body">
+                        <h5 class="card-title">Due Today Followups</h5>
+                        <p class="card-text">
+                            <strong style="font-size: 24px; color: #e67e22;">{{ today_due_leads|length }}</strong>
+                        </p>
+                        <p class="text-muted">Leads for today</p>
+                        <a href="{{ url_for('leads.followups_today') }}" class="btn btn-sm btn-warning">View All Leads</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Past Due Leads Table -->
+        {% if past_due_leads %}
+        <div class="card mb-4">
+            <div class="card-header" style="background-color: #c0392b; color: white;">
+                <h5 class="mb-0">Past Due Leads - Followup Required</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead style="background-color: #f8f9fa;">
+                        <tr>
+                            <th>Lead Name</th>
+                            <th>Phone</th>
+                            <th>Followup Due</th>
+                            <th>Lead Score</th>
+                            <th>Stage</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lead in past_due_leads %}
+                        <tr style="background-color: #ffebee;">
+                            <td><strong>{{ lead.name }}</strong></td>
+                            <td>{{ lead.phone or '-' }}</td>
+                            <td style="color: #c0392b; font-weight: bold;">{{ lead.next_followup_date }}</td>
+                            <td>
+                                <span style="background-color: {% if lead.lead_score >= 60 %}#27ae60{% elif lead.lead_score >= 40 %}#f39c12{% else %}#95a5a6{% endif %}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                                    {{ lead.lead_score or 0 }}
+                                </span>
+                            </td>
+                            <td>{{ lead.stage or '-' }}</td>
+                            <td>
+                                <a href="{{ url_for('leads.lead_detail', lead_id=lead.id) }}" class="btn btn-sm btn-primary">Followup</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Today's Due Leads Table -->
+        {% if today_due_leads %}
+        <div class="card">
+            <div class="card-header" style="background-color: #e67e22; color: white;">
+                <h5 class="mb-0">Due Today - Leads Followup</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead style="background-color: #f8f9fa;">
+                        <tr>
+                            <th>Lead Name</th>
+                            <th>Phone</th>
+                            <th>Followup Due</th>
+                            <th>Lead Score</th>
+                            <th>Stage</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lead in today_due_leads %}
+                        <tr style="background-color: #fff3e0;">
+                            <td><strong>{{ lead.name }}</strong></td>
+                            <td>{{ lead.phone or '-' }}</td>
+                            <td style="color: #e67e22; font-weight: bold;">{{ lead.next_followup_date }}</td>
+                            <td>
+                                <span style="background-color: {% if lead.lead_score >= 60 %}#27ae60{% elif lead.lead_score >= 40 %}#f39c12{% else %}#95a5a6{% endif %}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+                                    {{ lead.lead_score or 0 }}
+                                </span>
+                            </td>
+                            <td>{{ lead.stage or '-' }}</td>
+                            <td>
+                                <a href="{{ url_for('leads.lead_detail', lead_id=lead.id) }}" class="btn btn-sm btn-primary">Followup</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}

@@ -49,7 +49,124 @@ def login():
 @core_bp.route("/dashboard")
 @login_required
 def dashboard():
-    return render_template("core/dashboard.html")
+    conn = get_conn()
+    cur = conn.cursor()
+
+    today = datetime.now().date().isoformat()
+
+    # Past dues
+    past_dues_query = """
+        SELECT
+            ip.id,
+            ip.due_date,
+            ip.amount_due,
+            ip.amount_paid,
+            ip.status,
+            ip.remarks,
+            i.invoice_no,
+            i.id AS invoice_id,
+            s.full_name AS student_name,
+            s.student_code,
+            s.phone AS student_phone,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i
+            ON ip.invoice_id = i.id
+        JOIN students s
+            ON i.student_id = s.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) < ?
+        ORDER BY parse_date(ip.due_date) ASC
+    """
+
+    cur.execute(past_dues_query, [today])
+    past_dues = cur.fetchall()
+
+    # Today's dues
+    todays_dues_query = """
+        SELECT
+            ip.id,
+            ip.due_date,
+            ip.amount_due,
+            ip.amount_paid,
+            ip.status,
+            ip.remarks,
+            i.invoice_no,
+            i.id AS invoice_id,
+            s.full_name AS student_name,
+            s.student_code,
+            s.phone AS student_phone,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i
+            ON ip.invoice_id = i.id
+        JOIN students s
+            ON i.student_id = s.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) = ?
+        ORDER BY s.full_name ASC
+    """
+
+    cur.execute(todays_dues_query, [today])
+    todays_dues = cur.fetchall()
+
+    total_past_due = sum(float(row["balance_due"] or 0) for row in past_dues)
+    total_today_due = sum(float(row["balance_due"] or 0) for row in todays_dues)
+
+    # Past due leads (followup due before today)
+    past_due_leads_query = """
+        SELECT
+            id,
+            name,
+            phone,
+            next_followup_date,
+            lead_score,
+            stage,
+            status
+        FROM leads
+        WHERE status = 'active'
+          AND is_deleted = 0
+          AND next_followup_date IS NOT NULL
+          AND next_followup_date < ?
+        ORDER BY next_followup_date ASC
+    """
+
+    cur.execute(past_due_leads_query, [today])
+    past_due_leads = cur.fetchall()
+
+    # Today's due leads (followup due today)
+    today_due_leads_query = """
+        SELECT
+            id,
+            name,
+            phone,
+            next_followup_date,
+            lead_score,
+            stage,
+            status
+        FROM leads
+        WHERE status = 'active'
+          AND is_deleted = 0
+          AND next_followup_date IS NOT NULL
+          AND next_followup_date = ?
+        ORDER BY lead_score DESC
+    """
+
+    cur.execute(today_due_leads_query, [today])
+    today_due_leads = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "core/dashboard.html",
+        past_dues=past_dues,
+        todays_dues=todays_dues,
+        total_past_due=total_past_due,
+        total_today_due=total_today_due,
+        past_due_leads=past_due_leads,
+        today_due_leads=today_due_leads,
+        today=today
+    )
 
 
 @core_bp.route("/logout")
