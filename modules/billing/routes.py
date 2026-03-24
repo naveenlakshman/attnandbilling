@@ -1171,6 +1171,125 @@ def invoice_view(invoice_id):
         balance_amount=balance_amount
     )
 
+@billing_bp.route("/invoice/<int:invoice_id>/print")
+@login_required
+def invoice_print(invoice_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Fetch invoice details with student and branch info
+    cur.execute("""
+        SELECT
+            invoices.id,
+            invoices.invoice_no,
+            invoices.invoice_date,
+            invoices.subtotal,
+            invoices.discount_amount,
+            invoices.total_amount,
+            invoices.status,
+            invoices.notes,
+            invoices.created_at,
+            students.id AS student_id,
+            students.student_code,
+            students.full_name,
+            students.phone,
+            students.email,
+            students.address,
+            branches.branch_name
+        FROM invoices
+        JOIN students ON invoices.student_id = students.id
+        LEFT JOIN branches ON invoices.branch_id = branches.id
+        WHERE invoices.id = ?
+    """, (invoice_id,))
+    invoice = cur.fetchone()
+
+    if not invoice:
+        conn.close()
+        flash("Invoice not found.", "danger")
+        return redirect(url_for("billing.invoices"))
+
+    # Fetch invoice items
+    cur.execute("""
+        SELECT
+            id,
+            course_id,
+            description,
+            quantity,
+            unit_price,
+            line_total
+        FROM invoice_items
+        WHERE invoice_id = ?
+        ORDER BY id ASC
+    """, (invoice_id,))
+    items = cur.fetchall()
+
+    # Fetch installment plans
+    cur.execute("""
+        SELECT
+            id,
+            installment_no,
+            due_date,
+            amount_due,
+            amount_paid,
+            status,
+            remarks
+        FROM installment_plans
+        WHERE invoice_id = ?
+        ORDER BY installment_no ASC
+    """, (invoice_id,))
+    installments = cur.fetchall()
+
+    # Fetch payments (receipts) with user info - LEFT JOIN to handle no receipts
+    cur.execute("""
+        SELECT
+            receipts.id,
+            receipts.receipt_no,
+            receipts.receipt_date,
+            receipts.amount_received,
+            receipts.created_at,
+            receipts.created_by,
+            IFNULL(users.full_name, 'System') AS created_by_name
+        FROM receipts
+        LEFT JOIN users ON receipts.created_by = users.id
+        WHERE receipts.invoice_id = ?
+        ORDER BY receipts.id DESC
+    """, (invoice_id,))
+    payments = cur.fetchall()
+
+    # Calculate totals
+    cur.execute("""
+        SELECT
+            IFNULL(SUM(amount_received), 0) AS total_paid
+        FROM receipts
+        WHERE invoice_id = ?
+    """, (invoice_id,))
+    paid_result = cur.fetchone()
+    total_paid = float(paid_result["total_paid"] or 0) if paid_result else 0.0
+
+    balance_amount = float(invoice["total_amount"] or 0) - total_paid
+    net_total = float(invoice["total_amount"] or 0)
+
+    # Get prepared by user info
+    cur.execute("""
+        SELECT full_name FROM users WHERE id = ?
+    """, (session.get("user_id"),))
+    user_result = cur.fetchone()
+    prepared_by = user_result["full_name"] if user_result else "Administrator"
+
+    conn.close()
+
+    return render_template(
+        "billing/invoice_print.html",
+        invoice=invoice,
+        invoice_items=items,
+        installment_plans=installments,
+        receipts=payments,
+        total_paid=total_paid,
+        balance_amount=balance_amount,
+        net_total=net_total,
+        prepared_by=prepared_by
+    )
+
 @billing_bp.route("/installment/<int:installment_id>/edit", methods=["POST"])
 @login_required
 @admin_required

@@ -82,6 +82,12 @@
   }
 
   @media print {
+    /* Universal hiding for all non-content elements */
+    * {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
     /* Hide all page navigation and controls */
     .page-actions,
     .sidebar,
@@ -92,8 +98,42 @@
     .no-print,
     header,
     .page-header,
-    .app-header {
+    .app-header,
+    .erp-topbar,
+    .erp-topbar-title,
+    .erp-topbar-user,
+    .erp-sidebar,
+    .erp-shell > aside {
       display: none !important;
+      visibility: hidden !important;
+      height: 0 !important;
+    }
+
+    /* Restructure page layout for printing */
+    body,
+    html {
+      margin: 0 !important;
+      padding: 0 !important;
+      background: white !important;
+      width: 100% !important;
+      height: auto !important;
+    }
+
+    .erp-shell {
+      display: block !important;
+      flex-direction: row !important;
+    }
+
+    .erp-main {
+      width: 100% !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      flex: 1 !important;
+    }
+
+    .erp-content {
+      padding: 0 !important;
+      margin: 0 !important;
     }
 
     /* Hide browser header bar (Logged in: admin, Global IT ERP - Billing) */
@@ -103,17 +143,11 @@
 
     /* Hide page info at top */
     @page {
+      margin: 0;
       margin-top: 0;
     }
 
     /* Ensure main content is visible */
-    body,
-    html {
-      margin: 0 !important;
-      padding: 5mm !important;
-      background: white !important;
-    }
-
     h2 {
       display: none !important;
     }
@@ -230,7 +264,7 @@
   <a class="btn btn-warning" href="{{ url_for('billing.invoice_edit', invoice_id=invoice.id) }}">Edit Invoice</a>
   {% endif %}
   <a class="btn btn-primary" href="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">+ Record Payment</a>
-  <button class="btn btn-secondary" onclick="window.print()"> Print Invoice </button>
+  <a class="btn btn-secondary" href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}" target="_blank"> Print Invoice </a>
 </div>
 <div class="invoice-header">
 
@@ -321,7 +355,7 @@
 </div>
 
 <div class="card">
-  <h3>Payments</h3>
+  <h3>Receipts</h3>
   <table border="1" width="100%" cellpadding="10" class="billing-table">
     <tr>
       <th>Receipt No</th>

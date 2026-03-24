@@ -118,7 +118,7 @@
       <tr>
         <td>{{ inv.id }}</td>
         <td>
-          <a href="#" style="text-decoration: none;">
+          <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="text-decoration: none;">
             {{ inv.invoice_no }}
           </a>
         </td>
@@ -128,7 +128,7 @@
         <td style="color: #c0392b;">₹ {{ "%.2f"|format(balance or 0) }}</td>
         <td>{{ inv.status }}</td>
         <td>
-          <a href="#">View</a>
+          <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}">View</a>
         </td>
       </tr>
       {% else %}

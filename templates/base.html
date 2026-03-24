@@ -78,6 +78,75 @@
       padding: 24px;
       flex-grow: 1;
     }
+
+    /* Print styles */
+    @media print {
+      .no-print {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      /* Hide sidebar */
+      .erp-sidebar {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+      }
+
+      /* Hide topbar completely */
+      .erp-topbar {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        position: absolute !important;
+      }
+
+      .erp-topbar-user,
+      .erp-topbar-title {
+        display: none !important;
+        visibility: hidden !important;
+      }
+
+      /* Reset shell layout */
+      .erp-shell {
+        display: block !important;
+        flex-direction: column !important;
+      }
+
+      .erp-main {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      .erp-content {
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      /* Global print resets */
+      body,
+      html {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        width: 100% !important;
+      }
+
+      @page {
+        margin: 0;
+        padding: 0;
+      }
+    }
   </style>
 
   {% block extra_css %}{% endblock %}
@@ -146,7 +215,7 @@
   </aside>
 
   <main class="erp-main">
-    <div class="erp-topbar">
+    <div class="erp-topbar no-print">
       <div class="erp-topbar-title">{% block page_title %}Global IT ERP{% endblock %}</div>
       <div class="erp-topbar-user">
         Logged in: <strong>{{ session.get('username', 'Guest') }}</strong>
