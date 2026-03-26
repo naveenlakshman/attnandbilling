@@ -185,16 +185,6 @@ def add_asset():
 
             asset_id = cur.lastrowid
 
-            # Log activity
-            log_activity(
-                user_id=session.get("user_id"),
-                branch_id=int(branch_id),
-                action_type="create",
-                module_name="assets",
-                record_id=asset_id,
-                description=f"Created new asset: {asset_name} ({asset_code})"
-            )
-
             # Create initial asset log entry
             cur.execute("""
                 INSERT INTO asset_logs (
@@ -215,6 +205,16 @@ def add_asset():
 
             conn.commit()
             conn.close()
+
+            # Log activity (after committing the transaction)
+            log_activity(
+                user_id=session.get("user_id"),
+                branch_id=int(branch_id),
+                action_type="create",
+                module_name="assets",
+                record_id=asset_id,
+                description=f"Created new asset: {asset_name} ({asset_code})"
+            )
 
             flash(f"Asset {asset_code} created successfully!", "success")
             return redirect(url_for("assets.list_assets"))
