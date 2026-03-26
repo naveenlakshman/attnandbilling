@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Global IT ERP - Add Asset{% endblock %}
+
+{% block content %}
+
+<style>
+  .form-section {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    max-width: 600px;
+  }
+
+  .form-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 24px;
+  }
+
+  .form-group {
+    margin-bottom: 18px;
+  }
+
+  .form-group label {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  .form-group input,
+  .form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+  }
+
+  .form-group input::placeholder {
+    color: #999;
+  }
+
+  .form-group.required label::after {
+    content: " *";
+    color: #e74c3c;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 30px;
+    justify-content: flex-end;
+  }
+
+  .form-actions button,
+  .form-actions a {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-submit {
+    background-color: #0d6efd;
+    color: white;
+  }
+
+  .btn-submit:hover {
+    background-color: #0b5ed7;
+  }
+
+  .btn-cancel {
+    background-color: #6c757d;
+    color: white;
+  }
+
+  .btn-cancel:hover {
+    background-color: #5c636a;
+  }
+
+  .error-banner {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+  }
+
+  .error-banner ul {
+    margin: 0;
+    padding-left: 20px;
+  }
+
+  .error-banner li {
+    margin-bottom: 4px;
+  }
+
+  .breadcrumb-nav {
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+
+  .breadcrumb-nav a {
+    color: #0d6efd;
+    text-decoration: none;
+  }
+
+  .breadcrumb-nav a:hover {
+    text-decoration: underline;
+  }
+</style>
+
+<div class="breadcrumb-nav">
+  <a href="{{ url_for('assets.list_assets') }}">Assets</a> /
+  <span>Add New Asset</span>
+</div>
+
+<div class="form-section">
+  <h1 class="form-title">📦 Add New Asset</h1>
+
+  {% if errors %}
+  <div class="error-banner">
+    <ul>
+      {% for error in errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('assets.add_asset') }}">
+    <div class="form-group required">
+      <label for="asset_name">Asset Name</label>
+      <input 
+        type="text" 
+        id="asset_name" 
+        name="asset_name" 
+        placeholder="e.g., Dell Monitor, Office Chair"
+        value="{{ form.get('asset_name', '') if form else '' }}"
+        required
+      >
+    </div>
+
+    <div class="form-group required">
+      <label for="category">Category</label>
+      <select id="category" name="category" required>
+        <option value="">-- Select Category --</option>
+        {% for cat in categories %}
+        <option value="{{ cat }}" {% if form and form.get('category') == cat %}selected{% endif %}>
+          {{ cat }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="brand">Brand</label>
+      <input 
+        type="text" 
+        id="brand" 
+        name="brand" 
+        placeholder="e.g., Dell, Herman Miller, HP"
+        value="{{ form.get('brand', '') if form else '' }}"
+      >
+    </div>
+
+    <div class="form-group">
+      <label for="purchase_cost">Purchase Cost (₹)</label>
+      <input 
+        type="number" 
+        id="purchase_cost" 
+        name="purchase_cost" 
+        placeholder="0.00"
+        min="0"
+        step="0.01"
+        value="{{ form.get('purchase_cost', '0') if form else '0' }}"
+      >
+    </div>
+
+    <div class="form-group required">
+      <label for="purchase_date">Purchase Date</label>
+      <input 
+        type="date" 
+        id="purchase_date" 
+        name="purchase_date"
+        value="{{ form.get('purchase_date', '') if form else '' }}"
+        required
+      >
+    </div>
+
+    <div class="form-group required">
+      <label for="branch_id">Branch</label>
+      <select id="branch_id" name="branch_id" required>
+        <option value="">-- Select Branch --</option>
+        {% for branch in branches %}
+        <option value="{{ branch.id }}" {% if form and form.get('branch_id')|string == branch.id|string %}selected{% endif %}>
+          {{ branch.branch_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-actions">
+      <a href="{{ url_for('assets.list_assets') }}" class="btn-cancel">Cancel</a>
+      <button type="submit" class="btn-submit">Create Asset</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+
+{% block title %}Global IT ERP - Allocate Asset{% endblock %}
+
+{% block content %}
+
+<style>
+  .allocation-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 30px;
+  }
+
+  .asset-info-card {
+    background: white;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    border-left: 4px solid #0d6efd;
+  }
+
+  .asset-info-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 15px;
+  }
+
+  .asset-info-field {
+    margin-bottom: 15px;
+  }
+
+  .asset-info-label {
+    font-size: 12px;
+    color: #999;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .asset-info-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .allocation-status {
+    padding: 15px;
+    border-radius: 6px;
+    margin-top: 15px;
+  }
+
+  .allocation-status.allocated {
+    background-color: #cfe2ff;
+    border: 1px solid #b6d4fe;
+    color: #084298;
+  }
+
+  .allocation-status.not-allocated {
+    background-color: #e2e3e5;
+    border: 1px solid #d3d3d4;
+    color: #383d41;
+  }
+
+  .allocation-status-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .allocation-status-value {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .form-section {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
+  .form-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 20px;
+  }
+
+  .form-group {
+    margin-bottom: 18px;
+  }
+
+  .form-group label {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  .form-group input,
+  .form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+  }
+
+  .form-group input::placeholder {
+    color: #999;
+  }
+
+  .form-group.required label::after {
+    content: " *";
+    color: #e74c3c;
+  }
+
+  .role-description {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+    font-weight: 400;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 30px;
+    justify-content: flex-end;
+  }
+
+  .form-actions button,
+  .form-actions a {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-submit {
+    background-color: #0d6efd;
+    color: white;
+  }
+
+  .btn-submit:hover {
+    background-color: #0b5ed7;
+  }
+
+  .btn-cancel {
+    background-color: #6c757d;
+    color: white;
+  }
+
+  .btn-cancel:hover {
+    background-color: #5c636a;
+  }
+
+  .error-banner {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+  }
+
+  .error-banner ul {
+    margin: 0;
+    padding-left: 20px;
+  }
+
+  .error-banner li {
+    margin-bottom: 4px;
+  }
+
+  .breadcrumb-nav {
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+
+  .breadcrumb-nav a {
+    color: #0d6efd;
+    text-decoration: none;
+  }
+
+  .breadcrumb-nav a:hover {
+    text-decoration: underline;
+  }
+
+  @media (max-width: 768px) {
+    .allocation-container {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="breadcrumb-nav">
+  <a href="{{ url_for('assets.list_assets') }}">Assets</a> /
+  <span>Allocate Asset</span>
+</div>
+
+<div class="allocation-container">
+  <!-- Asset Information Card -->
+  <div class="asset-info-card">
+    <div class="asset-info-title">📦 Asset Details</div>
+    
+    <div class="asset-info-field">
+      <div class="asset-info-label">Asset Code</div>
+      <div class="asset-info-value">{{ asset.asset_code }}</div>
+    </div>
+
+    <div class="asset-info-field">
+      <div class="asset-info-label">Asset Name</div>
+      <div class="asset-info-value">{{ asset.asset_name }}</div>
+    </div>
+
+    <div class="asset-info-field">
+      <div class="asset-info-label">Category</div>
+      <div class="asset-info-value">{{ asset.category }}</div>
+    </div>
+
+    <div class="asset-info-field">
+      <div class="asset-info-label">Status</div>
+      <div class="asset-info-value">
+        <span style="display: inline-block; padding: 4px 8px; background: #d4edda; color: #155724; border-radius: 4px; font-size: 12px;">
+          {{ asset.status }}
+        </span>
+      </div>
+    </div>
+
+    <div class="asset-info-field">
+      <div class="asset-info-label">Branch</div>
+      <div class="asset-info-value">{{ asset.branch_name or '—' }}</div>
+    </div>
+
+    <!-- Current Allocation Status -->
+    {% if current_allocation %}
+    <div class="allocation-status allocated">
+      <div class="allocation-status-label">Currently Allocated To:</div>
+      <div class="allocation-status-value">{{ current_allocation.assigned_to }}</div>
+      <div style="font-size: 12px; margin-top: 8px; opacity: 0.8;">
+        Assigned: {{ current_allocation.assigned_date }}
+      </div>
+      <div style="font-size: 12px; margin-top: 4px; color: #ff6b6b; font-weight: 600;">
+        ⚠️ Reassigning will auto-return from current user
+      </div>
+    </div>
+    {% else %}
+    <div class="allocation-status not-allocated">
+      <div class="allocation-status-label">Status:</div>
+      <div class="allocation-status-value">Not Allocated</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Allocation Form -->
+  <div class="form-section">
+    <div class="form-title">🔗 Allocate to User</div>
+
+    {% if errors %}
+    <div class="error-banner">
+      <ul>
+        {% for error in errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('assets.allocate_asset', asset_id=asset.id) }}">
+      <div class="form-group required">
+        <label for="assigned_role">Role Type</label>
+        <select id="assigned_role" name="assigned_role" required onchange="updateRoleDescription()">
+          <option value="">-- Select Role --</option>
+          <option value="staff" {% if form and form.get('assigned_role') == 'staff' %}selected{% endif %}>
+            Staff Member (Trainer/Employee)
+          </option>
+          <option value="student" {% if form and form.get('assigned_role') == 'student' %}selected{% endif %}>
+            Student/Location (Lab/Class)
+          </option>
+        </select>
+        <div class="role-description" id="roleDesc"></div>
+      </div>
+
+      <div class="form-group required">
+        <label for="assigned_to">Assigned To Name</label>
+        <input 
+          type="text" 
+          id="assigned_to" 
+          name="assigned_to" 
+          placeholder="e.g., Meghana, Lab 1, Conference Room"
+          value="{{ form.get('assigned_to', '') if form else '' }}"
+          required
+        >
+        <div class="role-description">Enter the name of staff member, student, or location (Lab 1, Lab 2, etc.)</div>
+      </div>
+
+      <div class="form-group required">
+        <label for="assigned_date">Assigned Date</label>
+        <input 
+          type="date" 
+          id="assigned_date" 
+          name="assigned_date"
+          value="{{ form.get('assigned_date', '') if form else '' }}"
+          required
+        >
+      </div>
+
+      <div class="form-actions">
+        <a href="{{ url_for('assets.list_assets') }}" class="btn-cancel">Cancel</a>
+        <button type="submit" class="btn-submit">Allocate Asset</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function updateRoleDescription() {
+  const roleSelect = document.getElementById('assigned_role');
+  const roleDesc = document.getElementById('roleDesc');
+  
+  if (roleSelect.value === 'staff') {
+    roleDesc.textContent = 'Assign to a staff member like trainer or employee';
+  } else if (roleSelect.value === 'student') {
+    roleDesc.textContent = 'Assign to a student, classroom, lab, or location';
+  } else {
+    roleDesc.textContent = '';
+  }
+}
+
+// Update on page load
+window.addEventListener('DOMContentLoaded', updateRoleDescription);
+</script>
+
+{% endblock %}

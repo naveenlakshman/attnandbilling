@@ -319,6 +319,60 @@ def init_db():
         )
     """)
 
+    # ---------- ASSETS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS assets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            asset_code TEXT NOT NULL UNIQUE,
+            asset_name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            brand TEXT,
+            purchase_date TEXT,
+            purchase_cost REAL DEFAULT 0,
+            condition TEXT DEFAULT 'Good'
+                CHECK(condition IN ('Good', 'Repair', 'Damaged')),
+            status TEXT DEFAULT 'Active'
+                CHECK(status IN ('Active', 'In Repair', 'Disposed')),
+            branch_id INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (branch_id) REFERENCES branches(id)
+        )
+    """)
+
+    # ---------- ASSET ALLOCATION ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS asset_allocation (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            asset_id INTEGER NOT NULL,
+            assigned_to TEXT NOT NULL,
+            assigned_role TEXT NOT NULL
+                CHECK(assigned_role IN ('staff', 'student')),
+            assigned_date TEXT NOT NULL,
+            return_date TEXT,
+            status TEXT DEFAULT 'Allocated'
+                CHECK(status IN ('Allocated', 'Returned')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+        )
+    """)
+
+    # ---------- ASSET LOGS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS asset_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            asset_id INTEGER NOT NULL,
+            action TEXT NOT NULL
+                CHECK(action IN ('Created', 'Assigned', 'Returned', 'Repaired', 'Disposed')),
+            description TEXT,
+            done_by INTEGER,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+            FOREIGN KEY (done_by) REFERENCES users(id)
+        )
+    """)
+
     # ---------- SAFE MIGRATIONS ----------
     add_column_if_not_exists(cur, "users", "phone", "TEXT")
     add_column_if_not_exists(cur, "users", "branch_id", "INTEGER")

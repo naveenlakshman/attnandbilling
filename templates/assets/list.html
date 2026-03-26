@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}Global IT ERP - Assets{% endblock %}
+
+{% block content %}
+
+<style>
+  .assets-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .assets-page-header h2 {
+    margin: 0;
+    font-size: 28px;
+  }
+
+  .assets-action-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .filter-section {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    border: 1px solid #dee2e6;
+  }
+
+  .filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    align-items: end;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .filter-group label {
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+  }
+
+  .filter-group select,
+  .filter-group input {
+    padding: 8px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+
+  .filter-group select:focus,
+  .filter-group input:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.08);
+  }
+
+  .filter-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .filter-buttons button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .filter-buttons .btn-apply {
+    background-color: #0d6efd;
+    color: white;
+  }
+
+  .filter-buttons .btn-apply:hover {
+    background-color: #0b5ed7;
+  }
+
+  .filter-buttons .btn-clear {
+    background-color: #6c757d;
+    color: white;
+  }
+
+  .filter-buttons .btn-clear:hover {
+    background-color: #5c636a;
+  }
+
+  .assets-table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .assets-table thead tr {
+    background-color: #f5f6f7;
+  }
+
+  .assets-table th {
+    padding: 12px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+    border: 1px solid #ddd;
+  }
+
+  .assets-table td {
+    padding: 12px 10px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+
+  .assets-table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: capitalize;
+    white-space: nowrap;
+  }
+
+  .badge-active {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .badge-in-repair {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  .badge-disposed {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+
+  .badge-good {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .badge-repair {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  .badge-damaged {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+
+  .badge-allocated {
+    background-color: #cfe2ff;
+    color: #084298;
+  }
+
+  .badge-not-allocated {
+    background-color: #e2e3e5;
+    color: #383d41;
+  }
+
+  .assets-empty {
+    padding: 40px;
+    text-align: center;
+    color: #999;
+  }
+
+  .assets-empty p {
+    margin: 0;
+  }
+
+  .action-links a {
+    color: #0066cc;
+    text-decoration: none;
+    margin-right: 12px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .action-links a:hover {
+    text-decoration: underline;
+  }
+</style>
+
+<div class="assets-page-header">
+  <h2>📦 Assets</h2>
+
+  <div class="assets-action-buttons">
+    <a class="btn btn-primary" href="{{ url_for('assets.add_asset') }}">
+      + Add Asset
+    </a>
+  </div>
+</div>
+
+<!-- Filter Section -->
+<div class="filter-section">
+  <form method="get" class="filter-row">
+    <div class="filter-group">
+      <label for="branch">Branch</label>
+      <select name="branch" id="branch">
+        <option value="">All Branches</option>
+        {% for branch in branches %}
+        <option value="{{ branch.id }}" {% if branch_filter|string == branch.id|string %}selected{% endif %}>
+          {{ branch.branch_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label for="category">Category</label>
+      <select name="category" id="category">
+        <option value="">All Categories</option>
+        {% for cat in categories %}
+        <option value="{{ cat }}" {% if category_filter == cat %}selected{% endif %}>
+          {{ cat }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label for="status">Status</label>
+      <select name="status" id="status">
+        <option value="">All Status</option>
+        <option value="Active" {% if status_filter == 'Active' %}selected{% endif %}>Active</option>
+        <option value="In Repair" {% if status_filter == 'In Repair' %}selected{% endif %}>In Repair</option>
+        <option value="Disposed" {% if status_filter == 'Disposed' %}selected{% endif %}>Disposed</option>
+      </select>
+    </div>
+
+    <div class="filter-buttons">
+      <button type="submit" class="btn-apply">Apply Filters</button>
+      <a href="{{ url_for('assets.list_assets') }}" class="btn-clear" style="text-decoration: none; display: inline-block; padding: 8px 16px;">Clear</a>
+    </div>
+  </form>
+</div>
+
+<!-- Assets Table -->
+<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
+  {% if assets %}
+    <table border="1" cellpadding="10" class="assets-table">
+      <thead>
+        <tr>
+          <th style="width: 100px;">Asset Code</th>
+          <th>Name</th>
+          <th style="width: 120px;">Category</th>
+          <th style="width: 100px;">Brand</th>
+          <th style="width: 80px;">Status</th>
+          <th style="width: 80px;">Condition</th>
+          <th style="width: 100px;">Assigned To</th>
+          <th style="width: 130px;">Branch</th>
+          <th style="width: 100px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for asset in assets %}
+        <tr>
+          <td>
+            <strong>{{ asset.asset_code }}</strong>
+          </td>
+
+          <td>{{ asset.asset_name }}</td>
+
+          <td>{{ asset.category or '—' }}</td>
+
+          <td>{{ asset.brand or '—' }}</td>
+
+          <td>
+            <span class="badge
+              {% if asset.status == 'Active' %}badge-active
+              {% elif asset.status == 'In Repair' %}badge-in-repair
+              {% else %}badge-disposed{% endif %}">
+              {{ asset.status }}
+            </span>
+          </td>
+
+          <td>
+            <span class="badge
+              {% if asset.condition == 'Good' %}badge-good
+              {% elif asset.condition == 'Repair' %}badge-repair
+              {% else %}badge-damaged{% endif %}">
+              {{ asset.condition }}
+            </span>
+          </td>
+
+          <td>
+            {% if asset.is_allocated %}
+              <span class="badge badge-allocated">{{ asset.assigned_to }}</span>
+            {% else %}
+              <span class="badge badge-not-allocated">Not Assigned</span>
+            {% endif %}
+          </td>
+
+          <td>{{ asset.branch_name or '—' }}</td>
+
+          <td class="action-links">
+            <a href="{{ url_for('assets.asset_history', asset_id=asset.id) }}">View</a>
+            {% if asset.is_allocated %}
+              <a href="{{ url_for('assets.return_asset', asset_id=asset.id) }}" style="color: #28a745;">Return</a>
+            {% else %}
+              <a href="{{ url_for('assets.allocate_asset', asset_id=asset.id) }}">Allocate</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="assets-empty">
+      <p style="font-size: 16px;">📦 No assets found.</p>
+      <p style="font-size: 12px; margin-top: 8px; color: #aaa;">Try adjusting your filters or add a new asset.</p>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

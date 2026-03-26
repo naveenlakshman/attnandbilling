@@ -3,6 +3,7 @@ from config import Config
 from db import init_db
 from modules.leads.routes import leads_bp
 from modules.billing.routes import billing_bp
+from modules.assets.routes import assets_bp
 from modules.reports.routes import reports_bp
 from modules.import_export.routes import import_export_bp
 from datetime import datetime
@@ -33,6 +34,7 @@ def create_app():
     app.register_blueprint(core_bp)
     app.register_blueprint(leads_bp, url_prefix="/leads")
     app.register_blueprint(billing_bp, url_prefix="/billing")
+    app.register_blueprint(assets_bp, url_prefix="/assets")
     app.register_blueprint(reports_bp, url_prefix="/reports")
     app.register_blueprint(import_export_bp, url_prefix="/import-export")
 

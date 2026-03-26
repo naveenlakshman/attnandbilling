@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}Global IT ERP - Return Asset{% endblock %}
+
+{% block content %}
+
+<style>
+  .return-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 30px;
+  }
+
+  .asset-info-card {
+    background: white;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    border-left: 4px solid #e74c3c;
+  }
+
+  .asset-info-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 15px;
+  }
+
+  .asset-info-field {
+    margin-bottom: 15px;
+  }
+
+  .asset-info-label {
+    font-size: 12px;
+    color: #999;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .asset-info-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .allocation-info {
+    padding: 15px;
+    border-radius: 6px;
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+    margin-top: 15px;
+  }
+
+  .allocation-info-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .allocation-info-value {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .form-section {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
+  .form-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 20px;
+  }
+
+  .form-group {
+    margin-bottom: 18px;
+  }
+
+  .form-group label {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+  }
+
+  .form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+  }
+
+  .form-group textarea::placeholder {
+    color: #999;
+  }
+
+  .form-group.required label::after {
+    content: " *";
+    color: #e74c3c;
+  }
+
+  .condition-description {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+    font-weight: 400;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 30px;
+    justify-content: flex-end;
+  }
+
+  .form-actions button,
+  .form-actions a {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-submit {
+    background-color: #28a745;
+    color: white;
+  }
+
+  .btn-submit:hover {
+    background-color: #218838;
+  }
+
+  .btn-cancel {
+    background-color: #6c757d;
+    color: white;
+  }
+
+  .btn-cancel:hover {
+    background-color: #5c636a;
+  }
+
+  .error-banner {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+  }
+
+  .error-banner ul {
+    margin: 0;
+    padding-left: 20px;
+  }
+
+  .error-banner li {
+    margin-bottom: 4px;
+  }
+
+  .breadcrumb-nav {
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+
+  .breadcrumb-nav a {
+    color: #0d6efd;
+    text-decoration: none;
+  }
+
+  .breadcrumb-nav a:hover {
+    text-decoration: underline;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .badge-good {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .badge-repair {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  .badge-damaged {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+
+  @media (max-width: 768px) {
+    .return-container {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="breadcrumb-nav">
+  <a href="{{ url_for('assets.list_assets') }}">Assets</a> /
+  <span>Return Asset</span>
+</div>
+
+<div class="return-container">
+  <!-- Asset Information Card -->
+  <div class="asset-info-card">
+    <div class="asset-info-title">📦 Asset Details</div>
+    
+    <div class="asset-info-field">
+      <div class="asset-info-label">Asset Code</div>
+      <div class="asset-info-value">{{ asset.asset_code }}</div>
+    </div>
+
+    <div class="asset-info-field">
+      <div class="asset-info-label">Asset Name</div>
+      <div class="asset-info-value">{{ asset.asset_name }}</div>
+    </div>
+
+    <div class="asset-info-field">
+      <div class="asset-info-label">Category</div>
+      <div class="asset-info-value">{{ asset.category }}</div>
+    </div>
+
+    <div class="asset-info-field">
+      <div class="asset-info-label">Current Condition</div>
+      <div class="asset-info-value">
+        <span class="status-badge
+          {% if asset.condition == 'Good' %}badge-good
+          {% elif asset.condition == 'Repair' %}badge-repair
+          {% else %}badge-damaged{% endif %}">
+          {{ asset.condition }}
+        </span>
+      </div>
+    </div>
+
+    <div class="asset-info-field">
+      <div class="asset-info-label">Current Status</div>
+      <div class="asset-info-value">{{ asset.status }}</div>
+    </div>
+
+    <div class="asset-info-field">
+      <div class="asset-info-label">Branch</div>
+      <div class="asset-info-value">{{ asset.branch_name or '—' }}</div>
+    </div>
+
+    <!-- Current Allocation Info -->
+    {% if current_allocation %}
+    <div class="allocation-info">
+      <div class="allocation-info-label">Allocated To:</div>
+      <div class="allocation-info-value">{{ current_allocation.assigned_to }}</div>
+      <div>
+        <span style="font-size: 12px;">Role: 
+          {% if current_allocation.assigned_role == 'staff' %}
+            Staff Member
+          {% else %}
+            Student/Location
+          {% endif %}
+        </span>
+      </div>
+      <div style="font-size: 12px; margin-top: 4px;">
+        Assigned: {{ current_allocation.assigned_date }}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Return Form -->
+  <div class="form-section">
+    <div class="form-title">🔄 Return Asset</div>
+
+    {% if errors %}
+    <div class="error-banner">
+      <ul>
+        {% for error in errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('assets.return_asset', asset_id=asset.id) }}">
+      <div class="form-group required">
+        <label for="asset_condition">Asset Condition</label>
+        <select id="asset_condition" name="asset_condition" required onchange="updateConditionDescription()">
+          <option value="">-- Select Condition --</option>
+          <option value="Good" {% if form and form.get('asset_condition') == 'Good' %}selected{% endif %}>
+            Good (No Issues)
+          </option>
+          <option value="Repair" {% if form and form.get('asset_condition') == 'Repair' %}selected{% endif %}>
+            Repair (Needs Fixing)
+          </option>
+          <option value="Damaged" {% if form and form.get('asset_condition') == 'Damaged' %}selected{% endif %}>
+            Damaged (Major Damage)
+          </option>
+        </select>
+        <div class="condition-description" id="conditionDesc"></div>
+      </div>
+
+      <div class="form-group">
+        <label for="return_notes">Return Notes / Damage Report</label>
+        <textarea 
+          id="return_notes" 
+          name="return_notes" 
+          placeholder="Document any damage, repairs needed, or other notes about the asset condition..."
+        >{{ form.get('return_notes', '') if form else '' }}</textarea>
+        <div class="condition-description">Optional: Provide details about asset condition, observed issues, or maintenance needed</div>
+      </div>
+
+      <div style="padding: 12px; background-color: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 6px; margin-bottom: 20px; color: #004085; font-size: 13px;">
+        <strong>Status Update:</strong>
+        <div style="margin-top: 6px;">
+          If marked as <strong>Good</strong>: Status will be set to <span class="status-badge badge-good">Active</span>
+        </div>
+        <div style="margin-top: 4px;">
+          If marked as <strong>Repair</strong> or <strong>Damaged</strong>: Status will be set to <span class="status-badge" style="background-color: #fff3cd; color: #856404;">In Repair</span>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <a href="{{ url_for('assets.list_assets') }}" class="btn-cancel">Cancel</a>
+        <button type="submit" class="btn-submit">Return Asset</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function updateConditionDescription() {
+  const conditionSelect = document.getElementById('asset_condition');
+  const conditionDesc = document.getElementById('conditionDesc');
+  
+  if (conditionSelect.value === 'Good') {
+    conditionDesc.textContent = 'Asset is in good working condition';
+  } else if (conditionSelect.value === 'Repair') {
+    conditionDesc.textContent = 'Asset needs minor repairs but is functional';
+  } else if (conditionSelect.value === 'Damaged') {
+    conditionDesc.textContent = 'Asset has major damage and needs repair';
+  } else {
+    conditionDesc.textContent = '';
+  }
+}
+
+// Update on page load
+window.addEventListener('DOMContentLoaded', updateConditionDescription);
+</script>
+
+{% endblock %}

@@ -177,6 +177,11 @@
         💰 Billing Module
       </a>
 
+      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('assets.') %}active{% endif %}"
+         href="{{ url_for('assets.list_assets') }}">
+        📦 Assets
+      </a>
+
       {% if session.get('role') == 'admin' %}
       <hr>
         <a class="nav-link {% if request.endpoint in ['core.users', 'core.user_new', 'core.user_edit'] %}active{% endif %}"

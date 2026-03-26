@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+
+{% block title %}Global IT ERP - Asset History{% endblock %}
+
+{% block content %}
+
+<style>
+  .history-header {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    margin-bottom: 30px;
+  }
+
+  .history-header-title {
+    font-size: 28px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 20px;
+  }
+
+  .asset-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 20px;
+  }
+
+  .summary-item {
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 3px solid #0d6efd;
+  }
+
+  .summary-label {
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .summary-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .timeline-section {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    margin-bottom: 30px;
+  }
+
+  .section-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .timeline {
+    position: relative;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+  }
+
+  .timeline-item {
+    margin-bottom: 25px;
+    margin-left: 50px;
+    position: relative;
+  }
+
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -35px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #0d6efd;
+    border: 3px solid white;
+    box-shadow: 0 0 0 2px #e9ecef;
+  }
+
+  .timeline-item.repair::before {
+    background: #ff9800;
+  }
+
+  .timeline-item.return::before {
+    background: #28a745;
+  }
+
+  .timeline-item.created::before {
+    background: #0d6efd;
+  }
+
+  .timeline-item.allocated::before {
+    background: #17a2b8;
+  }
+
+  .timeline-date {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+
+  .timeline-action {
+    font-size: 14px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 4px;
+  }
+
+  .timeline-description {
+    font-size: 13px;
+    color: #666;
+    line-height: 1.5;
+  }
+
+  .timeline-meta {
+    font-size: 12px;
+    color: #999;
+    margin-top: 6px;
+  }
+
+  .no-data {
+    text-align: center;
+    padding: 40px 20px;
+    color: #999;
+  }
+
+  .allocation-card {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    border-left: 4px solid #17a2b8;
+    margin-bottom: 15px;
+  }
+
+  .allocation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 10px;
+  }
+
+  .allocation-name {
+    font-weight: 600;
+    color: #212529;
+    font-size: 15px;
+  }
+
+  .allocation-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #cfe2ff;
+    color: #084298;
+  }
+
+  .allocation-badge.returned {
+    background: #d1e7dd;
+    color: #0f5132;
+  }
+
+  .allocation-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    font-size: 13px;
+  }
+
+  .allocation-detail {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .allocation-detail-label {
+    color: #666;
+    font-size: 12px;
+    margin-bottom: 2px;
+  }
+
+  .allocation-detail-value {
+    color: #212529;
+    font-weight: 600;
+  }
+
+  .breadcrumb-nav {
+    margin-bottom: 20px;
+    font-size: 14px;
+  }
+
+  .breadcrumb-nav a {
+    color: #0d6efd;
+    text-decoration: none;
+  }
+
+  .breadcrumb-nav a:hover {
+    text-decoration: underline;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .badge-good {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .badge-repair {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  .badge-damaged {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+
+  .badge-active {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .badge-in-repair {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  @media (max-width: 768px) {
+    .asset-summary {
+      grid-template-columns: 1fr;
+    }
+
+    .allocation-details {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="breadcrumb-nav">
+  <a href="{{ url_for('assets.list_assets') }}">Assets</a> /
+  <span>Asset History</span>
+</div>
+
+<!-- Asset Summary Header -->
+<div class="history-header">
+  <div class="history-header-title">📋 Asset History & Audit Trail</div>
+  
+  <div class="asset-summary">
+    <div class="summary-item">
+      <div class="summary-label">Asset Code</div>
+      <div class="summary-value">{{ asset.asset_code }}</div>
+    </div>
+
+    <div class="summary-item">
+      <div class="summary-label">Asset Name</div>
+      <div class="summary-value">{{ asset.asset_name }}</div>
+    </div>
+
+    <div class="summary-item">
+      <div class="summary-label">Category</div>
+      <div class="summary-value">{{ asset.category }}</div>
+    </div>
+
+    <div class="summary-item">
+      <div class="summary-label">Status</div>
+      <div class="summary-value">
+        <span class="status-badge
+          {% if asset.status == 'Active' %}badge-active
+          {% elif asset.status == 'In Repair' %}badge-in-repair
+          {% else %}badge-damaged{% endif %}">
+          {{ asset.status }}
+        </span>
+      </div>
+    </div>
+
+    <div class="summary-item">
+      <div class="summary-label">Condition</div>
+      <div class="summary-value">
+        <span class="status-badge
+          {% if asset.condition == 'Good' %}badge-good
+          {% elif asset.condition == 'Repair' %}badge-repair
+          {% else %}badge-damaged{% endif %}">
+          {{ asset.condition }}
+        </span>
+      </div>
+    </div>
+
+    <div class="summary-item">
+      <div class="summary-label">Purchase Cost</div>
+      <div class="summary-value">₹ {{ "%.2f"|format(asset.purchase_cost or 0) }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Allocations Timeline -->
+{% if allocations %}
+<div class="timeline-section">
+  <div class="section-title">
+    <span>👤 Usage History</span>
+    <span style="font-size: 14px; font-weight: 400; color: #666; margin-left: auto;">{{ allocations|length }} allocation(s)</span>
+  </div>
+
+  {% for allocation in allocations %}
+  <div class="allocation-card">
+    <div class="allocation-header">
+      <div class="allocation-name">{{ allocation.assigned_to }}</div>
+      <span class="allocation-badge {% if allocation.status == 'Returned' %}returned{% endif %}">
+        {{ allocation.status }}
+      </span>
+    </div>
+
+    <div class="allocation-details">
+      <div class="allocation-detail">
+        <div class="allocation-detail-label">Role</div>
+        <div class="allocation-detail-value">
+          {% if allocation.assigned_role == 'staff' %}
+            Staff Member
+          {% else %}
+            Student/Location
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="allocation-detail">
+        <div class="allocation-detail-label">Assigned Date</div>
+        <div class="allocation-detail-value">{{ allocation.assigned_date }}</div>
+      </div>
+
+      {% if allocation.return_date %}
+      <div class="allocation-detail">
+        <div class="allocation-detail-label">Return Date</div>
+        <div class="allocation-detail-value">{{ allocation.return_date }}</div>
+      </div>
+
+      <div class="allocation-detail">
+        <div class="allocation-detail-label">Duration</div>
+        <div class="allocation-detail-value">
+          {% set assigned = allocation.assigned_date.split(' ')[0] if ' ' in allocation.assigned_date else allocation.assigned_date %}
+          {% set returned = allocation.return_date.split(' ')[0] if allocation.return_date and ' ' in allocation.return_date else allocation.return_date %}
+          {{ days_between(assigned, returned) if allocation.return_date else '—' }} days
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="timeline-section">
+  <div class="section-title">👤 Usage History</div>
+  <div class="no-data">
+    <p>No allocation history for this asset</p>
+  </div>
+</div>
+{% endif %}
+
+<!-- Activity Timeline -->
+{% if logs %}
+<div class="timeline-section">
+  <div class="section-title">
+    <span>📝 Activity Timeline</span>
+    <span style="font-size: 14px; font-weight: 400; color: #666; margin-left: auto;">{{ logs|length }} event(s)</span>
+  </div>
+
+  <div class="timeline">
+    {% for log in logs %}
+    <div class="timeline-item {% if 'repair' in log.action.lower() %}repair{% elif 'return' in log.action.lower() %}return{% elif 'created' in log.action.lower() %}created{% elif 'assigned' in log.action.lower() %}allocated{% endif %}">
+      <div class="timeline-date">{{ log.created_at }}</div>
+      <div class="timeline-action">{{ log.action }}</div>
+      <div class="timeline-description">{{ log.description }}</div>
+      {% if log.done_by_name %}
+      <div class="timeline-meta">By: {{ log.done_by_name }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="timeline-section">
+  <div class="section-title">📝 Activity Timeline</div>
+  <div class="no-data">
+    <p>No activity logs for this asset</p>
+  </div>
+</div>
+{% endif %}
+
+<script>
+function days_between(date1, date2) {
+  try {
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    const diff = Math.floor((d2 - d1) / (1000 * 60 * 60 * 24));
+    return diff >= 0 ? diff : 0;
+  } catch {
+    return '—';
+  }
+}
+
+// Make Jinja2 days_between available
+Jinja2.globals.days_between = days_between;
+</script>
+
+{% endblock %}
