@@ -387,7 +387,8 @@ def edit_asset(asset_id):
         "assets/edit.html",
         asset=asset,
         categories=ASSET_CATEGORIES,
-        branches=branches
+        branches=branches,
+        form=request.form
     )
 
 
