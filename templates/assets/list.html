@@ -315,6 +315,7 @@
           <td>{{ asset.branch_name or '—' }}</td>
 
           <td class="action-links">
+            <a href="{{ url_for('assets.edit_asset', asset_id=asset.id) }}" style="color: #ff9800;">Edit</a>
             <a href="{{ url_for('assets.asset_history', asset_id=asset.id) }}">View</a>
             {% if asset.is_allocated %}
               <a href="{{ url_for('assets.return_asset', asset_id=asset.id) }}" style="color: #28a745;">Return</a>

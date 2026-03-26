@@ -105,6 +105,12 @@ ASSET_CATEGORIES = [
     "Network Equipment",
     "Server",
     "Software License",
+    "Fan",
+    "UPS",
+    "Air Conditioner",
+    "Mobile Device",
+    "CCTV",
+    "Electrical Device",
     "Other"
 ]
 
@@ -242,6 +248,149 @@ def add_asset():
     )
 
 
+@assets_bp.route("/<int:asset_id>/edit", methods=["GET", "POST"])
+@login_required
+@admin_required
+def edit_asset(asset_id):
+    """Edit asset details"""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Get asset details
+    asset = cur.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
+    if not asset:
+        conn.close()
+        flash("Asset not found", "danger")
+        return redirect(url_for("assets.list_assets"))
+
+    if request.method == "POST":
+        asset_name = request.form.get("asset_name", "").strip()
+        category = request.form.get("category", "").strip()
+        brand = request.form.get("brand", "").strip()
+        purchase_cost = request.form.get("purchase_cost", "0").strip()
+        purchase_date = request.form.get("purchase_date", "").strip()
+        branch_id = request.form.get("branch_id", "").strip()
+
+        # Validation
+        errors = []
+        if not asset_name:
+            errors.append("Asset Name is required")
+        if not category:
+            errors.append("Category is required")
+        if not purchase_date:
+            errors.append("Purchase Date is required")
+        if not branch_id:
+            errors.append("Branch is required")
+
+        if errors:
+            branches = cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+            return render_template(
+                "assets/edit.html",
+                asset=asset,
+                categories=ASSET_CATEGORIES,
+                branches=branches,
+                errors=errors,
+                form=request.form
+            )
+
+        try:
+            purchase_cost = float(purchase_cost) if purchase_cost else 0
+        except ValueError:
+            purchase_cost = 0
+
+        now = datetime.now().isoformat(timespec="seconds")
+
+        try:
+            # Track what changed for logging
+            changes = []
+            if asset["asset_name"] != asset_name:
+                changes.append(f"Name: {asset['asset_name']} → {asset_name}")
+            if asset["category"] != category:
+                changes.append(f"Category: {asset['category']} → {category}")
+            if asset["brand"] != brand:
+                changes.append(f"Brand: {asset['brand']} → {brand}")
+            if asset["purchase_cost"] != purchase_cost:
+                changes.append(f"Cost: {asset['purchase_cost']} → {purchase_cost}")
+            if asset["purchase_date"] != purchase_date:
+                changes.append(f"Date: {asset['purchase_date']} → {purchase_date}")
+
+            cur.execute("""
+                UPDATE assets
+                SET asset_name = ?, category = ?, brand = ?, 
+                    purchase_date = ?, purchase_cost = ?, branch_id = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """, (
+                asset_name,
+                category,
+                brand,
+                purchase_date,
+                purchase_cost,
+                branch_id,
+                now,
+                asset_id
+            ))
+
+            # Create asset log entry
+            change_description = " | ".join(changes) if changes else "Asset details updated"
+            cur.execute("""
+                INSERT INTO asset_logs (
+                    asset_id,
+                    action,
+                    description,
+                    done_by,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                asset_id,
+                "Updated",
+                change_description,
+                session.get("user_id"),
+                now
+            ))
+
+            conn.commit()
+            conn.close()
+
+            # Log activity (after committing the transaction)
+            log_activity(
+                user_id=session.get("user_id"),
+                branch_id=int(branch_id),
+                action_type="update",
+                module_name="assets",
+                record_id=asset_id,
+                description=f"Updated asset {asset['asset_code']}: {change_description if changes else 'Details updated'}"
+            )
+
+            flash(f"Asset {asset['asset_code']} updated successfully!", "success")
+            return redirect(url_for("assets.list_assets"))
+
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            flash(f"Error updating asset: {str(e)}", "danger")
+            branches = cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+            return render_template(
+                "assets/edit.html",
+                asset=asset,
+                categories=ASSET_CATEGORIES,
+                branches=branches,
+                form=request.form
+            )
+
+    # GET request - show form
+    branches = cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+    conn.close()
+
+    return render_template(
+        "assets/edit.html",
+        asset=asset,
+        categories=ASSET_CATEGORIES,
+        branches=branches
+    )
+
+
 @assets_bp.route("/<int:asset_id>/allocate", methods=["GET", "POST"])
 @login_required
 @admin_required
@@ -258,6 +407,7 @@ def allocate_asset(asset_id):
             assets.asset_name,
             assets.category,
             assets.status,
+            assets.branch_id,
             branches.branch_name
         FROM assets
         LEFT JOIN branches ON assets.branch_id = branches.id
@@ -375,7 +525,7 @@ def allocate_asset(asset_id):
             # Log activity (after committing the transaction)
             log_activity(
                 user_id=session.get("user_id"),
-                branch_id=asset["id"],
+                branch_id=asset["branch_id"],
                 action_type="update",
                 module_name="assets",
                 record_id=asset_id,
@@ -422,6 +572,7 @@ def return_asset(asset_id):
             assets.category,
             assets.status,
             assets.condition,
+            assets.branch_id,
             branches.branch_name
         FROM assets
         LEFT JOIN branches ON assets.branch_id = branches.id
@@ -536,7 +687,7 @@ def return_asset(asset_id):
             # Log activity (after committing the transaction)
             log_activity(
                 user_id=session.get("user_id"),
-                branch_id=asset.get("id"),
+                branch_id=asset.get("branch_id"),
                 action_type="update",
                 module_name="assets",
                 record_id=asset_id,
