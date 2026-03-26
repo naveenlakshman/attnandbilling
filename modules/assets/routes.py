@@ -369,7 +369,10 @@ def allocate_asset(asset_id):
                 now
             ))
 
-            # Log activity
+            conn.commit()
+            conn.close()
+
+            # Log activity (after committing the transaction)
             log_activity(
                 user_id=session.get("user_id"),
                 branch_id=asset["id"],
@@ -378,9 +381,6 @@ def allocate_asset(asset_id):
                 record_id=asset_id,
                 description=f"Allocated {asset['asset_code']} to {assigned_to}"
             )
-
-            conn.commit()
-            conn.close()
 
             flash(f"Asset {asset['asset_code']} allocated to {assigned_to}!", "success")
             return redirect(url_for("assets.list_assets"))
@@ -530,7 +530,10 @@ def return_asset(asset_id):
                     now
                 ))
 
-            # Log activity
+            conn.commit()
+            conn.close()
+
+            # Log activity (after committing the transaction)
             log_activity(
                 user_id=session.get("user_id"),
                 branch_id=asset.get("id"),
@@ -539,9 +542,6 @@ def return_asset(asset_id):
                 record_id=asset_id,
                 description=f"Returned asset {asset['asset_code']} from {current_allocation['assigned_to']} - Condition: {asset_condition}"
             )
-
-            conn.commit()
-            conn.close()
 
             flash(f"Asset {asset['asset_code']} returned successfully! Status updated to {new_status}.", "success")
             return redirect(url_for("assets.list_assets"))
