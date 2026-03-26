@@ -370,7 +370,10 @@ def edit_asset(asset_id):
             conn.rollback()
             conn.close()
             flash(f"Error updating asset: {str(e)}", "danger")
-            branches = cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+            # Get branches from fresh connection for re-rendering form
+            conn_retry = get_conn()
+            branches = conn_retry.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+            conn_retry.close()
             return render_template(
                 "assets/edit.html",
                 asset=asset,
@@ -688,7 +691,7 @@ def return_asset(asset_id):
             # Log activity (after committing the transaction)
             log_activity(
                 user_id=session.get("user_id"),
-                branch_id=asset.get("branch_id"),
+                branch_id=asset["branch_id"],
                 action_type="update",
                 module_name="assets",
                 record_id=asset_id,
@@ -699,13 +702,28 @@ def return_asset(asset_id):
             return redirect(url_for("assets.list_assets"))
 
         except Exception as e:
-            conn.rollback()
-            conn.close()
+            if conn:
+                try:
+                    conn.rollback()
+                except:
+                    pass
+                try:
+                    conn.close()
+                except:
+                    pass
             flash(f"Error returning asset: {str(e)}", "danger")
+            # Get fresh connection if needed
+            conn_retry = get_conn()
+            cur_retry = conn_retry.cursor()
+            cur_retry.execute("SELECT * FROM assets WHERE id = ?", (asset_id,))
+            asset_retry = cur_retry.fetchone()
+            cur_retry.execute("SELECT * FROM asset_allocation WHERE asset_id = ? AND status = 'Allocated' ORDER BY assigned_date DESC LIMIT 1", (asset_id,))
+            current_allocation_retry = cur_retry.fetchone()
+            conn_retry.close()
             return render_template(
                 "assets/return.html",
-                asset=asset,
-                current_allocation=current_allocation,
+                asset=asset_retry or asset,
+                current_allocation=current_allocation_retry or current_allocation,
                 form=request.form
             )
 

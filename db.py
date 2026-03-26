@@ -364,7 +364,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             asset_id INTEGER NOT NULL,
             action TEXT NOT NULL
-                CHECK(action IN ('Created', 'Assigned', 'Returned', 'Repaired', 'Disposed')),
+                CHECK(action IN ('Created', 'Assigned', 'Returned', 'Repaired', 'Disposed', 'Updated')),
             description TEXT,
             done_by INTEGER,
             created_at TEXT NOT NULL,
@@ -395,6 +395,41 @@ def init_db():
 
     add_column_if_not_exists(cur, "receipts", "payment_mode", "TEXT DEFAULT 'cash'")
     add_column_if_not_exists(cur, "receipts", "notes", "TEXT")
+
+    # ---------- MIGRATE asset_logs CONSTRAINT ----------
+    # Update asset_logs table to allow 'Updated' action
+    try:
+        cur.execute("PRAGMA table_info(asset_logs)")
+        if cur.fetchone():
+            # Create backupof asset_logs data
+            cur.execute("SELECT * FROM asset_logs")
+            backup_data = cur.fetchall()
+            
+            # Drop old table and create new one with updated constraint
+            cur.execute("DROP TABLE IF EXISTS asset_logs")
+            cur.execute("""
+                CREATE TABLE asset_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    asset_id INTEGER NOT NULL,
+                    action TEXT NOT NULL
+                        CHECK(action IN ('Created', 'Assigned', 'Returned', 'Repaired', 'Disposed', 'Updated')),
+                    description TEXT,
+                    done_by INTEGER,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+                    FOREIGN KEY (done_by) REFERENCES users(id)
+                )
+            """)
+            
+            # Restore data if exists
+            if backup_data:
+                for row in backup_data:
+                    cur.execute("""
+                        INSERT INTO asset_logs (id, asset_id, action, description, done_by, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (row["id"], row["asset_id"], row["action"], row["description"], row["done_by"], row["created_at"]))
+    except:
+        pass
 
     # ---------- DEFAULT BRANCHES ----------
     cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HO",))
