@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, session, redirect, url_for, flash, Response
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import calendar
 import uuid
 from db import get_conn, log_activity
@@ -1055,6 +1055,9 @@ def invoices():
     cur = conn.cursor()
 
     today = datetime.now().date().isoformat()
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    month_year_filter = f"{current_year}-{current_month:02d}"
 
     # TODAY STATS
     cur.execute("""
@@ -1070,9 +1073,27 @@ def invoices():
                 WHERE receipts.invoice_id = invoices.id
             ), 0)) as outstanding_amount
         FROM invoices
-        WHERE DATE(invoices.created_at) = ?
+        WHERE DATE(invoices.invoice_date) = ?
     """, (today,))
     today_stats = cur.fetchone()
+
+    # MONTH STATS - Using invoice_date instead of created_at
+    cur.execute("""
+        SELECT 
+            COUNT(*) as total_invoices,
+            SUM(invoices.total_amount) as total_amount,
+            SUM(CASE WHEN invoices.status = 'paid' THEN 1 ELSE 0 END) as paid_count,
+            SUM(CASE WHEN invoices.status = 'partially_paid' THEN 1 ELSE 0 END) as partially_paid_count,
+            SUM(CASE WHEN invoices.status = 'unpaid' THEN 1 ELSE 0 END) as unpaid_count,
+            SUM(invoices.total_amount - IFNULL((
+                SELECT SUM(receipts.amount_received) 
+                FROM receipts 
+                WHERE receipts.invoice_id = invoices.id
+            ), 0)) as outstanding_amount
+        FROM invoices
+        WHERE strftime('%Y-%m', invoices.invoice_date) = ?
+    """, (f"{current_year}-{current_month:02d}",))
+    month_stats = cur.fetchone()
 
     # OVERALL STATS
     cur.execute("""
@@ -1139,6 +1160,7 @@ def invoices():
         invoices=invoices,
         search=search,
         today_stats=today_stats,
+        month_stats=month_stats,
         overall_stats=overall_stats
     )
 

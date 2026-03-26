@@ -137,36 +137,93 @@
   <h3 style="margin-top: 0; margin-bottom: 15px; color: #333;">📊 Invoice Dashboard</h3>
 
   <div style="margin-bottom: 20px;">
-    <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">Today</h4>
-    <div class="invoice-stats-grid">
-      <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
-        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Invoices</div>
-        <div style="font-size: 24px; font-weight: bold;">{{ today_stats.total_invoices or 0 }}</div>
-      </div>
+    <!-- Toggle Buttons -->
+    <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+      <button 
+        id="btnToday" 
+        onclick="toggleStatsView('today')" 
+        style="padding: 8px 16px; border: 2px solid #3498db; background-color: #3498db; color: white; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;"
+      >
+        📅 Today
+      </button>
+      <button 
+        id="btnMonth" 
+        onclick="toggleStatsView('month')" 
+        style="padding: 8px 16px; border: 2px solid #95a5a6; background-color: white; color: #333; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;"
+      >
+        📆 This Month
+      </button>
+    </div>
 
-      <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
-        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
-        <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.total_amount or 0) }}</div>
-      </div>
+    <!-- Today Stats -->
+    <div id="todayStats" style="display: block;">
+      <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">Today</h4>
+      <div class="invoice-stats-grid">
+        <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Invoices</div>
+          <div style="font-size: 24px; font-weight: bold;">{{ today_stats.total_invoices or 0 }}</div>
+        </div>
 
-      <div style="background: linear-gradient(135deg, #f39c12 0%, #d68910 100%); color: white; padding: 15px; border-radius: 6px;">
-        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Paid</div>
-        <div style="font-size: 20px; font-weight: bold;">{{ today_stats.paid_count or 0 }}</div>
-      </div>
+        <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
+          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.total_amount or 0) }}</div>
+        </div>
 
-      <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 15px; border-radius: 6px;">
-        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Partially Paid</div>
-        <div style="font-size: 20px; font-weight: bold;">{{ today_stats.partially_paid_count or 0 }}</div>
-      </div>
+        <div style="background: linear-gradient(135deg, #f39c12 0%, #d68910 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Paid</div>
+          <div style="font-size: 20px; font-weight: bold;">{{ today_stats.paid_count or 0 }}</div>
+        </div>
 
-      <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
-        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Unpaid</div>
-        <div style="font-size: 20px; font-weight: bold;">{{ today_stats.unpaid_count or 0 }}</div>
-      </div>
+        <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Partially Paid</div>
+          <div style="font-size: 20px; font-weight: bold;">{{ today_stats.partially_paid_count or 0 }}</div>
+        </div>
 
-      <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
-        <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Outstanding</div>
-        <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.outstanding_amount or 0) }}</div>
+        <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Unpaid</div>
+          <div style="font-size: 20px; font-weight: bold;">{{ today_stats.unpaid_count or 0 }}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Outstanding</div>
+          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.outstanding_amount or 0) }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Month Stats -->
+    <div id="monthStats" style="display: none;">
+      <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">This Month</h4>
+      <div class="invoice-stats-grid">
+        <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Invoices</div>
+          <div style="font-size: 24px; font-weight: bold;">{{ month_stats.total_invoices or 0 }}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
+          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(month_stats.total_amount or 0) }}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #f39c12 0%, #d68910 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Paid</div>
+          <div style="font-size: 20px; font-weight: bold;">{{ month_stats.paid_count or 0 }}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Partially Paid</div>
+          <div style="font-size: 20px; font-weight: bold;">{{ month_stats.partially_paid_count or 0 }}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Unpaid</div>
+          <div style="font-size: 20px; font-weight: bold;">{{ month_stats.unpaid_count or 0 }}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Outstanding</div>
+          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(month_stats.outstanding_amount or 0) }}</div>
+        </div>
       </div>
     </div>
   </div>
@@ -293,5 +350,42 @@
     </div>
   {% endif %}
 </div>
+
+<script>
+function toggleStatsView(view) {
+  const todayStats = document.getElementById('todayStats');
+  const monthStats = document.getElementById('monthStats');
+  const btnToday = document.getElementById('btnToday');
+  const btnMonth = document.getElementById('btnMonth');
+
+  if (view === 'today') {
+    // Show today stats
+    todayStats.style.display = 'block';
+    monthStats.style.display = 'none';
+    
+    // Update button styles
+    btnToday.style.backgroundColor = '#3498db';
+    btnToday.style.borderColor = '#3498db';
+    btnToday.style.color = 'white';
+    
+    btnMonth.style.backgroundColor = 'white';
+    btnMonth.style.borderColor = '#95a5a6';
+    btnMonth.style.color = '#333';
+  } else if (view === 'month') {
+    // Show month stats
+    todayStats.style.display = 'none';
+    monthStats.style.display = 'block';
+    
+    // Update button styles
+    btnToday.style.backgroundColor = 'white';
+    btnToday.style.borderColor = '#95a5a6';
+    btnToday.style.color = '#333';
+    
+    btnMonth.style.backgroundColor = '#3498db';
+    btnMonth.style.borderColor = '#3498db';
+    btnMonth.style.color = 'white';
+  }
+}
+</script>
 
 {% endblock %}
