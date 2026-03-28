@@ -2324,6 +2324,8 @@ def receipts():
             IFNULL(SUM(amount_received), 0) AS total_amount,
             SUM(CASE WHEN payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
             SUM(CASE WHEN payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
+            IFNULL(SUM(CASE WHEN payment_mode = 'cash' THEN amount_received ELSE 0 END), 0) AS cash_amount,
+            IFNULL(SUM(CASE WHEN payment_mode = 'upi' THEN amount_received ELSE 0 END), 0) AS upi_amount,
             IFNULL(AVG(amount_received), 0) AS avg_amount
         FROM receipts
         WHERE parse_date(receipt_date) = ?
@@ -2337,6 +2339,8 @@ def receipts():
             IFNULL(SUM(amount_received), 0) AS total_amount,
             SUM(CASE WHEN payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
             SUM(CASE WHEN payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
+            IFNULL(SUM(CASE WHEN payment_mode = 'cash' THEN amount_received ELSE 0 END), 0) AS cash_amount,
+            IFNULL(SUM(CASE WHEN payment_mode = 'upi' THEN amount_received ELSE 0 END), 0) AS upi_amount,
             IFNULL(AVG(amount_received), 0) AS avg_amount
         FROM receipts
         WHERE parse_date(receipt_date) >= ? AND parse_date(receipt_date) <= ?

@@ -166,9 +166,9 @@
 
         <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
           <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Payment Methods</div>
-          <div style="font-size: 14px; font-weight: bold;">
-            <div>💵 Cash: {{ today_stats.cash_count or 0 }}</div>
-            <div>📱 UPI: {{ today_stats.upi_count or 0 }}</div>
+          <div style="font-size: 12px; font-weight: bold; table-layout: fixed;">
+            <div style="margin-bottom: 4px;">💵 Cash: {{ today_stats.cash_count or 0 }} - ₹ {{ "%.2f"|format(today_stats.cash_amount or 0) }}</div>
+            <div>📱 UPI: {{ today_stats.upi_count or 0 }} - ₹ {{ "%.2f"|format(today_stats.upi_amount or 0) }}</div>
           </div>
         </div>
 
@@ -195,9 +195,9 @@
 
         <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
           <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Payment Methods</div>
-          <div style="font-size: 14px; font-weight: bold;">
-            <div>💵 Cash: {{ month_stats.cash_count or 0 }}</div>
-            <div>📱 UPI: {{ month_stats.upi_count or 0 }}</div>
+          <div style="font-size: 12px; font-weight: bold; table-layout: fixed;">
+            <div style="margin-bottom: 4px;">💵 Cash: {{ month_stats.cash_count or 0 }} - ₹ {{ "%.2f"|format(month_stats.cash_amount or 0) }}</div>
+            <div>📱 UPI: {{ month_stats.upi_count or 0 }} - ₹ {{ "%.2f"|format(month_stats.upi_amount or 0) }}</div>
           </div>
         </div>
 
