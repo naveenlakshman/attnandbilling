@@ -250,31 +250,31 @@
         <tr>
           <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
 
-          <td data-sort-value="{{ receipt.receipt_no }}">
+          <td data-sort-key="receipt_no" data-sort-value="{{ receipt.receipt_no }}">
             <a href="{{ url_for('billing.receipt_view', receipt_id=receipt.id) }}" style="text-decoration: none; font-weight: 600;">
               {{ receipt.receipt_no }}
             </a>
           </td>
 
-          <td data-sort-value="{{ receipt.invoice_no }}">
+          <td data-sort-key="invoice_no" data-sort-value="{{ receipt.invoice_no }}">
             <a href="{{ url_for('billing.invoice_view', invoice_id=receipt.invoice_id) }}" style="text-decoration: none;">
               {{ receipt.invoice_no }}
             </a>
           </td>
 
-          <td data-sort-value="{{ receipt.student_code }} {{ receipt.full_name }}">
+          <td data-sort-key="student" data-sort-value="{{ receipt.student_code }} {{ receipt.full_name }}">
             {{ receipt.student_code or "" }}
             {% if receipt.student_code %} - {% endif %}
             {{ receipt.full_name }}
           </td>
 
-          <td data-sort-value="{{ receipt.receipt_date }}">{{ receipt.receipt_date }}</td>
+          <td data-sort-key="date" data-sort-value="{{ receipt.receipt_date }}">{{ receipt.receipt_date }}</td>
 
-          <td class="amount-green" data-sort-value="{{ receipt.amount_received or 0 }}">
+          <td class="amount-green" data-sort-key="amount" data-sort-value="{{ receipt.amount_received or 0 }}">
             ₹ {{ "%.2f"|format(receipt.amount_received or 0) }}
           </td>
 
-          <td data-sort-value="{{ receipt.payment_mode or '' }}">
+          <td data-sort-key="mode" data-sort-value="{{ receipt.payment_mode or '' }}">
             {% set mode_labels = {
               'cash': 'Cash',
               'upi': 'UPI',
@@ -286,7 +286,7 @@
 
           <td>{{ receipt.notes or '-' }}</td>
 
-          <td data-sort-value="{{ receipt.created_by_name or 'System' }}">{{ receipt.created_by_name or 'System' }}</td>
+          <td data-sort-key="created_by" data-sort-value="{{ receipt.created_by_name or 'System' }}">{{ receipt.created_by_name or 'System' }}</td>
 
           <td>
             {% if session.get("role") == "admin" %}
@@ -371,24 +371,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
       currentSort.column = sortKey;
 
-      // Sort rows
+      // Sort rows using the data-sort-key attribute on cells
       rows.sort((a, b) => {
-        let aValue = a.querySelector(`td[data-sort-value]`);
-        let bValue = b.querySelector(`td[data-sort-value]`);
+        // Find cells with matching data-sort-key
+        const aCell = a.querySelector(`td[data-sort-key="${sortKey}"]`);
+        const bCell = b.querySelector(`td[data-sort-key="${sortKey}"]`);
 
-        // Find the correct td for this column
-        const columnIndex = Array.from(headers).findIndex(h => h.getAttribute('data-sort-key') === sortKey);
-        aValue = a.querySelectorAll('td')[columnIndex];
-        bValue = b.querySelectorAll('td')[columnIndex];
+        if (!aCell || !bCell) return 0;
 
-        if (!aValue || !bValue) return 0;
+        let aData = aCell.getAttribute('data-sort-value') || aCell.textContent;
+        let bData = bCell.getAttribute('data-sort-value') || bCell.textContent;
 
-        let aData = aValue.getAttribute('data-sort-value') || aValue.textContent;
-        let bData = bValue.getAttribute('data-sort-value') || bValue.textContent;
+        // Trim and clean
+        aData = aData.toString().trim();
+        bData = bData.toString().trim();
 
-        // Remove currency symbols and trim
-        aData = aData.toString().replace(/[₹ ,]/g, '').trim();
-        bData = bData.toString().replace(/[₹ ,]/g, '').trim();
+        // Handle date column - convert to numeric timestamp for proper comparison
+        if (sortKey === 'date') {
+          const aDate = new Date(aData).getTime();
+          const bDate = new Date(bData).getTime();
+          if (!isNaN(aDate) && !isNaN(bDate)) {
+            return currentSort.direction === 'asc' ? aDate - bDate : bDate - aDate;
+          }
+        }
+
+        // Remove currency symbols for amount sorting
+        if (sortKey === 'amount') {
+          aData = aData.replace(/[₹ ,]/g, '');
+          bData = bData.replace(/[₹ ,]/g, '');
+        }
 
         // Try to parse as numbers
         const aNum = parseFloat(aData);
@@ -398,19 +409,12 @@ document.addEventListener('DOMContentLoaded', function() {
           return currentSort.direction === 'asc' ? aNum - bNum : bNum - aNum;
         }
 
-        // Parse as dates if format looks like YYYY-MM-DD
-        if (/^\d{4}-\d{2}-\d{2}$/.test(aData) && /^\d{4}-\d{2}-\d{2}$/.test(bData)) {
-          const aDate = new Date(aData).getTime();
-          const bDate = new Date(bData).getTime();
-          return currentSort.direction === 'asc' ? aDate - bDate : bDate - aDate;
-        }
-
         // Default string comparison
         const comparison = aData.localeCompare(bData);
         return currentSort.direction === 'asc' ? comparison : -comparison;
       });
 
-      // Re-append sorted rows
+      // Re-append sorted rows to update DOM
       rows.forEach(row => tbody.appendChild(row));
     });
   });

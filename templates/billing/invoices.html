@@ -331,31 +331,31 @@
         <tr>
           <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
 
-          <td data-sort-value="{{ inv.invoice_no }}">
+          <td data-sort-key="invoice_no" data-sort-value="{{ inv.invoice_no }}">
             <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="text-decoration: none; font-weight: 600; color: #0066cc;">
               {{ inv.invoice_no }}
             </a>
           </td>
 
-          <td data-sort-value="{{ inv.student_code }} {{ inv.full_name }}">
+          <td data-sort-key="student" data-sort-value="{{ inv.student_code }} {{ inv.full_name }}">
             <a href="{{ url_for('billing.student_profile', student_id=inv.student_id) }}" style="text-decoration: none;">
               {{ inv.student_code }} - {{ inv.full_name }}
             </a>
           </td>
 
-          <td data-sort-value="{{ inv.invoice_date }}">{{ inv.invoice_date }}</td>
+          <td data-sort-key="date" data-sort-value="{{ inv.invoice_date }}">{{ inv.invoice_date }}</td>
 
-          <td data-sort-value="{{ inv.total_amount or 0 }}">₹ {{ "%.2f"|format(inv.total_amount or 0) }}</td>
+          <td data-sort-key="total" data-sort-value="{{ inv.total_amount or 0 }}">₹ {{ "%.2f"|format(inv.total_amount or 0) }}</td>
 
-          <td style="color: green;" data-sort-value="{{ inv.paid_amount or 0 }}">
+          <td style="color: green;" data-sort-key="paid" data-sort-value="{{ inv.paid_amount or 0 }}">
             ₹ {{ "%.2f"|format(inv.paid_amount or 0) }}
           </td>
 
-          <td style="color: #c0392b;" data-sort-value="{{ balance }}">
+          <td style="color: #c0392b;" data-sort-key="balance" data-sort-value="{{ balance }}">
             ₹ {{ "%.2f"|format(balance) }}
           </td>
 
-          <td data-sort-value="{{ inv.status or '' }}">
+          <td data-sort-key="status" data-sort-value="{{ inv.status or '' }}">
             <span class="status-badge
               {% if inv.status == 'paid' %}status-paid
               {% elif inv.status == 'partially_paid' %}status-partially-paid
@@ -446,24 +446,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
       currentSort.column = sortKey;
 
-      // Sort rows
+      // Sort rows using the data-sort-key attribute on cells
       rows.sort((a, b) => {
-        let aValue = a.querySelector(`td[data-sort-value]`);
-        let bValue = b.querySelector(`td[data-sort-value]`);
+        // Find cells with matching data-sort-key
+        const aCell = a.querySelector(`td[data-sort-key="${sortKey}"]`);
+        const bCell = b.querySelector(`td[data-sort-key="${sortKey}"]`);
 
-        // Find the correct td for this column
-        const columnIndex = Array.from(headers).findIndex(h => h.getAttribute('data-sort-key') === sortKey);
-        aValue = a.querySelectorAll('td')[columnIndex];
-        bValue = b.querySelectorAll('td')[columnIndex];
+        if (!aCell || !bCell) return 0;
 
-        if (!aValue || !bValue) return 0;
+        let aData = aCell.getAttribute('data-sort-value') || aCell.textContent;
+        let bData = bCell.getAttribute('data-sort-value') || bCell.textContent;
 
-        let aData = aValue.getAttribute('data-sort-value') || aValue.textContent;
-        let bData = bValue.getAttribute('data-sort-value') || bValue.textContent;
+        // Trim and clean
+        aData = aData.toString().trim();
+        bData = bData.toString().trim();
 
-        // Remove currency symbols and trim
-        aData = aData.toString().replace(/[₹ ,]/g, '').trim();
-        bData = bData.toString().replace(/[₹ ,]/g, '').trim();
+        // Handle date column - convert to numeric timestamp for proper comparison
+        if (sortKey === 'date') {
+          const aDate = new Date(aData).getTime();
+          const bDate = new Date(bData).getTime();
+          if (!isNaN(aDate) && !isNaN(bDate)) {
+            return currentSort.direction === 'asc' ? aDate - bDate : bDate - aDate;
+          }
+        }
+
+        // Remove currency symbols for amount/paid/balance sorting
+        if (sortKey === 'total' || sortKey === 'paid' || sortKey === 'balance') {
+          aData = aData.replace(/[₹ ,]/g, '');
+          bData = bData.replace(/[₹ ,]/g, '');
+        }
 
         // Try to parse as numbers
         const aNum = parseFloat(aData);
@@ -471,13 +482,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (!isNaN(aNum) && !isNaN(bNum)) {
           return currentSort.direction === 'asc' ? aNum - bNum : bNum - aNum;
-        }
-
-        // Parse as dates if format looks like YYYY-MM-DD
-        if (/^\d{4}-\d{2}-\d{2}$/.test(aData) && /^\d{4}-\d{2}-\d{2}$/.test(bData)) {
-          const aDate = new Date(aData).getTime();
-          const bDate = new Date(bData).getTime();
-          return currentSort.direction === 'asc' ? aDate - bDate : bDate - aDate;
         }
 
         // Default string comparison
