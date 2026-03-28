@@ -41,6 +41,24 @@
     </div>
   </div>
 
+  <!-- Bad Debt Card (Admin Only) -->
+  {% if session.get('role') == 'admin' %}
+  <div class="row g-4 mb-4">
+    <div class="col-md-6">
+      <div class="card h-100" style="border-left: 4px solid #dc3545;">
+        <div class="card-body">
+          <h5 class="card-title">Bad Debt Write-offs</h5>
+          <p class="card-text">
+            <strong style="font-size: 24px; color: #dc3545;">₹ {{ "%.2f"|format(bad_debt_stats['total_written_off'] or 0) }}</strong>
+          </p>
+          <p class="text-muted">{{ bad_debt_stats['total_writeoffs'] }} write-off(s)</p>
+          <a href="{{ url_for('baddebt.dashboard') }}" class="btn btn-sm btn-danger">Manage Write-offs</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Past Due Details Table -->
   {% if past_dues %}
   <div class="card mb-4">

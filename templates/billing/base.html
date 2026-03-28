@@ -123,6 +123,14 @@
         📋 Activity Logs
       </a>
 
+      {% if session.get('role') == 'admin' %}
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'baddebt.dashboard' else '' }}"
+        href="{{ url_for('baddebt.dashboard') }}">
+        ⚠️ Bad Debt Write-offs
+      </a>
+      {% endif %}
+
       <hr>
       <a class="nav-link text-danger" href="{{ url_for('core.logout') }}">
         🚪 Logout

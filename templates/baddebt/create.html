@@ -1,0 +1,354 @@
+{% extends "baddebt/base.html" %}
+
+{% block title %}Create Bad Debt Write-off - Global IT ERP{% endblock %}
+{% block page_title %}Create New Bad Debt Write-off{% endblock %}
+
+{% block extra_css %}
+<style>
+  .form-wizard-step {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 10px;
+    margin-bottom: 1.5rem;
+  }
+
+  .form-wizard-step h5 {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #0d6efd;
+    color: #0d6efd;
+  }
+
+  .invoice-details {
+    background: #e7f3ff;
+    padding: 1.5rem;
+    border-radius: 10px;
+    border-left: 4px solid #0d6efd;
+    margin: 1.5rem 0;
+  }
+
+  .invoice-details .row > div {
+    margin-bottom: 1rem;
+  }
+
+  .invoice-details label {
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .invoice-details p {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .balance-display {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    padding: 1.5rem;
+    border-radius: 10px;
+    margin: 1.5rem 0;
+    text-align: center;
+  }
+
+  .balance-display h6 {
+    color: #856404;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .balance-display .amount {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #856404;
+  }
+
+  .form-section {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  }
+
+  .btn-submit-wrapper {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 2rem;
+  }
+
+  .required::after {
+    content: " *";
+    color: red;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+      <form method="POST" action="{{ url_for('baddebt.create') }}" class="form-section">
+        
+        <!-- Step 1: Select Invoice -->
+        <div class="form-wizard-step">
+          <h5><i class="bi bi-filetext"></i> Step 1: Select Invoice</h5>
+
+          <div class="form-group mb-3">
+            <label for="invoice_id" class="form-label required">Invoice</label>
+            <select class="form-select form-select-lg" id="invoice_id" name="invoice_id" required 
+                    onchange="updateInvoiceDetails()"
+                    {% if pre_selected_invoice %}value="{{ pre_selected_invoice.id }}"{% endif %}>
+              <option value="">-- Select an Invoice --</option>
+              {% for inv in invoices %}
+                <option value="{{ inv.id }}" 
+                        data-total="{{ inv.total_amount }}"
+                        data-paid="{{ inv.paid_amount }}"
+                        data-student="{{ inv.student_name }}"
+                        data-code="{{ inv.student_code }}"
+                        data-status="{{ inv.student_status }}"
+                        {% if pre_selected_invoice and inv.id == pre_selected_invoice.id %}selected{% endif %}>
+                  {{ inv.invoice_no }} - {{ inv.student_name }} (Balance: ₹{{ "%.2f"|format(inv.total_amount - inv.paid_amount) }})
+                </option>
+              {% endfor %}
+            </select>
+            <small class="form-text text-muted">Select the invoice with outstanding balance</small>
+          </div>
+
+          <!-- Invoice Details Display -->
+          <div id="invoice-details-section" style="display: none;">
+            <div class="invoice-details">
+              <div class="row">
+                <div class="col-md-3">
+                  <label>Invoice No</label>
+                  <p id="detail-invoice-no">-</p>
+                </div>
+                <div class="col-md-3">
+                  <label>Student Name</label>
+                  <p id="detail-student-name">-</p>
+                </div>
+                <div class="col-md-3">
+                  <label>Student Code</label>
+                  <p id="detail-student-code">-</p>
+                </div>
+                <div class="col-md-3">
+                  <label>Student Status</label>
+                  <p id="detail-student-status">-</p>
+                </div>
+              </div>
+
+              <div class="row mt-3">
+                <div class="col-md-4">
+                  <label>Total Invoice Amount</label>
+                  <p id="detail-total">₹0.00</p>
+                </div>
+                <div class="col-md-4">
+                  <label>Paid Amount</label>
+                  <p id="detail-paid">₹0.00</p>
+                </div>
+                <div class="col-md-4">
+                  <label>Outstanding Balance</label>
+                  <p id="detail-balance" style="color: #dc3545; font-weight: 700;">₹0.00</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="balance-display">
+              <h6><i class="bi bi-exclamation-triangle"></i> Max Write-off Amount</h6>
+              <div class="amount" id="max-writeoff">₹0.00</div>
+              <small>You cannot write-off more than the outstanding balance</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Write-off Details -->
+        <div class="form-wizard-step">
+          <h5><i class="bi bi-pencil"></i> Step 2: Write-off Details</h5>
+
+          <div class="form-group mb-3">
+            <label for="amount_written_off" class="form-label required">Amount to Write-off</label>
+            <div class="input-group input-group-lg">
+              <span class="input-group-text">₹</span>
+              <input type="number" class="form-control" id="amount_written_off" name="amount_written_off" 
+                     placeholder="Enter amount" step="0.01" min="0.01" required oninput="validateAmount()">
+            </div>
+            <small class="form-text text-muted" id="amount-validation-msg"></small>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="reason" class="form-label required">Reason for Write-off</label>
+            <select class="form-select form-select-lg" id="reason" name="reason" required>
+              <option value="">-- Select Reason --</option>
+              <option value="Student Dropped">Student Dropped</option>
+              <option value="Student Deceased">Student Deceased</option>
+              <option value="Uncollectible Debt">Uncollectible Debt</option>
+              <option value="Insufficient Address">Insufficient Address</option>
+              <option value="Business Decision">Business Decision</option>
+              <option value="Dispute Settlement">Dispute Settlement</option>
+              <option value="Other">Other (specify in notes)</option>
+            </select>
+            <small class="form-text text-muted">Select the primary reason for this write-off</small>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="student_status" class="form-label">Student Status at Write-off</label>
+            <input type="text" class="form-control form-control-lg" id="student_status" 
+                   name="student_status" placeholder="Will auto-fill from invoice" readonly>
+            <small class="form-text text-muted">Auto-populated based on current student status</small>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="notes" class="form-label">Additional Notes</label>
+            <textarea class="form-control" id="notes" name="notes" rows="4" 
+                      placeholder="Add any additional details or context for this write-off..."></textarea>
+            <small class="form-text text-muted">Optional: Document any relevant context</small>
+          </div>
+        </div>
+
+        <!-- Review Summary -->
+        <div class="form-wizard-step">
+          <h5><i class="bi bi-check-circle"></i> Review Summary</h5>
+          <p class="text-muted">Please verify all details before submitting:</p>
+          
+          <ul class="list-group">
+            <li class="list-group-item">
+              <strong>Invoice:</strong> <span id="summary-invoice">-</span>
+            </li>
+            <li class="list-group-item">
+              <strong>Student:</strong> <span id="summary-student">-</span>
+            </li>
+            <li class="list-group-item">
+              <strong>Write-off Amount:</strong> <span id="summary-amount">-</span>
+            </li>
+            <li class="list-group-item">
+              <strong>Reason:</strong> <span id="summary-reason">-</span>
+            </li>
+            <li class="list-group-item">
+              <strong>What happens:</strong>
+              <ul class="mt-2 mb-0">
+                <li>Write-off record will be created</li>
+                <li>Amount will be logged as "Uncollectible Receivables" expense</li>
+                <li>Invoice status will be updated to "write_off" or "partially_written_off"</li>
+                <li>Activity will be logged for audit trail</li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="btn-submit-wrapper">
+          <a href="{{ url_for('baddebt.dashboard') }}" class="btn btn-outline-secondary btn-lg">
+            <i class="bi bi-arrow-left"></i> Cancel
+          </a>
+          <button type="submit" class="btn btn-danger btn-lg">
+            <i class="bi bi-check"></i> Create Write-off
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function updateInvoiceDetails() {
+    const select = document.getElementById('invoice_id');
+    const option = select.options[select.selectedIndex];
+    
+    if (!option.value) {
+      document.getElementById('invoice-details-section').style.display = 'none';
+      document.getElementById('amount_written_off').value = '';
+      return;
+    }
+
+    const total = parseFloat(option.dataset.total) || 0;
+    const paid = parseFloat(option.dataset.paid) || 0;
+    const balance = total - paid;
+    const student = option.dataset.student;
+    const code = option.dataset.code;
+    const status = option.dataset.status;
+    const invoiceNo = option.text.split(' - ')[0];
+
+    // Update display
+    document.getElementById('detail-invoice-no').textContent = invoiceNo;
+    document.getElementById('detail-student-name').textContent = student;
+    document.getElementById('detail-student-code').textContent = code;
+    document.getElementById('detail-student-status').textContent = status;
+    document.getElementById('detail-total').textContent = '₹' + total.toFixed(2);
+    document.getElementById('detail-paid').textContent = '₹' + paid.toFixed(2);
+    document.getElementById('detail-balance').textContent = '₹' + balance.toFixed(2);
+    document.getElementById('max-writeoff').textContent = '₹' + balance.toFixed(2);
+    document.getElementById('student_status').value = status;
+
+    // Update summary
+    document.getElementById('summary-invoice').textContent = invoiceNo;
+    document.getElementById('summary-student').textContent = student + ' (' + code + ')';
+
+    document.getElementById('invoice-details-section').style.display = 'block';
+  }
+
+  function validateAmount() {
+    const select = document.getElementById('invoice_id');
+    const option = select.options[select.selectedIndex];
+    const amountInput = document.getElementById('amount_written_off');
+    const validationMsg = document.getElementById('amount-validation-msg');
+    const summaryAmount = document.getElementById('summary-amount');
+
+    if (!option.value) {
+      validationMsg.textContent = 'Please select an invoice first';
+      validationMsg.style.color = '#dc3545';
+      return;
+    }
+
+    const total = parseFloat(option.dataset.total) || 0;
+    const paid = parseFloat(option.dataset.paid) || 0;
+    const balance = total - paid;
+    const amount = parseFloat(amountInput.value) || 0;
+
+    if (amount > balance) {
+      validationMsg.textContent = `Amount exceeds balance (₹${balance.toFixed(2)})`;
+      validationMsg.style.color = '#dc3545';
+      amountInput.classList.add('is-invalid');
+    } else if (amount > 0) {
+      validationMsg.textContent = `✓ Valid amount`;
+      validationMsg.style.color = '#28a745';
+      amountInput.classList.remove('is-invalid');
+      amountInput.classList.add('is-valid');
+    } else {
+      validationMsg.textContent = '';
+      amountInput.classList.remove('is-invalid', 'is-valid');
+    }
+
+    summaryAmount.textContent = amount > 0 ? '₹' + amount.toFixed(2) : '-';
+  }
+
+  document.getElementById('reason').addEventListener('change', function() {
+    document.getElementById('summary-reason').textContent = this.value || '-';
+  });
+
+  // Initialize Tom Select for better UX
+  new TomSelect('#invoice_id', {
+    create: false,
+    placeholder: 'Select an Invoice',
+  });
+
+  new TomSelect('#reason', {
+    create: false,
+    placeholder: 'Select Reason',
+  });
+
+  // Auto-populate if invoice was pre-selected from invoice view
+  {% if pre_selected_invoice %}
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+      updateInvoiceDetails();
+    }, 100);
+  });
+  {% endif %}
+</script>
+{% endblock %}

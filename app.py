@@ -6,6 +6,7 @@ from modules.billing.routes import billing_bp
 from modules.assets.routes import assets_bp
 from modules.reports.routes import reports_bp
 from modules.import_export.routes import import_export_bp
+from modules.baddebt.routes import baddebt_bp
 from datetime import datetime
 
 def format_datetime(value):
@@ -37,6 +38,7 @@ def create_app():
     app.register_blueprint(assets_bp, url_prefix="/assets")
     app.register_blueprint(reports_bp, url_prefix="/reports")
     app.register_blueprint(import_export_bp, url_prefix="/import-export")
+    app.register_blueprint(baddebt_bp, url_prefix="/baddebt")
 
     # Register Jinja2 filters
     app.jinja_env.filters['format_datetime'] = format_datetime

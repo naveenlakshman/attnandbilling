@@ -126,6 +126,16 @@ def menu():
     total_past_due = sum(float(row["balance_due"] or 0) for row in past_dues)
     total_today_due = sum(float(row["balance_due"] or 0) for row in todays_dues)
 
+    # Get bad debt statistics
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT 
+            COUNT(*) AS total_writeoffs,
+            IFNULL(SUM(amount_written_off), 0) AS total_written_off
+        FROM bad_debt_writeoffs
+    """)
+    bad_debt_stats = cur.fetchone()
+
     conn.close()
 
     return render_template(
@@ -134,7 +144,8 @@ def menu():
         todays_dues=todays_dues,
         total_past_due=total_past_due,
         total_today_due=total_today_due,
-        today=today
+        today=today,
+        bad_debt_stats=bad_debt_stats
     )
 
 @billing_bp.route("/dashboard")
@@ -1259,7 +1270,21 @@ def invoice_view(invoice_id):
     paid_result = cur.fetchone()
     total_paid = float(paid_result["total_paid"] or 0) if paid_result else 0.0
 
-    balance_amount = float(invoice["total_amount"] or 0) - total_paid
+    # Fetch write-off information if exists
+    cur.execute("""
+        SELECT
+            IFNULL(SUM(amount_written_off), 0) AS total_written_off
+        FROM bad_debt_writeoffs
+        WHERE invoice_id = ?
+    """, (invoice_id,))
+    writeoff_result = cur.fetchone()
+    total_written_off = float(writeoff_result["total_written_off"] or 0) if writeoff_result else 0.0
+
+    # For written-off invoices, balance is zero (cannot receive further payments)
+    if invoice["status"] in ["write_off", "partially_written_off"]:
+        balance_amount = 0.0
+    else:
+        balance_amount = float(invoice["total_amount"] or 0) - total_paid - total_written_off
 
     conn.close()
 
@@ -1270,7 +1295,8 @@ def invoice_view(invoice_id):
         installments=installments,
         payments=payments,
         total_paid=total_paid,
-        balance_amount=balance_amount
+        balance_amount=balance_amount,
+        total_written_off=total_written_off
     )
 
 @billing_bp.route("/invoice/<int:invoice_id>/print")
@@ -1293,8 +1319,8 @@ def invoice_print(invoice_id):
             invoices.created_at,
             students.id AS student_id,
             students.student_code,
-            students.full_name,
-            students.phone,
+            students.full_name AS student_name,
+            students.phone AS student_phone,
             students.email,
             students.address,
             branches.branch_name
@@ -2340,11 +2366,17 @@ def receipt_new():
 
             # Get invoice details
             cur.execute("""
-                SELECT id, total_amount, branch_id
+                SELECT id, total_amount, branch_id, status
                 FROM invoices
                 WHERE id = ?
             """, (invoice_id,))
             invoice_data = cur.fetchone()
+            
+            # Prevent payments on written-off invoices
+            if invoice_data and invoice_data["status"] in ["write_off", "partially_written_off"]:
+                conn.close()
+                flash("Cannot record payments for written-off invoices.", "danger")
+                return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
 
             if not invoice_data:
                 conn.close()
@@ -2737,6 +2769,7 @@ def receivables():
             ON i.branch_id = b.id
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
     """
     past_dues_params = [today]
 
@@ -2775,6 +2808,7 @@ def receivables():
             ON i.branch_id = b.id
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
     """
     todays_dues_params = [today]
 
@@ -2813,6 +2847,7 @@ def receivables():
             ON i.branch_id = b.id
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) > ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
     """
     upcoming_dues_params = [today]
 

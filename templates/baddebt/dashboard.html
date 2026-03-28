@@ -1,0 +1,181 @@
+{% extends "baddebt/base.html" %}
+
+{% block title %}Bad Debt Write-offs Dashboard - Global IT ERP{% endblock %}
+{% block page_title %}Bad Debt Write-offs Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+  .table-row:hover {
+    background-color: #f8f9fa;
+  }
+
+  .badge-reason {
+    background-color: #e7f3ff;
+    color: #0066cc;
+    padding: 0.35rem 0.65rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
+
+  .writeoff-card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .stat-box {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border-left: 4px solid #0d6efd;
+  }
+
+  .stat-box.warn {
+    border-left-color: #dc3545;
+  }
+
+  .stat-box h5 {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  .stat-box .value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #333;
+  }
+
+  .no-data {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #999;
+  }
+
+  .no-data i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.3;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Statistics -->
+  <div class="stats-grid">
+    <div class="stat-box">
+      <h5><i class="bi bi-filetext"></i> Total Write-offs</h5>
+      <div class="value">{{ count }}</div>
+    </div>
+
+    <div class="stat-box warn">
+      <h5><i class="bi bi-cash"></i> Total Amount Written Off</h5>
+      <div class="value">₹ {{ "%.2f"|format(total_written_off) }}</div>
+    </div>
+
+    <div class="stat-box">
+      <h5><i class="bi bi-info-circle"></i> Average per Write-off</h5>
+      <div class="value">
+        {% if count > 0 %}
+          ₹ {{ "%.2f"|format(total_written_off / count) }}
+        {% else %}
+          ₹ 0.00
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Write-offs Table -->
+  <div class="writeoff-card">
+    <div class="table-responsive">
+      {% if write_offs %}
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width: 12%">Invoice No</th>
+              <th style="width: 18%">Student Name</th>
+              <th style="width: 12%">Student Code</th>
+              <th style="width: 10%">Reason</th>
+              <th style="width: 12%">Amount Written Off</th>
+              <th style="width: 12%">Paid Amount</th>
+              <th style="width: 12%">Write-off Date</th>
+              <th style="width: 12%">Status</th>
+              <th style="width: 8%; text-align: center;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for writeoff in write_offs %}
+              <tr class="table-row">
+                <td>
+                  <a href="{{ url_for('baddebt.view', writeoff_id=writeoff.id) }}" class="text-decoration-none">
+                    <strong>{{ writeoff.invoice_no }}</strong>
+                  </a>
+                </td>
+                <td>{{ writeoff.student_name }}</td>
+                <td><code>{{ writeoff.student_code }}</code></td>
+                <td>
+                  <span class="badge-reason">{{ writeoff.reason[:20] }}{% if writeoff.reason|length > 20 %}...{% endif %}</span>
+                </td>
+                <td>
+                  <strong class="text-danger">₹ {{ "%.2f"|format(writeoff.amount_written_off) }}</strong>
+                </td>
+                <td>₹ {{ "%.2f"|format(writeoff.paid_amount) }}</td>
+                <td>{{ writeoff.writeoff_date | format_datetime }}</td>
+                <td>
+                  {% if writeoff.invoice_status == 'write_off' %}
+                    <span class="badge bg-danger">Write-off</span>
+                  {% elif writeoff.invoice_status == 'partially_written_off' %}
+                    <span class="badge bg-warning">Partial Write-off</span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ writeoff.invoice_status }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  <a href="{{ url_for('baddebt.view', writeoff_id=writeoff.id) }}" class="btn btn-sm btn-outline-primary" title="View">
+                    <i class="bi bi-eye"></i>
+                  </a>
+                  <form method="POST" action="{{ url_for('baddebt.delete', writeoff_id=writeoff.id) }}" style="display: inline;" 
+                        onsubmit="return confirm('Are you sure you want to delete this write-off?');">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="no-data">
+          <i class="bi bi-inbox"></i>
+          <p>No bad debt write-offs recorded yet</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Action Button -->
+  <div class="mt-4 text-center">
+    <a href="{{ url_for('baddebt.create') }}" class="btn btn-primary btn-primary-custom">
+      <i class="bi bi-plus-circle"></i> Create New Write-off
+    </a>
+  </div>
+</div>
+{% endblock %}

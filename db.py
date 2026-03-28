@@ -5,9 +5,12 @@ from config import DB_PATH
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA busy_timeout = 30000;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
 
     def parse_ddmmyyyy(date_str):
         if not date_str:
@@ -208,7 +211,7 @@ def init_db():
                 CHECK(installment_type IN ('full', 'custom')),
             notes TEXT,
             status TEXT NOT NULL DEFAULT 'unpaid'
-                CHECK(status IN ('unpaid', 'partially_paid', 'paid', 'cancelled')),
+                CHECK(status IN ('unpaid', 'partially_paid', 'paid', 'cancelled', 'write_off', 'partially_written_off')),
             created_by INTEGER NOT NULL,
             branch_id INTEGER,
             created_at TEXT NOT NULL,
@@ -268,6 +271,25 @@ def init_db():
             created_at TEXT NOT NULL,
             FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
             FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+
+    # ---------- BAD DEBT WRITE-OFFS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS bad_debt_writeoffs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_id INTEGER NOT NULL,
+            amount_written_off REAL NOT NULL,
+            paid_amount REAL NOT NULL DEFAULT 0,
+            reason TEXT NOT NULL,
+            student_status_at_writeoff TEXT,
+            authorized_by INTEGER,
+            writeoff_date TEXT NOT NULL,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (invoice_id) REFERENCES invoices(id),
+            FOREIGN KEY (authorized_by) REFERENCES users(id)
         )
     """)
 
@@ -515,6 +537,7 @@ def init_db():
         "Maintenance",
         "Tea/Snacks",
         "Software/Tools",
+        "Uncollectible Receivables",
         "Miscellaneous"
     ]
 

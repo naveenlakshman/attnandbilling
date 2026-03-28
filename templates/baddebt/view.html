@@ -1,0 +1,390 @@
+{% extends "baddebt/base.html" %}
+
+{% block title %}Bad Debt Write-off Details - Global IT ERP{% endblock %}
+{% block page_title %}Bad Debt Write-off Details{% endblock %}
+
+{% block extra_css %}
+<style>
+  .detail-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .detail-card h5 {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #0d6efd;
+    color: #0d6efd;
+  }
+
+  .detail-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .detail-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .detail-item label {
+    display: block;
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .detail-item p {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #333;
+    font-weight: 600;
+  }
+
+  .detail-item code {
+    background: #f8f9fa;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.95rem;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .status-badge.writeoff {
+    background: #ffe5e5;
+    color: #dc3545;
+  }
+
+  .status-badge.partial {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .amount-box {
+    background: #e7f3ff;
+    padding: 1.5rem;
+    border-radius: 10px;
+    border-left: 4px solid #0d6efd;
+  }
+
+  .amount-box p {
+    margin: 0 0 0.5rem 0;
+    color: #666;
+    font-size: 0.9rem;
+  }
+
+  .amount-box .amount {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #0d6efd;
+  }
+
+  .amount-box.warning {
+    background: #fff3cd;
+    border-left-color: #ffc107;
+  }
+
+  .amount-box.warning .amount {
+    color: #856404;
+  }
+
+  .timeline {
+    position: relative;
+    padding: 0;
+  }
+
+  .timeline-item {
+    padding-left: 30px;
+    margin-bottom: 1.5rem;
+    position: relative;
+  }
+
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 2px;
+    width: 14px;
+    height: 14px;
+    background: #0d6efd;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 2px #0d6efd;
+  }
+
+  .timeline-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 20px;
+    width: 2px;
+    height: 30px;
+    background: #dee2e6;
+  }
+
+  .timeline-label {
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .timeline-text {
+    margin: 0;
+    color: #333;
+    font-weight: 600;
+  }
+
+  .back-button {
+    margin-bottom: 1.5rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Back Button -->
+  <div class="back-button">
+    <a href="{{ url_for('baddebt.dashboard') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Back to Write-offs
+    </a>
+  </div>
+
+  <!-- Invoice Information -->
+  <div class="detail-card">
+    <h5><i class="bi bi-filetext"></i> Invoice Information</h5>
+    
+    <div class="detail-row">
+      <div class="detail-item">
+        <label>Invoice Number</label>
+        <p><strong>{{ write_off.invoice_no }}</strong></p>
+      </div>
+      <div class="detail-item">
+        <label>Invoice Date</label>
+        <p>{{ write_off.invoice_date | format_datetime }}</p>
+      </div>
+      <div class="detail-item">
+        <label>Invoice Status</label>
+        <p>
+          {% if write_off.invoice_status == 'write_off' %}
+            <span class="status-badge writeoff">
+              <i class="bi bi-exclamation-triangle"></i> Full Write-off
+            </span>
+          {% elif write_off.invoice_status == 'partially_written_off' %}
+            <span class="status-badge partial">
+              <i class="bi bi-exclamation-triangle"></i> Partial Write-off
+            </span>
+          {% else %}
+            <span class="badge bg-secondary">{{ write_off.invoice_status }}</span>
+          {% endif %}
+        </p>
+      </div>
+    </div>
+
+    <div class="detail-row">
+      <div class="detail-item">
+        <label>Total Invoice Amount</label>
+        <p>₹ {{ "%.2f"|format(write_off.total_amount) }}</p>
+      </div>
+      <div class="detail-item">
+        <label>Amount Paid</label>
+        <p style="color: #28a745;">₹ {{ "%.2f"|format(write_off.paid_amount) }}</p>
+      </div>
+      <div class="detail-item">
+        <label>Branch</label>
+        <p>{{ write_off.branch_name or 'N/A' }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student Information -->
+  <div class="detail-card">
+    <h5><i class="bi bi-person"></i> Student Information</h5>
+    
+    <div class="detail-row">
+      <div class="detail-item">
+        <label>Student Name</label>
+        <p>{{ write_off.student_name }}</p>
+      </div>
+      <div class="detail-item">
+        <label>Student Code</label>
+        <p><code>{{ write_off.student_code }}</code></p>
+      </div>
+      <div class="detail-item">
+        <label>Phone</label>
+        <p>{{ write_off.phone }}</p>
+      </div>
+    </div>
+
+    <div class="detail-row">
+      <div class="detail-item">
+        <label>Current Student Status</label>
+        <p>
+          {% if write_off.student_status == 'dropped' %}
+            <span class="badge bg-danger">Dropped</span>
+          {% elif write_off.student_status == 'completed' %}
+            <span class="badge bg-success">Completed</span>
+          {% else %}
+            <span class="badge bg-info">{{ write_off.student_status }}</span>
+          {% endif %}
+        </p>
+      </div>
+      <div class="detail-item">
+        <label>Student Status at Write-off</label>
+        <p>{{ write_off.student_status_at_writeoff }}</p>
+      </div>
+      <div class="detail-item">
+        <label>&nbsp;</label>
+        <p>&nbsp;</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Write-off Details -->
+  <div class="detail-card">
+    <h5><i class="bi bi-pencil"></i> Write-off Details</h5>
+    
+    <div class="row">
+      <div class="col-md-6">
+        <div class="amount-box warning">
+          <p>Amount Written Off</p>
+          <div class="amount">₹ {{ "%.2f"|format(write_off.amount_written_off) }}</div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="amount-box">
+          <p>Balance Recovered</p>
+          <div class="amount">₹ {{ "%.2f"|format(write_off.total_amount - write_off.paid_amount - write_off.amount_written_off) }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-row mt-4">
+      <div class="detail-item">
+        <label>Reason for Write-off</label>
+        <p style="font-size: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 6px; border-left: 3px solid #dc3545;">
+          <strong>{{ write_off.reason }}</strong>
+        </p>
+      </div>
+    </div>
+
+    {% if write_off.notes %}
+      <div class="detail-row mt-2">
+        <div class="detail-item">
+          <label>Additional Notes</label>
+          <p style="font-size: 0.95rem; white-space: pre-wrap;">{{ write_off.notes }}</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Audit Trail -->
+  <div class="detail-card">
+    <h5><i class="bi bi-clock-history"></i> Audit Trail</h5>
+    
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-label">Write-off Date</div>
+        <p class="timeline-text">{{ write_off.writeoff_date | format_datetime }}</p>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-label">Created At</div>
+        <p class="timeline-text">{{ write_off.created_at | format_datetime }}</p>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-label">Authorized By</div>
+        <p class="timeline-text">
+          {% if write_off.authorized_by %}
+            {{ write_off.authorized_by }}
+          {% else %}
+            System User
+          {% endif %}
+        </p>
+      </div>
+
+      {% if expense %}
+        <div class="timeline-item">
+          <div class="timeline-label">Logged as Expense</div>
+          <p class="timeline-text">
+            ✓ Expense ID: {{ expense.reference_no }} 
+            <br><small class="text-muted">Amount: ₹{{ "%.2f"|format(expense.amount) }}</small>
+          </p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Related Expense -->
+  {% if expense %}
+    <div class="detail-card">
+      <h5><i class="bi bi-receipt"></i> Linked Expense Record</h5>
+      
+      <div class="detail-row">
+        <div class="detail-item">
+          <label>Expense Reference</label>
+          <p><code>{{ expense.reference_no }}</code></p>
+        </div>
+        <div class="detail-item">
+          <label>Expense Date</label>
+          <p>{{ expense.expense_date | format_datetime }}</p>
+        </div>
+        <div class="detail-item">
+          <label>Amount</label>
+          <p style="color: #dc3545;">₹ {{ "%.2f"|format(expense.amount) }}</p>
+        </div>
+      </div>
+
+      <div class="detail-item">
+        <label>Category</label>
+        <p><span class="badge bg-info">Uncollectible Receivables</span></p>
+      </div>
+
+      {% if expense.notes %}
+        <div class="detail-row mt-3">
+          <div class="detail-item">
+            <label>Expense Notes</label>
+            <p style="font-size: 0.95rem; white-space: pre-wrap; background: #f8f9fa; padding: 1rem; border-radius: 6px;">
+              {{ expense.notes }}
+            </p>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <!-- Action Buttons -->
+  <div class="mt-4 pb-4">
+    <div class="row">
+      <div class="col-6">
+        <a href="{{ url_for('baddebt.dashboard') }}" class="btn btn-outline-secondary btn-lg w-100">
+          <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+      </div>
+      <div class="col-6">
+        <form method="POST" action="{{ url_for('baddebt.delete', writeoff_id=write_off.id) }}" 
+              onsubmit="return confirm('Are you sure you want to delete this write-off? This action cannot be undone.');" 
+              class="d-grid">
+          <button type="submit" class="btn btn-danger btn-lg">
+            <i class="bi bi-trash"></i> Delete Write-off
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
