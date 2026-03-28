@@ -62,6 +62,34 @@
     border: 1px solid #ddd;
   }
 
+  .receipts-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+  }
+
+  .receipts-table th.sortable:hover {
+    background-color: #e8e9ea;
+  }
+
+  .receipts-table th.sortable::after {
+    content: ' ↕';
+    color: #999;
+    font-size: 12px;
+  }
+
+  .receipts-table th.sorted-asc::after {
+    content: ' ↑';
+    color: #0056b3;
+    font-weight: bold;
+  }
+
+  .receipts-table th.sorted-desc::after {
+    content: ' ↓';
+    color: #0056b3;
+    font-weight: bold;
+  }
+
   .receipts-table td {
     padding: 10px 8px;
     border: 1px solid #ddd;
@@ -87,11 +115,101 @@
     color: green;
     font-weight: 600;
   }
+
+  .invoice-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+  }
 </style>
 
 <div class="receipt-page-header">
   <h2>Receipts</h2>
 </div>
+
+{% if session.get('role') == 'admin' %}
+<div style="margin-bottom: 25px;">
+  <h3 style="margin-top: 0; margin-bottom: 15px; color: #333;">📊 Receipt Dashboard</h3>
+
+  <div style="margin-bottom: 20px;">
+    <!-- Toggle Buttons -->
+    <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+      <button 
+        id="btnToday" 
+        onclick="toggleStatsView('today')" 
+        style="padding: 8px 16px; border: 2px solid #3498db; background-color: #3498db; color: white; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;"
+      >
+        📅 Today
+      </button>
+      <button 
+        id="btnMonth" 
+        onclick="toggleStatsView('month')" 
+        style="padding: 8px 16px; border: 2px solid #95a5a6; background-color: white; color: #333; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;"
+      >
+        📆 This Month
+      </button>
+    </div>
+
+    <!-- Today Stats -->
+    <div id="todayStats" style="display: block;">
+      <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">Today</h4>
+      <div class="invoice-stats-grid">
+        <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Receipts</div>
+          <div style="font-size: 24px; font-weight: bold;">{{ today_stats.total_receipts or 0 }}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
+          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.total_amount or 0) }}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Payment Methods</div>
+          <div style="font-size: 14px; font-weight: bold;">
+            <div>💵 Cash: {{ today_stats.cash_count or 0 }}</div>
+            <div>📱 UPI: {{ today_stats.upi_count or 0 }}</div>
+          </div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Avg Receipt</div>
+          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.avg_amount or 0) }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Month Stats -->
+    <div id="monthStats" style="display: none;">
+      <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">This Month</h4>
+      <div class="invoice-stats-grid">
+        <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Receipts</div>
+          <div style="font-size: 24px; font-weight: bold;">{{ month_stats.total_receipts or 0 }}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
+          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(month_stats.total_amount or 0) }}</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Payment Methods</div>
+          <div style="font-size: 14px; font-weight: bold;">
+            <div>💵 Cash: {{ month_stats.cash_count or 0 }}</div>
+            <div>📱 UPI: {{ month_stats.upi_count or 0 }}</div>
+          </div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
+          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Avg Receipt</div>
+          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(month_stats.avg_amount or 0) }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div class="card receipt-search-card">
   <form method="get" class="receipt-search-form">
@@ -111,51 +229,52 @@
 
 <div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
   {% if receipts %}
-    <table border="1" width="100%" cellpadding="10" class="receipts-table">
-      <thead>
+    <div style="overflow-x: auto;">
+      <table border="1" width="100%" cellpadding="10" class="receipts-table">
+        <thead>
         <tr>
-          <th style="width: 70px;">ID</th>
-          <th style="width: 130px;">Receipt No</th>
-          <th style="width: 130px;">Invoice No</th>
-          <th>Student</th>
-          <th style="width: 120px;">Date</th>
-          <th style="width: 130px;">Amount</th>
-          <th style="width: 130px;">Payment Mode</th>
+          <th style="width: 70px;">SL No</th>
+          <th style="width: 130px;" class="sortable" data-sort-key="receipt_no">Receipt No</th>
+          <th style="width: 130px;" class="sortable" data-sort-key="invoice_no">Invoice No</th>
+          <th class="sortable" data-sort-key="student">Student</th>
+          <th style="width: 120px;" class="sortable" data-sort-key="date">Date</th>
+          <th style="width: 130px;" class="sortable" data-sort-key="amount">Amount</th>
+          <th style="width: 130px;" class="sortable" data-sort-key="mode">Payment Mode</th>
           <th>Notes</th>
-          <th style="width: 140px;">Created By</th>
+          <th style="width: 140px;" class="sortable" data-sort-key="created_by">Created By</th>
           <th style="width: 120px;">Action</th>
         </tr>
       </thead>
       <tbody>
         {% for receipt in receipts %}
         <tr>
-          <td>{{ receipt.id }}</td>
+          <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
 
-          <td>
+          <td data-sort-value="{{ receipt.receipt_no }}">
             <a href="{{ url_for('billing.receipt_view', receipt_id=receipt.id) }}" style="text-decoration: none; font-weight: 600;">
               {{ receipt.receipt_no }}
             </a>
           </td>
 
-          <td>
+          <td data-sort-value="{{ receipt.invoice_no }}">
             <a href="{{ url_for('billing.invoice_view', invoice_id=receipt.invoice_id) }}" style="text-decoration: none;">
               {{ receipt.invoice_no }}
             </a>
           </td>
 
-          <td>
+          <td data-sort-value="{{ receipt.student_code }} {{ receipt.full_name }}">
             {{ receipt.student_code or "" }}
             {% if receipt.student_code %} - {% endif %}
             {{ receipt.full_name }}
           </td>
 
-          <td>{{ receipt.receipt_date }}</td>
+          <td data-sort-value="{{ receipt.receipt_date }}">{{ receipt.receipt_date }}</td>
 
-          <td class="amount-green">
+          <td class="amount-green" data-sort-value="{{ receipt.amount_received or 0 }}">
             ₹ {{ "%.2f"|format(receipt.amount_received or 0) }}
           </td>
 
-          <td>
+          <td data-sort-value="{{ receipt.payment_mode or '' }}">
             {% set mode_labels = {
               'cash': 'Cash',
               'upi': 'UPI',
@@ -167,7 +286,7 @@
 
           <td>{{ receipt.notes or '-' }}</td>
 
-          <td>{{ receipt.created_by_name or 'System' }}</td>
+          <td data-sort-value="{{ receipt.created_by_name or 'System' }}">{{ receipt.created_by_name or 'System' }}</td>
 
           <td>
             {% if session.get("role") == "admin" %}
@@ -180,6 +299,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   {% else %}
     <div class="receipt-empty">
       <p style="font-size: 15px;">💵 No receipts found.</p>
@@ -187,5 +307,114 @@
     </div>
   {% endif %}
 </div>
+
+<script>
+function toggleStatsView(view) {
+  const todayStats = document.getElementById('todayStats');
+  const monthStats = document.getElementById('monthStats');
+  const btnToday = document.getElementById('btnToday');
+  const btnMonth = document.getElementById('btnMonth');
+
+  if (view === 'today') {
+    todayStats.style.display = 'block';
+    monthStats.style.display = 'none';
+    
+    btnToday.style.backgroundColor = '#3498db';
+    btnToday.style.borderColor = '#3498db';
+    btnToday.style.color = 'white';
+    
+    btnMonth.style.backgroundColor = 'white';
+    btnMonth.style.borderColor = '#95a5a6';
+    btnMonth.style.color = '#333';
+  } else if (view === 'month') {
+    todayStats.style.display = 'none';
+    monthStats.style.display = 'block';
+    
+    btnToday.style.backgroundColor = 'white';
+    btnToday.style.borderColor = '#95a5a6';
+    btnToday.style.color = '#333';
+    
+    btnMonth.style.backgroundColor = '#3498db';
+    btnMonth.style.borderColor = '#3498db';
+    btnMonth.style.color = 'white';
+  }
+}
+
+// Table Sorting Functionality
+document.addEventListener('DOMContentLoaded', function() {
+  const table = document.querySelector('.receipts-table');
+  if (!table) return;
+
+  const headers = table.querySelectorAll('th.sortable');
+  let currentSort = { column: null, direction: 'asc' };
+
+  headers.forEach(header => {
+    header.addEventListener('click', function() {
+      const sortKey = this.getAttribute('data-sort-key');
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+
+      // Determine sort direction
+      if (currentSort.column === sortKey) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.direction = 'asc';
+        // Remove sorted class from all headers
+        headers.forEach(h => {
+          h.classList.remove('sorted-asc', 'sorted-desc');
+        });
+      }
+
+      // Add sorted class to current header
+      this.classList.remove('sorted-asc', 'sorted-desc');
+      this.classList.add('sorted-' + currentSort.direction);
+
+      currentSort.column = sortKey;
+
+      // Sort rows
+      rows.sort((a, b) => {
+        let aValue = a.querySelector(`td[data-sort-value]`);
+        let bValue = b.querySelector(`td[data-sort-value]`);
+
+        // Find the correct td for this column
+        const columnIndex = Array.from(headers).findIndex(h => h.getAttribute('data-sort-key') === sortKey);
+        aValue = a.querySelectorAll('td')[columnIndex];
+        bValue = b.querySelectorAll('td')[columnIndex];
+
+        if (!aValue || !bValue) return 0;
+
+        let aData = aValue.getAttribute('data-sort-value') || aValue.textContent;
+        let bData = bValue.getAttribute('data-sort-value') || bValue.textContent;
+
+        // Remove currency symbols and trim
+        aData = aData.toString().replace(/[₹ ,]/g, '').trim();
+        bData = bData.toString().replace(/[₹ ,]/g, '').trim();
+
+        // Try to parse as numbers
+        const aNum = parseFloat(aData);
+        const bNum = parseFloat(bData);
+
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return currentSort.direction === 'asc' ? aNum - bNum : bNum - aNum;
+        }
+
+        // Parse as dates if format looks like YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(aData) && /^\d{4}-\d{2}-\d{2}$/.test(bData)) {
+          const aDate = new Date(aData).getTime();
+          const bDate = new Date(bData).getTime();
+          return currentSort.direction === 'asc' ? aDate - bDate : bDate - aDate;
+        }
+
+        // Default string comparison
+        const comparison = aData.localeCompare(bData);
+        return currentSort.direction === 'asc' ? comparison : -comparison;
+      });
+
+      // Re-append sorted rows
+      rows.forEach(row => tbody.appendChild(row));
+    });
+  });
+});
+</script>
 
 {% endblock %}

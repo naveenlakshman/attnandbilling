@@ -75,6 +75,34 @@
     border: 1px solid #ddd;
   }
 
+  .invoice-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+  }
+
+  .invoice-table th.sortable:hover {
+    background-color: #e8e9ea;
+  }
+
+  .invoice-table th.sortable::after {
+    content: ' ↕';
+    color: #999;
+    font-size: 12px;
+  }
+
+  .invoice-table th.sorted-asc::after {
+    content: ' ↑';
+    color: #0056b3;
+    font-weight: bold;
+  }
+
+  .invoice-table th.sorted-desc::after {
+    content: ' ↓';
+    color: #0056b3;
+    font-weight: bold;
+  }
+
   .invoice-table td {
     padding: 10px 8px;
     border: 1px solid #ddd;
@@ -286,14 +314,14 @@
     <table border="1" width="100%" cellpadding="10" class="invoice-table">
       <thead>
         <tr>
-          <th style="width: 70px;">ID</th>
-          <th style="width: 120px;">Invoice No</th>
-          <th>Student</th>
-          <th style="width: 120px;">Date</th>
-          <th style="width: 130px;">Total</th>
-          <th style="width: 130px;">Paid</th>
-          <th style="width: 130px;">Balance</th>
-          <th style="width: 120px;">Status</th>
+          <th style="width: 70px;">SL No</th>
+          <th style="width: 120px;" class="sortable" data-sort-key="invoice_no">Invoice No</th>
+          <th class="sortable" data-sort-key="student">Student</th>
+          <th style="width: 120px;" class="sortable" data-sort-key="date">Date</th>
+          <th style="width: 130px;" class="sortable" data-sort-key="total">Total</th>
+          <th style="width: 130px;" class="sortable" data-sort-key="paid">Paid</th>
+          <th style="width: 130px;" class="sortable" data-sort-key="balance">Balance</th>
+          <th style="width: 120px;" class="sortable" data-sort-key="status">Status</th>
           <th style="width: 100px;">Action</th>
         </tr>
       </thead>
@@ -301,33 +329,33 @@
         {% for inv in invoices %}
         {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
         <tr>
-          <td>{{ inv.id }}</td>
+          <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
 
-          <td>
+          <td data-sort-value="{{ inv.invoice_no }}">
             <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="text-decoration: none; font-weight: 600; color: #0066cc;">
               {{ inv.invoice_no }}
             </a>
           </td>
 
-          <td>
+          <td data-sort-value="{{ inv.student_code }} {{ inv.full_name }}">
             <a href="{{ url_for('billing.student_profile', student_id=inv.student_id) }}" style="text-decoration: none;">
               {{ inv.student_code }} - {{ inv.full_name }}
             </a>
           </td>
 
-          <td>{{ inv.invoice_date }}</td>
+          <td data-sort-value="{{ inv.invoice_date }}">{{ inv.invoice_date }}</td>
 
-          <td>₹ {{ "%.2f"|format(inv.total_amount or 0) }}</td>
+          <td data-sort-value="{{ inv.total_amount or 0 }}">₹ {{ "%.2f"|format(inv.total_amount or 0) }}</td>
 
-          <td style="color: green;">
+          <td style="color: green;" data-sort-value="{{ inv.paid_amount or 0 }}">
             ₹ {{ "%.2f"|format(inv.paid_amount or 0) }}
           </td>
 
-          <td style="color: #c0392b;">
+          <td style="color: #c0392b;" data-sort-value="{{ balance }}">
             ₹ {{ "%.2f"|format(balance) }}
           </td>
 
-          <td>
+          <td data-sort-value="{{ inv.status or '' }}">
             <span class="status-badge
               {% if inv.status == 'paid' %}status-paid
               {% elif inv.status == 'partially_paid' %}status-partially-paid
@@ -386,6 +414,82 @@ function toggleStatsView(view) {
     btnMonth.style.color = 'white';
   }
 }
+
+// Table Sorting Functionality
+document.addEventListener('DOMContentLoaded', function() {
+  const table = document.querySelector('.invoice-table');
+  if (!table) return;
+
+  const headers = table.querySelectorAll('th.sortable');
+  let currentSort = { column: null, direction: 'asc' };
+
+  headers.forEach(header => {
+    header.addEventListener('click', function() {
+      const sortKey = this.getAttribute('data-sort-key');
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+
+      // Determine sort direction
+      if (currentSort.column === sortKey) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.direction = 'asc';
+        // Remove sorted class from all headers
+        headers.forEach(h => {
+          h.classList.remove('sorted-asc', 'sorted-desc');
+        });
+      }
+
+      // Add sorted class to current header
+      this.classList.remove('sorted-asc', 'sorted-desc');
+      this.classList.add('sorted-' + currentSort.direction);
+
+      currentSort.column = sortKey;
+
+      // Sort rows
+      rows.sort((a, b) => {
+        let aValue = a.querySelector(`td[data-sort-value]`);
+        let bValue = b.querySelector(`td[data-sort-value]`);
+
+        // Find the correct td for this column
+        const columnIndex = Array.from(headers).findIndex(h => h.getAttribute('data-sort-key') === sortKey);
+        aValue = a.querySelectorAll('td')[columnIndex];
+        bValue = b.querySelectorAll('td')[columnIndex];
+
+        if (!aValue || !bValue) return 0;
+
+        let aData = aValue.getAttribute('data-sort-value') || aValue.textContent;
+        let bData = bValue.getAttribute('data-sort-value') || bValue.textContent;
+
+        // Remove currency symbols and trim
+        aData = aData.toString().replace(/[₹ ,]/g, '').trim();
+        bData = bData.toString().replace(/[₹ ,]/g, '').trim();
+
+        // Try to parse as numbers
+        const aNum = parseFloat(aData);
+        const bNum = parseFloat(bData);
+
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return currentSort.direction === 'asc' ? aNum - bNum : bNum - aNum;
+        }
+
+        // Parse as dates if format looks like YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(aData) && /^\d{4}-\d{2}-\d{2}$/.test(bData)) {
+          const aDate = new Date(aData).getTime();
+          const bDate = new Date(bData).getTime();
+          return currentSort.direction === 'asc' ? aDate - bDate : bDate - aDate;
+        }
+
+        // Default string comparison
+        const comparison = aData.localeCompare(bData);
+        return currentSort.direction === 'asc' ? comparison : -comparison;
+      });
+
+      // Re-append sorted rows
+      rows.forEach(row => tbody.appendChild(row));
+    });
+  });
+});
 </script>
 
 {% endblock %}

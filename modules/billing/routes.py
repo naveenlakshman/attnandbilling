@@ -496,6 +496,24 @@ def students():
     """)
     stats = cur.fetchone()
 
+    # Get branch-wise student statistics
+    cur.execute("""
+        SELECT 
+            branches.id AS branch_id,
+            branches.branch_name,
+            branches.branch_code,
+            SUM(CASE WHEN students.status = 'active' THEN 1 ELSE 0 END) AS active_count,
+            SUM(CASE WHEN students.status = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+            SUM(CASE WHEN students.status = 'dropped' THEN 1 ELSE 0 END) AS dropped_count,
+            COUNT(students.id) AS total_count
+        FROM branches
+        LEFT JOIN students ON branches.id = students.branch_id
+        WHERE branches.is_active = 1
+        GROUP BY branches.id, branches.branch_name, branches.branch_code
+        ORDER BY branches.branch_name
+    """)
+    branch_stats = cur.fetchall()
+
     # Build student list query
     query = """
         SELECT
@@ -555,7 +573,8 @@ def students():
         search_query=search_query,
         branch_filter=branch_filter,
         status_filter=status_filter,
-        stats=stats
+        stats=stats,
+        branch_stats=branch_stats
     )
 
 @billing_bp.route("/student/new", methods=["GET", "POST"])
@@ -2294,6 +2313,36 @@ def receipts():
     conn = get_conn()
     cur = conn.cursor()
 
+    # Get today's date and month range
+    today = datetime.now().date()
+    first_day_of_month = today.replace(day=1)
+
+    # Today's statistics
+    cur.execute("""
+        SELECT
+            COUNT(*) AS total_receipts,
+            IFNULL(SUM(amount_received), 0) AS total_amount,
+            SUM(CASE WHEN payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
+            SUM(CASE WHEN payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
+            IFNULL(AVG(amount_received), 0) AS avg_amount
+        FROM receipts
+        WHERE parse_date(receipt_date) = ?
+    """, [today.isoformat()])
+    today_stats = cur.fetchone()
+
+    # This month's statistics
+    cur.execute("""
+        SELECT
+            COUNT(*) AS total_receipts,
+            IFNULL(SUM(amount_received), 0) AS total_amount,
+            SUM(CASE WHEN payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
+            SUM(CASE WHEN payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
+            IFNULL(AVG(amount_received), 0) AS avg_amount
+        FROM receipts
+        WHERE parse_date(receipt_date) >= ? AND parse_date(receipt_date) <= ?
+    """, [first_day_of_month.isoformat(), today.isoformat()])
+    month_stats = cur.fetchone()
+
     query = """
     SELECT
         receipts.id,
@@ -2342,7 +2391,9 @@ def receipts():
     return render_template(
         "billing/receipts.html",
         receipts=all_receipts,
-        search=search
+        search=search,
+        today_stats=today_stats,
+        month_stats=month_stats
     )
 
 @billing_bp.route("/receipt/new", methods=["GET", "POST"])

@@ -70,7 +70,7 @@
     <table border="1" width="100%" class="courses-table">
       <thead>
         <tr>
-          <th style="width: 70px;">ID</th>
+          <th style="width: 70px;">SL No</th>
           <th>Course Name</th>
           <th style="width: 180px;">Duration</th>
           <th style="width: 160px;">Fee</th>
@@ -80,7 +80,7 @@
       <tbody>
         {% for c in courses %}
         <tr>
-          <td>{{ c.id }}</td>
+          <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
           <td style="font-weight: 600;">{{ c.course_name }}</td>
           <td>{{ c.duration or "—" }}</td>
           <td>₹ {{ "%.2f"|format(c.fee or 0) }}</td>

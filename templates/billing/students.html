@@ -89,6 +89,7 @@
 
   .billing-table {
     border-collapse: collapse;
+    width: 100%;
   }
 
   .billing-table thead tr {
@@ -102,6 +103,8 @@
     font-size: 13px;
     color: #333;
     border: 1px solid #ddd;
+    position: relative;
+    user-select: none;
   }
 
   .billing-table td {
@@ -116,6 +119,11 @@
 
   .billing-table tbody tr {
     border-bottom: 1px solid #dee2e6;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    border-radius: 6px;
   }
 
   .status-badge {
@@ -173,24 +181,76 @@
 </div>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
+  <!-- Active Students Card -->
   <div style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 8px;">Active Students</div>
-    <div style="font-size: 32px; font-weight: bold;">{{ stats.active_count or 0 }}</div>
+    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+      <span>Active Students</span>
+      <span style="font-size: 28px; font-weight: bold;">{{ stats.active_count or 0 }}</span>
+    </div>
+    <div style="font-size: 11px;">
+      {% for branch in branch_stats %}
+        {% if branch.active_count > 0 %}
+        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+          <span>{{ branch.branch_code }}:</span>
+          <strong>{{ branch.active_count }}</strong>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
   </div>
 
+  <!-- Completed Students Card -->
   <div style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 8px;">Completed Students</div>
-    <div style="font-size: 32px; font-weight: bold;">{{ stats.completed_count or 0 }}</div>
+    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+      <span>Completed Students</span>
+      <span style="font-size: 28px; font-weight: bold;">{{ stats.completed_count or 0 }}</span>
+    </div>
+    <div style="font-size: 11px;">
+      {% for branch in branch_stats %}
+        {% if branch.completed_count > 0 %}
+        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+          <span>{{ branch.branch_code }}:</span>
+          <strong>{{ branch.completed_count }}</strong>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
   </div>
 
+  <!-- Dropped Students Card -->
   <div style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 8px;">Dropped Students</div>
-    <div style="font-size: 32px; font-weight: bold;">{{ stats.dropped_count or 0 }}</div>
+    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+      <span>Dropped Students</span>
+      <span style="font-size: 28px; font-weight: bold;">{{ stats.dropped_count or 0 }}</span>
+    </div>
+    <div style="font-size: 11px;">
+      {% for branch in branch_stats %}
+        {% if branch.dropped_count > 0 %}
+        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+          <span>{{ branch.branch_code }}:</span>
+          <strong>{{ branch.dropped_count }}</strong>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
   </div>
 
+  <!-- Total Students Card -->
   <div style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 8px;">Total Students</div>
-    <div style="font-size: 32px; font-weight: bold;">{{ stats.total_count or 0 }}</div>
+    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+      <span>Total Students</span>
+      <span style="font-size: 28px; font-weight: bold;">{{ stats.total_count or 0 }}</span>
+    </div>
+    <div style="font-size: 11px;">
+      {% for branch in branch_stats %}
+        {% if branch.total_count > 0 %}
+        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+          <span>{{ branch.branch_code }}:</span>
+          <strong>{{ branch.total_count }}</strong>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
   </div>
 </div>
 
@@ -276,12 +336,12 @@
   📊 <strong>{{ students | length }}</strong> student(s) found
 </div>
 
-<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
+<div class="card table-wrapper" style="padding: 0; border-radius: 6px; overflow: hidden;">
   {% if students %}
     <table border="1" width="100%" class="billing-table">
       <thead>
         <tr>
-          <th style="width: 60px;">ID</th>
+          <th style="width: 60px;">SL No</th>
           <th style="width: 90px;">Reg. No</th>
           <th style="width: 130px;">Name</th>
           <th style="width: 120px;">Phone</th>
@@ -296,7 +356,7 @@
       <tbody>
         {% for s in students %}
         <tr>
-          <td style="text-align: center; font-weight: 500;">{{ s.id }}</td>
+          <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
           <td style="font-weight: 500; color: #2c3e50;">{{ s.student_code or "—" }}</td>
           <td>
             <a href="{{ url_for('billing.student_profile', student_id=s.id) }}"
@@ -329,5 +389,66 @@
     </div>
   {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const table = document.querySelector('.billing-table');
+  if (!table) return;
+
+  const headers = table.querySelectorAll('thead th');
+
+  headers.forEach((header, index) => {
+    header.style.position = 'relative';
+    header.style.minWidth = header.offsetWidth + 'px';
+    
+    const resizer = document.createElement('div');
+    resizer.style.cssText = `
+      position: absolute;
+      right: -2px;
+      top: 0;
+      width: 4px;
+      height: 100%;
+      background-color: transparent;
+      cursor: col-resize;
+      user-select: none;
+    `;
+    
+    let isResizing = false;
+    let currentX = 0;
+    let currentWidth = 0;
+
+    resizer.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      currentX = e.clientX;
+      currentWidth = header.offsetWidth;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const diff = e.clientX - currentX;
+      const newWidth = Math.max(50, currentWidth + diff);
+      header.style.minWidth = newWidth + 'px';
+      header.style.width = newWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      isResizing = false;
+    });
+
+    resizer.addEventListener('mouseenter', () => {
+      resizer.style.backgroundColor = '#0056b3';
+    });
+
+    resizer.addEventListener('mouseleave', () => {
+      if (!isResizing) {
+        resizer.style.backgroundColor = 'transparent';
+      }
+    });
+
+    header.appendChild(resizer);
+  });
+});
+</script>
 
 {% endblock %}

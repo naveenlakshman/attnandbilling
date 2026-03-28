@@ -188,8 +188,9 @@
 </div>
 
 <div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
-  <table border="1" width="100%" cellpadding="10" class="activity-table">
-    <thead>
+  <div style="overflow-x: auto;">
+    <table border="1" width="100%" cellpadding="10" class="activity-table">
+      <thead>
       <tr>
         <th style="width: 70px;">ID</th>
         <th style="width: 170px;">Date & Time</th>
@@ -235,6 +236,5 @@
       {% endfor %}
     </tbody>
   </table>
-</div>
-
+  </div>
 {% endblock %}
