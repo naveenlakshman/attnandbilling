@@ -3,6 +3,7 @@
 {% block title %}Assign Students - {{ batch.batch_name }} - Global IT ERP{% endblock %}
 
 {% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <style>
   .batch-header-card {
     background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
@@ -65,18 +66,28 @@
     grid-template-columns: 1fr auto;
     gap: 12px;
     margin-bottom: 20px;
+    align-items: end;
   }
 
-  .form-select {
+  .form-select,
+  .select2-container--default .select2-selection--single {
     border-radius: 8px;
     border: 1px solid #dee2e6;
     padding: 10px 12px;
+    min-height: 38px;
   }
 
-  .form-select:focus {
+  .select2-container--default.select2-container--focus .select2-selection--single {
     border-color: #0d6efd;
     box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
-    outline: none;
+  }
+
+  .select2-results__option {
+    padding: 10px 12px;
+  }
+
+  .select2-search__field {
+    font-size: 14px;
   }
 
   .add-btn {
@@ -424,4 +435,27 @@
   </div>
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+$(document).ready(function() {
+  // Initialize Select2 on the student dropdown
+  $('select[name="student_id"]').select2({
+    placeholder: '🔍 Search and select a student...',
+    allowClear: true,
+    width: '100%',
+    templateResult: function(item) {
+      if (!item.id) return item.text;
+      return item.text;
+    },
+    templateSelection: function(item) {
+      if (!item.id) return item.text;
+      return item.text;
+    }
+  });
+});
+</script>
 {% endblock %}
