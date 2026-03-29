@@ -1,0 +1,365 @@
+{% extends "attendance/base.html" %}
+
+{% block content %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="bg-gradient-primary text-white p-4 rounded-3 shadow-sm">
+                <h2 class="mb-1">📊 Monthly Attendance Summary</h2>
+                <p class="mb-0 small opacity-75">Student attendance overview for the selected period</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">🔍 Filter Options</h6>
+                </div>
+                <div class="card-body">
+                    <form method="GET" class="row g-3" id="filterForm">
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">From Date</label>
+                            <input type="date" name="from_date" class="form-control form-control-sm" 
+                                   value="{{ from_date }}" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">To Date</label>
+                            <input type="date" name="to_date" class="form-control form-control-sm" 
+                                   value="{{ to_date }}" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Branch</label>
+                            <select name="branch_id" class="form-select form-select-sm" id="branchSelect" required>
+                                {% for branch in branches %}
+                                    <option value="{{ branch['id'] }}" 
+                                            {% if branch['id'] == branch_id %}selected{% endif %}>
+                                        {{ branch['branch_name'] }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Batch (Optional)</label>
+                            <select name="batch_id" class="form-select form-select-sm">
+                                <option value="">All Batches</option>
+                                {% for batch in batches %}
+                                    <option value="{{ batch['id'] }}" 
+                                            {% if batch['id']|string == batch_id|string %}selected{% endif %}>
+                                        {{ batch['batch_name'] }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Sort By</label>
+                            <select name="sort_by" class="form-select form-select-sm">
+                                <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name (A-Z)</option>
+                                <option value="percentage" {% if sort_by == 'percentage' %}selected{% endif %}>Attendance %</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">&nbsp;</label>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary btn-sm w-100">
+                                    View Report
+                                </button>
+                                <a href="{{ url_for('attendance.monthly_summary') }}" class="btn btn-outline-secondary btn-sm">
+                                    Reset
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overall Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Total Students</small>
+                    <h4 class="mb-0 text-primary fw-bold">{{ overall_stats.total_students }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Avg Attendance %</small>
+                    <h4 class="mb-0 text-success fw-bold">{{ "%.1f"|format(overall_stats.avg_percentage) }}%</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Total Present</small>
+                    <h4 class="mb-0 text-success fw-bold">{{ overall_stats.total_present }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Total Absent</small>
+                    <h4 class="mb-0 text-danger fw-bold">{{ overall_stats.total_absent }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Total Late</small>
+                    <h4 class="mb-0 text-warning fw-bold">{{ overall_stats.total_late }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Total Leave</small>
+                    <h4 class="mb-0 text-info fw-bold">{{ overall_stats.total_leave }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Summary Table -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">📋 Student Attendance Summary</h6>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-secondary" onclick="printTable()">
+                            🖨️ Print
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="downloadCSV()">
+                            📥 CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    {% if summary_data %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="summaryTable">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 80px;">Roll</th>
+                                    <th>Student Name</th>
+                                    <th style="width: 100px;">Phone</th>
+                                    <th class="text-center" style="width: 90px;">
+                                        <span title="Total Days Marked">Marked</span>
+                                    </th>
+                                    <th class="text-center" style="width: 80px;" data-sort-key="present">
+                                        <span class="badge bg-success">Present</span>
+                                    </th>
+                                    <th class="text-center" style="width: 80px;" data-sort-key="absent">
+                                        <span class="badge bg-danger">Absent</span>
+                                    </th>
+                                    <th class="text-center" style="width: 80px;" data-sort-key="late">
+                                        <span class="badge bg-warning">Late</span>
+                                    </th>
+                                    <th class="text-center" style="width: 80px;" data-sort-key="leave">
+                                        <span class="badge bg-info">Leave</span>
+                                    </th>
+                                    <th class="text-center" style="width: 120px;" data-sort-key="percentage">
+                                        <span class="badge bg-primary">Attendance %</span>
+                                    </th>
+                                    <th style="width: 80px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for student in summary_data %}
+                                <tr>
+                                    <td>
+                                        <small class="text-muted">{{ student.student_code }}</small>
+                                    </td>
+                                    <td class="fw-500">{{ student.full_name }}</td>
+                                    <td>
+                                        <small>{{ student.phone or '-' }}</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <strong>{{ student.total_marked }}</strong>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success-light text-success">{{ student.present }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-danger-light text-danger">{{ student.absent }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-warning-light text-warning">{{ student.late }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info-light text-info">{{ student.leave }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="d-flex align-items-center justify-content-center gap-2">
+                                            <div class="progress" style="width: 60px; height: 20px;">
+                                                {% set percent = student.percentage %}
+                                                {% if percent >= 80 %}
+                                                    <div class="progress-bar bg-success" role="progressbar" 
+                                                         style="width: {{ percent }}%"></div>
+                                                {% elif percent >= 70 %}
+                                                    <div class="progress-bar bg-warning" role="progressbar" 
+                                                         style="width: {{ percent }}%"></div>
+                                                {% else %}
+                                                    <div class="progress-bar bg-danger" role="progressbar" 
+                                                         style="width: {{ percent }}%"></div>
+                                                {% endif %}
+                                            </div>
+                                            <small class="fw-bold" style="width: 40px;">{{ "%.1f"|format(student.percentage) }}%</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('attendance.student_attendance_history', student_id=student.student_id) }}" class="btn btn-sm btn-outline-info">
+                                            👁️ View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-5 text-center">
+                        <p class="text-muted mb-0">
+                            {% if summary_data|length == 0 %}
+                                No students found for the selected filters.
+                            {% else %}
+                                No attendance data available for the selected period.
+                            {% endif %}
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 bg-light p-3">
+                <small class="text-muted">
+                    <strong>Legend:</strong> 
+                    <span class="badge bg-success">✓ Present</span>
+                    <span class="badge bg-danger">✗ Absent</span>
+                    <span class="badge bg-warning">⏱ Late</span>
+                    <span class="badge bg-info">📋 Leave</span>
+                    — 
+                    <strong>Attendance %:</strong> Calculated as (Present Days / Total Marked Days) × 100
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Styles -->
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .bg-success-light {
+        background-color: rgba(25, 135, 84, 0.1);
+    }
+    
+    .bg-danger-light {
+        background-color: rgba(220, 53, 69, 0.1);
+    }
+    
+    .bg-warning-light {
+        background-color: rgba(255, 193, 7, 0.1);
+    }
+    
+    .bg-info-light {
+        background-color: rgba(23, 162, 184, 0.1);
+    }
+    
+    .table th {
+        font-weight: 600;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+    }
+    
+    .table-hover tbody tr:hover {
+        background-color: #f5f5f5;
+    }
+    
+    .progress {
+        border-radius: 3px;
+        background-color: #e9ecef;
+    }
+    
+    @media print {
+        .btn, .form-group, .filter-section, .btn-group {
+            display: none;
+        }
+        
+        .card {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: none !important;
+        }
+        
+        .table {
+            font-size: 0.9rem;
+        }
+    }
+</style>
+
+<!-- JavaScript Functions -->
+<script>
+function downloadCSV() {
+    const table = document.getElementById('summaryTable');
+    let csv = [];
+    
+    // Add header
+    const headers = [];
+    table.querySelectorAll('thead th').forEach(th => {
+        headers.push(th.textContent.trim());
+    });
+    csv.push(headers.join(','));
+    
+    // Add rows
+    table.querySelectorAll('tbody tr').forEach(tr => {
+        const row = [];
+        tr.querySelectorAll('td').forEach(td => {
+            let text = td.textContent.trim();
+            // Handle special characters
+            if (text.includes(',') || text.includes('"')) {
+                text = '"' + text.replace(/"/g, '""') + '"';
+            }
+            row.push(text);
+        });
+        csv.push(row.join(','));
+    });
+    
+    // Create download link
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'monthly_attendance_summary_' + new Date().toISOString().split('T')[0] + '.csv';
+    link.click();
+}
+
+function printTable() {
+    window.print();
+}
+
+// Handle branch change to reload batches
+document.getElementById('branchSelect').addEventListener('change', function() {
+    // Get the form and submit it to reload with new branch
+    const form = document.getElementById('filterForm');
+    // Reset batch selection when branch changes
+    form.querySelector('select[name="batch_id"]').value = '';
+    form.submit();
+});
+</script>
+{% endblock %}

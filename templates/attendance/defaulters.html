@@ -1,0 +1,413 @@
+{% extends "attendance/base.html" %}
+
+{% block content %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="bg-gradient-danger text-white p-4 rounded-3 shadow-sm">
+                <h2 class="mb-1">⚠️ Low Attendance / Defaulters</h2>
+                <p class="mb-0 small opacity-75">Students below {{ threshold }}% attendance requiring follow-up action</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Total Defaulters</small>
+                    <h4 class="mb-0 text-danger fw-bold">{{ summary_stats.total_defaulters }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Avg Attendance</small>
+                    <h4 class="mb-0 text-warning fw-bold">{{ "%.1f"|format(summary_stats.avg_attendance) }}%</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Pending</small>
+                    <h4 class="mb-0 text-secondary fw-bold">{{ summary_stats.pending_followups }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Contacted</small>
+                    <h4 class="mb-0 text-info fw-bold">{{ summary_stats.contacted }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">Resolved</small>
+                    <h4 class="mb-0 text-success fw-bold">{{ summary_stats.resolved }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6 mb-3">
+            <div class="card border-0 shadow-sm h-100 bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted d-block mb-2">No Response</small>
+                    <h4 class="mb-0 text-danger fw-bold">{{ summary_stats.no_response }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">🔍 Filter Options</h6>
+                </div>
+                <div class="card-body">
+                    <form method="GET" class="row g-3" id="filterForm">
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Attendance Threshold %</label>
+                            <input type="number" name="threshold" class="form-control form-control-sm" 
+                                   value="{{ threshold }}" min="0" max="100" step="5" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Branch</label>
+                            <select name="branch_id" class="form-select form-select-sm" id="branchSelect" required>
+                                {% for branch in branches %}
+                                    <option value="{{ branch['id'] }}" 
+                                            {% if branch['id'] == branch_id %}selected{% endif %}>
+                                        {{ branch['branch_name'] }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold">Batch (Optional)</label>
+                            <select name="batch_id" class="form-select form-select-sm">
+                                <option value="">All Batches</option>
+                                {% for batch in batches %}
+                                    <option value="{{ batch['id'] }}" 
+                                            {% if batch['id']|string == batch_id|string %}selected{% endif %}>
+                                        {{ batch['batch_name'] }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Follow-up Status</label>
+                            <select name="followup_status" class="form-select form-select-sm">
+                                <option value="">All Status</option>
+                                <option value="pending" {% if followup_status == 'pending' %}selected{% endif %}>
+                                    ⏳ Pending
+                                </option>
+                                <option value="contacted" {% if followup_status == 'contacted' %}selected{% endif %}>
+                                    📞 Contacted
+                                </option>
+                                <option value="resolved" {% if followup_status == 'resolved' %}selected{% endif %}>
+                                    ✓ Resolved
+                                </option>
+                                <option value="no_response" {% if followup_status == 'no_response' %}selected{% endif %}>
+                                    ✗ No Response
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">&nbsp;</label>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-warning btn-sm w-100">
+                                    🔄 Apply Filters
+                                </button>
+                                <a href="{{ url_for('attendance.defaulters') }}" class="btn btn-outline-secondary btn-sm">
+                                    Reset
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Defaulters Table -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">🎯 Students Below {{ threshold }}% Attendance</h6>
+                    {% if defaulters_data %}
+                    <small class="text-muted">
+                        Showing <strong>{{ defaulters_data|length }}</strong> student(s)
+                    </small>
+                    {% endif %}
+                </div>
+                <div class="card-body p-0">
+                    {% if defaulters_data %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="defaultersTable">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 80px;">Roll</th>
+                                    <th>Student Name</th>
+                                    <th style="width: 110px;">Phone</th>
+                                    <th style="width: 120px;">Batch</th>
+                                    <th class="text-center" style="width: 110px;">
+                                        <span class="badge bg-danger">Attendance %</span>
+                                    </th>
+                                    <th class="text-center" style="width: 130px;">
+                                        <span class="badge bg-secondary">Follow-up Status</span>
+                                    </th>
+                                    <th style="width: 140px;">Last Follow-up</th>
+                                    <th style="width: 140px;">Remarks</th>
+                                    <th style="width: 180px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for defaulter in defaulters_data %}
+                                <tr>
+                                    <td>
+                                        <small class="text-muted">{{ defaulter.student_code }}</small>
+                                    </td>
+                                    <td class="fw-500">{{ defaulter.full_name }}</td>
+                                    <td>
+                                        <small>{{ defaulter.phone or '-' }}</small>
+                                    </td>
+                                    <td>
+                                        <small class="badge bg-light text-dark">{{ defaulter.batch_name }}</small>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="d-flex align-items-center justify-content-center gap-2">
+                                            <div class="progress" style="width: 60px; height: 20px;">
+                                                {% set percent = defaulter.attendance_percentage %}
+                                                {% if percent >= 70 %}
+                                                    <div class="progress-bar bg-warning" role="progressbar" 
+                                                         style="width: {{ percent }}%"></div>
+                                                {% else %}
+                                                    <div class="progress-bar bg-danger" role="progressbar" 
+                                                         style="width: {{ percent }}%"></div>
+                                                {% endif %}
+                                            </div>
+                                            <small class="fw-bold" style="width: 45px;">{{ "%.1f"|format(percent) }}%</small>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if defaulter.followup_status == 'pending' %}
+                                            <span class="badge bg-secondary">⏳ Pending</span>
+                                        {% elif defaulter.followup_status == 'contacted' %}
+                                            <span class="badge bg-info">📞 Contacted</span>
+                                        {% elif defaulter.followup_status == 'resolved' %}
+                                            <span class="badge bg-success">✓ Resolved</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">✗ No Response</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if defaulter.last_followup_date %}
+                                            <small class="text-muted">{{ defaulter.last_followup_date[:10] }}</small>
+                                        {% else %}
+                                            <small class="text-muted">Never</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if defaulter.followup_remarks %}
+                                            <small class="text-muted" title="{{ defaulter.followup_remarks }}" style="max-width: 200px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                {{ defaulter.followup_remarks[:50] }}{% if defaulter.followup_remarks|length > 50 %}...{% endif %}
+                                            </small>
+                                        {% else %}
+                                            <small class="text-muted">-</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-warning" 
+                                                onclick="openFollowupModal({{ defaulter.student_id }}, '{{ defaulter.full_name }}', '{{ defaulter.followup_status }}', '{{ defaulter.followup_remarks or '' }}')">
+                                            📝 Follow-up
+                                        </button>
+                                        <a href="{{ url_for('attendance.student_attendance_history', student_id=defaulter.student_id) }}" class="btn btn-sm btn-outline-info">
+                                            👁️ History
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-5 text-center">
+                        <p class="text-muted mb-0">
+                            No students found below {{ threshold }}% attendance for the selected filters.
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 bg-light p-3">
+                <small class="text-muted">
+                    <strong>Legend:</strong> 
+                    <span class="badge bg-secondary">⏳ Pending</span> — Follow-up not started
+                    <span class="badge bg-info">📞 Contacted</span> — Student/Parent contacted
+                    <span class="badge bg-success">✓ Resolved</span> — Issue resolved, attendance improved
+                    <span class="badge bg-danger">✗ No Response</span> — Unable to reach student/parent
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Follow-up Modal -->
+<div class="modal fade" id="followupModal" tabindex="-1" role="dialog" aria-labelledby="followupModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-white">
+                <h5 class="modal-title" id="followupModalLabel">
+                    📝 Update Follow-up: <span id="studentName"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="followupForm" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="followupStatus" class="form-label">Follow-up Status <span class="text-danger">*</span></label>
+                        <select id="followupStatus" name="followup_status" class="form-select" required>
+                            <option value="">Select status...</option>
+                            <option value="pending">⏳ Pending</option>
+                            <option value="contacted">📞 Contacted</option>
+                            <option value="resolved">✓ Resolved</option>
+                            <option value="no_response">✗ No Response</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="followupRemarks" class="form-label">Remarks / Notes</label>
+                        <textarea id="followupRemarks" name="remarks" class="form-control" rows="3" 
+                                  placeholder="Enter follow-up notes (e.g., 'Student promised to improve attendance', 'Parent will monitor closely')"></textarea>
+                        <small class="text-muted">Max 500 characters</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">💾 Save Follow-up</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Styles -->
+<style>
+    .bg-gradient-danger {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    }
+    
+    .progress {
+        border-radius: 3px;
+        background-color: #e9ecef;
+    }
+    
+    .table th {
+        font-weight: 600;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+    }
+    
+    .table-hover tbody tr:hover {
+        background-color: #f5f5f5;
+    }
+    
+    @media print {
+        .btn, .form-group, .filter-section, .btn-group {
+            display: none;
+        }
+        
+        .card {
+            border: 1px solid #dee2e6 !important;
+            box-shadow: none !important;
+        }
+    }
+</style>
+
+<!-- JavaScript Functions -->
+<script>
+let currentStudentId = null;
+
+// Cascade filtering: Reset batch when branch changes
+document.addEventListener('DOMContentLoaded', function() {
+    const filterForm = document.getElementById('filterForm');
+    if (filterForm) {
+        filterForm.addEventListener('change', function(e) {
+            if (e.target.name === 'branch_id') {
+                const batchSelect = filterForm.querySelector('select[name="batch_id"]');
+                if (batchSelect) {
+                    batchSelect.value = '';
+                    filterForm.submit();
+                }
+            } else if (e.target.name === 'threshold' || e.target.name === 'followup_status') {
+                filterForm.submit();
+            }
+        });
+    }
+});
+
+function openFollowupModal(studentId, studentName, currentStatus, currentRemarks) {
+    currentStudentId = studentId;
+    document.getElementById('studentName').textContent = studentName;
+    document.getElementById('followupStatus').value = currentStatus;
+    document.getElementById('followupRemarks').value = currentRemarks;
+    
+    const modal = new bootstrap.Modal(document.getElementById('followupModal'));
+    modal.show();
+}
+
+document.getElementById('followupForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData();
+    formData.append('followup_status', document.getElementById('followupStatus').value);
+    formData.append('remarks', document.getElementById('followupRemarks').value);
+    
+    try {
+        const response = await fetch(
+            `/attendance/defaulters/${currentStudentId}/add-followup`,
+            {
+                method: 'POST',
+                body: formData
+            }
+        );
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            // Show success message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.role = 'alert';
+            alertDiv.innerHTML = `
+                ✓ Follow-up saved successfully!
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.row'));
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('followupModal'));
+            modal.hide();
+            
+            // Reload page after 1.5 seconds
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error saving follow-up: ' + error);
+    }
+});
+</script>
+{% endblock %}

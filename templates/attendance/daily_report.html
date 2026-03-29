@@ -1,0 +1,556 @@
+{% extends "attendance/base.html" %}
+
+{% block title %}Daily Attendance Report - Global IT ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+  .header-card {
+    background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 28px;
+  }
+
+  .header-card h1 {
+    color: white;
+    margin-bottom: 8px;
+  }
+
+  .header-date {
+    font-size: 0.95rem;
+    opacity: 0.9;
+  }
+
+  .filter-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #212529;
+  }
+
+  .form-control, .form-select {
+    padding: 10px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    font-size: 0.95rem;
+  }
+
+  .form-control:focus, .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+    outline: none;
+  }
+
+  .filter-buttons {
+    display: flex;
+    gap: 12px;
+  }
+
+  .btn-filter {
+    padding: 10px 16px;
+    background: #0d6efd;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .btn-filter:hover {
+    background: #0b5ed7;
+  }
+
+  .btn-reset {
+    padding: 10px 16px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .btn-reset:hover {
+    background: #5c636a;
+  }
+
+  .report-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .report-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #f0f0f0;
+  }
+
+  .report-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .batch-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 16px;
+  }
+
+  .info-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .info-label {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+  }
+
+  .info-value {
+    color: #212529;
+    font-weight: 600;
+  }
+
+  .summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 8px;
+  }
+
+  .stat {
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #212529;
+  }
+
+  .stat-label {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 4px;
+  }
+
+  .attendance-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+  }
+
+  .attendance-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .attendance-table th {
+    padding: 14px;
+    text-align: left;
+    font-weight: 600;
+    color: #212529;
+    font-size: 0.95rem;
+  }
+
+  .attendance-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .attendance-table tbody tr:hover {
+    background: #f8f9fa;
+  }
+
+  .student-code {
+    color: #6c757d;
+    font-size: 0.9rem;
+  }
+
+  .student-name {
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 0.9rem;
+  }
+
+  .status-badge.present {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .status-badge.absent {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .status-badge.late {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .status-badge.leave {
+    background: #cfe2ff;
+    color: #084298;
+  }
+
+  .marked-by {
+    color: #6c757d;
+    font-size: 0.9rem;
+  }
+
+  .time-badge {
+    background: #e7f3ff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: #0c5460;
+    font-size: 0.85rem;
+  }
+
+  .remarks-text {
+    color: #6c757d;
+    font-size: 0.9rem;
+    font-style: italic;
+    max-width: 300px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon {
+    font-size: 4rem;
+    margin-bottom: 16px;
+  }
+
+  .verification-bar {
+    background: #cfe2ff;
+    border-left: 4px solid #0d6efd;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    color: #084298;
+    font-size: 0.95rem;
+  }
+
+  .export-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  .btn-export {
+    padding: 10px 16px;
+    background: #17a2b8;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .btn-export:hover {
+    background: #138496;
+  }
+
+  @media (max-width: 768px) {
+    .filter-row {
+      grid-template-columns: 1fr;
+    }
+
+    .summary-stats {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .attendance-table {
+      font-size: 0.9rem;
+    }
+
+    .attendance-table th,
+    .attendance-table td {
+      padding: 10px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <!-- Header -->
+  <div class="header-card">
+    <h1>📊 Daily Attendance Report</h1>
+    <div class="header-date">Review attendance records for verification</div>
+  </div>
+
+  <!-- Filter Card -->
+  <div class="filter-card">
+    <form method="GET" class="d-flex flex-column">
+      <div class="filter-row">
+        <div class="form-group">
+          <label for="branch_id" class="form-label">🏢 Branch</label>
+          <select class="form-select" id="branch_id" name="branch_id">
+            {% for branch in branches %}
+            <option value="{{ branch.id }}" {% if branch_id == branch.id %}selected{% endif %}>
+              {{ branch.branch_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="batch_id" class="form-label">📚 Batch</label>
+          <select class="form-select" id="batch_id" name="batch_id">
+            <option value="">-- Select Batch --</option>
+            {% for batch in batches %}
+            <option value="{{ batch.id }}" {% if batch_id == batch.id %}selected{% endif %}>
+              {{ batch.batch_name }}
+              {% if batch.course_name %}({{ batch.course_name }}){% endif %}
+              - {{ batch.attendance_count }} students
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="date" class="form-label">📅 Date</label>
+          <input type="date" class="form-control" id="date" name="date" value="{{ reported_date }}">
+        </div>
+      </div>
+
+      <div class="filter-buttons">
+        <button type="submit" class="btn-filter">🔍 View Report</button>
+        <a href="{{ url_for('attendance.daily_report') }}" class="btn-reset">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Report Section -->
+  {% if batch_info and attendance_records|length > 0 %}
+  <div class="report-card">
+    <div class="report-header">
+      <div class="report-title">{{ batch_info.batch_name }}</div>
+      <div class="batch-info">
+        {% if batch_info.course_name %}
+        <div class="info-item">
+          <div class="info-label">📖 Course</div>
+          <div class="info-value">{{ batch_info.course_name }}</div>
+        </div>
+        {% endif %}
+        
+        {% if batch_info.trainer_name %}
+        <div class="info-item">
+          <div class="info-label">👨‍🏫 Trainer</div>
+          <div class="info-value">{{ batch_info.trainer_name }}</div>
+        </div>
+        {% endif %}
+        
+        <div class="info-item">
+          <div class="info-label">📅 Date</div>
+          <div class="info-value">{{ reported_date }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Verification Bar -->
+    <div class="verification-bar">
+      ✓ This report shows all attendance records marked for this batch on this date. 
+      Use it to verify accuracy and staff work.
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="summary-stats">
+      <div class="stat">
+        <div class="stat-value">{{ summary_stats.total_marked }}</div>
+        <div class="stat-label">Total Marked</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" style="color: #198754;">{{ summary_stats.present }}</div>
+        <div class="stat-label">Present</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" style="color: #dc3545;">{{ summary_stats.absent }}</div>
+        <div class="stat-label">Absent</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" style="color: #ffc107;">{{ summary_stats.late }}</div>
+        <div class="stat-label">Late</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" style="color: #0dcaf0;">{{ summary_stats.leave }}</div>
+        <div class="stat-label">Leave</div>
+      </div>
+    </div>
+
+    <!-- Attendance Records Table -->
+    <div style="overflow-x: auto;">
+      <table class="attendance-table">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Student Name</th>
+            <th>Status</th>
+            <th>Remarks</th>
+            <th>Marked By</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in attendance_records %}
+          <tr>
+            <td>
+              <span class="student-code">{{ record.student_code }}</span>
+            </td>
+            <td>
+              <span class="student-name">{{ record.full_name }}</span>
+              <div style="font-size: 0.85rem; color: #6c757d;">{{ record.phone }}</div>
+            </td>
+            <td>
+              <span class="status-badge {{ record.status }}">
+                {% if record.status == 'present' %}✓ Present
+                {% elif record.status == 'absent' %}✗ Absent
+                {% elif record.status == 'late' %}⏱️ Late
+                {% else %}📋 Leave
+                {% endif %}
+              </span>
+            </td>
+            <td>
+              {% if record.remarks %}
+              <span class="remarks-text">{{ record.remarks }}</span>
+              {% else %}
+              <span style="color: #adb5bd;">-</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="marked-by">{{ record.marked_by_name or '-' }}</span>
+            </td>
+            <td>
+              <span class="time-badge">{{ record.updated_at.split('T')[1] if record.updated_at else '-' }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Export Options -->
+    <div class="export-buttons">
+      <button class="btn-export" onclick="window.print()">🖨️ Print Report</button>
+      <button class="btn-export" onclick="exportToCSV()">📥 Export to CSV</button>
+    </div>
+  </div>
+
+  <!-- Batch Selected But No Records -->
+  {% elif batch_info and attendance_records|length == 0 %}
+  <div class="report-card">
+    <div class="empty-state">
+      <div class="empty-state-icon">📭</div>
+      <p class="mb-0"><strong>No attendance marked for this batch on {{ reported_date }}</strong></p>
+      <p style="margin-top: 8px; font-size: 0.9rem;">
+        <a href="{{ url_for('attendance.mark_attendance', batch_id=batch_id, date=reported_date) }}">
+          Go to Mark Attendance
+        </a> to record attendance for this batch
+      </p>
+    </div>
+  </div>
+
+  <!-- No Selection State -->
+  {% else %}
+  <div class="report-card">
+    <div class="empty-state">
+      <div class="empty-state-icon">📚</div>
+      <p class="mb-0"><strong>Select a batch to view attendance</strong></p>
+      <p style="margin-top: 8px; font-size: 0.9rem;">
+        Choose a branch, batch, and date from the filters above
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+  function exportToCSV() {
+    const table = document.querySelector('.attendance-table');
+    if (!table) return;
+
+    let csv = [];
+    const rows = table.querySelectorAll('tr');
+
+    rows.forEach(row => {
+      const cells = row.querySelectorAll('td, th');
+      const rowData = [];
+      cells.forEach(cell => {
+        // Get text content without extra whitespace
+        let text = cell.textContent.trim();
+        // Replace quotes and newlines
+        text = text.replace(/"/g, '""');
+        rowData.push('"' + text + '"');
+      });
+      csv.push(rowData.join(','));
+    });
+
+    // Add header
+    const title = document.querySelector('.report-title').textContent;
+    const header = ['Attendance Report: ' + title, '{{ reported_date }}'].join(' - ');
+
+    const csvContent = [header, '', ...csv].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `attendance_{{ reported_date }}.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // Handle branch change to reload batches
+  document.getElementById('branch_id').addEventListener('change', function() {
+    // Get the form and submit it to reload with new branch
+    const form = document.querySelector('form');
+    // Reset batch selection when branch changes
+    document.getElementById('batch_id').value = '';
+    form.submit();
+  });
+</script>
+{% endblock %}

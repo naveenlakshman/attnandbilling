@@ -1,0 +1,427 @@
+{% extends "attendance/base.html" %}
+
+{% block title %}Assign Students - {{ batch.batch_name }} - Global IT ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+  .batch-header-card {
+    background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 28px;
+  }
+
+  .batch-header-card h1 {
+    color: white;
+    margin-bottom: 8px;
+  }
+
+  .batch-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .info-item {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 12px;
+    border-radius: 8px;
+  }
+
+  .info-label {
+    font-size: 0.85rem;
+    opacity: 0.9;
+  }
+
+  .info-value {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  .section-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 12px;
+  }
+
+  .add-student-form {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .form-select {
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    padding: 10px 12px;
+  }
+
+  .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+    outline: none;
+  }
+
+  .add-btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    background: #0d6efd;
+    color: white;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .add-btn:hover {
+    background: #0b5ed7;
+  }
+
+  .students-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .students-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .students-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #212529;
+    font-size: 0.95rem;
+  }
+
+  .students-table td {
+    padding: 12px;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .students-table tbody tr:hover {
+    background: #f8f9fa;
+  }
+
+  .student-name {
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .student-code {
+    color: #6c757d;
+    font-size: 0.9rem;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .status-badge.active {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .status-badge.completed {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .status-badge.dropped {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .status-select {
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .action-buttons form {
+    display: inline;
+  }
+
+  .btn-sm {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  .btn-update {
+    background: #198754;
+    color: white;
+  }
+
+  .btn-update:hover {
+    background: #157347;
+  }
+
+  .btn-remove {
+    background: #dc3545;
+    color: white;
+  }
+
+  .btn-remove:hover {
+    background: #bb2d3b;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+  }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #0d6efd;
+    text-decoration: none;
+    margin-bottom: 20px;
+  }
+
+  .back-link:hover {
+    text-decoration: underline;
+  }
+
+  .alert-danger {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .stat {
+    background: #f8f9fa;
+    padding: 16px;
+    border-radius: 8px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #212529;
+  }
+
+  .stat-label {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 4px;
+  }
+
+  @media (max-width: 768px) {
+    .batch-info {
+      grid-template-columns: 1fr;
+    }
+
+    .add-student-form {
+      grid-template-columns: 1fr;
+    }
+
+    .students-table {
+      font-size: 0.9rem;
+    }
+
+    .students-table th,
+    .students-table td {
+      padding: 8px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <!-- Back Link -->
+  <a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}" class="back-link">
+    ← Back to Batch
+  </a>
+
+  <!-- Batch Header -->
+  <div class="batch-header-card">
+    <h1>Assign Students to Batch</h1>
+    <div style="margin-top: 8px; font-size: 0.95rem;">{{ batch.batch_name }}</div>
+    
+    <div class="batch-info">
+      {% if batch.course_name %}
+      <div class="info-item">
+        <div class="info-label">📖 Course</div>
+        <div class="info-value">{{ batch.course_name }}</div>
+      </div>
+      {% endif %}
+      
+      <div class="info-item">
+        <div class="info-label">🏢 Branch</div>
+        <div class="info-value">{{ batch.branch_name }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Alert -->
+  {% if error %}
+  <div class="alert-danger">
+    ⚠️ {{ error }}
+  </div>
+  {% endif %}
+
+  <!-- Assigned Students Section -->
+  <div class="section-card">
+    <div class="section-title">
+      👥 Assigned Students ({{ assigned_students|length }})
+    </div>
+
+    {% if assigned_students|length > 0 %}
+    <div style="overflow-x: auto;">
+      <table class="students-table">
+        <thead>
+          <tr>
+            <th>Student Code</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Joined On</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for student in assigned_students %}
+          <tr>
+            <td>
+              <span class="student-code">{{ student.student_code }}</span>
+            </td>
+            <td>
+              <span class="student-name">{{ student.full_name }}</span>
+            </td>
+            <td>{{ student.phone }}</td>
+            <td>{{ student.joined_on }}</td>
+            <td>
+              <form method="POST" style="display: inline;">
+                <input type="hidden" name="action" value="update-status">
+                <input type="hidden" name="student_batch_id" value="{{ student.id }}">
+                <select class="status-select" name="status" onchange="this.form.submit()">
+                  <option value="active" {% if student.status == 'active' %}selected{% endif %}>✓ Active</option>
+                  <option value="completed" {% if student.status == 'completed' %}selected{% endif %}>✓ Completed</option>
+                  <option value="dropped" {% if student.status == 'dropped' %}selected{% endif %}>✗ Dropped</option>
+                </select>
+              </form>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <form method="POST" onsubmit="return confirm('Remove this student from batch?');">
+                  <input type="hidden" name="action" value="remove">
+                  <input type="hidden" name="student_batch_id" value="{{ student.id }}">
+                  <button type="submit" class="btn-sm btn-remove">🗑️ Remove</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">👥</div>
+      <p class="mb-0">No students assigned yet</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Add Students Section -->
+  <div class="section-card">
+    <div class="section-title">
+      ➕ Add Students to Batch
+    </div>
+
+    {% if available_students|length > 0 %}
+    <form method="POST" class="add-student-form">
+      <input type="hidden" name="action" value="add">
+      <select class="form-select" name="student_id" required>
+        <option value="">-- Select a student to add --</option>
+        {% for student in available_students %}
+        <option value="{{ student.id }}">
+          {{ student.student_code }} - {{ student.full_name }} ({{ student.phone }})
+        </option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="add-btn">➕ Add Student</button>
+    </form>
+
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-value">{{ available_students|length }}</div>
+        <div class="stat-label">Available to Add</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">{{ assigned_students|length }}</div>
+        <div class="stat-label">Currently Assigned</div>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">✓</div>
+      <p class="mb-0">All active students from this branch are already assigned!</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Help Text -->
+  <div style="background: #e7f3ff; border-radius: 8px; padding: 16px; margin-top: 24px; color: #0c5460;">
+    <strong>💡 Tips:</strong>
+    <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+      <li>Status can be updated at any time using the dropdown</li>
+      <li>Mark students as "Dropped" if they leave the batch</li>
+      <li>Students must have "active" status to mark attendance</li>
+      <li>Only active students from this branch appear in the "Add" list</li>
+    </ul>
+  </div>
+
+</div>
+{% endblock %}

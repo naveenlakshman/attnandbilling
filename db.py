@@ -194,6 +194,92 @@ def init_db():
         )
     """)
 
+    # ---------- BATCHES ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_name TEXT NOT NULL,
+            course_id INTEGER,
+            branch_id INTEGER NOT NULL,
+            start_date TEXT,
+            end_date TEXT,
+            start_time TEXT,
+            end_time TEXT,
+            trainer_id INTEGER,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK(status IN ('active', 'completed', 'cancelled')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (course_id) REFERENCES courses(id),
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            FOREIGN KEY (trainer_id) REFERENCES users(id)
+        )
+    """)
+
+    # ---------- STUDENT BATCH MAP ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS student_batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            batch_id INTEGER NOT NULL,
+            joined_on TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK(status IN ('active', 'completed', 'dropped')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE(student_id, batch_id),
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE
+        )
+    """)
+
+    # ---------- ATTENDANCE RECORDS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS attendance_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            attendance_date TEXT NOT NULL,
+            student_id INTEGER NOT NULL,
+            batch_id INTEGER NOT NULL,
+            branch_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'absent'
+                CHECK(status IN ('present', 'absent', 'late', 'leave')),
+            remarks TEXT,
+            marked_by INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE(attendance_date, student_id, batch_id),
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            FOREIGN KEY (marked_by) REFERENCES users(id)
+        )
+    """)
+
+    # ---------- ATTENDANCE FOLLOWUPS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS attendance_followups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            branch_id INTEGER NOT NULL,
+            batch_id INTEGER,
+            followup_date TEXT NOT NULL,
+            reason TEXT,
+            action_taken TEXT,
+            followup_status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(followup_status IN ('pending', 'contacted', 'resolved', 'no_response')),
+            last_followup_date TEXT,
+            remarks TEXT,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+            FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
+            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL,
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+
     # ---------- INVOICES ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS invoices (
@@ -623,6 +709,19 @@ def init_db():
                 SET status = ?, updated_at = ?
                 WHERE id = ?
             """, (new_status, now, invoice_id))
+    except:
+        pass
+
+    # ---------- MIGRATIONS ----------
+    try:
+        # Add branch_id to attendance_followups if missing
+        add_column_if_not_exists(cur, 'attendance_followups', 'branch_id', 'INTEGER NOT NULL DEFAULT 1')
+        
+        # Add last_followup_date to attendance_followups if missing
+        add_column_if_not_exists(cur, 'attendance_followups', 'last_followup_date', 'TEXT')
+        
+        # Add remarks to attendance_followups if missing
+        add_column_if_not_exists(cur, 'attendance_followups', 'remarks', 'TEXT')
     except:
         pass
 

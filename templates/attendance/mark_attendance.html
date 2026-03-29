@@ -1,0 +1,615 @@
+{% extends "attendance/base.html" %}
+
+{% block title %}Mark Attendance - Global IT ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+  .header-card {
+    background: linear-gradient(135deg, #198754 0%, #157347 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 28px;
+  }
+
+  .header-card h1 {
+    color: white;
+    margin-bottom: 8px;
+  }
+
+  .header-date {
+    font-size: 0.95rem;
+    opacity: 0.9;
+  }
+
+  .filter-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #212529;
+  }
+
+  .form-control, .form-select {
+    padding: 10px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    font-size: 0.95rem;
+  }
+
+  .form-control:focus, .form-select:focus {
+    border-color: #198754;
+    box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.1);
+    outline: none;
+  }
+
+  .filter-buttons {
+    display: flex;
+    gap: 12px;
+  }
+
+  .btn-load {
+    padding: 10px 16px;
+    background: #0d6efd;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .btn-load:hover {
+    background: #0b5ed7;
+  }
+
+  .btn-reset {
+    padding: 10px 16px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .btn-reset:hover {
+    background: #5c636a;
+  }
+
+  .attendance-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .attendance-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #f0f0f0;
+  }
+
+  .attendance-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .batch-details {
+    display: flex;
+    gap: 20px;
+    font-size: 0.95rem;
+    color: #6c757d;
+  }
+
+  .quick-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .quick-action-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+
+  .btn-present-all {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .btn-present-all:hover {
+    background: #c3e6cb;
+  }
+
+  .btn-absent-all {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .btn-absent-all:hover {
+    background: #f5c6cb;
+  }
+
+  .students-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+  }
+
+  .students-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .students-table th {
+    padding: 14px;
+    text-align: left;
+    font-weight: 600;
+    color: #212529;
+    font-size: 0.95rem;
+  }
+
+  .students-table td {
+    padding: 14px;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .students-table tbody tr:hover {
+    background: #f8f9fa;
+  }
+
+  .student-code {
+    color: #6c757d;
+    font-size: 0.9rem;
+  }
+
+  .student-name {
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .status-select {
+    padding: 8px 12px;
+    border: 2px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    min-width: 120px;
+  }
+
+  .status-select:focus {
+    border-color: #198754;
+    outline: none;
+  }
+
+  .status-select.present {
+    border-color: #198754;
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .status-select.absent {
+    border-color: #dc3545;
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .status-select.late {
+    border-color: #ffc107;
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .status-select.leave {
+    border-color: #0dcaf0;
+    background: #cfe2ff;
+    color: #084298;
+  }
+
+  .remarks-input {
+    padding: 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .remarks-input:focus {
+    border-color: #198754;
+    outline: none;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 2px solid #f0f0f0;
+  }
+
+  .btn-save {
+    padding: 12px 24px;
+    background: #198754;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+  .btn-save:hover {
+    background: #157347;
+  }
+
+  .btn-cancel {
+    padding: 12px 24px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+  .btn-cancel:hover {
+    background: #5c636a;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon {
+    font-size: 4rem;
+    margin-bottom: 16px;
+  }
+
+  .alert {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+
+  .alert-success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+  }
+
+  .alert-info {
+    background: #cfe2ff;
+    border: 1px solid #b6d4fe;
+    color: #084298;
+  }
+
+  .attendance-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  .stat {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #212529;
+  }
+
+  .stat-label {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 4px;
+  }
+
+  @media (max-width: 768px) {
+    .filter-row {
+      grid-template-columns: 1fr;
+    }
+
+    .attendance-header {
+      flex-direction: column;
+      align-items: start;
+    }
+
+    .batch-details {
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .students-table {
+      font-size: 0.9rem;
+    }
+
+    .students-table th,
+    .students-table td {
+      padding: 10px;
+    }
+
+    .status-select {
+      min-width: 100px;
+    }
+
+    .remarks-input {
+      max-width: 100%;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <!-- Header -->
+  <div class="header-card">
+    <h1>📋 Mark Attendance</h1>
+    <div class="header-date">Select a batch and date to mark attendance</div>
+  </div>
+
+  <!-- Messages -->
+  {% if message == 'saved' %}
+  <div class="alert alert-success">
+    ✓ Attendance saved successfully!
+  </div>
+  {% elif message == 'marked_all_present' %}
+  <div class="alert alert-success">
+    ✓ All students marked as present!
+  </div>
+  {% elif message == 'marked_all_absent' %}
+  <div class="alert alert-success">
+    ✓ All students marked as absent!
+  </div>
+  {% endif %}
+
+  <!-- Filter Card -->
+  <div class="filter-card">
+    <form method="GET">
+      <div class="filter-row">
+        <div class="form-group">
+          <label for="branch_id" class="form-label">🏢 Branch</label>
+          <select class="form-select" id="branch_id" name="branch_id" onchange="this.form.submit()">
+            {% for branch in branches %}
+            <option value="{{ branch.id }}" {% if branch_id == branch.id %}selected{% endif %}>
+              {{ branch.branch_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="batch_id" class="form-label">📚 Batch</label>
+          <select class="form-select" id="batch_id" name="batch_id" onchange="this.form.submit()">
+            <option value="">-- Select Batch --</option>
+            {% for batch in batches %}
+            <option value="{{ batch.id }}" {% if batch_id == batch.id %}selected{% endif %}>
+              {{ batch.batch_name }}
+              {% if batch.course_name %}({{ batch.course_name }}){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="attendance_date" class="form-label">📅 Date</label>
+          <input type="date" class="form-control" id="attendance_date" name="date"
+                 value="{{ attendance_date }}" onchange="this.form.submit()">
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Attendance Marking Section -->
+  {% if batch_info and students|length > 0 %}
+  <div class="attendance-card">
+    <div class="attendance-header">
+      <div>
+        <div class="attendance-title">{{ batch_info.batch_name }}</div>
+        <div class="batch-details">
+          {% if batch_info.course_name %}
+          <span>📖 {{ batch_info.course_name }}</span>
+          {% endif %}
+          <span>Total: <strong>{{ students|length }}</strong> students</span>
+        </div>
+      </div>
+      <div class="quick-actions">
+        <form method="POST" style="display: inline;">
+          <input type="hidden" name="action" value="mark-all-present">
+          <input type="hidden" name="batch_id" value="{{ batch_id }}">
+          <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
+          <input type="hidden" name="branch_id" value="{{ branch_id }}">
+          <button type="submit" class="quick-action-btn btn-present-all">✓ All Present</button>
+        </form>
+        <form method="POST" style="display: inline;">
+          <input type="hidden" name="action" value="mark-all-absent">
+          <input type="hidden" name="batch_id" value="{{ batch_id }}">
+          <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
+          <input type="hidden" name="branch_id" value="{{ branch_id }}">
+          <button type="submit" class="quick-action-btn btn-absent-all">✗ All Absent</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Attendance Table -->
+    <form method="POST">
+      <input type="hidden" name="action" value="save">
+      <input type="hidden" name="batch_id" value="{{ batch_id }}">
+      <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
+      <input type="hidden" name="branch_id" value="{{ branch_id }}">
+
+      <div style="overflow-x: auto;">
+        <table class="students-table">
+          <thead>
+            <tr>
+              <th style="width: 120px;">Code</th>
+              <th>Name</th>
+              <th style="width: 140px;">Status</th>
+              <th style="width: 250px;">Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student in students %}
+            <tr>
+              <td>
+                <span class="student-code">{{ student.student_code }}</span>
+              </td>
+              <td>
+                <span class="student-name">{{ student.full_name }}</span>
+                <div style="font-size: 0.85rem; color: #6c757d;">{{ student.phone }}</div>
+              </td>
+              <td>
+                <select class="status-select" name="status_{{ student.student_id }}" 
+                        id="status_{{ student.student_id }}"
+                        onchange="this.className = 'status-select ' + this.value">
+                  <option value="present" {% if attendance_data.get(student.student_id, {}).get('status') == 'present' %}selected{% endif %}>
+                    ✓ Present
+                  </option>
+                  <option value="absent" {% if attendance_data.get(student.student_id, {}).get('status', 'absent') == 'absent' %}selected{% endif %}>
+                    ✗ Absent
+                  </option>
+                  <option value="late" {% if attendance_data.get(student.student_id, {}).get('status') == 'late' %}selected{% endif %}>
+                    ⏱️ Late
+                  </option>
+                  <option value="leave" {% if attendance_data.get(student.student_id, {}).get('status') == 'leave' %}selected{% endif %}>
+                    📋 Leave
+                  </option>
+                </select>
+              </td>
+              <td>
+                <input type="text" class="remarks-input" name="remarks_{{ student.student_id }}"
+                       placeholder="Add remarks (optional)" maxlength="200"
+                       value="{{ attendance_data.get(student.student_id, {}).get('remarks', '') }}">
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Attendance Statistics -->
+      <div class="attendance-stats">
+        <div class="stat">
+          <div class="stat-value" id="present-count">0</div>
+          <div class="stat-label">Present</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="absent-count">0</div>
+          <div class="stat-label">Absent</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="late-count">0</div>
+          <div class="stat-label">Late</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="leave-count">0</div>
+          <div class="stat-label">Leave</div>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="form-actions">
+        <button type="submit" class="btn-save">💾 Save Attendance</button>
+        <a href="{{ url_for('attendance.mark_attendance') }}" class="btn-cancel">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- No Selection State -->
+  {% elif not batch_info %}
+  <div class="attendance-card">
+    <div class="empty-state">
+      <div class="empty-state-icon">📚</div>
+      <p class="mb-0"><strong>Select a batch to mark attendance</strong></p>
+      <p style="margin-top: 8px; font-size: 0.9rem;">
+        Choose a branch, batch, and date from the filters above
+      </p>
+    </div>
+  </div>
+
+  <!-- No Students State -->
+  {% elif batch_info and students|length == 0 %}
+  <div class="attendance-card">
+    <div class="empty-state">
+      <div class="empty-state-icon">👥</div>
+      <p class="mb-0"><strong>No students assigned to this batch</strong></p>
+      <p style="margin-top: 8px; font-size: 0.9rem;">
+        <a href="{{ url_for('attendance.assign_students', batch_id=batch_id) }}">
+          Assign students to this batch first
+        </a>
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+  // Update statistics when status changes
+  function updateStatistics() {
+    let counts = {
+      present: 0,
+      absent: 0,
+      late: 0,
+      leave: 0
+    };
+
+    // Count all status selects
+    document.querySelectorAll('select[class*="status-select"]').forEach(select => {
+      const status = select.value;
+      if (status in counts) {
+        counts[status]++;
+      }
+    });
+
+    // Update display
+    document.getElementById('present-count').textContent = counts.present;
+    document.getElementById('absent-count').textContent = counts.absent;
+    document.getElementById('late-count').textContent = counts.late;
+    document.getElementById('leave-count').textContent = counts.leave;
+  }
+
+  // Add change event listeners to all status selects
+  document.querySelectorAll('select[class*="status-select"]').forEach(select => {
+    select.addEventListener('change', updateStatistics);
+  });
+
+  // Initial statistics update
+  updateStatistics();
+</script>
+{% endblock %}

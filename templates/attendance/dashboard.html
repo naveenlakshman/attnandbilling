@@ -1,0 +1,421 @@
+{% extends "attendance/base.html" %}
+
+{% block title %}Attendance Dashboard - Global IT ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+  .stat-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    border-left: 4px solid #0d6efd;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: 16px;
+  }
+
+  .stat-card.present {
+    border-left-color: #198754;
+  }
+
+  .stat-card.absent {
+    border-left-color: #dc3545;
+  }
+
+  .stat-card.late {
+    border-left-color: #ffc107;
+  }
+
+  .stat-card.leave {
+    border-left-color: #0dcaf0;
+  }
+
+  .stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #212529;
+  }
+
+  .stat-label {
+    color: #6c757d;
+    font-size: 0.95rem;
+    margin-top: 8px;
+  }
+
+  .batch-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid #dee2e6;
+    margin-bottom: 16px;
+    transition: all 0.3s ease;
+  }
+
+  .batch-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: #0d6efd;
+  }
+
+  .batch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 16px;
+  }
+
+  .batch-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .batch-meta {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    font-size: 0.95rem;
+    margin: 12px 0;
+  }
+
+  .batch-meta-item {
+    color: #6c757d;
+  }
+
+  .batch-meta-item strong {
+    color: #212529;
+  }
+
+  .batch-progress {
+    background: #e9ecef;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 16px 0;
+  }
+
+  .batch-progress-bar {
+    height: 100%;
+    background: #0d6efd;
+    transition: width 0.3s ease;
+  }
+
+  .batch-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .batch-actions .btn {
+    font-size: 0.9rem;
+    padding: 8px 16px;
+  }
+
+  .quick-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+  }
+
+  .quick-stat {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+  }
+
+  .quick-stat .value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #212529;
+  }
+
+  .quick-stat .label {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 4px;
+  }
+
+  .followup-item {
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+  }
+
+  .followup-info {
+    flex: 1;
+  }
+
+  .followup-student {
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .followup-reason {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin-top: 4px;
+  }
+
+  .followup-date {
+    font-size: 0.85rem;
+    color: #6c757d;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-top: 32px;
+    margin-bottom: 20px;
+    color: #212529;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .today-date {
+    color: #6c757d;
+    font-size: 0.95rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <!-- Header -->
+  <div class="mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <h1 class="mb-1">Attendance Dashboard</h1>
+        <span class="today-date">📅 Today: {{ today }}</span>
+      </div>
+      <div>
+        <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-primary">
+          👥 Manage Batches
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overall Statistics -->
+  {% if overall_stats.total_batches > 0 %}
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="stat-card present">
+        <div class="stat-value">{{ overall_stats.total_present }}</div>
+        <div class="stat-label">Present</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-card absent">
+        <div class="stat-value">{{ overall_stats.total_absent }}</div>
+        <div class="stat-label">Absent</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-card late">
+        <div class="stat-value">{{ overall_stats.total_late }}</div>
+        <div class="stat-label">Late</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-card leave">
+        <div class="stat-value">{{ overall_stats.total_leave }}</div>
+        <div class="stat-label">Leave</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Completion Status -->
+  <div class="row mb-4">
+    <div class="col-md-12">
+      <div class="stat-card" style="border-left-color: #6c757d;">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="stat-label">Attendance Marked</div>
+            <div class="stat-value">{{ "%.1f"|format(overall_stats.percentage_marked) }}%</div>
+          </div>
+          <div style="flex: 1; margin-left: 30px;">
+            <div class="batch-progress" style="height: 10px;">
+              <div class="batch-progress-bar" style="width: {{ overall_stats.percentage_marked }}%;"></div>
+            </div>
+            <div class="d-flex justify-content-between mt-2" style="font-size: 0.9rem; color: #6c757d;">
+              <span><strong>{{ overall_stats.total_marked }}</strong> marked</span>
+              <span><strong>{{ overall_stats.total_not_marked }}</strong> pending</span>
+              <span><strong>{{ overall_stats.total_students }}</strong> total students</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Today's Batches Section -->
+  <div class="section-title">
+    📚 Today's Batches ({{ batch_stats|length }})
+  </div>
+
+  {% if batch_stats|length > 0 %}
+  <div class="row">
+    <div class="col-12">
+      {% for batch_stat in batch_stats %}
+      <div class="batch-card">
+        <div class="batch-header">
+          <div>
+            <div class="batch-title">{{ batch_stat.batch.batch_name }}</div>
+            <div class="batch-meta">
+              {% if batch_stat.batch.course_name %}
+              <span class="batch-meta-item">📖 <strong>{{ batch_stat.batch.course_name }}</strong></span>
+              {% endif %}
+              {% if batch_stat.batch.trainer_name %}
+              <span class="batch-meta-item">👨‍🏫 <strong>{{ batch_stat.batch.trainer_name }}</strong></span>
+              {% endif %}
+              <span class="batch-meta-item">🏢 <strong>{{ batch_stat.batch.branch_name }}</strong></span>
+              {% if batch_stat.batch.start_time %}
+              <span class="batch-meta-item">⏰ <strong>{{ batch_stat.batch.start_time }} - {{ batch_stat.batch.end_time }}</strong></span>
+              {% endif %}
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <span class="badge bg-success" style="font-size: 0.95rem;">Active</span>
+          </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="quick-stats">
+          <div class="quick-stat">
+            <div class="value">{{ batch_stat.total_students }}</div>
+            <div class="label">Total</div>
+          </div>
+          <div class="quick-stat" style="background: #d1ecf1;">
+            <div class="value" style="color: #0c5460;">{{ batch_stat.marked_count }}</div>
+            <div class="label">Marked</div>
+          </div>
+          <div class="quick-stat" style="background: #f8d7da;">
+            <div class="value" style="color: #721c24;">{{ batch_stat.not_marked }}</div>
+            <div class="label">Pending</div>
+          </div>
+          <div class="quick-stat" style="background: #d4edda;">
+            <div class="value" style="color: #155724;">{{ batch_stat.present }}</div>
+            <div class="label">Present</div>
+          </div>
+          <div class="quick-stat" style="background: #f8d7da;">
+            <div class="value" style="color: #721c24;">{{ batch_stat.absent }}</div>
+            <div class="label">Absent</div>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="batch-progress">
+          <div class="batch-progress-bar" style="width: {{ batch_stat.percentage_marked }}%;"></div>
+        </div>
+        <div style="font-size: 0.9rem; color: #6c757d; text-align: right;">
+          {{ "%.0f"|format(batch_stat.percentage_marked) }}% attendance marked
+        </div>
+
+        <!-- Actions -->
+        <div class="batch-actions">
+          <a href="{{ url_for('attendance.mark_attendance', batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-primary">✏️ Mark Attendance</a>
+          <a href="{{ url_for('attendance.view_batch', batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-outline-secondary">👁️ View Details</a>
+          <a href="{{ url_for('attendance.daily_report') }}" class="btn btn-sm btn-outline-secondary">📊 Reports</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div class="batch-card">
+    <div class="empty-state">
+      <div class="empty-state-icon">📭</div>
+      <p class="mb-0">No active batches for today</p>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Pending Followups Section -->
+  {% if pending_followups|length > 0 %}
+  <div class="section-title">
+    ⚠️ Pending Attendance Followups
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      {% for followup in pending_followups %}
+      <div class="followup-item">
+        <div class="followup-info">
+          <div class="followup-student">
+            <a href="{{ url_for('attendance.student_attendance_history', student_id=followup.student_id) }}" style="color: #212529; text-decoration: none;">
+              {{ followup.full_name }} ({{ followup.student_code }})
+            </a>
+          </div>
+          {% if followup.batch_name %}
+          <div class="followup-reason">📚 Batch: <strong>{{ followup.batch_name }}</strong></div>
+          {% endif %}
+          {% if followup.reason %}
+          <div class="followup-reason">Reason: {{ followup.reason }}</div>
+          {% endif %}
+        </div>
+        <div style="text-align: right;">
+          <div class="followup-date">📅 {{ followup.followup_date }}</div>
+          <a href="{{ url_for('attendance.followups') }}" class="btn btn-sm btn-warning mt-2">📋 Manage Followups</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Quick Links -->
+  <div class="section-title">
+    🔗 Quick Links
+  </div>
+
+  <div class="row" style="margin-bottom: 40px;">
+    <div class="col-md-2">
+      <a href="{{ url_for('attendance.mark_attendance') }}" class="btn btn-outline-primary btn-lg w-100">
+        ✏️ Mark Attendance
+      </a>
+    </div>
+    <div class="col-md-2">
+      <a href="{{ url_for('attendance.daily_report') }}" class="btn btn-outline-primary btn-lg w-100">
+        📊 Daily Report
+      </a>
+    </div>
+    <div class="col-md-2">
+      <a href="{{ url_for('attendance.monthly_summary') }}" class="btn btn-outline-primary btn-lg w-100">
+        📈 Monthly Summary
+      </a>
+    </div>
+    <div class="col-md-2">
+      <a href="{{ url_for('attendance.defaulters') }}" class="btn btn-outline-danger btn-lg w-100">
+        ⚠️ Defaulters
+      </a>
+    </div>
+    <div class="col-md-2">
+      <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-primary btn-lg w-100">
+        👥 Batches
+      </a>
+    </div>
+    <div class="col-md-2">
+      <a href="{{ url_for('attendance.followups') }}" class="btn btn-outline-info btn-lg w-100">
+        📋 Followups
+      </a>
+    </div>
+  </div>
+
+{% endblock %}

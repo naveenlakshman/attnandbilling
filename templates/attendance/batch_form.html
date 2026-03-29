@@ -1,0 +1,264 @@
+{% extends "attendance/base.html" %}
+
+{% block title %}{% if edit %}Edit Batch{% else %}Create Batch{% endif %} - Global IT ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+  .form-card {
+    background: white;
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .form-section {
+    margin-bottom: 28px;
+  }
+
+  .form-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f0f0f0;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-label {
+    font-weight: 500;
+    color: #212529;
+    margin-bottom: 8px;
+  }
+
+  .form-control, .form-select {
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+  }
+
+  .form-control:focus, .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid #dee2e6;
+  }
+
+  .form-actions .btn {
+    flex: 1;
+    padding: 12px;
+  }
+
+  .alert-danger {
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+
+  .required::after {
+    content: " *";
+    color: #dc3545;
+  }
+
+  .form-helper {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 4px;
+  }
+
+  @media (max-width: 768px) {
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+
+    .form-card {
+      padding: 20px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="mb-4">
+    <h1 class="mb-1">{% if edit %}Edit Batch{% else %}Create New Batch{% endif %}</h1>
+    <p class="text-muted mb-0">{% if edit %}Update batch details{% else %}Set up a new training batch{% endif %}</p>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-danger alert-dismissible fade show" role="alert">
+    {{ error }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endif %}
+
+  <div class="form-card">
+    <form method="POST" novalidate>
+      <!-- Basic Information -->
+      <div class="form-section">
+        <div class="form-section-title">📋 Basic Information</div>
+        
+        <div class="form-group">
+          <label for="batch_name" class="form-label required">Batch Name</label>
+          <input type="text" class="form-control" id="batch_name" name="batch_name"
+                 value="{{ batch.batch_name if batch else '' }}" placeholder="e.g., Batch A - Q1 2026"
+                 required>
+          <div class="form-helper">Unique name to identify this batch</div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="branch_id" class="form-label required">Branch</label>
+            <select class="form-select" id="branch_id" name="branch_id" required>
+              <option value="">Select Branch</option>
+              {% for branch in branches %}
+              <option value="{{ branch.id }}" 
+                      {% if batch and batch.branch_id == branch.id %}selected{% endif %}>
+                {{ branch.branch_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="course_id" class="form-label">Course</label>
+            <select class="form-select" id="course_id" name="course_id">
+              <option value="">Select Course (Optional)</option>
+              {% for course in courses %}
+              <option value="{{ course.id }}"
+                      {% if batch and batch.course_id == course.id %}selected{% endif %}>
+                {{ course.course_name }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-helper">Pre-select a course if batch is for one course</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trainer & Time -->
+      <div class="form-section">
+        <div class="form-section-title">👨‍🏫 Trainer & Schedule</div>
+        
+        <div class="form-group">
+          <label for="trainer_id" class="form-label">Trainer</label>
+          <select class="form-select" id="trainer_id" name="trainer_id">
+            <option value="">Assign Trainer (Optional)</option>
+            {% for trainer in trainers %}
+            <option value="{{ trainer.id }}"
+                    {% if batch and batch.trainer_id == trainer.id %}selected{% endif %}>
+              {{ trainer.full_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="start_time" class="form-label">Start Time</label>
+            <input type="time" class="form-control" id="start_time" name="start_time"
+                   value="{{ batch.start_time if batch else '' }}">
+          </div>
+
+          <div class="form-group">
+            <label for="end_time" class="form-label">End Time</label>
+            <input type="time" class="form-control" id="end_time" name="end_time"
+                   value="{{ batch.end_time if batch else '' }}">
+          </div>
+        </div>
+      </div>
+
+      <!-- Batch Duration -->
+      <div class="form-section">
+        <div class="form-section-title">📅 Batch Duration</div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="start_date" class="form-label">Start Date</label>
+            <input type="date" class="form-control" id="start_date" name="start_date"
+                   value="{{ batch.start_date if batch else '' }}">
+            <div class="form-helper">Leave empty for ongoing batches</div>
+          </div>
+
+          <div class="form-group">
+            <label for="end_date" class="form-label">End Date</label>
+            <input type="date" class="form-control" id="end_date" name="end_date"
+                   value="{{ batch.end_date if batch else '' }}">
+          </div>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="form-section">
+        <div class="form-section-title">✓ Status</div>
+        
+        <div class="form-group">
+          <label for="status" class="form-label required">Batch Status</label>
+          <select class="form-select" id="status" name="status" required>
+            <option value="active" {% if not batch or batch.status == 'active' %}selected{% endif %}>
+              ✓ Active - Currently Running
+            </option>
+            <option value="completed" {% if batch and batch.status == 'completed' %}selected{% endif %}>
+              ✓ Completed - Finished
+            </option>
+            <option value="cancelled" {% if batch and batch.status == 'cancelled' %}selected{% endif %}>
+              ✗ Cancelled - Not Running
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+          {% if edit %}💾 Update Batch{% else %}➕ Create Batch{% endif %}
+        </button>
+        <a href="{% if batch %}{{ url_for('attendance.view_batch', batch_id=batch.id) }}{% else %}{{ url_for('attendance.list_batches') }}{% endif %}" 
+           class="btn btn-outline-secondary">
+          Cancel
+        </a>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<script>
+  // Form validation
+  document.querySelector('form').addEventListener('submit', function(e) {
+    if (!this.checkValidity()) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    this.classList.add('was-validated');
+  });
+
+  // Validate end date is after start date
+  const startDate = document.getElementById('start_date');
+  const endDate = document.getElementById('end_date');
+
+  endDate.addEventListener('change', function() {
+    if (startDate.value && this.value && this.value < startDate.value) {
+      this.setCustomValidity('End date must be after start date');
+    } else {
+      this.setCustomValidity('');
+    }
+  });
+</script>
+{% endblock %}

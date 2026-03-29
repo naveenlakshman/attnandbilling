@@ -1,0 +1,266 @@
+{% extends "attendance/base.html" %}
+
+{% block title %}Batch Management - Global IT ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+  .batch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+
+  .batch-table {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .batch-table table {
+    margin-bottom: 0;
+  }
+
+  .batch-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .batch-table th {
+    padding: 14px 16px;
+    font-weight: 600;
+    color: #212529;
+    vertical-align: middle;
+  }
+
+  .batch-table td {
+    padding: 12px 16px;
+    vertical-align: middle;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .batch-table tbody tr:hover {
+    background: #f8f9fa;
+  }
+
+  .batch-name {
+    font-weight: 600;
+    color: #0d6efd;
+    text-decoration: none;
+  }
+
+  .batch-name:hover {
+    text-decoration: underline;
+  }
+
+  .status-badge {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .status-badge.active {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .status-badge.completed {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .status-badge.cancelled {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .filter-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+  }
+
+  .batch-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .batch-actions .btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+
+  .student-count {
+    background: #e7f3ff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: #0c5460;
+    font-weight: 600;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <!-- Header -->
+  <div class="batch-header">
+    <div>
+      <h1 class="mb-1">Batch Management</h1>
+      <p class="text-muted mb-0">Create and manage training batches</p>
+    </div>
+    <div>
+      <a href="{{ url_for('attendance.create_batch') }}" class="btn btn-primary">
+        ➕ Create Batch
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filter-card">
+    <form method="GET" class="row g-3">
+      <div class="col-md-4">
+        <label for="status" class="form-label">Status</label>
+        <select class="form-select" id="status" name="status">
+          <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Status</option>
+          <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+          <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+          <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancelled</option>
+        </select>
+      </div>
+      {% if branches %}
+      <div class="col-md-4">
+        <label for="branch_id" class="form-label">Branch</label>
+        <select class="form-select" id="branch_id" name="branch_id">
+          <option value="">All Branches</option>
+          {% for branch in branches %}
+          <option value="{{ branch.id }}" {% if branch_filter == branch.id|string %}selected{% endif %}>
+            {{ branch.branch_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="col-md-4 d-flex align-items-end gap-2">
+        <button type="submit" class="btn btn-outline-primary">🔍 Filter</button>
+        <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-secondary">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Batches Table -->
+  {% if batches|length > 0 %}
+  <div class="batch-table">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Batch Name</th>
+          <th>Course</th>
+          <th>Branch</th>
+          <th>Trainer</th>
+          <th>Dates</th>
+          <th>Time</th>
+          <th>Students</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for batch in batches %}
+        <tr>
+          <td>
+            <a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}" class="batch-name">
+              {{ batch.batch_name }}
+            </a>
+          </td>
+          <td>
+            {% if batch.course_name %}
+            <span>📖 {{ batch.course_name }}</span>
+            {% else %}
+            <span class="text-muted">-</span>
+            {% endif %}
+          </td>
+          <td>🏢 {{ batch.branch_name }}</td>
+          <td>
+            {% if batch.trainer_name %}
+            <span>👨‍🏫 {{ batch.trainer_name }}</span>
+            {% else %}
+            <span class="text-muted">-</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if batch.start_date %}
+            {{ batch.start_date }} to {{ batch.end_date or '...' }}
+            {% else %}
+            <span class="text-muted">Ongoing</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if batch.start_time %}
+            {{ batch.start_time }} - {{ batch.end_time }}
+            {% else %}
+            <span class="text-muted">-</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="student-count">{{ batch.student_count }}</span>
+          </td>
+          <td>
+            <span class="status-badge {{ batch.status }}">
+              {% if batch.status == 'active' %}
+              ✓ Active
+              {% elif batch.status == 'completed' %}
+              ✓ Completed
+              {% else %}
+              ✗ Cancelled
+              {% endif %}
+            </span>
+          </td>
+          <td>
+            <div class="batch-actions">
+              <a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}" 
+                 class="btn btn-sm btn-outline-primary" title="View details">👁️</a>
+              <a href="{{ url_for('attendance.assign_students', batch_id=batch.id) }}" 
+                 class="btn btn-sm btn-outline-info" title="Assign students">👥</a>
+              <a href="{{ url_for('attendance.edit_batch', batch_id=batch.id) }}" 
+                 class="btn btn-sm btn-outline-secondary" title="Edit">✏️</a>
+              {% if batch.status != 'cancelled' %}
+              <form method="POST" action="{{ url_for('attendance.delete_batch', batch_id=batch.id) }}" 
+                    style="display: inline;" onsubmit="return confirm('Cancel this batch?');">
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">🗑️</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="batch-table">
+    <div class="empty-state">
+      <div class="empty-state-icon">📭</div>
+      <p class="mb-0">No batches found</p>
+      <p class="small text-muted mt-2">
+        <a href="{{ url_for('attendance.create_batch') }}">Create a new batch</a> to get started
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

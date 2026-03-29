@@ -1,0 +1,440 @@
+{% extends "attendance/base.html" %}
+
+{% block content %}
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">👤 Student Attendance History</h2>
+                    <p class="mb-0 text-muted small">Comprehensive attendance and follow-up records</p>
+                </div>
+                <a href="{{ url_for('attendance.dashboard') }}" class="btn btn-outline-secondary">
+                    ← Back
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Profile & Overall Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">📋 Student Profile</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Roll Number</small>
+                        <strong class="fs-5">{{ student.student_code }}</strong>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Full Name</small>
+                        <strong>{{ student.full_name }}</strong>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Email</small>
+                        <small>{{ student.email or '-' }}</small>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Phone</small>
+                        <strong>{{ student.phone or '-' }}</strong>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Guardian</small>
+                        <small>{{ student.guardian_name or '-' }}</small>
+                    </div>
+                    <div>
+                        <small class="text-muted d-block">Guardian Phone</small>
+                        <strong>{{ student.guardian_phone or '-' }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">📚 Current Batch</h6>
+                </div>
+                <div class="card-body">
+                    {% if current_batch %}
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Batch Name</small>
+                        <strong>{{ current_batch.batch_name }}</strong>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Course</small>
+                        <small>{{ current_batch.course_name or '-' }}</small>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Joined On</small>
+                        <strong>{{ current_batch.joined_on[:10] if current_batch.joined_on else '-' }}</strong>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Status</small>
+                        <span class="badge bg-success">{{ current_batch.status }}</span>
+                    </div>
+                    <div>
+                        <small class="text-muted d-block">Duration</small>
+                        <small>{{ current_batch.start_date[:10] if current_batch.start_date else '-' }} to {{ current_batch.end_date[:10] if current_batch.end_date else '-' }}</small>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">Not enrolled in any active batch</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100 bg-gradient-primary text-white">
+                <div class="card-body text-center">
+                    <h6 class="opacity-75">Overall Attendance</h6>
+                    <h2 class="mb-3">{{ "%.1f"|format(overall_percentage) }}%</h2>
+                    <div class="progress mb-3" style="height: 8px; background-color: rgba(255,255,255,0.3);">
+                        <div class="progress-bar" role="progressbar" 
+                             style="width: {{ overall_percentage }}%; background-color: rgba(255,255,255,0.8);"></div>
+                    </div>
+                    <small class="opacity-75">
+                        {{ overall_stats.present or 0 }} present out of {{ overall_stats.total_marked or 0 }} days
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">📊 Overall Stats</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <small class="text-muted d-block">✓ Present</small>
+                            <strong class="text-success fs-5">{{ overall_stats.present or 0 }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">✗ Absent</small>
+                            <strong class="text-danger fs-5">{{ overall_stats.absent or 0 }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">⏱ Late</small>
+                            <strong class="text-warning fs-5">{{ overall_stats.late or 0 }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">📋 Leave</small>
+                            <strong class="text-info fs-5">{{ overall_stats.leave or 0 }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs for Different Views -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <ul class="nav nav-tabs mb-4" id="historyTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="attendance-tab" data-bs-toggle="tab" 
+                            data-bs-target="#attendance-pane" type="button" role="tab" aria-selected="true">
+                        📅 Attendance Details
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="monthly-tab" data-bs-toggle="tab" 
+                            data-bs-target="#monthly-pane" type="button" role="tab" aria-selected="false">
+                        📊 Monthly Summary
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="followup-tab" data-bs-toggle="tab" 
+                            data-bs-target="#followup-pane" type="button" role="tab" aria-selected="false">
+                        📋 Follow-up History
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="batches-tab" data-bs-toggle="tab" 
+                            data-bs-target="#batches-pane" type="button" role="tab" aria-selected="false">
+                        👥 Batch History
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content" id="historyTabContent">
+                <!-- Attendance Details Tab -->
+                <div class="tab-pane fade show active" id="attendance-pane" role="tabpanel">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-light border-0 py-3">
+                            <h6 class="mb-0">📅 Attendance Date-wise Records</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            {% if attendance_records %}
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th style="width: 130px;">Date</th>
+                                            <th style="width: 100px;">Status</th>
+                                            <th style="width: 150px;">Batch</th>
+                                            <th>Remarks</th>
+                                            <th style="width: 150px;">Marked By</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for record in attendance_records %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ record.attendance_date }}</strong>
+                                            </td>
+                                            <td>
+                                                {% if record.status == 'present' %}
+                                                    <span class="badge bg-success">✓ Present</span>
+                                                {% elif record.status == 'absent' %}
+                                                    <span class="badge bg-danger">✗ Absent</span>
+                                                {% elif record.status == 'late' %}
+                                                    <span class="badge bg-warning">⏱ Late</span>
+                                                {% else %}
+                                                    <span class="badge bg-info">📋 Leave</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">{{ record.batch_name or '-' }}</small>
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">{{ record.remarks or '-' }}</small>
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">{{ record.username or '-' }}</small>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="p-4 text-center text-muted">
+                                <p>No attendance records found</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Summary Tab -->
+                <div class="tab-pane fade" id="monthly-pane" role="tabpanel">
+                    {% if monthly_stats %}
+                    <div class="row">
+                        {% for month_data in monthly_stats %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-header bg-light border-0 py-2">
+                                    <h6 class="mb-0">{{ month_data.month }}</h6>
+                                </div>
+                                <div class="card-body">
+                                    {% set month_pct = (month_data.present / month_data.total_marked * 100) if month_data.total_marked else 0 %}
+                                    <div class="text-center mb-3">
+                                        <h4 class="mb-2">{{ "%.1f"|format(month_pct) }}%</h4>
+                                        <div class="progress" style="height: 8px;">
+                                            {% if month_pct >= 80 %}
+                                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ month_pct }}%"></div>
+                                            {% elif month_pct >= 70 %}
+                                                <div class="progress-bar bg-warning" role="progressbar" style="width: {{ month_pct }}%"></div>
+                                            {% else %}
+                                                <div class="progress-bar bg-danger" role="progressbar" style="width: {{ month_pct }}%"></div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="row g-2 text-center">
+                                        <div class="col-6">
+                                            <small class="text-muted d-block">Total Days</small>
+                                            <strong>{{ month_data.total_marked }}</strong>
+                                        </div>
+                                        <div class="col-6">
+                                            <small class="text-muted d-block">Present</small>
+                                            <strong class="text-success">{{ month_data.present }}</strong>
+                                        </div>
+                                        <div class="col-6">
+                                            <small class="text-muted d-block">Absent</small>
+                                            <strong class="text-danger">{{ month_data.absent }}</strong>
+                                        </div>
+                                        <div class="col-6">
+                                            <small class="text-muted d-block">Late</small>
+                                            <strong class="text-warning">{{ month_data.late }}</strong>
+                                        </div>
+                                        <div class="col-12 mt-2">
+                                            <small class="text-muted d-block">Leave</small>
+                                            <strong class="text-info">{{ month_data.leave }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <p class="mb-0">No monthly data available</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Follow-up History Tab -->
+                <div class="tab-pane fade" id="followup-pane" role="tabpanel">
+                    {% if followups %}
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body">
+                            <div class="timeline">
+                                {% for followup in followups %}
+                                <div class="timeline-item">
+                                    <div class="timeline-marker"></div>
+                                    <div class="timeline-content">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <div>
+                                                {% if followup.followup_status == 'pending' %}
+                                                    <span class="badge bg-secondary">⏳ Pending</span>
+                                                {% elif followup.followup_status == 'contacted' %}
+                                                    <span class="badge bg-info">📞 Contacted</span>
+                                                {% elif followup.followup_status == 'resolved' %}
+                                                    <span class="badge bg-success">✓ Resolved</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger">✗ No Response</span>
+                                                {% endif %}
+                                            </div>
+                                            <small class="text-muted">{{ followup.last_followup_date[:10] if followup.last_followup_date else followup.created_at[:10] }}</small>
+                                        </div>
+                                        {% if followup.remarks %}
+                                        <p class="text-muted mb-0" style="word-wrap: break-word;">{{ followup.remarks }}</p>
+                                        {% else %}
+                                        <p class="text-muted mb-0">No remarks</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <p class="mb-0">No follow-up records available for this student</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Batch History Tab -->
+                <div class="tab-pane fade" id="batches-pane" role="tabpanel">
+                    {% if batches %}
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th>Batch Name</th>
+                                            <th>Course</th>
+                                            <th style="width: 130px;">Joined On</th>
+                                            <th style="width: 130px;">Status</th>
+                                            <th style="width: 100px;">Duration</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for batch in batches %}
+                                        <tr>
+                                            <td><strong>{{ batch.batch_name }}</strong></td>
+                                            <td><small class="text-muted">{{ batch.course_name or '-' }}</small></td>
+                                            <td><small>{{ batch.joined_on[:10] if batch.joined_on else '-' }}</small></td>
+                                            <td>
+                                                {% if batch.status == 'active' %}
+                                                    <span class="badge bg-success">Active</span>
+                                                {% elif batch.status == 'completed' %}
+                                                    <span class="badge bg-primary">Completed</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">{{ batch.status }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">
+                                                    {{ batch.start_date[:10] if batch.start_date else '-' }} to {{ batch.end_date[:10] if batch.end_date else '-' }}
+                                                </small>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <p class="mb-0">No batch enrollment history</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Styles -->
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .timeline {
+        position: relative;
+        padding: 20px 0;
+    }
+    
+    .timeline-item {
+        display: flex;
+        margin-bottom: 30px;
+        position: relative;
+        padding-left: 40px;
+    }
+    
+    .timeline-item:last-child {
+        margin-bottom: 0;
+    }
+    
+    .timeline-marker {
+        width: 12px;
+        height: 12px;
+        background: #0d6efd;
+        border: 3px solid white;
+        border-radius: 50%;
+        position: absolute;
+        left: 0;
+        top: 4px;
+        box-shadow: 0 0 0 3px #e9ecef;
+    }
+    
+    .timeline-content {
+        flex: 1;
+    }
+    
+    .nav-tabs .nav-link {
+        color: #6c757d;
+        border: none;
+        border-bottom: 3px solid transparent;
+        font-weight: 500;
+    }
+    
+    .nav-tabs .nav-link:hover {
+        color: #0d6efd;
+    }
+    
+    .nav-tabs .nav-link.active {
+        color: #0d6efd;
+        border-bottom-color: #0d6efd;
+        background: none;
+    }
+    
+    .table th {
+        font-weight: 600;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+    }
+</style>
+{% endblock %}

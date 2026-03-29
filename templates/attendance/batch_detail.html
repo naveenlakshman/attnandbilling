@@ -1,0 +1,355 @@
+{% extends "attendance/base.html" %}
+
+{% block title %}{{ batch.batch_name }} - Global IT ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+  .batch-header-card {
+    background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 28px;
+  }
+
+  .batch-header-card h1 {
+    color: white;
+    margin-bottom: 16px;
+  }
+
+  .batch-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+  }
+
+  .info-item {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 16px;
+    border-radius: 8px;
+    border-left: 3px solid rgba(255, 255, 255, 0.5);
+  }
+
+  .info-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    margin-bottom: 6px;
+  }
+
+  .info-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .actions-bar {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .actions-bar .btn {
+    padding: 10px 16px;
+  }
+
+  .detail-card {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .detail-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 12px;
+  }
+
+  .detail-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 20px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .detail-row:last-child {
+    border-bottom: none;
+  }
+
+  .detail-label {
+    color: #6c757d;
+    font-weight: 500;
+  }
+
+  .detail-value {
+    color: #212529;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 0.9rem;
+  }
+
+  .status-badge.active {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .status-badge.completed {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .status-badge.cancelled {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .students-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .students-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .students-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .students-table td {
+    padding: 12px;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .students-table tbody tr:hover {
+    background: #f8f9fa;
+  }
+
+  .student-status {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .student-status.active {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .student-status.completed {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .student-status.dropped {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #0d6efd;
+    text-decoration: none;
+    margin-bottom: 20px;
+  }
+
+  .back-link:hover {
+    text-decoration: underline;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+  }
+
+  @media (max-width: 768px) {
+    .batch-info-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .detail-row {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .detail-label {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <!-- Back Link -->
+  <a href="{{ url_for('attendance.list_batches') }}" class="back-link">
+    ← Back to Batches
+  </a>
+
+  <!-- Header Card -->
+  <div class="batch-header-card">
+    <h1>{{ batch.batch_name }}</h1>
+    
+    <div class="batch-info-grid">
+      {% if batch.course_name %}
+      <div class="info-item">
+        <div class="info-label">📖 Course</div>
+        <div class="info-value">{{ batch.course_name }}</div>
+      </div>
+      {% endif %}
+
+      {% if batch.trainer_name %}
+      <div class="info-item">
+        <div class="info-label">👨‍🏫 Trainer</div>
+        <div class="info-value">{{ batch.trainer_name }}</div>
+      </div>
+      {% endif %}
+
+      <div class="info-item">
+        <div class="info-label">🏢 Branch</div>
+        <div class="info-value">{{ batch.branch_name }}</div>
+      </div>
+
+      <div class="info-item">
+        <div class="info-label">✓ Status</div>
+        <div class="info-value">
+          <span class="status-badge {{ batch.status }}">
+            {% if batch.status == 'active' %}✓ Active{% elif batch.status == 'completed' %}✓ Completed{% else %}✗ Cancelled{% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions-bar">
+      <a href="{{ url_for('attendance.edit_batch', batch_id=batch.id) }}" class="btn btn-light">
+        ✏️ Edit Batch
+      </a>
+      <a href="{{ url_for('attendance.assign_students', batch_id=batch.id) }}" class="btn btn-outline-light">
+        👥 Assign Students
+      </a>
+      <a href="{{ url_for('attendance.daily_report', batch_id=batch.id) }}" class="btn btn-outline-light">
+        📊 View Attendance
+      </a>
+    </div>
+  </div>
+
+  <!-- Details Section -->
+  <div class="detail-card">
+    <div class="detail-title">📋 Batch Details</div>
+
+    {% if batch.start_date %}
+    <div class="detail-row">
+      <div class="detail-label">Start Date</div>
+      <div class="detail-value">{{ batch.start_date }}</div>
+    </div>
+
+    <div class="detail-row">
+      <div class="detail-label">End Date</div>
+      <div class="detail-value">{{ batch.end_date or 'Ongoing' }}</div>
+    </div>
+    {% else %}
+    <div class="detail-row">
+      <div class="detail-label">Duration</div>
+      <div class="detail-value">Ongoing (No end date)</div>
+    </div>
+    {% endif %}
+
+    {% if batch.start_time %}
+    <div class="detail-row">
+      <div class="detail-label">Timing</div>
+      <div class="detail-value">{{ batch.start_time }} - {{ batch.end_time }}</div>
+    </div>
+    {% endif %}
+
+    <div class="detail-row">
+      <div class="detail-label">Created</div>
+      <div class="detail-value">{{ batch.created_at }}</div>
+    </div>
+
+    {% if batch.updated_at %}
+    <div class="detail-row">
+      <div class="detail-label">Last Updated</div>
+      <div class="detail-value">{{ batch.updated_at }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Students Section -->
+  <div class="detail-card">
+    <div class="detail-title">👥 Enrolled Students ({{ students|length }})</div>
+
+    {% if students|length > 0 %}
+    <div style="overflow-x: auto;">
+      <table class="students-table">
+        <thead>
+          <tr>
+            <th>Student Code</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Joined On</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for student in students %}
+          <tr>
+            <td><strong>{{ student.student_code }}</strong></td>
+            <td>{{ student.full_name }}</td>
+            <td>{{ student.phone }}</td>
+            <td>{{ student.joined_on }}</td>
+            <td>
+              <span class="student-status {{ student.status }}">
+                {% if student.status == 'active' %}✓ Active
+                {% elif student.status == 'completed' %}✓ Completed
+                {% else %}✗ Dropped
+                {% endif %}
+              </span>
+            </td>
+            <td>
+              <a href="{{ url_for('attendance.student_attendance_history', student_id=student.id) }}" class="btn btn-sm btn-outline-primary">View History</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">👥</div>
+      <p class="mb-2">No students enrolled in this batch yet</p>
+      <p class="small text-muted">
+        <a href="{{ url_for('attendance.assign_students', batch_id=batch.id) }}">Assign students to this batch</a> to get started
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+{% endblock %}

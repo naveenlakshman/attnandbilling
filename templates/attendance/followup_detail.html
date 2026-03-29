@@ -1,0 +1,387 @@
+{% extends "attendance/base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">📋 Follow-up Details</h2>
+                    <p class="mb-0 text-muted small">Case tracking and attendance analysis for {{ followup.full_name }}</p>
+                </div>
+                <a href="{{ url_for('attendance.followups') }}" class="btn btn-outline-secondary">
+                    ← Back to Follow-ups
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Overview -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">👤 Student Information</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Student Code</small>
+                        <strong>{{ followup.student_code }}</strong>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Full Name</small>
+                        <strong>{{ followup.full_name }}</strong>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Contact Number</small>
+                        <strong>{{ followup.phone or '-' }}</strong>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Batch</small>
+                        <strong>{{ followup.batch_name or '-' }}</strong>
+                    </div>
+                    <div>
+                        <small class="text-muted d-block">Enrolled Since</small>
+                        <strong>{{ followup.created_at[:10] if followup.created_at else '-' }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">📋 Follow-up Information</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Follow-up Status</small>
+                        {% if followup.followup_status == 'pending' %}
+                            <span class="badge bg-secondary fs-6">⏳ Pending</span>
+                        {% elif followup.followup_status == 'contacted' %}
+                            <span class="badge bg-info fs-6">📞 Contacted</span>
+                        {% elif followup.followup_status == 'resolved' %}
+                            <span class="badge bg-success fs-6">✓ Resolved</span>
+                        {% else %}
+                            <span class="badge bg-danger fs-6">✗ No Response</span>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Last Follow-up Date</small>
+                        <strong>{{ followup.last_followup_date[:10] if followup.last_followup_date else 'Never' }}</strong>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Last Follow-up Time</small>
+                        <strong>{{ followup.last_followup_date[11:19] if followup.last_followup_date else '-' }}</strong>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted d-block">Updated At</small>
+                        <strong>{{ followup.updated_at[:10] if followup.updated_at else '-' }}</strong>
+                    </div>
+                    <div>
+                        <button class="btn btn-warning btn-sm w-100" onclick="openUpdateModal()">
+                            ✏️ Update Follow-up
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">📝 Notes & Remarks</h6>
+                </div>
+                <div class="card-body">
+                    {% if followup.remarks %}
+                        <p class="mb-0 text-muted" style="word-wrap: break-word;">{{ followup.remarks }}</p>
+                    {% else %}
+                        <small class="text-muted">No notes recorded</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance Comparison -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">📊 Attendance Before Follow-up</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <small class="text-muted d-block">Total Marked</small>
+                            <h5 class="mb-2 text-primary fw-bold">{{ attendance_before.total_marked or 0 }}</h5>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">Percentage</small>
+                            {% if attendance_before.total_marked %}
+                                <h5 class="mb-2 text-danger fw-bold">{{ "%.1f"|format((attendance_before.present / attendance_before.total_marked) * 100) }}%</h5>
+                            {% else %}
+                                <h5 class="mb-2 text-muted">-</h5>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="progress mb-3" style="height: 6px;">
+                        {% if attendance_before.total_marked %}
+                            <div class="progress-bar bg-success" role="progressbar" 
+                                 style="width: {{ ((attendance_before.present or 0) / attendance_before.total_marked) * 100 }}%"></div>
+                        {% endif %}
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <small class="text-muted d-block">✓ Present</small>
+                            <strong class="text-success">{{ attendance_before.present or 0 }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">✗ Absent</small>
+                            <strong class="text-danger">{{ attendance_before.absent or 0 }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">⏱ Late</small>
+                            <strong class="text-warning">{{ attendance_before.late or 0 }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">📋 Leave</small>
+                            <strong class="text-info">{{ attendance_before.leave or 0 }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">📊 Attendance After Follow-up (30 days)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <small class="text-muted d-block">Total Marked</small>
+                            <h5 class="mb-2 text-primary fw-bold">{{ attendance_after.total_marked or 0 }}</h5>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">Percentage</small>
+                            {% if attendance_after.total_marked %}
+                                <h5 class="mb-2 text-success fw-bold">{{ "%.1f"|format((attendance_after.present / attendance_after.total_marked) * 100) }}%</h5>
+                            {% else %}
+                                <h5 class="mb-2 text-muted">-</h5>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="progress mb-3" style="height: 6px;">
+                        {% if attendance_after.total_marked %}
+                            <div class="progress-bar bg-success" role="progressbar" 
+                                 style="width: {{ ((attendance_after.present or 0) / attendance_after.total_marked) * 100 }}%"></div>
+                        {% endif %}
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <small class="text-muted d-block">✓ Present</small>
+                            <strong class="text-success">{{ attendance_after.present or 0 }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">✗ Absent</small>
+                            <strong class="text-danger">{{ attendance_after.absent or 0 }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">⏱ Late</small>
+                            <strong class="text-warning">{{ attendance_after.late or 0 }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">📋 Leave</small>
+                            <strong class="text-info">{{ attendance_after.leave or 0 }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Impact Summary -->
+    {% if attendance_before.total_marked and attendance_after.total_marked %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm bg-gradient-success text-white">
+                <div class="card-body">
+                    <div class="row text-center">
+                        {% set before_pct = (attendance_before.present / attendance_before.total_marked) * 100 %}
+                        {% set after_pct = (attendance_after.present / attendance_after.total_marked) * 100 %}
+                        {% set change = after_pct - before_pct %}
+                        <div class="col-md-4">
+                            <small class="opacity-75">Attendance Change</small>
+                            {% if change > 0 %}
+                                <h4 class="mb-0">📈 +{{ "%.1f"|format(change) }}%</h4>
+                            {% elif change < 0 %}
+                                <h4 class="mb-0">📉 {{ "%.1f"|format(change) }}%</h4>
+                            {% else %}
+                                <h4 class="mb-0">— No change</h4>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <small class="opacity-75">Before</small>
+                            <h4 class="mb-0">{{ "%.1f"|format(before_pct) }}%</h4>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="opacity-75">After (30 days)</small>
+                            <h4 class="mb-0">{{ "%.1f"|format(after_pct) }}%</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Activity Log -->
+    {% if activity_logs %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-light border-0 py-3">
+                    <h6 class="mb-0">📅 Activity Log</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="timeline">
+                        {% for log in activity_logs %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker"></div>
+                            <div class="timeline-content">
+                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                    <strong>{{ log.username }}</strong>
+                                    <small class="text-muted">{{ log.logged_at[:10] }} {{ log.logged_at[11:19] }}</small>
+                                </div>
+                                <p class="text-muted mb-0">{{ log.description }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Update Follow-up Modal -->
+<div class="modal fade" id="updateModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-white">
+                <h5 class="modal-title">✏️ Update Follow-up</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="updateForm" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="updateStatus" class="form-label">Status <span class="text-danger">*</span></label>
+                        <select id="updateStatus" name="followup_status" class="form-select" required>
+                            <option value="pending" {% if followup.followup_status == 'pending' %}selected{% endif %}>⏳ Pending</option>
+                            <option value="contacted" {% if followup.followup_status == 'contacted' %}selected{% endif %}>📞 Contacted</option>
+                            <option value="resolved" {% if followup.followup_status == 'resolved' %}selected{% endif %}>✓ Resolved</option>
+                            <option value="no_response" {% if followup.followup_status == 'no_response' %}selected{% endif %}>✗ No Response</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="updateRemarks" class="form-label">Remarks / Notes</label>
+                        <textarea id="updateRemarks" name="remarks" class="form-control" rows="3">{{ followup.remarks or '' }}</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">💾 Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Styles -->
+<style>
+    .bg-gradient-success {
+        background: linear-gradient(135deg, #198754 0%, #0f5132 100%);
+    }
+    
+    .timeline {
+        padding: 20px;
+    }
+    
+    .timeline-item {
+        display: flex;
+        margin-bottom: 20px;
+        position: relative;
+        padding-left: 40px;
+    }
+    
+    .timeline-marker {
+        width: 12px;
+        height: 12px;
+        background: #0d6efd;
+        border: 3px solid white;
+        border-radius: 50%;
+        position: absolute;
+        left: 0;
+        top: 4px;
+        box-shadow: 0 0 0 3px #e9ecef;
+    }
+    
+    .timeline-content {
+        flex: 1;
+    }
+    
+    .card-header.bg-light {
+        background-color: #f8f9fa !important;
+    }
+</style>
+
+<!-- JavaScript -->
+<script>
+function openUpdateModal() {
+    new bootstrap.Modal(document.getElementById('updateModal')).show();
+}
+
+document.getElementById('updateForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData();
+    formData.append('followup_status', document.getElementById('updateStatus').value);
+    formData.append('remarks', document.getElementById('updateRemarks').value);
+    
+    try {
+        const response = await fetch(
+            `{{ url_for('attendance.add_followup', student_id=followup.student_id) }}`,
+            {
+                method: 'POST',
+                body: formData
+            }
+        );
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.role = 'alert';
+            alertDiv.innerHTML = `
+                ✓ Follow-up updated successfully!
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.row'));
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('updateModal'));
+            modal.hide();
+            
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error updating follow-up: ' + error);
+    }
+});
+</script>
+{% endblock %}
