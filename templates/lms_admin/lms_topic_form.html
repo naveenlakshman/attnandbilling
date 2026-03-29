@@ -1,0 +1,498 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}
+    {% if topic %}
+        Edit Topic - {{ topic.topic_title }}
+    {% else %}
+        Create New Topic
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Breadcrumb Navigation -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_programs') }}" class="text-decoration-none">Programs</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.program_view', program_id=program.id) }}" class="text-decoration-none">{{ program.program_name }}</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_chapters', program_id=program.id) }}" class="text-decoration-none">Chapters</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_topics', chapter_id=chapter.id) }}" class="text-decoration-none">{{ chapter.chapter_title }}</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_topics', chapter_id=chapter.id) }}" class="text-decoration-none">Topics</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">
+                {% if topic %}
+                    Edit Topic
+                {% else %}
+                    New Topic
+                {% endif %}
+            </li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <h1 class="h2 mb-1">
+                        {% if topic %}
+                            ✏️ Edit Topic
+                        {% else %}
+                            ➕ Create New Topic
+                        {% endif %}
+                    </h1>
+                    <p class="text-muted mb-0">Chapter: <strong>{{ chapter.chapter_title }}</strong> → Program: <strong>{{ program.program_name }}</strong></p>
+                </div>
+                <a href="{{ url_for('lms_admin.list_topics', chapter_id=chapter.id) }}" class="btn btn-outline-secondary">
+                    ← Back to Topics
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form Container -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <form method="POST" id="topicForm">
+                        <!-- Basic Information Section -->
+                        <div class="form-section mb-4">
+                            <h5 class="text-primary mb-3">
+                                <i class="bi bi-pencil-square"></i> Basic Information
+                            </h5>
+                            
+                            <!-- Topic Title -->
+                            <div class="mb-3">
+                                <label for="topic_title" class="form-label">
+                                    Topic Title <span class="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    class="form-control form-control-lg" 
+                                    id="topic_title" 
+                                    name="topic_title"
+                                    placeholder="e.g., Introduction to Computer Application"
+                                    value="{{ topic.topic_title if topic else '' }}"
+                                    required
+                                    maxlength="255"
+                                >
+                                <small class="form-text text-muted">
+                                    Enter a clear, descriptive title for this learning topic.
+                                </small>
+                            </div>
+
+                            <!-- Topic Order -->
+                            <div class="mb-3">
+                                <label for="topic_order" class="form-label">
+                                    Topic Order <span class="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="number" 
+                                    class="form-control" 
+                                    id="topic_order" 
+                                    name="topic_order"
+                                    min="1"
+                                    max="999"
+                                    value="{% if topic %}{{ topic.topic_order }}{% else %}{{ next_order }}{% endif %}"
+                                    required
+                                >
+                                <small class="form-text text-muted">
+                                    Determines the sequence. Lower numbers appear first.
+                                </small>
+                            </div>
+
+                            <!-- Short Description -->
+                            <div class="mb-3">
+                                <label for="short_description" class="form-label">
+                                    Short Description
+                                </label>
+                                <textarea 
+                                    class="form-control" 
+                                    id="short_description" 
+                                    name="short_description"
+                                    rows="3"
+                                    placeholder="Optional: Brief summary of this topic's content..."
+                                    maxlength="500"
+                                >{{ topic.short_description if topic else '' }}</textarea>
+                                <small class="form-text text-muted" id="descCharCount">
+                                    0 / 500 characters
+                                </small>
+                            </div>
+
+                            <!-- Estimated Learning Time -->
+                            <div class="mb-3">
+                                <label for="estimated_minutes" class="form-label">
+                                    Estimated Learning Time (minutes)
+                                </label>
+                                <div class="input-group">
+                                    <input 
+                                        type="number" 
+                                        class="form-control" 
+                                        id="estimated_minutes" 
+                                        name="estimated_minutes"
+                                        min="1"
+                                        max="999"
+                                        placeholder="e.g., 30"
+                                        value="{% if topic and topic.estimated_minutes %}{{ topic.estimated_minutes }}{% endif %}"
+                                    >
+                                    <span class="input-group-text">minutes</span>
+                                </div>
+                                <small class="form-text text-muted">
+                                    Helps students understand time commitment. Leave blank if not applicable.
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Content Type Section -->
+                        <div class="form-section mb-4">
+                            <h5 class="text-primary mb-3">
+                                <i class="bi bi-file-earmark-play"></i> Content Type
+                            </h5>
+                            
+                            <div class="mb-3">
+                                <label for="content_type" class="form-label">
+                                    Primary Content Type <span class="text-danger">*</span>
+                                </label>
+                                <select 
+                                    class="form-select" 
+                                    id="content_type" 
+                                    name="content_type"
+                                    required
+                                >
+                                    <option value="">-- Select Content Type --</option>
+                                    <option value="lesson" {% if not topic or topic.content_type == 'lesson' %}selected{% endif %}>📚 Lesson</option>
+                                    <option value="video" {% if topic and topic.content_type == 'video' %}selected{% endif %}>▶️ Video</option>
+                                    <option value="pdf" {% if topic and topic.content_type == 'pdf' %}selected{% endif %}>📕 PDF Document</option>
+                                    <option value="assignment" {% if topic and topic.content_type == 'assignment' %}selected{% endif %}>✏️ Assignment</option>
+                                    <option value="ebook" {% if topic and topic.content_type == 'ebook' %}selected{% endif %}>📖 E-Book</option>
+                                    <option value="workbook" {% if topic and topic.content_type == 'workbook' %}selected{% endif %}>📝 Workbook</option>
+                                </select>
+                                <small class="form-text text-muted" id="contentTypeHelp">
+                                    Select the main content format for this topic.
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Additional Options Section -->
+                        <div class="form-section mb-4">
+                            <h5 class="text-primary mb-3">
+                                <i class="bi bi-sliders"></i> Additional Options
+                            </h5>
+                            
+                            <!-- Preview Toggle -->
+                            <div class="form-check form-switch mb-3">
+                                <input 
+                                    class="form-check-input" 
+                                    type="checkbox" 
+                                    id="is_preview" 
+                                    name="is_preview"
+                                    value="1"
+                                    {% if topic and topic.is_preview %}checked{% endif %}
+                                >
+                                <label class="form-check-label" for="is_preview">
+                                    <strong>Mark as Preview</strong>
+                                    <span class="badge bg-info ms-2">Preview Access</span>
+                                </label>
+                                <small class="d-block text-muted mt-1">
+                                    Enable this to allow free preview of this topic without enrollment.
+                                </small>
+                            </div>
+
+                            <!-- Active/Inactive Toggle -->
+                            <div class="form-check form-switch mt-3">
+                                <input 
+                                    class="form-check-input" 
+                                    type="checkbox" 
+                                    id="is_active" 
+                                    name="is_active"
+                                    value="1"
+                                    {% if not topic or topic.is_active %}checked{% endif %}
+                                >
+                                <label class="form-check-label" for="is_active">
+                                    <strong>Active</strong>
+                                    <span class="badge bg-success ms-2" id="statusBadge">Active</span>
+                                </label>
+                                <small class="d-block text-muted mt-1">
+                                    Inactive topics won't be visible to students.
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Form Actions -->
+                        <div class="form-section pt-2 border-top">
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    {% if topic %}
+                                        💾 Save Changes
+                                    {% else %}
+                                        ✅ Create Topic
+                                    {% endif %}
+                                </button>
+                                <a 
+                                    href="{{ url_for('lms_admin.list_topics', chapter_id=chapter.id) }}" 
+                                    class="btn btn-outline-secondary btn-lg"
+                                >
+                                    Cancel
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Help Section -->
+            <div class="alert alert-info mt-4" role="alert">
+                <h6 class="alert-heading">
+                    <i class="bi bi-lightbulb"></i> Tips for Creating Topics
+                </h6>
+                <ul class="mb-0">
+                    <li>Break chapters into small, focused topics (typically 5-15 minutes each)</li>
+                    <li>Use clear, action-oriented titles (e.g., "Creating Your First Document")</li>
+                    <li>Set realistic time estimates to help students plan their learning</li>
+                    <li>Choose the most appropriate content type for your material</li>
+                    <li>Topics marked as "Preview" can be accessed by visitors without enrollment</li>
+                    <li>After creating the topic, you can add content (text, videos, PDFs, etc.)</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Right Sidebar - Topic Info -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm bg-light">
+                <div class="card-body">
+                    <h6 class="card-title mb-3">
+                        <i class="bi bi-info-circle"></i> Topic Details
+                    </h6>
+                    
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1"><strong>Chapter</strong></small>
+                        <span class="badge bg-primary">{{ chapter.chapter_title }}</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1"><strong>Program</strong></small>
+                        <span class="badge bg-secondary">{{ program.program_name }}</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1"><strong>Sequence</strong></small>
+                        <span id="sequenceDisplay">{% if topic %}{{ topic.topic_order }}{% else %}{{ next_order }}{% endif %}</span>
+                    </div>
+
+                    {% if topic %}
+                        <hr>
+                        
+                        <div class="mb-3">
+                            <small class="text-muted d-block mb-1"><strong>Created</strong></small>
+                            <span>{{ topic.created_at[:10] }}</span>
+                        </div>
+
+                        <div class="mb-3">
+                            <small class="text-muted d-block mb-1"><strong>Last Updated</strong></small>
+                            <span>{{ topic.updated_at[:10] }}</span>
+                        </div>
+
+                        <div class="mb-3">
+                            <small class="text-muted d-block mb-1"><strong>Content Items</strong></small>
+                            <span id="contentCount">0</span> items
+                        </div>
+
+                        <hr>
+
+                        <div class="mb-3">
+                            <small class="text-muted d-block mb-1"><strong>Status</strong></small>
+                            {% if topic.is_active %}
+                                <span class="badge bg-success">✓ Active</span>
+                            {% else %}
+                                <span class="badge bg-secondary">✗ Inactive</span>
+                            {% endif %}
+                            {% if topic.is_preview %}
+                                <span class="badge bg-info">👁️ Preview Enabled</span>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <hr>
+                        
+                        <div class="alert alert-light" role="alert">
+                            <small><strong>New Topic:</strong><br> This topic will be created in the "<strong>{{ chapter.chapter_title }}</strong>" chapter.</small>
+                        </div>
+                    {% endif %}
+
+                    <hr>
+                    
+                    <div class="alert alert-light" role="alert">
+                        <small><strong>Next Step:</strong><br> After creating this topic, you can add multiple content items (text, videos, documents, etc.).</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content Type Guide -->
+            <div class="card shadow-sm mt-3">
+                <div class="card-body">
+                    <h6 class="card-title mb-2">
+                        <i class="bi bi-question-circle"></i> Content Types
+                    </h6>
+                    <small class="text-muted">
+                        <div class="mb-2"><strong>Text:</strong> Simple plain text</div>
+                        <div class="mb-2"><strong>HTML:</strong> Rich formatted content</div>
+                        <div class="mb-2"><strong>YouTube:</strong> Embedded video</div>
+                        <div class="mb-2"><strong>Video File:</strong> Uploaded video</div>
+                        <div class="mb-2"><strong>PDF:</strong> Document download</div>
+                        <div class="mb-2"><strong>Image:</strong> Display pictures</div>
+                        <div><strong>Download:</strong> Any resource file</div>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Styles -->
+<style>
+    .form-section {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background-color: #f8f9fa;
+    }
+
+    .form-section h5 {
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid #007bff;
+    }
+
+    .form-control:focus,
+    .form-control-lg:focus,
+    .form-select:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+
+    .form-check-input:checked {
+        background-color: #28a745;
+        border-color: #28a745;
+    }
+
+    .form-check-input:focus {
+        border-color: #28a745;
+        box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+    }
+
+    .btn-lg {
+        padding: 0.75rem 1.5rem;
+        font-weight: 500;
+    }
+
+    .badge {
+        padding: 0.35rem 0.65rem;
+        font-size: 0.85rem;
+    }
+
+    .breadcrumb {
+        background-color: transparent;
+        padding: 0;
+    }
+
+    .breadcrumb-item a {
+        color: #007bff;
+    }
+
+    .breadcrumb-item a:hover {
+        color: #0056b3;
+    }
+
+    .input-group-text {
+        background-color: #e9ecef;
+        color: #495057;
+    }
+
+    @media (max-width: 992px) {
+        .col-lg-4 {
+            margin-top: 2rem;
+        }
+    }
+</style>
+
+<!-- Scripts -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Character counter for description
+        const descriptionInput = document.getElementById('short_description');
+        const descCharCount = document.getElementById('descCharCount');
+        
+        function updateDescCharCount() {
+            const count = descriptionInput.value.length;
+            descCharCount.textContent = count + ' / 500 characters';
+        }
+        
+        descriptionInput.addEventListener('input', updateDescCharCount);
+        updateDescCharCount(); // Initial count
+
+        // Update sequence display as order changes
+        const orderInput = document.getElementById('topic_order');
+        const sequenceDisplay = document.getElementById('sequenceDisplay');
+        
+        orderInput.addEventListener('change', function() {
+            sequenceDisplay.textContent = this.value;
+        });
+
+        // Status toggle
+        const isActiveCheckbox = document.getElementById('is_active');
+        const statusBadge = document.getElementById('statusBadge');
+        
+        function updateStatusBadge() {
+            if (isActiveCheckbox.checked) {
+                statusBadge.textContent = 'Active';
+                statusBadge.className = 'badge bg-success ms-2';
+            } else {
+                statusBadge.textContent = 'Inactive';
+                statusBadge.className = 'badge bg-secondary ms-2';
+            }
+        }
+        
+        isActiveCheckbox.addEventListener('change', updateStatusBadge);
+        updateStatusBadge(); // Initial state
+
+        // Content type help text
+        const contentTypeSelect = document.getElementById('content_type');
+        const contentTypeHelp = document.getElementById('contentTypeHelp');
+        const helpTexts = {
+            'text': 'Plain text content - ideal for simple instructions or notes.',
+            'html': 'HTML-formatted content - allows rich text, styling, and interactive elements.',
+            'youtube': 'Embed YouTube videos directly from URLs.',
+            'video_file': 'Upload and serve video files (MP4, WebM, etc.).',
+            'pdf': 'Attach PDF documents for students to download and read.',
+            'image': 'Display images and infographics.',
+            'download': 'Provide downloadable resources like templates or datasets.'
+        };
+        
+        contentTypeSelect.addEventListener('change', function() {
+            if (this.value && helpTexts[this.value]) {
+                contentTypeHelp.textContent = helpTexts[this.value];
+            }
+        });
+
+        // Form validation
+        document.getElementById('topicForm').addEventListener('submit', function(e) {
+            const title = document.getElementById('topic_title').value.trim();
+            if (!title) {
+                e.preventDefault();
+                alert('Please enter a topic title.');
+                document.getElementById('topic_title').focus();
+                return false;
+            }
+        });
+    });
+</script>
+{% endblock %}

@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory
 from config import Config
 from db import init_db
 from modules.leads.routes import leads_bp
@@ -8,7 +8,9 @@ from modules.reports.routes import reports_bp
 from modules.import_export.routes import import_export_bp
 from modules.baddebt.routes import baddebt_bp
 from modules.attendance.routes import attendance_bp
+from modules.lms_admin.routes import lms_admin_bp
 from datetime import datetime
+import os
 
 def format_datetime(value):
     """Jinja2 filter to format ISO datetime to user-friendly format"""
@@ -41,6 +43,18 @@ def create_app():
     app.register_blueprint(import_export_bp, url_prefix="/import-export")
     app.register_blueprint(baddebt_bp, url_prefix="/baddebt")
     app.register_blueprint(attendance_bp, url_prefix="/attendance")
+    app.register_blueprint(lms_admin_bp)
+
+    # File serving route for uploaded content
+    @app.route('/uploads/content/<path:filename>')
+    def serve_content(filename):
+        """Serve uploaded content files"""
+        try:
+            # Security: only serve from the uploads/content directory
+            upload_path = os.path.join(Config.UPLOAD_FOLDER)
+            return send_from_directory(upload_path, filename)
+        except Exception as e:
+            return f"File not found: {str(e)}", 404
 
     # Register Jinja2 filters
     app.jinja_env.filters['format_datetime'] = format_datetime

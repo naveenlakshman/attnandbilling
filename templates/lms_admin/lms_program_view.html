@@ -1,0 +1,565 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}{{ summary.program.program_name }} - LMS Program - Global IT ERP{% endblock %}
+{% block page_title %}{{ summary.program.program_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .program-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .program-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 200px;
+    height: 200px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    transform: translate(50%, -50%);
+  }
+
+  .program-header-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .program-title {
+    font-size: 32px;
+    font-weight: 700;
+    margin: 0 0 16px 0;
+    color: white;
+  }
+
+  .program-meta {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    font-size: 14px;
+    opacity: 0.95;
+  }
+
+  .program-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .program-description {
+    margin-top: 20px;
+    line-height: 1.6;
+    opacity: 0.95;
+    max-width: 600px;
+  }
+
+  .program-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+
+  .btn-header {
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.3s ease;
+  }
+
+  .btn-edit {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 2px solid white;
+  }
+
+  .btn-edit:hover {
+    background: white;
+    color: #667eea;
+  }
+
+  .btn-back {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: none;
+  }
+
+  .btn-back:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .metric-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border-left: 4px solid #667eea;
+    transition: all 0.3s ease;
+  }
+
+  .metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .metric-icon {
+    font-size: 24px;
+    margin-bottom: 12px;
+  }
+
+  .metric-label {
+    color: #6c757d;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .metric-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #212529;
+    margin-top: 8px;
+  }
+
+  .metric-card.chapters {
+    border-left-color: #667eea;
+  }
+
+  .metric-card.topics {
+    border-left-color: #764ba2;
+  }
+
+  .metric-card.students {
+    border-left-color: #f093fb;
+  }
+
+  .metric-card.tests {
+    border-left-color: #4facfe;
+  }
+
+  .metric-card.resources {
+    border-left-color: #43e97b;
+  }
+
+  .section-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .section-header {
+    background: #f8f9fa;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #212529;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-content {
+    padding: 20px;
+  }
+
+  .empty-state-small {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon-small {
+    font-size: 36px;
+    opacity: 0.5;
+    margin-bottom: 12px;
+  }
+
+  .empty-state-text-small {
+    font-size: 13px;
+  }
+
+  .chapters-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .chapter-item {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 16px;
+    border-left: 4px solid #667eea;
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+  }
+
+  .chapter-info h4 {
+    margin: 0 0 6px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .chapter-meta {
+    font-size: 12px;
+    color: #6c757d;
+    display: flex;
+    gap: 16px;
+  }
+
+  .chapter-badge {
+    background: white;
+    border: 1px solid #dee2e6;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .resources-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .resource-item {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 16px;
+    border-left: 4px solid #43e97b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .resource-info {
+    flex: 1;
+  }
+
+  .resource-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #212529;
+    margin: 0 0 4px 0;
+  }
+
+  .resource-type {
+    display: inline-block;
+    background: #e8f5e9;
+    color: #2e7d32;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .activity-item {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px 16px;
+    border-left: 4px solid #dee2e6;
+    font-size: 13px;
+  }
+
+  .activity-action {
+    display: inline-block;
+    background: #cfe2ff;
+    color: #084298;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-right: 6px;
+  }
+
+  .activity-time {
+    color: #6c757d;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .status-published {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .status-draft {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .status-active {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .status-inactive {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  @media (max-width: 768px) {
+    .program-header {
+      padding: 24px;
+    }
+
+    .program-title {
+      font-size: 24px;
+    }
+
+    .program-meta {
+      gap: 12px;
+    }
+
+    .metrics-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .program-actions {
+      flex-direction: column;
+    }
+
+    .btn-header {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Program Header -->
+<div class="program-header">
+  <div class="program-header-content">
+    <h1 class="program-title">📖 {{ summary.program.program_name }}</h1>
+    
+    <div class="program-meta">
+      {% if summary.program.course_name %}
+      <div class="program-meta-item">
+        🎓 <strong>{{ summary.program.course_name }}</strong>
+      </div>
+      {% endif %}
+      
+      <div class="program-meta-item">
+        <span class="status-badge {% if summary.program.is_active %}status-active{% else %}status-inactive{% endif %}">
+          {{ '✓ Active' if summary.program.is_active else '✗ Inactive' }}
+        </span>
+      </div>
+      
+      <div class="program-meta-item">
+        <span class="status-badge {% if summary.program.is_published %}status-published{% else %}status-draft{% endif %}">
+          {{ '📤 Published' if summary.program.is_published else '📄 Draft' }}
+        </span>
+      </div>
+    </div>
+
+    {% if summary.program.description %}
+    <div class="program-description">
+      {{ summary.program.description }}
+    </div>
+    {% endif %}
+
+    <div class="program-actions">
+      <a href="{{ url_for('lms_admin.program_edit', program_id=summary.program.id) }}" class="btn-header btn-edit">
+        ✏️ Edit Program
+      </a>
+      <a href="{{ url_for('lms_admin.list_program_resources', program_id=summary.program.id) }}" class="btn-header btn-edit">
+        📚 Resources
+      </a>
+      <a href="{{ url_for('lms_admin.list_programs') }}" class="btn-header btn-back">
+        ← Back to Programs
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Metrics Grid -->
+<div class="metrics-grid">
+  <div class="metric-card chapters">
+    <div class="metric-icon">📑</div>
+    <div class="metric-label">Chapters</div>
+    <div class="metric-value">{{ summary.total_chapters }}</div>
+  </div>
+
+  <div class="metric-card topics">
+    <div class="metric-icon">📝</div>
+    <div class="metric-label">Topics</div>
+    <div class="metric-value">{{ summary.total_topics }}</div>
+  </div>
+
+  <div class="metric-card students">
+    <div class="metric-icon">👥</div>
+    <div class="metric-label">Students</div>
+    <div class="metric-value">{{ summary.total_students }}</div>
+  </div>
+
+  <div class="metric-card tests">
+    <div class="metric-icon">✍️</div>
+    <div class="metric-label">Tests</div>
+    <div class="metric-value">{{ summary.total_tests }}</div>
+  </div>
+
+  <div class="metric-card resources">
+    <div class="metric-icon">📦</div>
+    <div class="metric-label">Resources</div>
+    <div class="metric-value">{{ summary.resource_count }}</div>
+  </div>
+</div>
+
+<!-- Chapters Section -->
+<div class="section-card">
+  <div class="section-header">
+    <h3 class="section-title">📑 Chapters ({{ summary.total_chapters }})</h3>
+    {% if summary.chapters %}
+    <a href="{{ url_for('lms_admin.list_chapters', program_id=summary.program.id) }}" style="color: #0d6efd; text-decoration: none; font-size: 13px; font-weight: 600;">
+      View All →
+    </a>
+    {% endif %}
+  </div>
+  <div class="section-content">
+    {% if summary.chapters %}
+      <div class="chapters-list">
+        {% for chapter in summary.chapters %}
+        <div class="chapter-item">
+          <div class="chapter-info">
+            <h4>{{ chapter.chapter_order }}. {{ chapter.chapter_title }}</h4>
+            <div class="chapter-meta">
+              <span class="chapter-badge">📝 {{ chapter.topic_count }} {{ 'Topic' if chapter.topic_count == 1 else 'Topics' }}</span>
+              <span class="chapter-badge">{{ '✓ Active' if chapter.is_active else '✗ Inactive' }}</span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state-small">
+        <div class="empty-state-icon-small">📑</div>
+        <p class="empty-state-text-small">No chapters yet. Create chapters to organize topics.</p>
+        <a href="{{ url_for('lms_admin.list_chapters', program_id=summary.program.id) }}" style="display: inline-block; background: #0d6efd; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 13px; margin-top: 12px;">
+          Manage Chapters →
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Resources Section -->
+<div class="section-card">
+  <div class="section-header">
+    <h3 class="section-title">� Resources ({{ summary.resource_count }})</h3>
+  </div>
+  <div class="section-content">
+    {% if summary.resources %}
+      <div class="resources-list">
+        {% for resource in summary.resources %}
+        <div class="resource-item">
+          <div class="resource-info">
+            <p class="resource-title">{{ resource.resource_title }}</p>
+            <span class="resource-type">{{ resource.resource_type }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div style="margin-top: 1rem; text-align: center;">
+        <a href="{{ url_for('lms_admin.list_program_resources', program_id=summary.program.id) }}" style="display: inline-block; background: #0d6efd; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 13px;">
+          Manage Resources →
+        </a>
+      </div>
+    {% else %}
+      <div class="empty-state-small">
+        <div class="empty-state-icon-small">📚</div>
+        <p class="empty-state-text-small">No resources added yet. Share course materials with all students.</p>
+        <a href="{{ url_for('lms_admin.list_program_resources', program_id=summary.program.id) }}" style="display: inline-block; background: #0d6efd; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 13px; margin-top: 12px;">
+          Manage Resources →
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Activity Section -->
+<div class="section-card">
+  <div class="section-header">
+    <h3 class="section-title">📋 Recent Activity</h3>
+  </div>
+  <div class="section-content">
+    {% if summary.recent_activity %}
+      <div class="activity-list">
+        {% for activity in summary.recent_activity %}
+        <div class="activity-item">
+          <span class="activity-action">{{ activity.action_type | upper }}</span>
+          {{ activity.description }}
+          {% if activity.full_name %}
+          <div class="activity-time">
+            by <strong>{{ activity.full_name }}</strong> • {{ activity.created_at }}
+          </div>
+          {% else %}
+          <div class="activity-time">
+            {{ activity.created_at }}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state-small">
+        <div class="empty-state-icon-small">📭</div>
+        <p class="empty-state-text-small">No activity yet.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

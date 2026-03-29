@@ -1,0 +1,456 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}Topics - {{ data.chapter.chapter_title }} - Global IT ERP{% endblock %}
+{% block page_title %}{{ data.chapter.chapter_title }} → Topics{% endblock %}
+
+{% block extra_css %}
+<style>
+  .breadcrumb-nav {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 24px;
+    font-size: 14px;
+    flex-wrap: wrap;
+  }
+
+  .breadcrumb-nav a {
+    color: #0d6efd;
+    text-decoration: none;
+  }
+
+  .breadcrumb-nav a:hover {
+    text-decoration: underline;
+  }
+
+  .breadcrumb-separator {
+    color: #6c757d;
+  }
+
+  .topics-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .topics-list-header h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    color: #212529;
+  }
+
+  .topics-list-header .badge {
+    background: #667eea;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn-add {
+    background: #0d6efd;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-add:hover {
+    background: #0a58ca;
+  }
+
+  .btn-back {
+    background: #e9ecef;
+    color: #333;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-back:hover {
+    background: #dee2e6;
+  }
+
+  .info-box {
+    background: #e7f3ff;
+    border-left: 4px solid #0d6efd;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: #0c5460;
+  }
+
+  .topics-table-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+  }
+
+  .topics-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .topics-table thead {
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+  }
+
+  .topics-table thead th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #495057;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .topics-table tbody tr {
+    border-bottom: 1px solid #dee2e6;
+    transition: background-color 0.2s;
+  }
+
+  .topics-table tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+
+  .topics-table tbody td {
+    padding: 12px;
+    font-size: 13px;
+  }
+
+  .topic-row {
+    height: auto;
+  }
+
+  .topic-order-input {
+    width: 60px;
+    padding: 6px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .topic-title {
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .topic-description {
+    color: #6c757d;
+    font-size: 12px;
+    margin-top: 2px;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .content-badge {
+    display: inline-block;
+    background: #e2e3e5;
+    color: #383d41;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .minutes-badge {
+    display: inline-block;
+    background: #ffeaa7;
+    color: #856404;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .preview-badge {
+    display: inline-block;
+    background: #cce5ff;
+    color: #004085;
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 4px;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .status-active {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .status-inactive {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  .topic-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .btn-action {
+    padding: 6px 10px;
+    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .btn-edit {
+    background: #cfe2ff;
+    color: #084298;
+  }
+
+  .btn-edit:hover {
+    background: #aec5fb;
+  }
+
+  .btn-content {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .btn-content:hover {
+    background: #bee5eb;
+  }
+
+  .btn-delete {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .btn-delete:hover {
+    background: #f5c6cb;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon {
+    font-size: 48px;
+    opacity: 0.6;
+    margin-bottom: 16px;
+  }
+
+  .empty-state-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 8px;
+  }
+
+  .empty-state-text {
+    font-size: 13px;
+    color: #6c757d;
+    margin-bottom: 20px;
+  }
+
+  .empty-state .btn-add {
+    display: inline-flex;
+  }
+
+  @media (max-width: 768px) {
+    .topics-list-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .header-actions {
+      width: 100%;
+      flex-direction: column;
+    }
+
+    .btn-add,
+    .btn-back {
+      width: 100%;
+    }
+
+    .topics-table thead th,
+    .topics-table tbody td {
+      padding: 10px 8px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb Navigation -->
+<div class="breadcrumb-nav">
+  <a href="{{ url_for('lms_admin.list_programs') }}">📖 Programs</a>
+  <span class="breadcrumb-separator">/</span>
+  <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}">{{ data.program.program_name }}</a>
+  <span class="breadcrumb-separator">/</span>
+  <a href="{{ url_for('lms_admin.list_chapters', program_id=data.program.id) }}">📑 Chapters</a>
+  <span class="breadcrumb-separator">/</span>
+  <a href="{{ url_for('lms_admin.list_chapters', program_id=data.program.id) }}">{{ data.chapter.chapter_title }}</a>
+  <span class="breadcrumb-separator">/</span>
+  <span>📝 Topics</span>
+</div>
+
+<!-- Page Header -->
+<div class="topics-list-header">
+  <div>
+    <h2>📝 Topics</h2>
+  </div>
+  <div class="header-actions">
+    <a href="{{ url_for('lms_admin.topic_new', chapter_id=data.chapter.id) }}" class="btn-add">
+      + Add Topic
+    </a>
+    <a href="{{ url_for('lms_admin.list_chapters', program_id=data.program.id) }}" class="btn-back">
+      ← Back to Chapters
+    </a>
+  </div>
+</div>
+
+<!-- Info Box -->
+<div class="info-box">
+  📚 Managing topics for <strong>{{ data.chapter.chapter_title }}</strong> (<strong>{{ data.program.program_name }}</strong>). Total topics: <strong>{{ data.total_topics }}</strong>
+</div>
+
+<!-- Topics Table -->
+<div class="topics-table-card">
+  {% if data.topics %}
+    <table class="topics-table">
+      <thead>
+        <tr>
+          <th style="width: 70px;">Order</th>
+          <th>Topic Title</th>
+          <th style="width: 120px;">Content</th>
+          <th style="width: 100px;">Duration</th>
+          <th style="width: 120px;">Status</th>
+          <th style="width: 250px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for topic in data.topics %}
+        <tr class="topic-row" data-topic-id="{{ topic.id }}">
+          <td style="text-align: center;">
+            <input type="number" class="topic-order-input" value="{{ topic.topic_order }}" min="1" readonly>
+          </td>
+          <td>
+            <div class="topic-title">
+              <a href="{{ url_for('lms_admin.topic_view', topic_id=topic.id) }}" style="color: #212529; text-decoration: none;">
+                {{ topic.topic_order }}. {{ topic.topic_title }}
+              </a>
+              {% if topic.is_preview %}
+                <span class="preview-badge">👁️ Preview</span>
+              {% endif %}
+            </div>
+            {% if topic.short_description %}
+            <div class="topic-description" title="{{ topic.short_description }}">{{ topic.short_description }}</div>
+            {% endif %}
+          </td>
+          <td>
+            <span class="content-badge">📦 {{ topic.content_count }} {{ 'Item' if topic.content_count == 1 else 'Items' }}</span>
+          </td>
+          <td>
+            {% if topic.estimated_minutes %}
+              <span class="minutes-badge">⏱️{{ topic.estimated_minutes }}m</span>
+            {% else %}
+              <span class="minutes-badge">-</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="status-badge {% if topic.is_active %}status-active{% else %}status-inactive{% endif %}">
+              {{ '✓ Active' if topic.is_active else '✗ Inactive' }}
+            </span>
+          </td>
+          <td>
+            <div class="topic-actions">
+              <a class="btn-action btn-edit" href="{{ url_for('lms_admin.topic_view', topic_id=topic.id) }}" title="View Topic">
+                👁️ View
+              </a>
+              <a class="btn-action btn-edit" href="{{ url_for('lms_admin.topic_edit', topic_id=topic.id) }}" title="Edit Topic">
+                ✏️ Edit
+              </a>
+              <a class="btn-action btn-content" href="#" onclick="manageContent(event, {{ topic.id }});" title="Manage Content">
+                📦 Content
+              </a>
+              <button class="btn-action btn-delete" onclick="deleteTopic(event, {{ topic.id }})" title="Delete Topic">
+                🗑️ Delete
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">📝</div>
+      <div class="empty-state-title">No Topics Yet</div>
+      <div class="empty-state-text">Start building your chapter by creating your first topic.</div>
+      <a href="{{ url_for('lms_admin.topic_new', chapter_id=data.chapter.id) }}" class="btn-add">+ Add Your First Topic</a>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  function deleteTopic(event, topicId) {
+    event.preventDefault();
+    if (confirm('Are you sure you want to delete this topic and all its content? This action cannot be undone.')) {
+      // Create a hidden form and submit it
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/lms_admin/topic/' + topicId + '/delete';
+      document.body.appendChild(form);
+      form.submit();
+    }
+  }
+
+  function manageContent(event, topicId) {
+    event.preventDefault();
+    window.location.href = '/lms_admin/topic/' + topicId + '/content';
+  }
+</script>
+
+{% endblock %}

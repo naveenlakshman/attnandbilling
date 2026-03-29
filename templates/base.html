@@ -187,6 +187,11 @@
         📦 Assets
       </a>
 
+      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('lms_admin.') %}active{% endif %}"
+         href="{{ url_for('lms_admin.dashboard') }}">
+        📚 LMS Module
+      </a>
+
       {% if session.get('role') == 'admin' %}
       <hr>
         <a class="nav-link {% if request.endpoint in ['core.users', 'core.user_new', 'core.user_edit'] %}active{% endif %}"

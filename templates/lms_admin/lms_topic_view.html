@@ -1,0 +1,686 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}Topic - {{ data.topic.topic_title }} - Global IT ERP{% endblock %}
+{% block page_title %}{{ data.topic.topic_title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .breadcrumb-nav {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 24px;
+    font-size: 14px;
+    flex-wrap: wrap;
+  }
+
+  .breadcrumb-nav a {
+    color: #0d6efd;
+    text-decoration: none;
+  }
+
+  .breadcrumb-nav a:hover {
+    text-decoration: underline;
+  }
+
+  .breadcrumb-separator {
+    color: #6c757d;
+  }
+
+  .topic-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 30px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .topic-header h1 {
+    margin: 0 0 8px 0;
+    font-size: 28px;
+    font-weight: 700;
+  }
+
+  .topic-header-meta {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    opacity: 0.9;
+    margin-top: 12px;
+  }
+
+  .topic-header-meta span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .topic-status-badge {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .metric-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .metric-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+
+  .metric-card-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+  }
+
+  .metric-card-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #212529;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .metric-card-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+
+  .btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border-radius: 6px;
+    border: none;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: #0d6efd;
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: #0a58ca;
+  }
+
+  .btn-secondary {
+    background: #e9ecef;
+    color: #333;
+  }
+
+  .btn-secondary:hover {
+    background: #dee2e6;
+  }
+
+  .btn-danger {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .btn-danger:hover {
+    background: #f5c6cb;
+  }
+
+  .section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #212529;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .section-title a {
+    color: #0d6efd;
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .section-title a:hover {
+    text-decoration: underline;
+  }
+
+  .card-wrapper {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .card-content {
+    padding: 20px;
+  }
+
+  .content-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    background: #f8f9fa;
+  }
+
+  .content-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .content-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+
+  .content-info {
+    flex-grow: 1;
+  }
+
+  .content-title {
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 4px;
+  }
+
+  .content-description {
+    font-size: 12px;
+    color: #6c757d;
+    margin-bottom: 4px;
+  }
+
+  .content-meta {
+    font-size: 11px;
+    color: #999;
+  }
+
+  .content-meta span {
+    margin-right: 12px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon {
+    font-size: 48px;
+    opacity: 0.4;
+    margin-bottom: 12px;
+  }
+
+  .empty-state-text {
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+
+  .detail-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #e9ecef;
+  }
+
+  .detail-item:last-child {
+    border-bottom: none;
+  }
+
+  .detail-label {
+    font-weight: 600;
+    color: #495057;
+    min-width: 120px;
+  }
+
+  .detail-value {
+    color: #212529;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .badge-active {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .badge-inactive {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  .badge-preview {
+    background: #cfe2ff;
+    color: #084298;
+  }
+
+  .badge-required {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .activity-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    border-bottom: 1px solid #e9ecef;
+  }
+
+  .activity-item:last-child {
+    border-bottom: none;
+  }
+
+  .activity-type-badge {
+    display: inline-block;
+    background: #e9ecef;
+    color: #495057;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    min-width: 50px;
+    text-align: center;
+  }
+
+  .activity-type-create { background: #d1ecf1; color: #0c5460; }
+  .activity-type-update { background: #fff3cd; color: #856404; }
+  .activity-type-delete { background: #f8d7da; color: #721c24; }
+
+  .activity-text {
+    flex-grow: 1;
+  }
+
+  .activity-description {
+    font-size: 13px;
+    color: #212529;
+    margin-bottom: 4px;
+  }
+
+  .activity-time {
+    font-size: 11px;
+    color: #6c757d;
+  }
+
+  .grid-2col {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+  }
+
+  @media (max-width: 768px) {
+    .topic-header {
+      padding: 20px;
+    }
+
+    .topic-header h1 {
+      font-size: 22px;
+    }
+
+    .action-buttons {
+      flex-direction: column;
+    }
+
+    .btn-action {
+      justify-content: center;
+    }
+
+    .metric-cards {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .grid-2col {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb Navigation -->
+<div class="breadcrumb-nav">
+  <a href="{{ url_for('lms_admin.list_programs') }}">📖 Programs</a>
+  <span class="breadcrumb-separator">/</span>
+  <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}">{{ data.program.program_name }}</a>
+  <span class="breadcrumb-separator">/</span>
+  <a href="{{ url_for('lms_admin.list_chapters', program_id=data.program.id) }}">📑 Chapters</a>
+  <span class="breadcrumb-separator">/</span>
+  <a href="{{ url_for('lms_admin.list_topics', chapter_id=data.chapter.id) }}">{{ data.chapter.chapter_title }}</a>
+  <span class="breadcrumb-separator">/</span>
+  <span>📝 {{ data.topic.topic_title }}</span>
+</div>
+
+<!-- Topic Header -->
+<div class="topic-header">
+  <h1>{{ data.topic.topic_title }}</h1>
+  <div class="topic-header-meta">
+    <span>📚 Chapter: {{ data.chapter.chapter_title }}</span>
+    <span>🔢 Order: {{ data.topic.topic_order }}</span>
+    {% if data.topic.estimated_minutes %}
+      <span>⏱️ {{ data.topic.estimated_minutes }} minutes</span>
+    {% endif %}
+    <span>
+      {% if data.topic.is_active %}
+        <span class="topic-status-badge">✓ Active</span>
+      {% else %}
+        <span class="topic-status-badge">✗ Inactive</span>
+      {% endif %}
+    </span>
+    {% if data.topic.is_preview %}
+      <span class="topic-status-badge">👁️ Preview</span>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Metric Cards -->
+<div class="metric-cards">
+  <div class="metric-card">
+    <div class="metric-card-icon">📦</div>
+    <div class="metric-card-value">{{ data.content_count }}</div>
+    <div class="metric-card-label">Content Items</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-card-icon">✍️</div>
+    <div class="metric-card-value">{{ data.test_count }}</div>
+    <div class="metric-card-label">Tests</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-card-icon">📅</div>
+    <div class="metric-card-value">{{ data.topic.created_at[:10] }}</div>
+    <div class="metric-card-label">Created</div>
+  </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="action-buttons">
+  <a href="{{ url_for('lms_admin.topic_edit', topic_id=data.topic.id) }}" class="btn-action btn-primary">
+    ✏️ Edit Topic
+  </a>
+  <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=data.topic.id) }}" class="btn-action btn-secondary">
+    📦 Manage Content
+  </a>
+  <a href="{{ url_for('lms_admin.list_topic_attachments', topic_id=data.topic.id) }}" class="btn-action btn-secondary">
+    📎 Attachments
+  </a>
+  <a href="#" class="btn-action btn-secondary">
+    ✍️ Create Test
+  </a>
+  <a href="{{ url_for('lms_admin.list_topics', chapter_id=data.chapter.id) }}" class="btn-action btn-secondary">
+    ← Back to Topics
+  </a>
+</div>
+
+<!-- Main Content Grid -->
+<div class="grid-2col">
+  <!-- Left Column: Details and Content -->
+  <div>
+    <!-- Topic Details -->
+    <div class="card-wrapper">
+      <div class="card-content">
+        <div class="section-title">
+          ℹ️ Topic Details
+        </div>
+        
+        <div class="detail-item">
+          <div class="detail-label">Title</div>
+          <div class="detail-value">{{ data.topic.topic_title }}</div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Order</div>
+          <div class="detail-value">#{{ data.topic.topic_order }}</div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Duration</div>
+          <div class="detail-value">
+            {% if data.topic.estimated_minutes %}
+              {{ data.topic.estimated_minutes }} minutes
+            {% else %}
+              Not specified
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Content Type</div>
+          <div class="detail-value">
+            {% if data.topic.content_type == 'text' %}
+              📄 Text & Description
+            {% elif data.topic.content_type == 'html' %}
+              🌐 HTML Content
+            {% elif data.topic.content_type == 'youtube' %}
+              ▶️ YouTube Video
+            {% elif data.topic.content_type == 'video_file' %}
+              🎥 Video File
+            {% elif data.topic.content_type == 'pdf' %}
+              📕 PDF Document
+            {% elif data.topic.content_type == 'image' %}
+              🖼️ Image
+            {% elif data.topic.content_type == 'download' %}
+              ⬇️ Downloadable
+            {% else %}
+              {{ data.topic.content_type }}
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Status</div>
+          <div class="detail-value">
+            {% if data.topic.is_active %}
+              <span class="badge badge-active">✓ Active</span>
+            {% else %}
+              <span class="badge badge-inactive">✗ Inactive</span>
+            {% endif %}
+            {% if data.topic.is_preview %}
+              <span class="badge badge-preview">👁️ Preview</span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if data.topic.short_description %}
+        <div class="detail-item">
+          <div class="detail-label">Description</div>
+          <div class="detail-value">{{ data.topic.short_description }}</div>
+        </div>
+        {% endif %}
+
+        <div class="detail-item">
+          <div class="detail-label">Created</div>
+          <div class="detail-value">{{ data.topic.created_at[:10] }}</div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Updated</div>
+          <div class="detail-value">{{ data.topic.updated_at[:10] }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content Items Section -->
+    <div class="card-wrapper">
+      <div class="card-content">
+        <div class="section-title">
+          📦 Content Items
+          <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=data.topic.id) }}">Manage →</a>
+        </div>
+
+        {% if data.content_items %}
+          {% for item in data.content_items %}
+          <div class="content-item">
+            <div class="content-icon">
+              {% if item.content_type == 'text' %}
+                📄
+              {% elif item.content_type == 'html' %}
+                🌐
+              {% elif item.content_type == 'youtube' %}
+                ▶️
+              {% elif item.content_type == 'video_file' %}
+                🎥
+              {% elif item.content_type == 'pdf' %}
+                📕
+              {% elif item.content_type == 'image' %}
+                🖼️
+              {% elif item.content_type == 'download' %}
+                ⬇️
+              {% else %}
+                📦
+              {% endif %}
+            </div>
+            <div class="content-info">
+              <div class="content-title">{{ item.title }}</div>
+              {% if item.description %}
+              <div class="content-description">{{ item.description }}</div>
+              {% endif %}
+              <div class="content-meta">
+                <span>
+                  {% if item.content_type == 'text' %}
+                    Text
+                  {% elif item.content_type == 'html' %}
+                    HTML
+                  {% elif item.content_type == 'youtube' %}
+                    YouTube
+                  {% elif item.content_type == 'video_file' %}
+                    Video
+                  {% elif item.content_type == 'pdf' %}
+                    PDF
+                  {% elif item.content_type == 'image' %}
+                    Image
+                  {% elif item.content_type == 'download' %}
+                    Resource
+                  {% endif %}
+                </span>
+                {% if item.duration_minutes %}
+                <span>⏱️ {{ item.duration_minutes }}m</span>
+                {% endif %}
+                {% if item.is_required %}
+                <span class="badge badge-required">Required</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-state">
+            <div class="empty-state-icon">📦</div>
+            <div class="empty-state-text">No content added yet</div>
+            <a href="{{ url_for('lms_admin.content_new', topic_id=data.topic.id) }}" class="btn-action btn-primary">+ Add First Content</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Tests and Activity -->
+  <div>
+    <!-- Tests Section -->
+    <div class="card-wrapper">
+      <div class="card-content">
+        <div class="section-title">
+          ✍️ Associated Tests
+          <a href="#">Create Test →</a>
+        </div>
+
+        {% if data.tests %}
+          {% for test in data.tests %}
+          <div class="content-item">
+            <div class="content-icon">✍️</div>
+            <div class="content-info">
+              <div class="content-title">{{ test.test_title }}</div>
+              {% if test.description %}
+              <div class="content-description">{{ test.description }}</div>
+              {% endif %}
+              <div class="content-meta">
+                <span>📋 {{ test.total_questions }} questions</span>
+                <span>🎯 {{ test.passing_score }}% pass</span>
+                {% if test.is_active %}
+                  <span class="badge badge-active">Active</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-state">
+            <div class="empty-state-icon">✍️</div>
+            <div class="empty-state-text">No tests created yet</div>
+            <a href="#" class="btn-action btn-primary">+ Create Test</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card-wrapper">
+      <div class="card-content">
+        <div class="section-title">📊 Recent Activity</div>
+
+        {% if data.recent_activity %}
+          {% for activity in data.recent_activity %}
+          <div class="activity-item">
+            <span class="activity-type-badge activity-type-{{ activity.action_type }}">
+              {{ activity.action_type }}
+            </span>
+            <div class="activity-text">
+              <div class="activity-description">{{ activity.description }}</div>
+              <div class="activity-time">
+                {{ activity.created_at[:10] }} 
+                {% if activity.full_name %}
+                  by {{ activity.full_name }}
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-state" style="padding: 30px 20px;">
+            <div class="empty-state-text">No activity yet</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

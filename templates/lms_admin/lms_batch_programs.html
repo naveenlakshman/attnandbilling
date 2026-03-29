@@ -1,0 +1,624 @@
+{% extends "lms_admin/base.html" %}
+
+{% block content %}
+<style>
+    .breadcrumb {
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+    }
+    
+    .breadcrumb-item {
+        display: inline;
+    }
+    
+    .breadcrumb-item + .breadcrumb-item::before {
+        content: " → ";
+        color: #999;
+    }
+    
+    .breadcrumb-item a {
+        color: #007bff;
+        text-decoration: none;
+    }
+    
+    .breadcrumb-item a:hover {
+        text-decoration: underline;
+    }
+    
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 1rem;
+    }
+    
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #333;
+        margin: 0;
+    }
+    
+    .header-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .btn-add {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.5rem 1.25rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-add:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+        background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+        text-decoration: none;
+        color: white;
+    }
+    
+    .main-layout {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .sidebar-card {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1.25rem;
+        height: fit-content;
+        position: sticky;
+        top: 1rem;
+    }
+    
+    .card-title {
+        font-size: 0.875rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #666;
+        margin-bottom: 0.75rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 0.5rem;
+    }
+    
+    .card-content {
+        font-size: 0.875rem;
+        color: #333;
+        line-height: 1.6;
+    }
+    
+    .card-content p {
+        margin: 0.5rem 0;
+    }
+    
+    .card-content strong {
+        font-weight: 600;
+        color: #222;
+    }
+    
+    .content-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 0.375rem;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .content-table thead {
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .content-table th {
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        color: #333;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .content-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #dee2e6;
+        font-size: 0.9rem;
+    }
+    
+    .content-table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .content-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+    
+    .status-badge {
+        padding: 0.375rem 0.625rem;
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+        display: inline-block;
+    }
+    
+    .status-badge.active {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .status-badge.inactive {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .program-badge {
+        background-color: #d1ecf1;
+        color: #0c5460;
+        padding: 0.25rem 0.625rem;
+        border-radius: 0.25rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    
+    .batch-id {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 0.4rem 0.6rem;
+        border-radius: 0.25rem;
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #333;
+    }
+    
+    .date-range {
+        font-size: 0.9rem;
+        color: #666;
+        line-height: 1.4;
+    }
+    
+    .date-range strong {
+        display: block;
+        color: #333;
+        font-weight: 600;
+    }
+    
+    .student-count {
+        background-color: #e7f3ff;
+        color: #004085;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.375rem;
+        text-align: center;
+        font-weight: 600;
+    }
+    
+    .action-buttons {
+        display: inline-flex;
+        gap: 0.5rem;
+    }
+    
+    .btn-sm {
+        padding: 0.375rem 0.75rem;
+        border: none;
+        border-radius: 0.25rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-edit {
+        background-color: #007bff;
+        color: white;
+    }
+    
+    .btn-edit:hover {
+        background-color: #0056b3;
+        transform: translateY(-1px);
+    }
+    
+    .btn-delete {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .btn-delete:hover {
+        background-color: #c82333;
+        transform: translateY(-1px);
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        background: white;
+        border-radius: 0.375rem;
+        border: 2px dashed #dee2e6;
+    }
+    
+    .empty-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+    
+    .empty-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 0.5rem;
+    }
+    
+    .empty-text {
+        color: #666;
+        margin-bottom: 1.5rem;
+        font-size: 0.95rem;
+    }
+    
+    .btn-primary {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.625rem 1.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+        background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+        text-decoration: none;
+        color: white;
+    }
+    
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        text-align: center;
+    }
+    
+    .stat-number {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #007bff;
+        margin-bottom: 0.25rem;
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: #666;
+        font-weight: 500;
+    }
+    
+    .filter-bar {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    
+    .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .filter-group label {
+        font-weight: 600;
+        color: #333;
+        font-size: 0.9rem;
+        margin: 0;
+    }
+    
+    .filter-group select {
+        padding: 0.375rem 0.5rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        font-size: 0.85rem;
+    }
+    
+    @media (max-width: 768px) {
+        .main-layout {
+            grid-template-columns: 1fr;
+        }
+        
+        .sidebar-card {
+            position: static;
+        }
+        
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        
+        .content-table {
+            font-size: 0.85rem;
+        }
+        
+        .content-table th,
+        .content-table td {
+            padding: 0.75rem;
+        }
+        
+        .action-buttons {
+            flex-direction: column;
+        }
+        
+        .btn-sm {
+            width: 100%;
+            text-align: center;
+        }
+        
+        .filter-bar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .filter-group {
+            width: 100%;
+        }
+        
+        .filter-group select {
+            width: 100%;
+        }
+    }
+</style>
+
+<!-- Breadcrumb Navigation -->
+<nav class="breadcrumb">
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_programs') }}">📚 Programs</a>
+    </span>
+    <span class="breadcrumb-item">🎓 Batch Assignments</span>
+</nav>
+
+<!-- Page Header -->
+<div class="page-header">
+    <h1 class="page-title">🎓 Batch-Program Assignments</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('lms_admin.add_batch_program') }}" class="btn-add">
+            + Add Assignment
+        </a>
+        <a href="{{ url_for('lms_admin.list_programs') }}" class="btn-add" style="background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);">
+            ← Back to Programs
+        </a>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-number">{{ data.total_assignments }}</div>
+        <div class="stat-label">Total Assignments</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ data.active_assignments }}</div>
+        <div class="stat-label">Active</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ data.total_batches }}</div>
+        <div class="stat-label">Batches</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ data.total_programs }}</div>
+        <div class="stat-label">Programs</div>
+    </div>
+</div>
+
+<!-- Main Content Layout -->
+<div class="main-layout">
+    <!-- Assignments Table -->
+    <div>
+        {% if data.batch_programs|length > 0 %}
+            <table class="content-table">
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">Batch ID</th>
+                        <th style="width: 180px;">Program</th>
+                        <th style="width: 140px;">Access Period</th>
+                        <th style="width: 80px;">Students</th>
+                        <th style="width: 80px;">Status</th>
+                        <th style="width: 100px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for assignment in data.batch_programs %}
+                        <tr>
+                            <!-- Batch ID -->
+                            <td>
+                                <span class="batch-id">Batch #{{ assignment.batch_id }}</span>
+                            </td>
+                            
+                            <!-- Program Name -->
+                            <td>
+                                <span class="program-badge">
+                                    📚 {{ assignment.program_name }}
+                                </span>
+                            </td>
+                            
+                            <!-- Access Period -->
+                            <td>
+                                <div class="date-range">
+                                    <strong>Start:</strong> {{ data.format_date(assignment.access_start_date) }}<br>
+                                    <strong>End:</strong> {{ data.format_date(assignment.access_end_date) }}
+                                </div>
+                            </td>
+                            
+                            <!-- Student Count -->
+                            <td>
+                                <div class="student-count">
+                                    👥 {{ assignment.student_count }}
+                                </div>
+                            </td>
+                            
+                            <!-- Status -->
+                            <td>
+                                <span class="status-badge {% if assignment.is_active %}active{% else %}inactive{% endif %}">
+                                    {% if assignment.is_active %}
+                                        ✓ Active
+                                    {% else %}
+                                        ✗ Inactive
+                                    {% endif %}
+                                </span>
+                            </td>
+                            
+                            <!-- Actions -->
+                            <td>
+                                <div class="action-buttons">
+                                    <a href="{{ url_for('lms_admin.edit_batch_program', assignment_id=assignment.id) }}" class="btn-sm btn-edit" title="Edit Assignment">✏️ Edit</a>
+                                    <form method="POST" 
+                                          action="{{ url_for('lms_admin.delete_batch_program', assignment_id=assignment.id) }}" 
+                                          style="display: inline;"
+                                          onsubmit="return confirm('Remove this assignment?');">
+                                        <button type="submit" class="btn-sm btn-delete">🗑️ Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <!-- Empty State -->
+            <div class="empty-state">
+                <div class="empty-icon">🎓</div>
+                <div class="empty-title">No Batch Assignments Yet</div>
+                <div class="empty-text">
+                    Batch-to-program assignments control which student batches have access to which LMS programs and time periods.
+                </div>
+                <a href="{{ url_for('lms_admin.add_batch_program') }}" class="btn-primary">
+                    + Add Your First Assignment
+                </a>
+                <p style="color: #666; font-size: 0.85rem; margin-top: 1rem;">
+                    💡 <strong>Tip:</strong> Use batch assignments to manage program access for different cohorts of students with specific start and end dates.
+                </p>
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Right Sidebar -->
+    <div>
+        <!-- Overview Card -->
+        <div class="sidebar-card">
+            <div class="card-title">📋 Overview</div>
+            <div class="card-content">
+                <p>
+                    <strong>Total Assignments:</strong><br>
+                    {{ data.total_assignments }}
+                </p>
+                <p>
+                    <strong>Active Now:</strong><br>
+                    {{ data.active_assignments }}
+                </p>
+                <p>
+                    <strong>Inactive:</strong><br>
+                    {{ data.total_assignments - data.active_assignments }}
+                </p>
+            </div>
+        </div>
+        
+        <!-- Add Assignment Card -->
+        <div class="sidebar-card">
+            <div class="card-title">➕ New Assignment</div>
+            <div class="card-content">
+                <p style="margin-bottom: 0.75rem;">
+                    Link a batch to a program to grant access.
+                </p>
+                <a href="{{ url_for('lms_admin.add_batch_program') }}" 
+                   class="btn-primary" style="width: 100%; text-align: center; display: block; text-decoration: none;">
+                    + Add Assignment
+                </a>
+            </div>
+        </div>
+        
+        <!-- About Card -->
+        <div class="sidebar-card">
+            <div class="card-title">ℹ️ About Batch Access</div>
+            <div class="card-content">
+                <p>
+                    Batch assignments link student cohorts to LMS programs with specific access periods.
+                </p>
+                <p style="margin-bottom: 0; font-size: 0.8rem; color: #666;">
+                    Each assignment includes start/end dates to control when students can access course materials.
+                </p>
+            </div>
+        </div>
+        
+        <!-- Key Information Card -->
+        <div class="sidebar-card">
+            <div class="card-title">🔑 Key Features</div>
+            <div class="card-content">
+                <ul style="margin: 0; padding-left: 1rem; font-size: 0.8rem;">
+                    <li>Control batch access to programs</li>
+                    <li>Set start and end dates</li>
+                    <li>Track student enrollment</li>
+                    <li>Enable/disable access</li>
+                    <li>Manage multiple cohorts</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Statistics Card -->
+        <div class="sidebar-card">
+            <div class="card-title">📊 Statistics</div>
+            <div class="card-content">
+                <p>
+                    <strong>Batches:</strong><br>
+                    {{ data.total_batches }}
+                </p>
+                <p>
+                    <strong>Programs:</strong><br>
+                    {{ data.total_programs }}
+                </p>
+                <p>
+                    <strong>Avg. per batch:</strong><br>
+                    {% if data.total_batches > 0 %}
+                        {{ "%.1f"|format(data.total_assignments / data.total_batches) }}
+                    {% else %}
+                        0
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
