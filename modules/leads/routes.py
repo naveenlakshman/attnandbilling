@@ -620,19 +620,43 @@ def leads_list():
     cur.execute("SELECT id, full_name, username FROM users ORDER BY full_name")
     all_users = cur.fetchall()
 
-    # Simple metrics (basic version for now)
+    # Calculate metrics properly
+    today = date.today()
+    month_str = today.strftime("%Y-%m")
+
     cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0")
-    total = cur.fetchone()[0]
+    total_overall = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND substr(created_at, 1, 7) = ?", (month_str,))
+    total_this_month = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'active'")
+    active_overall = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'active' AND substr(created_at, 1, 7) = ?", (month_str,))
+    active_this_month = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'converted'")
+    converted_overall = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'converted' AND substr(updated_at, 1, 7) = ?", (month_str,))
+    converted_this_month = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'lost'")
+    lost_overall = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'lost' AND substr(updated_at, 1, 7) = ?", (month_str,))
+    lost_this_month = cur.fetchone()[0]
 
     metrics = {
-        "total_overall": total,
-        "total_this_month": total,
-        "active_overall": total,
-        "active_this_month": total,
-        "converted_overall": 0,
-        "converted_this_month": 0,
-        "lost_overall": 0,
-        "lost_this_month": 0,
+        "total_overall": total_overall,
+        "total_this_month": total_this_month,
+        "active_overall": active_overall,
+        "active_this_month": active_this_month,
+        "converted_overall": converted_overall,
+        "converted_this_month": converted_this_month,
+        "lost_overall": lost_overall,
+        "lost_this_month": lost_this_month,
     }
 
     conn.close()
