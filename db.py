@@ -174,6 +174,9 @@ def init_db():
             qualification TEXT,
             employment_status TEXT DEFAULT 'unemployed',
             branch_id INTEGER,
+            date_of_birth TEXT,
+            parent_name TEXT,
+            parent_contact TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT,
             FOREIGN KEY (branch_id) REFERENCES branches(id)
@@ -493,6 +496,9 @@ def init_db():
     add_column_if_not_exists(cur, "students", "employment_status", "TEXT DEFAULT 'unemployed'")
     add_column_if_not_exists(cur, "students", "branch_id", "INTEGER")
     add_column_if_not_exists(cur, "students", "student_location", "TEXT")
+    add_column_if_not_exists(cur, "students", "date_of_birth", "TEXT")
+    add_column_if_not_exists(cur, "students", "parent_name", "TEXT")
+    add_column_if_not_exists(cur, "students", "parent_contact", "TEXT")
     add_column_if_not_exists(cur, "leads", "lead_location", "TEXT")
 
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")

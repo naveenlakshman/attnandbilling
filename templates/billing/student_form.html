@@ -148,6 +148,11 @@
         </div>
 
         <div class="form-group">
+          <label>Date of Birth</label>
+          <input type="date" name="date_of_birth" {% if student %}value="{{ student.date_of_birth }}"{% endif %}>
+        </div>
+
+        <div class="form-group">
           <label>Gender</label>
           <select name="gender">
             <option value="">-- Select --</option>
@@ -165,6 +170,16 @@
         <div class="form-group full-width">
           <label>Address</label>
           <textarea name="address">{% if student %}{{ student.address }}{% endif %}</textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Parent/Guardian Name</label>
+          <input type="text" name="parent_name" {% if student %}value="{{ student.parent_name }}"{% endif %}>
+        </div>
+
+        <div class="form-group">
+          <label>Parent/Guardian Contact Number</label>
+          <input type="text" name="parent_contact" {% if student %}value="{{ student.parent_contact }}"{% endif %}>
         </div>
 
         <div class="form-group">

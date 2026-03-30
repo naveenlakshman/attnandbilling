@@ -595,6 +595,9 @@ def student_new():
         student_location = request.form.get("student_location", "").strip()
         employment_status = request.form.get("employment_status", "").strip()
         status = request.form.get("status", "active").strip()
+        date_of_birth = request.form.get("date_of_birth", "").strip() or None
+        parent_name = request.form.get("parent_name", "").strip() or None
+        parent_contact = request.form.get("parent_contact", "").strip() or None
 
         # Get next registration number
         cur.execute("""
@@ -630,13 +633,16 @@ def student_new():
                 qualification,
                 student_location,
                 employment_status,
+                date_of_birth,
+                parent_name,
+                parent_contact,
                 joined_date,
                 status,
                 branch_id,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(next_reg_no),
             full_name,
@@ -648,6 +654,9 @@ def student_new():
             qualification,
             student_location,
             employment_status,
+            date_of_birth,
+            parent_name,
+            parent_contact,
             now,
             status,
             branch_id,
@@ -719,6 +728,9 @@ def student_edit(student_id):
         student_location = request.form.get("student_location", "").strip()
         employment_status = request.form.get("employment_status", "").strip()
         status = request.form.get("status", "active").strip()
+        date_of_birth = request.form.get("date_of_birth", "").strip() or None
+        parent_name = request.form.get("parent_name", "").strip() or None
+        parent_contact = request.form.get("parent_contact", "").strip() or None
 
         now = datetime.now().isoformat(timespec="seconds")
 
@@ -734,6 +746,9 @@ def student_edit(student_id):
                 qualification = ?,
                 student_location = ?,
                 employment_status = ?,
+                date_of_birth = ?,
+                parent_name = ?,
+                parent_contact = ?,
                 status = ?,
                 updated_at = ?
             WHERE id = ?
@@ -748,6 +763,9 @@ def student_edit(student_id):
             qualification,
             student_location,
             employment_status,
+            date_of_birth,
+            parent_name,
+            parent_contact,
             status,
             now,
             student_id
