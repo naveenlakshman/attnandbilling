@@ -844,6 +844,25 @@ def student_profile(student_id):
     """, (student_id,))
     payment_summary = cur.fetchone()
 
+    # Fetch invoice items (courses enrolled)
+    cur.execute("""
+        SELECT
+            invoice_items.id,
+            invoice_items.invoice_id,
+            invoice_items.description,
+            invoice_items.quantity,
+            invoice_items.unit_price,
+            invoice_items.line_total,
+            invoice_items.discount,
+            invoices.invoice_no,
+            invoices.invoice_date
+        FROM invoice_items
+        JOIN invoices ON invoice_items.invoice_id = invoices.id
+        WHERE invoices.student_id = ?
+        ORDER BY invoices.invoice_date DESC, invoice_items.id
+    """, (student_id,))
+    invoice_items = cur.fetchall()
+
     total_invoices = int(invoice_summary["total_invoices"] or 0)
     total_billed = float(invoice_summary["total_billed"] or 0)
     total_paid = float(payment_summary["total_paid"] or 0)
@@ -855,6 +874,7 @@ def student_profile(student_id):
         "billing/student_profile.html",
         student=student,
         invoices=invoices,
+        invoice_items=invoice_items,
         total_invoices=total_invoices,
         total_billed=total_billed,
         total_paid=total_paid,

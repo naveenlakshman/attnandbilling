@@ -140,4 +140,43 @@
   </table>
 </div>
 
+<div class="card" style="margin-top: 20px;">
+  <h3 style="margin-top: 0;">Enrolled Courses</h3>
+
+  <table border="1" width="100%" cellpadding="10" class="student-profile-table">
+    <thead>
+      <tr>
+        <th style="width: 150px;">Invoice No</th>
+        <th style="width: 120px;">Invoice Date</th>
+        <th>Course Name</th>
+        <th style="width: 80px;">Qty</th>
+        <th style="width: 120px;">Unit Price</th>
+        <th style="width: 100px;">Discount</th>
+        <th style="width: 130px;">Line Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in invoice_items %}
+      <tr>
+        <td>
+          <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}" style="text-decoration: none;">
+            {{ item.invoice_no }}
+          </a>
+        </td>
+        <td>{{ item.invoice_date }}</td>
+        <td>{{ item.description }}</td>
+        <td style="text-align: center;">{{ item.quantity }}</td>
+        <td style="text-align: right;">₹ {{ "%.2f"|format(item.unit_price or 0) }}</td>
+        <td style="text-align: right;">{{ "%.2f"|format(item.discount or 0) }}</td>
+        <td style="text-align: right;">₹ {{ "%.2f"|format(item.line_total or 0) }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" style="text-align:center;">No courses enrolled.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
 {% endblock %}
