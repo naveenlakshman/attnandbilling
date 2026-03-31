@@ -263,7 +263,9 @@
   {% if session.get("role") == "admin" %}
   <a class="btn btn-warning" href="{{ url_for('billing.invoice_edit', invoice_id=invoice.id) }}">Edit Invoice</a>
   {% endif %}
+  {% if invoice['status'] not in ['write_off', 'partially_written_off'] %}
   <a class="btn btn-primary" href="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">+ Record Payment</a>
+  {% endif %}
   {% if session.get("role") == "admin" and invoice['status'] in ['unpaid', 'partially_paid'] %}
   <a class="btn btn-danger" href="{{ url_for('baddebt.create') }}?invoice_id={{ invoice.id }}" title="Write-off outstanding balance">✗ Write-off</a>
   {% endif %}

@@ -2628,6 +2628,12 @@ def receipt_new():
         flash("Invoice not found.", "danger")
         return redirect(url_for("billing.invoices"))
 
+    # Prevent payments on written-off invoices
+    if invoice["status"] in ["write_off", "partially_written_off"]:
+        conn.close()
+        flash("Cannot record payments for written-off invoices.", "danger")
+        return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
     cur.execute("""
         SELECT IFNULL(SUM(amount_received), 0) AS total_paid
         FROM receipts
