@@ -201,7 +201,26 @@
     <div class="d-flex justify-content-between align-items-center">
       <div>
         <h1 class="mb-1">Attendance Dashboard</h1>
-        <span class="today-date">📅 Today: {{ today }}</span>
+        <div style="display: flex; align-items: center; gap: 15px; margin-top: 10px;">
+          <span class="today-date">📅 Today: {{ today }}</span>
+          
+          {% if user.can_view_all_branches and available_branches %}
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label for="branch-filter" style="font-weight: 500; color: #666; margin: 0;">Branch:</label>
+            <form method="GET" id="branch-filter-form" style="display: flex; gap: 8px; align-items: center;">
+              <select id="branch-filter" name="branch_id" onchange="document.getElementById('branch-filter-form').submit();" 
+                      style="padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.9rem; background: #fff; cursor: pointer;">
+                <option value="">All Branches</option>
+                {% for branch in available_branches %}
+                  <option value="{{ branch.id }}" {% if selected_branch_id == branch.id %}selected{% endif %}>
+                    {{ branch.branch_name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </form>
+          </div>
+          {% endif %}
+        </div>
       </div>
       <div>
         <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-primary">
@@ -214,30 +233,79 @@
   <!-- Overall Statistics -->
   {% if overall_stats.total_batches > 0 %}
   <div class="row mb-4">
-    <div class="col-md-3">
-      <div class="stat-card present">
-        <div class="stat-value">{{ overall_stats.total_present }}</div>
-        <div class="stat-label">Present</div>
+    {% if branch_stats %}
+      <!-- Branch-wise breakdown when All Branches is selected -->
+      <div class="col-md-3">
+        <div class="stat-card present" style="padding: 16px;">
+          <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Present</div>
+          {% for branch_id, stats in branch_stats.items() %}
+          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between;">
+            <span style="color: #666;">{{ stats.branch_name }}</span>
+            <strong style="color: #198754;">{{ stats.total_present }}</strong>
+          </div>
+          {% endfor %}
+        </div>
       </div>
-    </div>
-    <div class="col-md-3">
-      <div class="stat-card absent">
-        <div class="stat-value">{{ overall_stats.total_absent }}</div>
-        <div class="stat-label">Absent</div>
+      <div class="col-md-3">
+        <div class="stat-card absent" style="padding: 16px;">
+          <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Absent</div>
+          {% for branch_id, stats in branch_stats.items() %}
+          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between;">
+            <span style="color: #666;">{{ stats.branch_name }}</span>
+            <strong style="color: #dc3545;">{{ stats.total_absent }}</strong>
+          </div>
+          {% endfor %}
+        </div>
       </div>
-    </div>
-    <div class="col-md-3">
-      <div class="stat-card late">
-        <div class="stat-value">{{ overall_stats.total_late }}</div>
-        <div class="stat-label">Late</div>
+      <div class="col-md-3">
+        <div class="stat-card late" style="padding: 16px;">
+          <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Late</div>
+          {% for branch_id, stats in branch_stats.items() %}
+          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between;">
+            <span style="color: #666;">{{ stats.branch_name }}</span>
+            <strong style="color: #ffc107;">{{ stats.total_late }}</strong>
+          </div>
+          {% endfor %}
+        </div>
       </div>
-    </div>
-    <div class="col-md-3">
-      <div class="stat-card leave">
-        <div class="stat-value">{{ overall_stats.total_leave }}</div>
-        <div class="stat-label">Leave</div>
+      <div class="col-md-3">
+        <div class="stat-card leave" style="padding: 16px;">
+          <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Leave</div>
+          {% for branch_id, stats in branch_stats.items() %}
+          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between;">
+            <span style="color: #666;">{{ stats.branch_name }}</span>
+            <strong style="color: #0dcaf0;">{{ stats.total_leave }}</strong>
+          </div>
+          {% endfor %}
+        </div>
       </div>
-    </div>
+    {% else %}
+      <!-- Aggregate totals when a specific branch is selected -->
+      <div class="col-md-3">
+        <div class="stat-card present">
+          <div class="stat-value">{{ overall_stats.total_present }}</div>
+          <div class="stat-label">Present</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card absent">
+          <div class="stat-value">{{ overall_stats.total_absent }}</div>
+          <div class="stat-label">Absent</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card late">
+          <div class="stat-value">{{ overall_stats.total_late }}</div>
+          <div class="stat-label">Late</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card leave">
+          <div class="stat-value">{{ overall_stats.total_leave }}</div>
+          <div class="stat-label">Leave</div>
+        </div>
+      </div>
+    {% endif %}
   </div>
 
   <!-- Completion Status -->

@@ -31,10 +31,53 @@ def dashboard():
         # Get today's date in YYYY-MM-DD format
         today = datetime.now().strftime("%Y-%m-%d")
         
-        # Get batches for today based on branch
+        # Get selected branch from query parameter
+        selected_branch_id = request.args.get('branch_id', '', type=int)
+        
+        # Determine which branch to use
+        if user['can_view_all_branches']:
+            # If user can view all branches and selected one, use it
+            working_branch_id = selected_branch_id if selected_branch_id else None
+        else:
+            # If user can't view all branches, use their assigned branch
+            working_branch_id = user['branch_id']
+        
+        # Get all branches for the dropdown (only if user can view all branches)
+        available_branches = []
         if user['can_view_all_branches']:
             cur.execute("""
-                SELECT DISTINCT b.id, b.batch_name, c.course_name, b.start_time, b.end_time, 
+                SELECT id, branch_name FROM branches 
+                WHERE is_active = 1 
+                ORDER BY branch_name ASC
+            """)
+            available_branches = cur.fetchall()
+        
+        # Get batches for today based on branch
+        if working_branch_id:
+            # Filter by specific branch
+            cur.execute("""
+                SELECT DISTINCT b.id, b.batch_name, b.branch_id, c.course_name, b.start_time, b.end_time, 
+                       b.status, u.full_name as trainer_name, br.branch_name
+                FROM batches b
+                LEFT JOIN courses c ON b.course_id = c.id
+                LEFT JOIN users u ON b.trainer_id = u.id
+                LEFT JOIN branches br ON b.branch_id = br.id
+                WHERE b.status = 'active'
+                AND b.branch_id = ?
+                AND (
+                    b.start_date IS NULL 
+                    OR date(b.start_date) <= date(?)
+                )
+                AND (
+                    b.end_date IS NULL 
+                    OR date(b.end_date) >= date(?)
+                )
+                ORDER BY b.start_time ASC
+            """, (working_branch_id, today, today))
+        elif user['can_view_all_branches']:
+            # Show all batches if admin didn't select a specific branch
+            cur.execute("""
+                SELECT DISTINCT b.id, b.batch_name, b.branch_id, c.course_name, b.start_time, b.end_time, 
                        b.status, u.full_name as trainer_name, br.branch_name
                 FROM batches b
                 LEFT JOIN courses c ON b.course_id = c.id
@@ -52,8 +95,9 @@ def dashboard():
                 ORDER BY b.start_time ASC
             """, (today, today))
         else:
+            # Non-admin users see only their branch
             cur.execute("""
-                SELECT DISTINCT b.id, b.batch_name, c.course_name, b.start_time, b.end_time, 
+                SELECT DISTINCT b.id, b.batch_name, b.branch_id, c.course_name, b.start_time, b.end_time, 
                        b.status, u.full_name as trainer_name, br.branch_name
                 FROM batches b
                 LEFT JOIN courses c ON b.course_id = c.id
@@ -153,6 +197,31 @@ def dashboard():
         """)
         pending_followups = cur.fetchall()
         
+        # Calculate branch-wise statistics if "All Branches" is selected
+        branch_stats = {}
+        if user['can_view_all_branches'] and not selected_branch_id:
+            for batch in batches:
+                branch_id = batch['branch_id']
+                branch_name = batch['branch_name']
+                
+                if branch_id not in branch_stats:
+                    branch_stats[branch_id] = {
+                        'branch_name': branch_name,
+                        'total_present': 0,
+                        'total_absent': 0,
+                        'total_late': 0,
+                        'total_leave': 0
+                    }
+                
+                # Find the batch_stat entry for this batch
+                for bs in batch_stats:
+                    if bs['batch']['id'] == batch['id']:
+                        branch_stats[branch_id]['total_present'] += bs['present']
+                        branch_stats[branch_id]['total_absent'] += bs['absent']
+                        branch_stats[branch_id]['total_late'] += bs['late']
+                        branch_stats[branch_id]['total_leave'] += bs['leave']
+                        break
+        
         # Prepare overall statistics
         overall_stats = {
             'total_batches': len(batches),
@@ -171,8 +240,11 @@ def dashboard():
             today=today,
             batch_stats=batch_stats,
             overall_stats=overall_stats,
+            branch_stats=branch_stats,
             pending_followups=pending_followups,
-            user=user
+            user=user,
+            available_branches=available_branches,
+            selected_branch_id=selected_branch_id
         )
     
     finally:
@@ -1389,8 +1461,12 @@ def add_followup(student_id):
             return jsonify({'error': 'Access denied'}), 403
         
         # Get form data
+        followup_date = request.form.get('followup_date', '').strip()
         followup_status = request.form.get('followup_status')
         remarks = request.form.get('remarks', '').strip()
+        
+        if not followup_date:
+            return jsonify({'error': 'Follow-up date is required'}), 400
         
         if not followup_status or followup_status not in ['pending', 'contacted', 'resolved', 'no_response']:
             return jsonify({'error': 'Invalid followup status'}), 400
@@ -1408,20 +1484,20 @@ def add_followup(student_id):
             # Update existing
             cur.execute("""
                 UPDATE attendance_followups
-                SET followup_status = ?, last_followup_date = ?, remarks = ?, updated_at = ?
+                SET followup_date = ?, followup_status = ?, last_followup_date = ?, remarks = ?, updated_at = ?
                 WHERE student_id = ? AND branch_id = ?
-            """, (followup_status, today, remarks, today, student_id, student['branch_id']))
+            """, (followup_date, followup_status, today, remarks, today, student_id, student['branch_id']))
         else:
             # Create new
             cur.execute("""
                 INSERT INTO attendance_followups
-                (student_id, branch_id, followup_status, last_followup_date, remarks, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (student_id, student['branch_id'], followup_status, today, remarks, today, today))
+                (student_id, branch_id, followup_date, followup_status, last_followup_date, remarks, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (student_id, student['branch_id'], followup_date, followup_status, today, remarks, today, today))
         
         # Log activity
         cur.execute("""
-            INSERT INTO activity_logs (user_id, branch_id, action, entity_type, entity_id, description, logged_at)
+            INSERT INTO activity_logs (user_id, branch_id, action_type, module_name, record_id, description, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (user_id, student['branch_id'], 'update', 'attendance_followup', student_id,
               f'Attended follow-up for student - Status: {followup_status}', today))
