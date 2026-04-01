@@ -952,9 +952,11 @@
     row.innerHTML = `
       <div class="item-field-group">
         <label>Course</label>
-        <select name="item_course_id[]" class="course-select" onchange="handleCourseSelect(this)">
+        <select name="item_course_id[]" class="course-select" data-course-name="${item?.course_name || ''}" onchange="handleCourseSelect(this)">
           ${courseSelectOptions}
         </select>
+        ${item?.course_name ? `<div style="font-size: 12px; color: #666; margin-top: 4px;">📌 ${item.course_name}</div>` : ''}
+        <input type="hidden" name="item_course_name[]" value="${item?.course_name || ''}">
       </div>
 
       <div class="item-field-group">
@@ -1016,8 +1018,21 @@
     const selected = selectEl.options[selectEl.selectedIndex];
     const rateInput = row.querySelector('input[name="item_rate[]"]');
     const qtyInput = row.querySelector('input[name="item_qty[]"]');
+    const courseNameInput = row.querySelector('input[name="item_course_name[]"]');
 
+    const courseName = selected.getAttribute('data-name') || selected.textContent;
     const courseFee = parseFloat(selected.getAttribute('data-fee')) || 0;
+
+    // Update course name hidden field
+    if (courseNameInput) {
+      courseNameInput.value = courseName;
+    }
+
+    // Update course name display
+    const courseNameDisplay = row.querySelector('[style*="color: #666"]');
+    if (courseNameDisplay && selected.value) {
+      courseNameDisplay.textContent = '📌 ' + courseName;
+    }
 
     if (courseFee > 0) {
       rateInput.value = courseFee.toFixed(2);
