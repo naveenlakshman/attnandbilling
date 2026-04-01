@@ -2041,10 +2041,13 @@ def invoice_new():
     def row_to_dict(row):
         if row is None:
             return None
-        return dict(row) if hasattr(row, 'keys') else row
+        try:
+            return dict(row)
+        except (TypeError, ValueError):
+            return row if isinstance(row, dict) else str(row)
 
-    students_dict = [row_to_dict(student) for student in students]
-    courses_dict = [row_to_dict(course) for course in courses]
+    students_dict = [row_to_dict(student) for student in (students or [])]
+    courses_dict = [row_to_dict(course) for course in (courses or [])]
 
     return render_template(
         "billing/invoice_form_modern.html",
@@ -2477,13 +2480,16 @@ def invoice_edit(invoice_id):
     def row_to_dict(row):
         if row is None:
             return None
-        return dict(row) if hasattr(row, 'keys') else row
+        try:
+            return dict(row)
+        except (TypeError, ValueError):
+            return row if isinstance(row, dict) else str(row)
 
-    items_dict = [row_to_dict(item) for item in items]
-    installments_dict = [row_to_dict(inst) for inst in installments]
-    courses_dict = [row_to_dict(course) for course in courses]
-    students_dict = [row_to_dict(student) for student in students]
-    invoice_dict = row_to_dict(invoice)
+    items_dict = [row_to_dict(item) for item in (items or [])]
+    installments_dict = [row_to_dict(inst) for inst in (installments or [])]
+    courses_dict = [row_to_dict(course) for course in (courses or [])]
+    students_dict = [row_to_dict(student) for student in (students or [])]
+    invoice_dict = row_to_dict(invoice) if invoice else {}
 
     return render_template(
         "billing/invoice_form_modern.html",
