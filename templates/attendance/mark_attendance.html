@@ -246,6 +246,37 @@
     outline: none;
   }
 
+  /* Payment due indicators */
+  .due-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    margin-top: 4px;
+    white-space: nowrap;
+  }
+
+  .due-badge-overdue {
+    background: #f8d7da;
+    color: #842029;
+    border: 1px solid #f5c2c7;
+  }
+
+  .due-badge-upcoming {
+    background: #fff3cd;
+    color: #664d03;
+    border: 1px solid #ffecb5;
+  }
+
+  .students-table tbody tr.row-overdue {
+    background: #fff5f5 !important;
+  }
+
+  .students-table tbody tr.row-upcoming {
+    background: #fffdf0 !important;
+  }
+
   .form-actions {
     display: flex;
     gap: 12px;
@@ -485,13 +516,29 @@
           </thead>
           <tbody>
             {% for student in students %}
-            <tr>
+            {% set dues = payment_dues.get(student.student_id, {}) %}
+            <tr class="{% if dues.get('past_due', 0) > 0 %}row-overdue{% elif dues.get('upcoming_amount', 0) > 0 %}row-upcoming{% endif %}">
               <td>
                 <span class="student-code">{{ student.student_code }}</span>
               </td>
               <td>
                 <span class="student-name">{{ student.full_name }}</span>
                 <div style="font-size: 0.85rem; color: #6c757d;">{{ student.phone }}</div>
+                {% if dues.get('past_due', 0) > 0 %}
+                {% set pd = dues.past_days %}
+                {% if pd == 1 %}{% set pd_label = "1 day overdue" %}
+                {% elif pd and pd > 1 %}{% set pd_label = pd ~ " days overdue" %}
+                {% else %}{% set pd_label = dues.upcoming_date %}{% endif %}
+                <div><span class="due-badge due-badge-overdue">⚠ Past Due: ₹{{ "{:,.0f}".format(dues.past_due) }} · {{ pd_label }}</span></div>
+                {% endif %}
+                {% if dues.get('upcoming_amount', 0) > 0 %}
+                {% set ud = dues.upcoming_days %}
+                {% if ud == 0 %}{% set ud_label = "Due today" %}
+                {% elif ud == 1 %}{% set ud_label = "Due tomorrow" %}
+                {% elif ud and ud > 1 %}{% set ud_label = ud ~ " days left · " ~ dues.upcoming_date %}
+                {% else %}{% set ud_label = dues.upcoming_date %}{% endif %}
+                <div><span class="due-badge due-badge-upcoming">💰 ₹{{ "{:,.0f}".format(dues.upcoming_amount) }} · {{ ud_label }}</span></div>
+                {% endif %}
               </td>
               <td>
                 <select class="status-select" name="status_{{ student.student_id }}" 

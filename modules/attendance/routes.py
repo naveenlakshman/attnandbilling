@@ -894,7 +894,71 @@ def mark_attendance():
                         'status': row['status'],
                         'remarks': row['remarks']
                     }
-        
+
+        # Get payment due alerts for students in this batch
+        payment_dues = {}
+        if students:
+            student_ids = [s['student_id'] for s in students]
+            try:
+                att_date_obj = datetime.strptime(attendance_date, "%Y-%m-%d").date()
+            except Exception:
+                att_date_obj = datetime.now().date()
+
+            alert_end_date = (att_date_obj + timedelta(days=4)).isoformat()
+            att_date_str = att_date_obj.isoformat()
+            placeholders = ','.join(['?' for _ in student_ids])
+
+            # Past dues: overdue unpaid installments (MIN date = earliest unpaid = most days overdue)
+            cur.execute(f"""
+                SELECT i.student_id,
+                       SUM(ip.amount_due - ip.amount_paid) AS total_past_due,
+                       MIN(parse_date(ip.due_date)) AS earliest_due_date
+                FROM installment_plans ip
+                JOIN invoices i ON ip.invoice_id = i.id
+                WHERE ip.status != 'paid'
+                  AND (ip.amount_due - ip.amount_paid) > 0
+                  AND date(parse_date(ip.due_date)) < date(?)
+                  AND i.student_id IN ({placeholders})
+                GROUP BY i.student_id
+            """, [att_date_str] + student_ids)
+            from datetime import date as date_type
+            for row in cur.fetchall():
+                sid = row['student_id']
+                if sid not in payment_dues:
+                    payment_dues[sid] = {}
+                payment_dues[sid]['past_due'] = float(row['total_past_due'] or 0)
+                try:
+                    earliest = date_type.fromisoformat(row['earliest_due_date'])
+                    payment_dues[sid]['past_days'] = (att_date_obj - earliest).days
+                except Exception:
+                    payment_dues[sid]['past_days'] = None
+
+            # Upcoming dues: due within next 4 days (inclusive of today)
+            cur.execute(f"""
+                SELECT i.student_id,
+                       MIN(parse_date(ip.due_date)) AS next_due_date,
+                       SUM(ip.amount_due - ip.amount_paid) AS total_upcoming
+                FROM installment_plans ip
+                JOIN invoices i ON ip.invoice_id = i.id
+                WHERE ip.status != 'paid'
+                  AND (ip.amount_due - ip.amount_paid) > 0
+                  AND date(parse_date(ip.due_date)) >= date(?)
+                  AND date(parse_date(ip.due_date)) <= date(?)
+                  AND i.student_id IN ({placeholders})
+                GROUP BY i.student_id
+            """, [att_date_str, alert_end_date] + student_ids)
+            for row in cur.fetchall():
+                sid = row['student_id']
+                if sid not in payment_dues:
+                    payment_dues[sid] = {}
+                payment_dues[sid]['upcoming_amount'] = float(row['total_upcoming'] or 0)
+                payment_dues[sid]['upcoming_date'] = row['next_due_date']
+                try:
+                    due_d = date_type.fromisoformat(row['next_due_date'])
+                    payment_dues[sid]['upcoming_days'] = (due_d - att_date_obj).days
+                except Exception:
+                    payment_dues[sid]['upcoming_days'] = None
+
         if request.method == 'POST':
             action = request.form.get('action')
             
@@ -947,6 +1011,7 @@ def mark_attendance():
                              attendance_date=attendance_date,
                              batch_info=batch_info, students=students,
                              attendance_data=attendance_data,
+                             payment_dues=payment_dues,
                              message=message, user=user)
     
     finally:
