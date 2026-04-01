@@ -2039,10 +2039,20 @@ def invoice_new():
 
     conn.close()
     today = datetime.today().strftime("%Y-%m-%d")
+    
+    # Convert Row objects to dictionaries for JSON serialization in template
+    def row_to_dict(row):
+        if row is None:
+            return None
+        return dict(row) if hasattr(row, 'keys') else row
+
+    students_dict = [row_to_dict(student) for student in students]
+    courses_dict = [row_to_dict(course) for course in courses]
+
     return render_template(
-        "billing/invoice_form.html",
-        students=students,
-        courses=courses,
+        "billing/invoice_form_modern.html",
+        students=students_dict,
+        courses=courses_dict,
         today=today,
         mode="create"
     )
@@ -2470,13 +2480,25 @@ def invoice_edit(invoice_id):
 
     conn.close()
 
+    # Convert Row objects to dictionaries for JSON serialization in template
+    def row_to_dict(row):
+        if row is None:
+            return None
+        return dict(row) if hasattr(row, 'keys') else row
+
+    items_dict = [row_to_dict(item) for item in items]
+    installments_dict = [row_to_dict(inst) for inst in installments]
+    courses_dict = [row_to_dict(course) for course in courses]
+    students_dict = [row_to_dict(student) for student in students]
+    invoice_dict = row_to_dict(invoice)
+
     return render_template(
-        "billing/invoice_form.html",
-        invoice=invoice,
-        items=items,
-        installments=installments,
-        courses=courses,
-        students=students,
+        "billing/invoice_form_modern.html",
+        invoice=invoice_dict,
+        items=items_dict,
+        installments=installments_dict,
+        courses=courses_dict,
+        students=students_dict,
         total_paid=total_paid,
         today=datetime.now().date().isoformat(),
         mode="edit"
