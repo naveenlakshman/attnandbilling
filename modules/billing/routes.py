@@ -1714,7 +1714,7 @@ def invoice_new():
             notes = request.form.get("notes", "").strip()
 
             item_course_ids = request.form.getlist("item_course_id[]")
-            item_descriptions = request.form.getlist("item_description[]")
+            item_descriptions = request.form.getlist("item_course_name[]")
             item_qtys = request.form.getlist("item_qty[]")
             item_rates = request.form.getlist("item_rate[]")
             item_discounts = request.form.getlist("item_discount[]")
@@ -2140,7 +2140,7 @@ def invoice_edit(invoice_id):
             total_paid = float(cur.fetchone()["total_paid"] or 0)
 
             item_course_ids = request.form.getlist("item_course_id[]")
-            item_descriptions = request.form.getlist("item_description[]")
+            item_descriptions = request.form.getlist("item_course_name[]")
             item_qtys = request.form.getlist("item_qty[]")
             item_rates = request.form.getlist("item_rate[]")
             item_discounts = request.form.getlist("item_discount[]")

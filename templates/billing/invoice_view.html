@@ -320,7 +320,7 @@
 
     {% for item in items %}
     <tr>
-      <td>{{ item.description }}</td>
+      <td>{{ item.course_name or item.description }}</td>
       <td>{{ item.quantity }}</td>
       <td>₹ {{ "%.2f"|format(item.unit_price or 0) }}</td>
       <td>₹ {{ "%.2f"|format(item.line_total or 0) }}</td>
