@@ -1206,19 +1206,32 @@
 
   // Form submission
   document.getElementById('invoiceForm').addEventListener('submit', function(e) {
-    const items = document.querySelectorAll('.item-row');
-    const finalTotal = parseFloat(document.getElementById('summary_total').innerText) || 0;
-    const type = document.querySelector('input[name="installment_type"]:checked').value;
+    const rows = document.querySelectorAll('.item-row');
+    let validItems = 0;
+    let totalAmount = 0;
 
-    if (items.length === 0 || finalTotal <= 0) {
+    // Count only rows with a course selected and check amounts
+    rows.forEach(row => {
+      const courseSelect = row.querySelector('.course-select');
+      const amountInput = row.querySelector('.item-amount');
+      
+      if (courseSelect && courseSelect.value) {
+        validItems++;
+        const amount = parseFloat(amountInput.value) || 0;
+        totalAmount += amount;
+      }
+    });
+
+    if (validItems === 0 || totalAmount <= 0) {
       e.preventDefault();
-      alert('❌ Please add at least one valid bill item.');
+      alert('❌ Please add at least one valid bill item with an amount greater than 0.');
       return;
     }
 
+    const type = document.querySelector('input[name="installment_type"]:checked').value;
     if (type === 'custom') {
       const installmentTotal = parseFloat(document.getElementById('installment_total').innerText) || 0;
-      if (Math.abs(finalTotal - installmentTotal) >= 0.01) {
+      if (Math.abs(totalAmount - installmentTotal) >= 0.01) {
         e.preventDefault();
         alert('⚠ Installment total must match the net invoice total. Adjust installment amounts.');
         return;

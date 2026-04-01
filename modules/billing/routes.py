@@ -1723,7 +1723,7 @@ def invoice_new():
                 flash("Please select a student.", "danger")
                 return redirect(url_for("billing.invoice_new"))
 
-            if not item_descriptions:
+            if not item_course_ids:
                 flash("Please add at least one bill item.", "danger")
                 return redirect(url_for("billing.invoice_new"))
 
@@ -1751,23 +1751,20 @@ def invoice_new():
             discount_amount = 0.0
             total_amount = 0.0
 
-            for i in range(len(item_descriptions)):
-                description = (item_descriptions[i] or "").strip()
+            for i in range(len(item_course_ids)):
                 course_id_raw = (item_course_ids[i] or "").strip()
                 qty_raw = (item_qtys[i] or "0").strip()
                 rate_raw = (item_rates[i] or "0").strip()
                 discount_raw = (item_discounts[i] or "0").strip()
 
+                # Skip empty rows (no course selected)
+                if not course_id_raw:
+                    continue
+
+                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
                 qty = float(qty_raw or 0)
                 rate = float(rate_raw or 0)
                 row_discount = float(discount_raw or 0)
-
-                if not description and qty == 0 and rate == 0:
-                    continue
-
-                if not description:
-                    flash(f"Description is required in item row {i + 1}.", "danger")
-                    return redirect(url_for("billing.invoice_new"))
 
                 if qty <= 0:
                     flash(f"Quantity must be greater than 0 in item row {i + 1}.", "danger")
@@ -2145,7 +2142,7 @@ def invoice_edit(invoice_id):
             item_rates = request.form.getlist("item_rate[]")
             item_discounts = request.form.getlist("item_discount[]")
 
-            if not item_descriptions:
+            if not item_course_ids:
                 flash("Please add at least one bill item.", "danger")
                 conn.close()
                 return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
@@ -2157,24 +2154,20 @@ def invoice_edit(invoice_id):
             discount_amount = 0.0
             total_amount = 0.0
 
-            for i in range(len(item_descriptions)):
-                description = (item_descriptions[i] or "").strip()
+            for i in range(len(item_course_ids)):
                 course_id_raw = (item_course_ids[i] or "").strip()
                 qty_raw = (item_qtys[i] or "0").strip()
                 rate_raw = (item_rates[i] or "0").strip()
                 discount_raw = (item_discounts[i] or "0").strip()
 
+                # Skip empty rows (no course selected)
+                if not course_id_raw:
+                    continue
+
+                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
                 qty = float(qty_raw or 0)
                 rate = float(rate_raw or 0)
                 row_discount = float(discount_raw or 0)
-
-                if not description and qty == 0 and rate == 0:
-                    continue
-
-                if not description:
-                    conn.close()
-                    flash(f"Description is required in item row {i + 1}.", "danger")
-                    return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
 
                 if qty <= 0:
                     conn.close()
