@@ -5,6 +5,95 @@
 {% block content %}
 
 <style>
+  .profile-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 30px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+  }
+
+  .profile-photo-wrapper {
+    flex-shrink: 0;
+  }
+
+  .profile-photo {
+    width: 150px;
+    height: 150px;
+    border-radius: 10px;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 3px solid white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .profile-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .profile-photo-placeholder {
+    font-size: 48px;
+    color: #667eea;
+  }
+
+  .profile-header-content {
+    flex: 1;
+  }
+
+  .profile-header-content h1 {
+    margin: 0 0 5px 0;
+    font-size: 32px;
+    font-weight: 700;
+  }
+
+  .profile-header-content .student-code {
+    font-size: 18px;
+    opacity: 0.95;
+    margin-bottom: 15px;
+  }
+
+  .profile-header-content .status-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 15px;
+  }
+
+  .profile-header-quick-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    font-size: 14px;
+  }
+
+  .quick-info-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .quick-info-label {
+    opacity: 0.85;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .quick-info-value {
+    font-weight: 600;
+    margin-top: 3px;
+  }
+
   .page-actions {
     display: flex;
     gap: 10px;
@@ -14,169 +103,693 @@
 
   .profile-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 20px;
-    margin-bottom: 20px;
+    margin-bottom: 30px;
   }
 
-  .profile-card h3 {
-    margin-top: 0;
-    margin-bottom: 16px;
+  .info-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   }
 
-  .profile-card p {
-    margin-bottom: 10px;
-    font-size: 14px;
+  .info-card h3 {
+    margin: 0 0 15px 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f0f0f0;
   }
 
-  .student-profile-table {
+  .info-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+
+  .info-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .info-label {
+    font-weight: 600;
+    color: #666;
+    min-width: 120px;
+  }
+
+  .info-value {
+    color: #333;
+    text-align: right;
+    flex: 1;
+    word-break: break-word;
+  }
+
+  .billing-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 30px;
+  }
+
+  .billing-card {
+    background: white;
+    border-left: 4px solid #667eea;
+    padding: 15px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    text-align: center;
+  }
+
+  .billing-card.paid {
+    border-left-color: #27ae60;
+  }
+
+  .billing-card.balance {
+    border-left-color: #e74c3c;
+  }
+
+  .billing-card.total {
+    border-left-color: #f39c12;
+  }
+
+  .billing-card-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+
+  .billing-card-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #333;
+  }
+
+  .section {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .section h3 {
+    margin: 0 0 20px 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #333;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f0f0f0;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+  }
+
+  .data-table {
+    width: 100%;
     border-collapse: collapse;
+    font-size: 13px;
   }
 
-  .student-profile-table thead tr {
-    background-color: #f5f6f7;
+  .data-table thead tr {
+    background-color: #f8f9fa;
   }
 
-  .student-profile-table th {
-    padding: 10px 8px;
+  .data-table th {
+    padding: 12px 10px;
     text-align: left;
     font-weight: 600;
-    font-size: 13px;
     color: #333;
-    border: 1px solid #ddd;
+    border-bottom: 2px solid #e0e0e0;
   }
 
-  .student-profile-table td {
-    padding: 10px 8px;
-    border: 1px solid #ddd;
-    font-size: 13px;
-    vertical-align: middle;
+  .data-table td {
+    padding: 12px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    color: #555;
   }
 
-  .student-profile-table tbody tr:hover {
+  .data-table tbody tr:hover {
     background-color: #f9f9f9;
   }
 
-  @media (max-width: 900px) {
+  .status-label {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .status-label.paid {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .status-label.pending {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  .status-label.active {
+    background-color: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .status-label.completed {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .status-label.dropped {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+
+  .status-label.partially_paid {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  .no-data {
+    text-align: center;
+    color: #999;
+    padding: 30px 10px;
+    font-style: italic;
+  }
+
+  .text-right {
+    text-align: right;
+  }
+
+  .text-success {
+    color: #27ae60;
+    font-weight: 600;
+  }
+
+  .text-danger {
+    color: #e74c3c;
+    font-weight: 600;
+  }
+
+  @media (max-width: 1200px) {
+    .profile-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .billing-summary {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .profile-header {
+      flex-direction: column;
+      text-align: center;
+    }
+
+    .profile-header-quick-info {
+      grid-template-columns: 1fr;
+    }
+
     .profile-grid {
       grid-template-columns: 1fr;
     }
+
+    .billing-summary {
+      grid-template-columns: 1fr;
+    }
+
+    .info-item {
+      flex-direction: column;
+    }
+
+    .info-label,
+    .info-value {
+      text-align: left;
+    }
   }
+
+  @media print {
+    .page-actions {
+      display: none;
+    }
+
+    .profile-header,
+    .info-card,
+    .section {
+      box-shadow: none;
+      border: 1px solid #ccc;
+      page-break-inside: avoid;
+    }
+  }
+
+  /* Modal Styles */
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+
+  .modal.show {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-content {
+    background-color: white;
+    padding: 30px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  }
+
+  .modal-header {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    color: #333;
+  }
+
+  .modal-body {
+    margin-bottom: 20px;
+  }
+
+  .modal-invoice-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .invoice-option {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .invoice-option:hover {
+    border-color: #667eea;
+    background-color: #f8f9ff;
+  }
+
+  .invoice-option input[type="radio"] {
+    margin-right: 12px;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+  }
+
+  .invoice-option-info {
+    flex: 1;
+  }
+
+  .invoice-option-invoice-no {
+    font-weight: 600;
+    color: #333;
+  }
+
+  .invoice-option-date {
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+  }
+
+  .invoice-option-amount {
+    font-weight: 600;
+    color: #667eea;
+    text-align: right;
+  }
+
+  .modal-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  .modal-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .modal-btn.primary {
+    background-color: #667eea;
+    color: white;
+  }
+
+  .modal-btn.primary:hover {
+    background-color: #5568d3;
+  }
+
+  .modal-btn.secondary {
+    background-color: #e0e0e0;
+    color: #333;
+  }
+
+  .modal-btn.secondary:hover {
+    background-color: #d0d0d0;
+  }
+
 </style>
 
 <div class="page-actions no-print">
-  <a class="btn btn-secondary" href="{{ url_for('billing.students') }}">Back to Students</a>
-  <a class="btn btn-primary" href="{{ url_for('billing.student_edit', student_id=student.id) }}">Edit Student</a>
+  <a class="btn btn-secondary" href="{{ url_for('billing.students') }}">← Back to Students</a>
+  <a class="btn btn-primary" href="{{ url_for('billing.student_edit', student_id=student.id) }}">✎ Edit Student</a>
+  {% if invoices %}
+  <button class="btn btn-secondary" onclick="showAgreementModal()">📄 Generate Enrollment Agreement</button>
+  {% endif %}
 </div>
 
-<h2 style="margin-bottom: 20px;">Student Profile</h2>
+<!-- Profile Header -->
+<div class="profile-header">
+  <div class="profile-photo-wrapper">
+    <div class="profile-photo">
+      {% if student.photo_filename %}
+        <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="Student Photo">
+      {% else %}
+        <div class="profile-photo-placeholder">👤</div>
+      {% endif %}
+    </div>
+  </div>
 
+  <div class="profile-header-content">
+    <h1>{{ student.full_name }}</h1>
+    <div class="student-code">Registration No: {{ student.student_code }}</div>
+    
+    <div class="status-badge" style="background: {% if student.status == 'active' %}rgba(39, 174, 96, 0.2){% elif student.status == 'completed' %}rgba(46, 204, 113, 0.2){% else %}rgba(231, 76, 60, 0.2){% endif %}; color: {% if student.status == 'active' %}white{% elif student.status == 'completed' %}white{% else %}white{% endif %};">
+      {{ student.status | upper }}
+    </div>
+
+    <div class="profile-header-quick-info">
+      <div class="quick-info-item">
+        <span class="quick-info-label">Branch</span>
+        <span class="quick-info-value">{{ student.branch_name or '-' }}</span>
+      </div>
+      <div class="quick-info-item">
+        <span class="quick-info-label">Joined Date</span>
+        <span class="quick-info-value">{{ student.joined_date or '-' }}</span>
+      </div>
+      <div class="quick-info-item">
+        <span class="quick-info-label">Phone</span>
+        <span class="quick-info-value">{{ student.phone or '-' }}</span>
+      </div>
+      <div class="quick-info-item">
+        <span class="quick-info-label">Email</span>
+        <span class="quick-info-value">{{ student.email or '-' }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Billing Summary -->
+<div class="billing-summary">
+  <div class="billing-card total">
+    <div class="billing-card-label">Total Billed</div>
+    <div class="billing-card-value">₹ {{ "%.2f"|format(total_billed or 0) }}</div>
+  </div>
+  <div class="billing-card paid">
+    <div class="billing-card-label">Total Paid</div>
+    <div class="billing-card-value">₹ {{ "%.2f"|format(total_paid or 0) }}</div>
+  </div>
+  <div class="billing-card balance">
+    <div class="billing-card-label">Balance Due</div>
+    <div class="billing-card-value">₹ {{ "%.2f"|format(total_balance or 0) }}</div>
+  </div>
+  <div class="billing-card">
+    <div class="billing-card-label">Total Invoices</div>
+    <div class="billing-card-value">{{ total_invoices }}</div>
+  </div>
+</div>
+
+<!-- Information Cards Grid -->
 <div class="profile-grid">
-  <div class="card profile-card">
-    <h3>Student Details</h3>
-    <p><strong>Student Code:</strong> {{ student.student_code }}</p>
-    <p><strong>Name:</strong> {{ student.full_name }}</p>
-    <p><strong>Phone:</strong> {{ student.phone or "-" }}</p>
-    <p><strong>Email:</strong> {{ student.email or "-" }}</p>
-    <p><strong>Address:</strong> {{ student.address or "-" }}</p>
-    <p><strong>Qualification:</strong> {{ student.qualification or "-" }}</p>
-    <p><strong>Student Location:</strong> {{ student.student_location or "-" }}</p>
-    <p><strong>Employment Status:</strong> {{ student.employment_status or "-" }}</p>
-    <p><strong>Joined Date:</strong> {{ student.joined_date or "-" }}</p>
-    <p><strong>Status:</strong> {{ student.status or "-" }}</p>
-    <p><strong>Branch:</strong> {{ student.branch_name or "-" }}</p>
+  <!-- Personal Information -->
+  <div class="info-card">
+    <h3>Personal Information</h3>
+    <div class="info-item">
+      <span class="info-label">Date of Birth:</span>
+      <span class="info-value">{{ student.date_of_birth or '-' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Gender:</span>
+      <span class="info-value">{{ student.gender or '-' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Location:</span>
+      <span class="info-value">{{ student.student_location | upper or '-' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Employment:</span>
+      <span class="info-value">{{ student.employment_status | upper or '-' }}</span>
+    </div>
   </div>
 
-  <div class="card profile-card">
-    <h3>Billing Summary</h3>
-    <p><strong>Total Invoices:</strong> {{ total_invoices }}</p>
-    <p><strong>Total Billed:</strong> ₹ {{ "%.2f"|format(total_billed or 0) }}</p>
-    <p><strong>Total Paid:</strong> ₹ {{ "%.2f"|format(total_paid or 0) }}</p>
-    <p><strong>Total Balance:</strong> ₹ {{ "%.2f"|format(total_balance or 0) }}</p>
+  <!-- Education Information -->
+  <div class="info-card">
+    <h3>Education Details</h3>
+    <div class="info-item">
+      <span class="info-label">Education Level:</span>
+      <span class="info-value">{{ student.education_level or '-' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Qualification:</span>
+      <span class="info-value">{{ student.qualification or '-' }}</span>
+    </div>
+  </div>
+
+  <!-- Contact Information -->
+  <div class="info-card">
+    <h3>Contact Information</h3>
+    <div class="info-item">
+      <span class="info-label">Address:</span>
+      <span class="info-value">{{ student.address or '-' }}</span>
+    </div>
   </div>
 </div>
 
-<div class="card">
-  <h3 style="margin-top: 0;">Invoice History</h3>
+<!-- Guardian Information -->
+{% if student.parent_name or student.parent_contact %}
+<div class="section">
+  <h3>Parent/Guardian Information</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="info-item">
+      <span class="info-label">Name:</span>
+      <span class="info-value">{{ student.parent_name or '-' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Contact:</span>
+      <span class="info-value">{{ student.parent_contact or '-' }}</span>
+    </div>
+  </div>
+</div>
+{% endif %}
 
-  <table border="1" width="100%" cellpadding="10" class="student-profile-table">
-    <thead>
-      <tr>
-        <th style="width: 70px;">ID</th>
-        <th style="width: 130px;">Invoice No</th>
-        <th style="width: 120px;">Date</th>
-        <th style="width: 130px;">Total</th>
-        <th style="width: 130px;">Paid</th>
-        <th style="width: 130px;">Balance</th>
-        <th style="width: 120px;">Status</th>
-        <th style="width: 100px;">Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for inv in invoices %}
-      {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
-      <tr>
-        <td>{{ inv.id }}</td>
-        <td>
-          <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="text-decoration: none;">
-            {{ inv.invoice_no }}
-          </a>
-        </td>
-        <td>{{ inv.invoice_date }}</td>
-        <td>₹ {{ "%.2f"|format(inv.total_amount or 0) }}</td>
-        <td style="color: green;">₹ {{ "%.2f"|format(inv.paid_amount or 0) }}</td>
-        <td style="color: #c0392b;">₹ {{ "%.2f"|format(balance or 0) }}</td>
-        <td>{{ inv.status }}</td>
-        <td>
-          <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}">View</a>
-        </td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="8" style="text-align:center;">No invoices found for this student.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Invoices Section -->
+<div class="section">
+  <h3>Invoice History</h3>
+  <div class="table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Invoice No</th>
+          <th>Date</th>
+          <th>Total Amount</th>
+          <th>Paid Amount</th>
+          <th>Balance</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
+        {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
+        <tr>
+          <td>{{ inv.invoice_no }}</td>
+          <td>{{ inv.invoice_date }}</td>
+          <td>₹ {{ "%.2f"|format(inv.total_amount or 0) }}</td>
+          <td class="text-success">₹ {{ "%.2f"|format(inv.paid_amount or 0) }}</td>
+          <td class="text-danger">₹ {{ "%.2f"|format(balance or 0) }}</td>
+          <td>
+            <span class="status-label {{ inv.status | lower }}">{{ inv.status }}</span>
+          </td>
+          <td>
+            <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="text-decoration: none; color: #0066cc; margin-right: 10px;">View</a>
+            <a href="{{ url_for('billing.student_enrollment_agreement', student_id=student.id, invoice_id=inv.id) }}" style="text-decoration: none; color: #27ae60;">Agreement</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="no-data">No invoices found</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 
-<div class="card" style="margin-top: 20px;">
-  <h3 style="margin-top: 0;">Enrolled Courses</h3>
-
-  <table border="1" width="100%" cellpadding="10" class="student-profile-table">
-    <thead>
-      <tr>
-        <th style="width: 150px;">Invoice No</th>
-        <th style="width: 120px;">Invoice Date</th>
-        <th>Course Name</th>
-        <th style="width: 80px;">Qty</th>
-        <th style="width: 120px;">Unit Price</th>
-        <th style="width: 100px;">Discount</th>
-        <th style="width: 130px;">Line Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in invoice_items %}
-      <tr>
-        <td>
-          <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}" style="text-decoration: none;">
-            {{ item.invoice_no }}
-          </a>
-        </td>
-        <td>{{ item.invoice_date }}</td>
-        <td>{{ item.description }}</td>
-        <td style="text-align: center;">{{ item.quantity }}</td>
-        <td style="text-align: right;">₹ {{ "%.2f"|format(item.unit_price or 0) }}</td>
-        <td style="text-align: right;">{{ "%.2f"|format(item.discount or 0) }}</td>
-        <td style="text-align: right;">₹ {{ "%.2f"|format(item.line_total or 0) }}</td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="7" style="text-align:center;">No courses enrolled.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Installments Section -->
+{% if installment_plans %}
+<div class="section">
+  <h3>Installment Plans</h3>
+  <div class="table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Invoice No</th>
+          <th>Installment #</th>
+          <th>Due Date</th>
+          <th>Amount Due</th>
+          <th>Amount Paid</th>
+          <th>Status</th>
+          <th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for plan in installment_plans %}
+        <tr>
+          <td>{{ plan.invoice_no }}</td>
+          <td>#{{ plan.installment_no }}</td>
+          <td>{{ plan.due_date }}</td>
+          <td>₹ {{ "%.2f"|format(plan.amount_due or 0) }}</td>
+          <td class="text-success">₹ {{ "%.2f"|format(plan.amount_paid or 0) }}</td>
+          <td>
+            <span class="status-label {{ plan.status | lower }}">{{ plan.status }}</span>
+          </td>
+          <td>{{ plan.remarks or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
+{% endif %}
+
+<!-- Enrolled Courses Section -->
+<div class="section">
+  <h3>Enrolled Courses</h3>
+  <div class="table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Invoice No</th>
+          <th>Invoice Date</th>
+          <th>Course Name</th>
+          <th style="text-align: center;">Quantity</th>
+          <th class="text-right">Unit Price</th>
+          <th class="text-right">Discount</th>
+          <th class="text-right">Line Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in invoice_items %}
+        <tr>
+          <td>
+            <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}" style="text-decoration: none; color: #0066cc;">
+              {{ item.invoice_no }}
+            </a>
+          </td>
+          <td>{{ item.invoice_date }}</td>
+          <td>{{ item.description }}</td>
+          <td style="text-align: center;">{{ item.quantity }}</td>
+          <td class="text-right">₹ {{ "%.2f"|format(item.unit_price or 0) }}</td>
+          <td class="text-right">₹ {{ "%.2f"|format(item.discount or 0) }}</td>
+          <td class="text-right">₹ {{ "%.2f"|format(item.line_total or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="no-data">No courses enrolled</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Enrollment Agreement Modal -->
+<div id="agreementModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">Select Invoice for Enrollment Agreement</div>
+    <div class="modal-body">
+      <div class="modal-invoice-list">
+        {% for inv in invoices %}
+        {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
+        <label class="invoice-option">
+          <input type="radio" name="invoice-select" value="{{ url_for('billing.student_enrollment_agreement', student_id=student.id, invoice_id=inv.id) }}">
+          <div class="invoice-option-info">
+            <div class="invoice-option-invoice-no">{{ inv.invoice_no }}</div>
+            <div class="invoice-option-date">{{ inv.invoice_date }} • Balance: ₹ {{ "%.2f"|format(balance or 0) }}</div>
+          </div>
+          <div class="invoice-option-amount">₹ {{ "%.2f"|format(inv.total_amount or 0) }}</div>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn secondary" onclick="closeAgreementModal()">Cancel</button>
+      <button class="modal-btn primary" onclick="openAgreement()">Generate Agreement</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showAgreementModal() {
+    document.getElementById('agreementModal').classList.add('show');
+  }
+
+  function closeAgreementModal() {
+    document.getElementById('agreementModal').classList.remove('show');
+  }
+
+  function openAgreement() {
+    const selected = document.querySelector('input[name="invoice-select"]:checked');
+    if (selected && selected.value) {
+      window.location.href = selected.value;
+    } else {
+      alert('Please select an invoice');
+    }
+  }
+
+  // Close modal when clicking outside
+  window.onclick = function(event) {
+    const modal = document.getElementById('agreementModal');
+    if (event.target === modal) {
+      closeAgreementModal();
+    }
+  }
+
+  // Allow Enter key to confirm
+  document.addEventListener('keypress', function(event) {
+    if (event.key === 'Enter') {
+      const modal = document.getElementById('agreementModal');
+      if (modal.classList.contains('show')) {
+        openAgreement();
+      }
+    }
+  });
+</script>
 
 {% endblock %}

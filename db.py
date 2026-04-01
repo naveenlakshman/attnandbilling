@@ -64,11 +64,14 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
 
 
 def add_column_if_not_exists(cur, table_name, column_name, column_def):
-    cur.execute(f"PRAGMA table_info({table_name})")
-    columns = [row["name"] for row in cur.fetchall()]
-    if column_name not in columns:
-        clean_def = column_def.replace(" UNIQUE", "").replace("UNIQUE ", "")
-        cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {clean_def}")
+    try:
+        cur.execute(f"PRAGMA table_info({table_name})")
+        columns = [row["name"] for row in cur.fetchall()]
+        if column_name not in columns:
+            clean_def = column_def.replace(" UNIQUE", "").replace("UNIQUE ", "")
+            cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {clean_def}")
+    except Exception as e:
+        print(f"Warning: Could not add column {column_name} to {table_name}: {e}")
 
 
 def init_db():
@@ -499,6 +502,7 @@ def init_db():
     add_column_if_not_exists(cur, "students", "date_of_birth", "TEXT")
     add_column_if_not_exists(cur, "students", "parent_name", "TEXT")
     add_column_if_not_exists(cur, "students", "parent_contact", "TEXT")
+    add_column_if_not_exists(cur, "students", "photo_filename", "TEXT")
     add_column_if_not_exists(cur, "leads", "lead_location", "TEXT")
 
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")

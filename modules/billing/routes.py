@@ -6,6 +6,8 @@ from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
 import io
 import csv
+import os
+import base64
 
 
 QUALIFICATION_LEVELS = {
@@ -57,6 +59,33 @@ QUALIFICATION_LEVELS = {
 }
 
 billing_bp = Blueprint("billing", __name__)
+
+def save_student_photo(photo_data, student_code):
+    """Save student photo from base64 data"""
+    if not photo_data:
+        return None
+    
+    try:
+        # Remove data URL prefix if present
+        if ',' in photo_data:
+            photo_data = photo_data.split(',')[1]
+        
+        # Create directory if it doesn't exist
+        photo_dir = os.path.join('static', 'images', 'student_photos')
+        os.makedirs(photo_dir, exist_ok=True)
+        
+        # Decode and save
+        photo_bytes = base64.b64decode(photo_data)
+        filename = f"{student_code}.jpg"
+        filepath = os.path.join(photo_dir, filename)
+        
+        with open(filepath, 'wb') as f:
+            f.write(photo_bytes)
+        
+        return filename
+    except Exception as e:
+        print(f"Error saving photo: {e}")
+        return None
 
 @billing_bp.route("/")
 @login_required
@@ -474,6 +503,82 @@ def dashboard():
         expenses_data=expenses_data
     )
 
+@billing_bp.route("/student/<int:student_id>/enrollment-agreement/<int:invoice_id>")
+@login_required
+def student_enrollment_agreement(student_id, invoice_id):
+    """Display printable enrollment agreement for student"""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Fetch student details
+    cur.execute("""
+        SELECT
+            students.*,
+            branches.branch_name
+        FROM students
+        LEFT JOIN branches ON students.branch_id = branches.id
+        WHERE students.id = ?
+    """, (student_id,))
+    student = cur.fetchone()
+
+    if not student:
+        conn.close()
+        flash("Student not found.", "danger")
+        return redirect(url_for("billing.students"))
+
+    # Fetch invoice details
+    cur.execute("""
+        SELECT *
+        FROM invoices
+        WHERE id = ? AND student_id = ?
+    """, (invoice_id, student_id))
+    invoice = cur.fetchone()
+
+    if not invoice:
+        conn.close()
+        flash("Invoice not found.", "danger")
+        return redirect(url_for("billing.student_profile", student_id=student_id))
+
+    # Fetch invoice items (courses)
+    cur.execute("""
+        SELECT *
+        FROM invoice_items
+        WHERE invoice_id = ?
+        ORDER BY id
+    """, (invoice_id,))
+    invoice_items = cur.fetchall()
+
+    # Fetch installment plans for this invoice
+    cur.execute("""
+        SELECT *
+        FROM installment_plans
+        WHERE invoice_id = ?
+        ORDER BY installment_no ASC
+    """, (invoice_id,))
+    installment_plans = cur.fetchall()
+
+    # Fetch total paid for this invoice
+    cur.execute("""
+        SELECT IFNULL(SUM(amount_received), 0) AS total_paid
+        FROM receipts
+        WHERE invoice_id = ?
+    """, (invoice_id,))
+    payment_info = cur.fetchone()
+    total_paid = float(payment_info["total_paid"] or 0)
+    balance = float(invoice["total_amount"] or 0) - total_paid
+
+    conn.close()
+
+    return render_template(
+        "billing/student_enrollment_agreement.html",
+        student=student,
+        invoice=invoice,
+        invoice_items=invoice_items,
+        installment_plans=installment_plans,
+        total_paid=total_paid,
+        balance=balance
+    )
+
 @billing_bp.route("/students")
 @login_required
 def students():
@@ -598,6 +703,7 @@ def student_new():
         date_of_birth = request.form.get("date_of_birth", "").strip() or None
         parent_name = request.form.get("parent_name", "").strip() or None
         parent_contact = request.form.get("parent_contact", "").strip() or None
+        photo_data = request.form.get("photo_data", "").strip()
 
         # Get next registration number
         cur.execute("""
@@ -619,6 +725,11 @@ def student_new():
             max_reg = 1515000
             next_reg_no = max_reg + 1
 
+        # Save photo if provided
+        photo_filename = None
+        if photo_data:
+            photo_filename = save_student_photo(photo_data, str(next_reg_no))
+
         now = datetime.now().isoformat(timespec="seconds")
 
         cur.execute("""
@@ -639,10 +750,11 @@ def student_new():
                 joined_date,
                 status,
                 branch_id,
+                photo_filename,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(next_reg_no),
             full_name,
@@ -660,6 +772,7 @@ def student_new():
             now,
             status,
             branch_id,
+            photo_filename,
             now,
             now
         ))
@@ -731,6 +844,17 @@ def student_edit(student_id):
         date_of_birth = request.form.get("date_of_birth", "").strip() or None
         parent_name = request.form.get("parent_name", "").strip() or None
         parent_contact = request.form.get("parent_contact", "").strip() or None
+        photo_data = request.form.get("photo_data", "").strip()
+
+        # Save photo if provided
+        # Row objects don't have .get() method, use bracket notation instead
+        try:
+            photo_filename = student["photo_filename"] if "photo_filename" in student.keys() else None
+        except:
+            photo_filename = None
+        
+        if photo_data:
+            photo_filename = save_student_photo(photo_data, student["student_code"])
 
         now = datetime.now().isoformat(timespec="seconds")
 
@@ -750,6 +874,7 @@ def student_edit(student_id):
                 parent_name = ?,
                 parent_contact = ?,
                 status = ?,
+                photo_filename = ?,
                 updated_at = ?
             WHERE id = ?
         """, (
@@ -767,6 +892,7 @@ def student_edit(student_id):
             parent_name,
             parent_contact,
             status,
+            photo_filename,
             now,
             student_id
         ))
@@ -881,6 +1007,18 @@ def student_profile(student_id):
     """, (student_id,))
     invoice_items = cur.fetchall()
 
+    # Fetch installment plans
+    cur.execute("""
+        SELECT
+            installment_plans.*,
+            invoices.invoice_no
+        FROM installment_plans
+        JOIN invoices ON installment_plans.invoice_id = invoices.id
+        WHERE invoices.student_id = ?
+        ORDER BY installment_plans.due_date ASC
+    """, (student_id,))
+    installment_plans = cur.fetchall()
+
     total_invoices = int(invoice_summary["total_invoices"] or 0)
     total_billed = float(invoice_summary["total_billed"] or 0)
     total_paid = float(payment_summary["total_paid"] or 0)
@@ -893,6 +1031,7 @@ def student_profile(student_id):
         student=student,
         invoices=invoices,
         invoice_items=invoice_items,
+        installment_plans=installment_plans,
         total_invoices=total_invoices,
         total_billed=total_billed,
         total_paid=total_paid,

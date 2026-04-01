@@ -6,6 +6,8 @@
 
 {% block content %}
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+
 <style>
   .student-form-wrap {
     max-width: 950px;
@@ -96,6 +98,37 @@
       grid-template-columns: 1fr;
     }
   }
+
+  .photo-upload-section {
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px dashed #dee2e6;
+  }
+
+  .photo-input-wrapper {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .crop-preview-wrapper {
+    background: white;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    overflow: auto;
+    max-height: 450px;
+  }
+
+  .crop-actions {
+    justify-content: center;
+  }
+
+  .btn-sm {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
 </style>
 
 <div class="student-form-wrap">
@@ -170,6 +203,43 @@
         <div class="form-group full-width">
           <label>Address</label>
           <textarea name="address">{% if student %}{{ student.address }}{% endif %}</textarea>
+        </div>
+
+        <div class="form-group full-width">
+          <label>Student Photo</label>
+          <div class="photo-upload-section">
+            <div class="photo-input-wrapper">
+              <input type="file" id="photo_input" accept="image/*" style="display: none;">
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('photo_input').click()">
+                Choose Photo
+              </button>
+              {% if student and student.photo_filename %}
+                <small class="field-help" style="display: block; margin-top: 8px;">Current photo: {{ student.photo_filename }}</small>
+              {% endif %}
+            </div>
+
+            <div id="crop_container" style="display: none; margin-top: 15px;">
+              <div class="crop-preview-wrapper">
+                <img id="crop_image" src="" alt="Crop preview" style="max-width: 100%; max-height: 400px;">
+              </div>
+              <div class="crop-actions" style="margin-top: 12px; display: flex; gap: 10px;">
+                <button type="button" class="btn btn-primary" onclick="cropPhoto()">Crop & Save</button>
+                <button type="button" class="btn btn-secondary" onclick="cancelPhotoUpload()">Cancel</button>
+              </div>
+            </div>
+
+            <div id="photo_preview" style="display: none; margin-top: 15px;">
+              <div style="text-align: center;">
+                <img id="preview_image" src="" alt="Photo preview" style="max-width: 100%; max-height: 300px; border-radius: 6px;">
+                <div style="margin-top: 12px; display: flex; gap: 10px; justify-content: center;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="changePhoto()">Change Photo</button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="removePhoto()">Remove Photo</button>
+                </div>
+              </div>
+              <input type="hidden" id="photo_data" name="photo_data">
+              <small class="field-help" style="display: block; margin-top: 8px; text-align: center;">Photo will be saved as: <span id="filename_preview"></span></small>
+            </div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -249,8 +319,13 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 <script>
 const qualificationLevels = {{ qualification_levels | tojson }};
+
+let cropper = null;
+let currentPhotoData = null;
+let studentCode = "{% if student %}{{ student.student_code }}{% endif %}";
 
 const educationLevelSelect = document.querySelector('select[name="education_level"]');
 const qualificationSelect = document.getElementById('qualification_select');
@@ -285,6 +360,100 @@ qualificationSelect.addEventListener('change', function() {
 });
 
 educationLevelSelect.addEventListener('change', updateQualifications);
+
+// Photo upload handler
+document.getElementById('photo_input').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    const cropImage = document.getElementById('crop_image');
+    cropImage.src = event.target.result;
+
+    if (cropper) {
+      cropper.destroy();
+    }
+
+    document.getElementById('crop_container').style.display = 'block';
+    document.getElementById('photo_preview').style.display = 'none';
+
+    setTimeout(() => {
+      cropper = new Cropper(cropImage, {
+        aspectRatio: 1,
+        viewMode: 1,
+        autoCropArea: 1,
+        responsive: true,
+        guides: true,
+        highlight: true,
+        cropBoxMovable: true,
+        cropBoxResizable: true,
+        toggleDragModeOnDblclick: true,
+      });
+    }, 100);
+  };
+  reader.readAsDataURL(file);
+});
+
+function cropPhoto() {
+  if (!cropper) return;
+
+  const canvas = cropper.getCroppedCanvas({
+    maxWidth: 500,
+    maxHeight: 500,
+    fillColor: '#fff',
+    imageSmoothingEnabled: true,
+    imageSmoothingQuality: 'high',
+  });
+
+  currentPhotoData = canvas.toDataURL('image/jpeg', 0.9);
+
+  const branch = document.querySelector('select[name="branch_id"]').value;
+  const fullName = document.querySelector('input[name="full_name"]').value;
+  const branchCode = branch || 'NEW';
+  
+  document.getElementById('photo_data').value = currentPhotoData;
+  document.getElementById('preview_image').src = currentPhotoData;
+  
+  const filename = `${branchCode}-${fullName.replace(/\s+/g, '_')}-${Date.now()}.jpg`;
+  document.getElementById('filename_preview').textContent = filename;
+
+  document.getElementById('crop_container').style.display = 'none';
+  document.getElementById('photo_preview').style.display = 'block';
+  document.getElementById('photo_input').value = '';
+
+  if (cropper) {
+    cropper.destroy();
+    cropper = null;
+  }
+}
+
+function changePhoto() {
+  document.getElementById('photo_input').click();
+}
+
+function removePhoto() {
+  currentPhotoData = null;
+  document.getElementById('photo_data').value = '';
+  document.getElementById('photo_preview').style.display = 'none';
+  document.getElementById('crop_container').style.display = 'none';
+  document.getElementById('photo_input').value = '';
+  
+  if (cropper) {
+    cropper.destroy();
+    cropper = null;
+  }
+}
+
+function cancelPhotoUpload() {
+  document.getElementById('crop_container').style.display = 'none';
+  document.getElementById('photo_input').value = '';
+  
+  if (cropper) {
+    cropper.destroy();
+    cropper = null;
+  }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
   updateQualifications();
