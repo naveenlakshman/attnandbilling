@@ -112,6 +112,30 @@
     color: #0c5460;
     font-weight: 600;
   }
+
+  .batch-table tbody tr.running-now {
+    background: #f0fff4 !important;
+    border-left: 4px solid #28a745;
+  }
+
+  .live-badge {
+    display: inline-block;
+    background: #dc3545;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+    animation: pulse-badge 1.5s infinite;
+    vertical-align: middle;
+    margin-left: 4px;
+  }
+
+  @keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.5; }
+  }
 </style>
 {% endblock %}
 
@@ -180,7 +204,7 @@
       </thead>
       <tbody>
         {% for batch in batches %}
-        <tr>
+        <tr data-start="{{ batch.start_time or '' }}" data-end="{{ batch.end_time or '' }}">
           <td>
             <a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}" class="batch-name">
               {{ batch.batch_name }}
@@ -210,7 +234,8 @@
           </td>
           <td>
             {% if batch.start_time %}
-            {{ batch.start_time }} - {{ batch.end_time }}
+            {{ batch.start_time }} – {{ batch.end_time }}
+            <span class="live-badge d-none">● LIVE</span>
             {% else %}
             <span class="text-muted">-</span>
             {% endif %}
@@ -263,4 +288,35 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  function nowHHMM() {
+    const d = new Date();
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function highlightRunning() {
+    const now = nowHHMM();
+    document.querySelectorAll('.batch-table tbody tr[data-start]').forEach(function (row) {
+      const start = row.dataset.start;
+      const end   = row.dataset.end;
+      if (start && end && now >= start && now < end) {
+        row.classList.add('running-now');
+        const badge = row.querySelector('.live-badge');
+        if (badge) badge.classList.remove('d-none');
+      } else {
+        row.classList.remove('running-now');
+        const badge = row.querySelector('.live-badge');
+        if (badge) badge.classList.add('d-none');
+      }
+    });
+  }
+
+  highlightRunning();
+  setInterval(highlightRunning, 60000); // re-check every minute
+})();
+</script>
 {% endblock %}
