@@ -1949,6 +1949,9 @@ def batch_planner():
         suggested_slots = []
         opening_time = None
         closing_time = None
+        batch_duration_mins = request.args.get('batch_duration_mins', 120, type=int)
+        if batch_duration_mins < 30:
+            batch_duration_mins = 30
 
         if selected_branch_id:
             cur.execute("SELECT * FROM branches WHERE id = ?", (selected_branch_id,))
@@ -2033,68 +2036,44 @@ def batch_planner():
                 capacity_info['computers_free'] = computers_free
                 capacity_info['can_fit'] = (computers_free >= proposed_students) if no_of_computers > 0 else None
 
-            # Compute suggested free time slots using sweep-line algorithm
+            # Compute suggested specific-duration batch slots
             suggested_slots = []
             opening_time = selected_branch['opening_time'] if selected_branch['opening_time'] else None
             closing_time = selected_branch['closing_time'] if selected_branch['closing_time'] else None
 
             if opening_time and closing_time and no_of_computers > 0:
-                breakpoints = set([opening_time, closing_time])
-                for batch in existing_batches:
-                    st = batch['start_time']
-                    et = batch['end_time']
-                    if st and opening_time <= st <= closing_time:
-                        breakpoints.add(st)
-                    if et and opening_time <= et <= closing_time:
-                        breakpoints.add(et)
-                breakpoints = sorted(breakpoints)
+                oh, om = map(int, opening_time.split(':'))
+                ch, cm = map(int, closing_time.split(':'))
+                open_mins = oh * 60 + om
+                close_mins = ch * 60 + cm
 
-                intervals = []
-                for i in range(len(breakpoints) - 1):
-                    seg_start = breakpoints[i]
-                    seg_end = breakpoints[i + 1]
-                    if seg_start >= closing_time:
-                        break
-                    occupied = 0
+                candidate = open_mins
+                while candidate + batch_duration_mins <= close_mins:
+                    slot_start = f"{candidate // 60:02d}:{candidate % 60:02d}"
+                    slot_end_mins = candidate + batch_duration_mins
+                    slot_end = f"{slot_end_mins // 60:02d}:{slot_end_mins % 60:02d}"
+
+                    # Count students concurrent during this proposed slot
+                    peak = 0
                     for batch in existing_batches:
                         bs = batch['start_time'] or '00:00'
                         be = batch['end_time'] or '23:59'
-                        if bs < seg_end and be > seg_start:
-                            occupied += batch['student_count']
-                    free = max(0, no_of_computers - occupied)
-                    intervals.append({'start': seg_start, 'end': seg_end, 'free': free, 'occupied': occupied})
+                        if slot_start < be and bs < slot_end:
+                            peak += batch['student_count']
 
-                current = None
-                for iv in intervals:
-                    if iv['free'] > 0:
-                        if current is None:
-                            current = {'start': iv['start'], 'end': iv['end'], 'min_free': iv['free'], 'max_occupied': iv['occupied']}
-                        else:
-                            current['end'] = iv['end']
-                            current['min_free'] = min(current['min_free'], iv['free'])
-                            current['max_occupied'] = max(current['max_occupied'], iv['occupied'])
-                    else:
-                        if current:
-                            try:
-                                sh2, sm2 = map(int, current['start'].split(':'))
-                                eh2, em2 = map(int, current['end'].split(':'))
-                                dur = (eh2 * 60 + em2) - (sh2 * 60 + sm2)
-                                h2, m2 = divmod(dur, 60)
-                                current['duration_str'] = f"{h2}h {m2}m" if m2 else f"{h2}h"
-                            except Exception:
-                                current['duration_str'] = '—'
-                            suggested_slots.append(current)
-                            current = None
-                if current:
-                    try:
-                        sh2, sm2 = map(int, current['start'].split(':'))
-                        eh2, em2 = map(int, current['end'].split(':'))
-                        dur = (eh2 * 60 + em2) - (sh2 * 60 + sm2)
-                        h2, m2 = divmod(dur, 60)
-                        current['duration_str'] = f"{h2}h {m2}m" if m2 else f"{h2}h"
-                    except Exception:
-                        current['duration_str'] = '—'
-                    suggested_slots.append(current)
+                    free = max(0, no_of_computers - peak)
+                    if free > 0:
+                        h2, m2 = divmod(batch_duration_mins, 60)
+                        dur_str = f"{h2}h {m2}m" if m2 else f"{h2}h"
+                        suggested_slots.append({
+                            'start': slot_start,
+                            'end': slot_end,
+                            'computers_free': free,
+                            'occupied': peak,
+                            'duration_str': dur_str,
+                        })
+
+                    candidate += 30  # step every 30 minutes
 
         return render_template('attendance/batch_planner.html',
                                branches=branches,
@@ -2104,6 +2083,7 @@ def batch_planner():
                                capacity_info=capacity_info,
                                suggested_slots=suggested_slots,
                                opening_time=opening_time,
-                               closing_time=closing_time)
+                               closing_time=closing_time,
+                               batch_duration_mins=batch_duration_mins)
     finally:
         conn.close()

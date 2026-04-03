@@ -317,19 +317,31 @@
       </a>
     {% elif capacity_info.no_of_computers == 0 %}
       <p class="text-muted mb-0">Set the computer count for this branch to get slot suggestions.</p>
-    {% elif suggested_slots %}
-      <p class="text-muted small mb-3">
-        Branch hours: <strong>{{ opening_time }} – {{ closing_time }}</strong>
-        &nbsp;|&nbsp;
-        Total computers: <strong>{{ capacity_info.no_of_computers }}</strong>
-      </p>
+    {% else %}
+      <!-- Duration selector -->
+      <form method="get" class="d-flex align-items-center gap-3 mb-3">
+        <input type="hidden" name="branch_id" value="{{ selected_branch_id }}">
+        <label class="form-label fw-semibold mb-0 text-nowrap">Batch Duration:</label>
+        <select name="batch_duration_mins" class="form-select form-select-sm" style="width:auto;"
+                onchange="this.form.submit()">
+          <option value="60"  {% if batch_duration_mins == 60  %}selected{% endif %}>1 hour</option>
+          <option value="90"  {% if batch_duration_mins == 90  %}selected{% endif %}>1.5 hours</option>
+          <option value="120" {% if batch_duration_mins == 120 %}selected{% endif %}>2 hours</option>
+          <option value="150" {% if batch_duration_mins == 150 %}selected{% endif %}>2.5 hours</option>
+          <option value="180" {% if batch_duration_mins == 180 %}selected{% endif %}>3 hours</option>
+        </select>
+        <span class="text-muted small">Branch hours: <strong>{{ opening_time }} – {{ closing_time }}</strong>
+        &nbsp;|&nbsp; Total computers: <strong>{{ capacity_info.no_of_computers }}</strong></span>
+      </form>
+
+      {% if suggested_slots %}
       <div class="table-responsive">
         <table class="table table-sm table-hover align-middle mb-0">
           <thead class="table-light">
             <tr>
-              <th>Available Window</th>
+              <th>Suggested Slot</th>
               <th>Duration</th>
-              <th>Min. Free Computers</th>
+              <th>Free Computers</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -341,16 +353,16 @@
               </td>
               <td class="text-muted small">{{ slot.duration_str }}</td>
               <td>
-                {% if slot.min_free == 1 %}
-                  <span class="badge bg-danger">{{ slot.min_free }} free</span>
-                {% elif slot.min_free <= 3 %}
-                  <span class="badge bg-warning text-dark">{{ slot.min_free }} free</span>
+                {% if slot.computers_free == 1 %}
+                  <span class="badge bg-danger">{{ slot.computers_free }} free</span>
+                {% elif slot.computers_free <= 3 %}
+                  <span class="badge bg-warning text-dark">{{ slot.computers_free }} free</span>
                 {% else %}
-                  <span class="badge bg-success">{{ slot.min_free }} free</span>
+                  <span class="badge bg-success">{{ slot.computers_free }} free</span>
                 {% endif %}
               </td>
               <td>
-                <a href="?branch_id={{ selected_branch_id }}&proposed_start={{ slot.start }}&proposed_end={{ slot.end }}"
+                <a href="?branch_id={{ selected_branch_id }}&proposed_start={{ slot.start }}&proposed_end={{ slot.end }}&batch_duration_mins={{ batch_duration_mins }}"
                    class="btn btn-sm btn-outline-primary">
                   Check This Slot →
                 </a>
@@ -360,11 +372,13 @@
           </tbody>
         </table>
       </div>
-    {% else %}
+      {% else %}
       <div class="result-box result-fail mb-0">
-        ❌ No free time slots found within branch hours ({{ opening_time }} – {{ closing_time }}).
+        ❌ No free slots found within branch hours ({{ opening_time }} – {{ closing_time }}) for a {{ batch_duration_mins // 60 }}h
+        {%- if batch_duration_mins % 60 %} {{ batch_duration_mins % 60 }}m{% endif %} batch.
         All computers are fully occupied during operating hours.
       </div>
+      {% endif %}
     {% endif %}
   </div>
 
