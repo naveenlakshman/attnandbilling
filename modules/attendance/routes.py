@@ -297,7 +297,7 @@ def list_batches():
             query += " AND b.status = ?"
             params.append(status_filter)
         
-        query += " ORDER BY CASE WHEN b.start_date IS NULL THEN 1 ELSE 0 END, b.start_date DESC, b.batch_name ASC"
+        query += " ORDER BY CASE WHEN b.start_time IS NULL OR b.start_time = '' THEN 1 ELSE 0 END, b.start_time ASC, b.batch_name ASC"
         
         cur.execute(query, params)
         batches = cur.fetchall()
