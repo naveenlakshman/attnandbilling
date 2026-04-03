@@ -435,36 +435,89 @@
   }
 
   @media (max-width: 768px) {
-    .filter-row {
-      grid-template-columns: 1fr;
-    }
+    .filter-row { grid-template-columns: 1fr 1fr; }
+    .filter-row > div:last-child { grid-column: 1 / -1; }
 
     .attendance-header {
       flex-direction: column;
-      align-items: start;
+      align-items: stretch;
+      gap: 12px;
+    }
+    .batch-details { flex-direction: column; gap: 4px; }
+
+    .quick-actions { flex-direction: row; }
+    .quick-action-btn { flex: 1; text-align: center; }
+
+    .form-actions { flex-direction: column; }
+    .form-actions .btn-save,
+    .form-actions .btn-cancel { width: 100%; text-align: center; }
+
+    .attendance-stats { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .stat { padding: 8px 4px; }
+    .stat-value { font-size: 1.2rem; }
+
+    /* Convert table to stacked cards */
+    .students-table,
+    .students-table thead,
+    .students-table tbody,
+    .students-table tr,
+    .students-table td { display: block; width: 100%; }
+    .students-table thead { display: none; }
+
+    .students-table tbody tr {
+      border: 1px solid #dee2e6;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .students-table tbody tr.row-overdue { background: #fff5f5 !important; border-color: #f5c2c7; }
+    .students-table tbody tr.row-upcoming { background: #fffdf0 !important; border-color: #ffecb5; }
+    .students-table tbody tr:hover { background: #f8f9ff; }
+    .students-table tbody td { padding: 0; border: none; margin-bottom: 8px; }
+    .students-table tbody td:last-child { margin-bottom: 0; }
+
+    /* Code inline with name */
+    .students-table tbody td:first-child {
+      display: inline;
+      font-size: .78rem;
+      color: #6c757d;
+      font-family: monospace;
+    }
+    .students-table tbody td:nth-child(2) {
+      display: block;
+      margin-bottom: 8px;
     }
 
-    .batch-details {
-      flex-direction: column;
-      gap: 8px;
+    /* Status: big tap-friendly button */
+    .status-select {
+      width: 100%;
+      min-width: unset;
+      padding: 12px;
+      font-size: 1rem;
+      border-radius: 8px;
     }
 
-    .students-table {
-      font-size: 0.9rem;
-    }
-
-    .students-table th,
-    .students-table td {
+    /* Remarks: full width */
+    .remarks-input {
+      max-width: 100%;
+      width: 100%;
       padding: 10px;
     }
 
-    .status-select {
-      min-width: 100px;
-    }
+    /* History cells: keep compact */
+    .hist-cell { width: 18px; height: 18px; }
+    .hist-label { width: 18px; font-size: .58rem; }
+    .hist-cells { gap: 2px; }
+    .hist-labels { gap: 2px; }
+  }
 
-    .remarks-input {
-      max-width: 100%;
-    }
+  @media (max-width: 480px) {
+    .header-card { padding: 16px; }
+    .header-card h1 { font-size: 1.25rem; }
+    .filter-row { grid-template-columns: 1fr; }
+    .attendance-card { padding: 14px; }
   }
 </style>
 {% endblock %}

@@ -2196,7 +2196,8 @@ def attendance_pattern():
         students = []
         if batch_id:
             cur.execute("""
-                SELECT s.id, s.student_code, s.full_name, s.phone, s.photo_filename
+                SELECT s.id, s.student_code, s.full_name, s.phone, s.photo_filename,
+                       sb.batch_id as batch_id
                 FROM student_batches sb
                 JOIN students s ON sb.student_id = s.id
                 WHERE sb.batch_id = ? AND sb.status = 'active'
@@ -2205,11 +2206,13 @@ def attendance_pattern():
             students = cur.fetchall()
         elif selected_branch_id:
             cur.execute("""
-                SELECT DISTINCT s.id, s.student_code, s.full_name, s.phone, s.photo_filename
+                SELECT s.id, s.student_code, s.full_name, s.phone, s.photo_filename,
+                       MIN(sb.batch_id) as batch_id
                 FROM student_batches sb
                 JOIN students s ON sb.student_id = s.id
                 JOIN batches b ON sb.batch_id = b.id
                 WHERE b.branch_id = ? AND sb.status = 'active' AND b.status = 'active'
+                GROUP BY s.id, s.student_code, s.full_name, s.phone, s.photo_filename
                 ORDER BY s.full_name ASC
             """, (selected_branch_id,))
             students = cur.fetchall()

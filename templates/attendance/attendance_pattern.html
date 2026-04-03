@@ -231,6 +231,86 @@
     overflow-x: auto;
   }
 
+  /* ── Mobile responsive ────────────────────────── */
+  @media (max-width: 640px) {
+    .page-header { padding: 16px 16px; border-radius: 10px; }
+    .page-header h1 { font-size: 1.25rem; }
+    .page-header p  { font-size: .82rem; }
+
+    .filter-card { padding: 14px 14px; }
+    .filter-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .filter-grid > div:last-child { grid-column: 1 / -1; }
+
+    .legend-bar { gap: 8px; font-size: .78rem; }
+    .legend-bar span[style] { margin-left: 0 !important; width: 100%; }
+
+    /* Turn table into stacked cards */
+    .pattern-wrap { border-radius: 10px; }
+    .pattern-table,
+    .pattern-table thead,
+    .pattern-table tbody,
+    .pattern-table tr,
+    .pattern-table td { display: block; width: 100%; }
+    .pattern-table thead { display: none; }
+
+    .pattern-table tbody tr {
+      border-bottom: 2px solid #dee2e6;
+      padding: 12px 14px;
+      position: relative;
+    }
+    .pattern-table tbody tr:last-child { border-bottom: none; }
+    .pattern-table tbody tr:hover { background: #f8f9ff; }
+    .pattern-table tbody td { padding: 0; border: none; }
+
+    /* Row 1: photo + code side by side */
+    .td-photo {
+      display: inline-flex !important;
+      align-items: center;
+      width: auto !important;
+      margin-right: 10px;
+      vertical-align: top;
+    }
+    .td-code {
+      display: inline-flex !important;
+      align-items: center;
+      font-size: .85rem;
+      font-weight: 700;
+      color: #3949ab;
+      margin-bottom: 8px;
+      vertical-align: top;
+      padding-top: 12px;
+    }
+    .student-avatar,
+    .student-avatar-placeholder { width: 40px; height: 40px; }
+
+    /* Pattern cell below */
+    .td-pattern {
+      display: block !important;
+      margin-top: 8px;
+    }
+    .pattern-name { font-size: .9rem; }
+    .p-cell { width: 18px; height: 18px; }
+    .p-label { width: 18px; font-size: 8px; }
+    .p-labels { gap: 3px; }
+    .pattern-row { gap: 3px; }
+
+    /* Actions as inline row */
+    .td-actions {
+      display: flex !important;
+      gap: 8px;
+      margin-top: 10px;
+      white-space: normal;
+      width: auto !important;
+    }
+    .td-actions .btn { width: auto; flex: 1; font-size: .8rem; padding: 6px 8px; margin-bottom: 0; }
+  }
+
+  @media (max-width: 400px) {
+    .filter-grid { grid-template-columns: 1fr; }
+    .p-cell { width: 16px; height: 16px; }
+    .p-label { width: 16px; font-size: 7px; }
+  }
+
   .stat-summary-bar {
     display: flex;
     gap: 12px;
@@ -407,7 +487,7 @@
           <td class="td-actions">
             <a href="{{ url_for('attendance.student_attendance_history', student_id=student.id) }}"
                class="btn btn-sm btn-outline-primary">📈 History</a>
-            <a href="{{ url_for('attendance.mark_attendance', batch_id=batch_id or '') }}"
+            <a href="{{ url_for('attendance.mark_attendance', branch_id=selected_branch_id, batch_id=student.batch_id or '') }}"
                class="btn btn-sm btn-primary">✏️ Mark</a>
           </td>
         </tr>
