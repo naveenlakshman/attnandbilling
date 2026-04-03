@@ -203,6 +203,8 @@
     border-radius: 12px;
     border: 1px solid #dee2e6;
     overflow: hidden;
+    overflow-y: auto;
+    max-height: 520px;
     margin-bottom: 16px;
   }
 
@@ -218,6 +220,9 @@
     border-bottom: 2px solid #dee2e6;
     white-space: nowrap;
     padding: 10px 12px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
   }
 
   .batch-table tbody td {
