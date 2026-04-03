@@ -121,13 +121,14 @@
     box-shadow: 0 2px 4px rgba(0,0,0,.07);
   }
 
-  /* ── WhatsApp button ──────────────────────────── */
+  /* ── WhatsApp button ─────────────────────────────────────────── */
   .wa-btn {
     display: inline-flex;
     align-items: center;
     gap: 3px;
     background: #25D366;
     color: #fff;
+    border: none;
     border-radius: 10px;
     padding: 1px 7px;
     font-size: .72rem;
@@ -136,9 +137,28 @@
     vertical-align: middle;
     margin-left: 5px;
     white-space: nowrap;
+    cursor: pointer;
   }
   .wa-btn:hover { background: #128C7E; color: #fff; text-decoration: none; }
   .student-phone { font-size: .8rem; color: #6c757d; margin-bottom: 5px; }
+
+  /* ── Toast notification ───────────────────────────────────────── */
+  #wa-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #212529;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: .88rem;
+    z-index: 9999;
+    transition: transform .3s ease;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  #wa-toast.show { transform: translateX(-50%) translateY(0); }
   .pattern-table tbody td {
     padding: 10px 14px;
     border-bottom: 1px solid #f0f0f0;
@@ -446,7 +466,7 @@
         {% set n_absent  = hist.values() | select('equalto', 'absent')  | list | length %}
         {% set n_late    = hist.values() | select('equalto', 'late')    | list | length %}
         {% set n_leave   = hist.values() | select('equalto', 'leave')   | list | length %}
-        <tr>
+        <tr id="student-row-{{ student.id }}">
           <!-- Col 1: Code -->
           <td class="td-code">{{ student.student_code }}</td>
 
@@ -469,12 +489,12 @@
             {% if student.phone %}
             <div class="student-phone">
               {{ student.phone }}
-              <a class="wa-btn"
-                 href="https://wa.me/{{ student.phone | replace(' ','') | replace('+','') | replace('-','') | replace('(','') | replace(')','') }}"
-                 target="_blank" rel="noopener">
+              <button class="wa-btn"
+                onclick="shareAttendanceCard({{ student.id }}, '{{ student.phone | replace(' ','') | replace('+','') | replace('-','') | replace('(','') | replace(')','') }}', '{{ student.full_name }}')"
+                title="Capture card &amp; send via WhatsApp">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.553 4.113 1.522 5.843L.057 23.882a.5.5 0 0 0 .612.612l6.102-1.463A11.952 11.952 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.826 9.826 0 0 1-5.01-1.374l-.36-.213-3.628.87.886-3.541-.233-.374A9.817 9.817 0 0 1 2.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/></svg>
                 WA
-              </a>
+              </button>
             </div>
             {% endif %}
             <div class="pattern-rows">
@@ -551,4 +571,78 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+/* Toast helper */
+function showToast(msg, duration) {
+  var t = document.getElementById('wa-toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, duration || 3500);
+}
+
+async function shareAttendanceCard(studentId, phone, name) {
+  var row = document.getElementById('student-row-' + studentId);
+  if (!row) return;
+
+  showToast('⏳ Capturing attendance card…', 8000);
+
+  try {
+    /* Capture the table row as canvas */
+    var canvas = await html2canvas(row, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      useCORS: true,
+      logging: false
+    });
+
+    var filename = 'attendance_' + name.replace(/\s+/g, '_') + '.png';
+    var waUrl = 'https://wa.me/' + phone;
+
+    /* Try Web Share API with file (works on mobile: Android Chrome, iOS Safari) */
+    canvas.toBlob(async function(blob) {
+      var file = new File([blob], filename, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: name + ' – Attendance Pattern',
+            text: 'Attendance pattern for ' + name
+          });
+          showToast('✅ Shared! Pick WhatsApp from the sheet.');
+        } catch (e) {
+          if (e.name !== 'AbortError') {
+            fallbackDownloadAndOpen(canvas, filename, waUrl, name);
+          }
+        }
+      } else {
+        /* Desktop fallback: download PNG, then open WhatsApp Web */
+        fallbackDownloadAndOpen(canvas, filename, waUrl, name);
+      }
+    }, 'image/png');
+
+  } catch (err) {
+    showToast('❌ Could not capture card: ' + err.message);
+  }
+}
+
+function fallbackDownloadAndOpen(canvas, filename, waUrl, name) {
+  /* Download the PNG */
+  var a = document.createElement('a');
+  a.download = filename;
+  a.href = canvas.toDataURL('image/png');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  /* Open WhatsApp after short delay so download starts first */
+  setTimeout(function() { window.open(waUrl, '_blank'); }, 600);
+  showToast('📥 PNG downloaded — attach it in WhatsApp Web!');
+}
+</script>
+<div id="wa-toast"></div>
 {% endblock %}
