@@ -489,7 +489,7 @@
             <div style="font-size:0.78rem;color:#6c757d;margin-top:2px;">{{ "%.0f"|format(batch_stat.percentage_marked) }}%</div>
           </td>
           <td style="white-space:nowrap;">
-            <a href="{{ url_for('attendance.mark_attendance', batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-primary mb-1">✏️ Mark</a>
+            <a href="{{ url_for('attendance.mark_attendance', branch_id=batch_stat.batch.branch_id, batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-primary mb-1">✏️ Mark</a>
             <a href="{{ url_for('attendance.view_batch', batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-outline-secondary mb-1">👁️ Details</a>
           </td>
         </tr>
