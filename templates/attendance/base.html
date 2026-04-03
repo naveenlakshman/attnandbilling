@@ -33,6 +33,13 @@
       flex-shrink: 0;
     }
 
+    @media (max-width: 991.98px) {
+      .sidebar {
+        min-height: unset;
+        position: fixed;
+      }
+    }
+
     .sidebar .nav-link {
       color: #212529;
       border-radius: 10px;
@@ -64,6 +71,12 @@
       position: sticky;
       top: 0;
       z-index: 1000;
+      background: #fff;
+      border-bottom: 1px solid #dee2e6;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
 
     .content-wrap {
@@ -81,8 +94,13 @@
 
 <div class="d-flex">
   <!-- Sidebar -->
-  <aside class="sidebar p-3">
-    <div class="mb-4">
+  <div class="sidebar offcanvas-lg offcanvas-start" id="mainSidebar" tabindex="-1">
+    <div class="offcanvas-header border-bottom d-lg-none">
+      <h6 class="offcanvas-title fw-bold mb-0">Global IT Education</h6>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#mainSidebar" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body p-3 d-lg-flex flex-column">
+    <div class="mb-4 d-none d-lg-block">
       <div class="fw-bold text-dark">Global IT Education</div>
       <div class="text-muted small">Attendance Module</div>
       <hr class="my-2">
@@ -167,10 +185,21 @@
         ← Back to ERP
       </a>
     </nav>
-  </aside>
+    </div>
+  </div>
 
   <!-- Main Content Area -->
   <div class="content-wrap">
+    <div class="topbar no-print">
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainSidebar" aria-controls="mainSidebar" aria-label="Menu">☰</button>
+        <span class="fw-semibold">Global IT ERP – Attendance</span>
+      </div>
+      <div class="small text-muted d-none d-sm-block">
+        Logged in: <strong>{{ session.get('username', 'User') }}</strong>
+        <span class="d-none d-md-inline">({{ session.get('role', 'staff') }})</span>
+      </div>
+    </div>
     
     <div class="container-fluid">
       {% block content %}{% endblock %}

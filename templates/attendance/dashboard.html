@@ -60,6 +60,8 @@
     justify-content: space-between;
     align-items: start;
     margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .batch-title {
@@ -102,6 +104,7 @@
     display: flex;
     gap: 10px;
     margin-top: 16px;
+    flex-wrap: wrap;
   }
 
   .batch-actions .btn {
@@ -144,6 +147,8 @@
     display: flex;
     justify-content: space-between;
     align-items: start;
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
   .followup-info {
@@ -192,16 +197,36 @@
     color: #6c757d;
     font-size: 0.95rem;
   }
+
+  @media (max-width: 576px) {
+    .stat-value {
+      font-size: 2rem;
+    }
+
+    .erp-content, .container-fluid {
+      padding-left: 12px !important;
+      padding-right: 12px !important;
+    }
+
+    .completion-inner {
+      flex-direction: column !important;
+    }
+
+    .completion-inner .progress-wrap {
+      margin-left: 0 !important;
+      margin-top: 12px;
+    }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
   <!-- Header -->
   <div class="mb-4">
-    <div class="d-flex justify-content-between align-items-center">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
       <div>
         <h1 class="mb-1">Attendance Dashboard</h1>
-        <div style="display: flex; align-items: center; gap: 15px; margin-top: 10px;">
+        <div style="display: flex; align-items: center; gap: 15px; margin-top: 10px; flex-wrap: wrap;">
           <span class="today-date">📅 Today: {{ today }}</span>
           
           {% if user.can_view_all_branches and available_branches %}
@@ -235,7 +260,7 @@
   <div class="row mb-4">
     {% if branch_stats %}
       <!-- Branch-wise breakdown when All Branches is selected -->
-      <div class="col-md-3">
+      <div class="col-6 col-md-3">
         <div class="stat-card present" style="padding: 16px;">
           <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Present</div>
           {% for branch_id, stats in branch_stats.items() %}
@@ -246,7 +271,7 @@
           {% endfor %}
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-6 col-md-3">
         <div class="stat-card absent" style="padding: 16px;">
           <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Absent</div>
           {% for branch_id, stats in branch_stats.items() %}
@@ -257,7 +282,7 @@
           {% endfor %}
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-6 col-md-3">
         <div class="stat-card late" style="padding: 16px;">
           <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Late</div>
           {% for branch_id, stats in branch_stats.items() %}
@@ -268,7 +293,7 @@
           {% endfor %}
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-6 col-md-3">
         <div class="stat-card leave" style="padding: 16px;">
           <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Leave</div>
           {% for branch_id, stats in branch_stats.items() %}
@@ -281,25 +306,25 @@
       </div>
     {% else %}
       <!-- Aggregate totals when a specific branch is selected -->
-      <div class="col-md-3">
+      <div class="col-6 col-md-3">
         <div class="stat-card present">
           <div class="stat-value">{{ overall_stats.total_present }}</div>
           <div class="stat-label">Present</div>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-6 col-md-3">
         <div class="stat-card absent">
           <div class="stat-value">{{ overall_stats.total_absent }}</div>
           <div class="stat-label">Absent</div>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-6 col-md-3">
         <div class="stat-card late">
           <div class="stat-value">{{ overall_stats.total_late }}</div>
           <div class="stat-label">Late</div>
         </div>
       </div>
-      <div class="col-md-3">
+      <div class="col-6 col-md-3">
         <div class="stat-card leave">
           <div class="stat-value">{{ overall_stats.total_leave }}</div>
           <div class="stat-label">Leave</div>
@@ -312,12 +337,12 @@
   <div class="row mb-4">
     <div class="col-md-12">
       <div class="stat-card" style="border-left-color: #6c757d;">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 completion-inner">
           <div>
             <div class="stat-label">Attendance Marked</div>
             <div class="stat-value">{{ "%.1f"|format(overall_stats.percentage_marked) }}%</div>
           </div>
-          <div style="flex: 1; margin-left: 30px;">
+          <div class="progress-wrap" style="flex: 1; min-width: 200px; margin-left: 30px;">
             <div class="batch-progress" style="height: 10px;">
               <div class="batch-progress-bar" style="width: {{ overall_stats.percentage_marked }}%;"></div>
             </div>
@@ -453,33 +478,33 @@
     🔗 Quick Links
   </div>
 
-  <div class="row" style="margin-bottom: 40px;">
-    <div class="col-md-2">
+  <div class="row g-2" style="margin-bottom: 40px;">
+    <div class="col-6 col-md-2">
       <a href="{{ url_for('attendance.mark_attendance') }}" class="btn btn-outline-primary btn-lg w-100">
         ✏️ Mark Attendance
       </a>
     </div>
-    <div class="col-md-2">
+    <div class="col-6 col-md-2">
       <a href="{{ url_for('attendance.daily_report') }}" class="btn btn-outline-primary btn-lg w-100">
         📊 Daily Report
       </a>
     </div>
-    <div class="col-md-2">
+    <div class="col-6 col-md-2">
       <a href="{{ url_for('attendance.monthly_summary') }}" class="btn btn-outline-primary btn-lg w-100">
         📈 Monthly Summary
       </a>
     </div>
-    <div class="col-md-2">
+    <div class="col-6 col-md-2">
       <a href="{{ url_for('attendance.defaulters') }}" class="btn btn-outline-danger btn-lg w-100">
         ⚠️ Defaulters
       </a>
     </div>
-    <div class="col-md-2">
+    <div class="col-6 col-md-2">
       <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-primary btn-lg w-100">
         👥 Batches
       </a>
     </div>
-    <div class="col-md-2">
+    <div class="col-6 col-md-2">
       <a href="{{ url_for('attendance.followups') }}" class="btn btn-outline-info btn-lg w-100">
         📋 Followups
       </a>

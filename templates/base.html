@@ -22,6 +22,12 @@
       padding: 24px 16px;
       flex-shrink: 0;
     }
+
+    @media (max-width: 991.98px) {
+      .erp-sidebar {
+        padding: 16px;
+      }
+    }
     .erp-brand-title {
       font-size: 1.9rem;
       font-weight: 700;
@@ -60,10 +66,13 @@
     .erp-topbar {
       background: #ffffff;
       border-bottom: 1px solid #dee2e6;
-      padding: 16px 24px;
+      padding: 12px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
     }
     .erp-topbar-title {
       font-size: 1.4rem;
@@ -154,8 +163,13 @@
 <body>
 
 <div class="erp-shell">
-  <aside class="erp-sidebar">
-    <div class="mb-4">
+  <div class="erp-sidebar offcanvas-lg offcanvas-start" id="erpSidebar" tabindex="-1">
+    <div class="offcanvas-header border-bottom d-lg-none">
+      <h6 class="offcanvas-title fw-bold mb-0">Global IT Education</h6>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#erpSidebar" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body p-0 d-lg-block">
+    <div class="mb-4 d-none d-lg-block">
       <h1 class="erp-brand-title">Global IT Education</h1>
       <div class="erp-brand-subtitle">ERP System</div>
       <hr>
@@ -222,15 +236,19 @@
         🚪 Logout
       </a>
     </nav>
-  </aside>
+    </div>
+  </div>
 
   <main class="erp-main">
     <div class="erp-topbar no-print">
-      <div class="erp-topbar-title">{% block page_title %}Global IT ERP{% endblock %}</div>
-      <div class="erp-topbar-user">
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#erpSidebar" aria-controls="erpSidebar" aria-label="Menu">☰</button>
+        <div class="erp-topbar-title">{% block page_title %}Global IT ERP{% endblock %}</div>
+      </div>
+      <div class="erp-topbar-user d-none d-sm-block">
         Logged in: <strong>{{ session.get('username', 'Guest') }}</strong>
         {% if session.get('role') %}
-          ({{ session.get('role') }})
+          <span class="d-none d-md-inline">({{ session.get('role') }})</span>
         {% endif %}
       </div>
     </div>

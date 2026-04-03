@@ -2507,6 +2507,7 @@ def invoice_edit(invoice_id):
 @login_required
 def receipts():
     search = request.args.get("search", "").strip()
+    stats_date_str = request.args.get("stats_date", "").strip()
 
     conn = get_conn()
     cur = conn.cursor()
@@ -2515,7 +2516,14 @@ def receipts():
     today = datetime.now().date()
     first_day_of_month = today.replace(day=1)
 
-    # Today's statistics
+    # Use selected date for stats, fall back to today
+    try:
+        from datetime import date as date_type
+        stats_date = date_type.fromisoformat(stats_date_str) if stats_date_str else today
+    except ValueError:
+        stats_date = today
+
+    # Selected date statistics
     cur.execute("""
         SELECT
             COUNT(*) AS total_receipts,
@@ -2527,8 +2535,8 @@ def receipts():
             IFNULL(AVG(amount_received), 0) AS avg_amount
         FROM receipts
         WHERE parse_date(receipt_date) = ?
-    """, [today.isoformat()])
-    today_stats = cur.fetchone()
+    """, [stats_date.isoformat()])
+    date_stats = cur.fetchone()
 
     # This month's statistics
     cur.execute("""
@@ -2594,7 +2602,9 @@ def receipts():
         "billing/receipts.html",
         receipts=all_receipts,
         search=search,
-        today_stats=today_stats,
+        date_stats=date_stats,
+        stats_date=stats_date.isoformat(),
+        today=today.isoformat(),
         month_stats=month_stats
     )
 

@@ -33,6 +33,13 @@
       flex-shrink: 0;
     }
 
+    @media (max-width: 991.98px) {
+      .sidebar {
+        min-height: unset;
+        position: fixed;
+      }
+    }
+
     .sidebar .nav-link {
       color: #212529;
       border-radius: 10px;
@@ -65,8 +72,13 @@
 
 <div class="d-flex">
   <!-- Sidebar -->
-  <aside class="sidebar p-3">
-    <div class="mb-3">
+  <div class="sidebar offcanvas-lg offcanvas-start" id="mainSidebar" tabindex="-1">
+    <div class="offcanvas-header border-bottom d-lg-none">
+      <h6 class="offcanvas-title fw-bold mb-0">Global IT Education</h6>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#mainSidebar" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body p-3 d-lg-flex flex-column">
+    <div class="mb-3 d-none d-lg-block">
       <div class="fw-bold">Global IT Education</div>
       <div class="text-muted small">Leads Module</div>
       <hr>
@@ -147,17 +159,21 @@
         🚪 Logout
       </a>
     </nav>
-  </aside>
+    </div>
+  </div>
 
   <!-- Main -->
   <main class="flex-grow-1 content-wrap">
     <!-- Top bar -->
     <div class="topbar px-3 py-2 bg-white border-bottom d-flex align-items-center justify-content-between">
-      <div class="fw-semibold">Global IT ERP - Leads</div>
-      <div class="small text-muted">
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainSidebar" aria-controls="mainSidebar" aria-label="Menu">☰</button>
+        <div class="fw-semibold">Global IT ERP - Leads</div>
+      </div>
+      <div class="small text-muted d-none d-sm-block">
         Logged in:
         <span class="fw-semibold">{{ session.get("username", "User") }}</span>
-        ({{ session.get("role", "staff") }})
+        <span class="d-none d-md-inline">({{ session.get("role", "staff") }})</span>
       </div>
     </div>
 

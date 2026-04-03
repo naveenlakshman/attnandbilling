@@ -1,5 +1,32 @@
 {% extends "leads/base.html" %}
 {% block title %}{{ 'New Lead' if mode=='create' else 'Edit Lead' }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media (max-width: 576px) {
+    /* Prevent iOS Safari zoom on input focus */
+    .form-control,
+    .form-select {
+      font-size: 16px !important;
+    }
+
+    /* Full-width action buttons on mobile */
+    .form-actions-row {
+      flex-direction: column;
+    }
+
+    .form-actions-row .btn {
+      width: 100%;
+    }
+
+    /* Reduce card padding */
+    .card.p-3 {
+      padding: 12px !important;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 
 <h5 class="mb-3">{{ 'New Lead' if mode=='create' else 'Edit Lead' }}</h5>
@@ -145,7 +172,7 @@
     </div>
   </div>
 
-  <div class="mt-3 d-flex gap-2">
+  <div class="mt-3 d-flex gap-2 form-actions-row">
     <button class="btn btn-primary" type="submit">
       {{ 'Create' if mode=='create' else 'Save Changes' }}
     </button>
