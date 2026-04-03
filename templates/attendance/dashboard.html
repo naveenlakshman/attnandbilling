@@ -198,27 +198,78 @@
     font-size: 0.95rem;
   }
 
-  .batch-card.running-now {
+  .batch-table-wrap {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #dee2e6;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+
+  .batch-table {
+    margin-bottom: 0;
+    font-size: 0.92rem;
+  }
+
+  .batch-table thead th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
+    padding: 10px 12px;
+  }
+
+  .batch-table tbody td {
+    vertical-align: middle;
+    padding: 9px 12px;
+  }
+
+  .batch-table tbody tr.running-now {
     background: #f0fff4 !important;
-    border-color: #28a745 !important;
-    border-left: 4px solid #28a745 !important;
+    border-left: 4px solid #28a745;
   }
 
   .live-badge-dash {
     display: inline-block;
     background: #dc3545;
     color: #fff;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 12px;
-    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-left: 5px;
+    vertical-align: middle;
     animation: pulse-badge-dash 1.5s infinite;
   }
 
   @keyframes pulse-badge-dash {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
+  }
+
+  .stat-pill {
+    display: inline-block;
+    min-width: 28px;
+    text-align: center;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-size: 0.88rem;
+  }
+
+  .prog-mini {
+    height: 6px;
+    border-radius: 3px;
+    background: #e9ecef;
+    min-width: 80px;
+    overflow: hidden;
+  }
+
+  .prog-mini-bar {
+    height: 100%;
+    background: #0d6efd;
+    border-radius: 3px;
   }
 
   @media (max-width: 576px) {
@@ -387,76 +438,62 @@
   </div>
 
   {% if batch_stats|length > 0 %}
-  <div class="row">
-    <div class="col-12">
-      {% for batch_stat in batch_stats %}
-      <div class="batch-card" data-start="{{ batch_stat.batch.start_time or '' }}" data-end="{{ batch_stat.batch.end_time or '' }}">
-        <div class="batch-header">
-          <div>
-            <div class="batch-title">{{ batch_stat.batch.batch_name }}</div>
-            <div class="batch-meta">
-              {% if batch_stat.batch.course_name %}
-              <span class="batch-meta-item">📖 <strong>{{ batch_stat.batch.course_name }}</strong></span>
-              {% endif %}
-              {% if batch_stat.batch.trainer_name %}
-              <span class="batch-meta-item">👨‍🏫 <strong>{{ batch_stat.batch.trainer_name }}</strong></span>
-              {% endif %}
-              <span class="batch-meta-item">🏢 <strong>{{ batch_stat.batch.branch_name }}</strong></span>
-              {% if batch_stat.batch.start_time %}
-              <span class="batch-meta-item">⏰ <strong>{{ batch_stat.batch.start_time }} - {{ batch_stat.batch.end_time }}</strong></span>
-              {% endif %}
-            </div>
-          </div>
-          <div style="text-align: right;">
-            <span class="badge bg-success" style="font-size: 0.95rem;">Active</span>
+  <div class="batch-table-wrap">
+    <table class="table batch-table">
+      <thead>
+        <tr>
+          <th>Batch</th>
+          <th>Time</th>
+          <th>Trainer</th>
+          <th>Branch</th>
+          <th class="text-center">Total</th>
+          <th class="text-center">Marked</th>
+          <th class="text-center">Pending</th>
+          <th class="text-center">Present</th>
+          <th class="text-center">Absent</th>
+          <th>Progress</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for batch_stat in batch_stats %}
+        <tr data-start="{{ batch_stat.batch.start_time or '' }}" data-end="{{ batch_stat.batch.end_time or '' }}">
+          <td>
+            <span class="fw-semibold">{{ batch_stat.batch.batch_name }}</span>
             <span class="live-badge-dash d-none">● LIVE</span>
-          </div>
-        </div>
-
-        <!-- Quick Stats -->
-        <div class="quick-stats">
-          <div class="quick-stat">
-            <div class="value">{{ batch_stat.total_students }}</div>
-            <div class="label">Total</div>
-          </div>
-          <div class="quick-stat" style="background: #d1ecf1;">
-            <div class="value" style="color: #0c5460;">{{ batch_stat.marked_count }}</div>
-            <div class="label">Marked</div>
-          </div>
-          <div class="quick-stat" style="background: #f8d7da;">
-            <div class="value" style="color: #721c24;">{{ batch_stat.not_marked }}</div>
-            <div class="label">Pending</div>
-          </div>
-          <div class="quick-stat" style="background: #d4edda;">
-            <div class="value" style="color: #155724;">{{ batch_stat.present }}</div>
-            <div class="label">Present</div>
-          </div>
-          <div class="quick-stat" style="background: #f8d7da;">
-            <div class="value" style="color: #721c24;">{{ batch_stat.absent }}</div>
-            <div class="label">Absent</div>
-          </div>
-        </div>
-
-        <!-- Progress Bar -->
-        <div class="batch-progress">
-          <div class="batch-progress-bar" style="width: {{ batch_stat.percentage_marked }}%;"></div>
-        </div>
-        <div style="font-size: 0.9rem; color: #6c757d; text-align: right;">
-          {{ "%.0f"|format(batch_stat.percentage_marked) }}% attendance marked
-        </div>
-
-        <!-- Actions -->
-        <div class="batch-actions">
-          <a href="{{ url_for('attendance.mark_attendance', batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-primary">✏️ Mark Attendance</a>
-          <a href="{{ url_for('attendance.view_batch', batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-outline-secondary">👁️ View Details</a>
-          <a href="{{ url_for('attendance.daily_report') }}" class="btn btn-sm btn-outline-secondary">📊 Reports</a>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
+            {% if batch_stat.batch.course_name %}
+            <div class="text-muted" style="font-size:0.8rem;">{{ batch_stat.batch.course_name }}</div>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;">
+            {% if batch_stat.batch.start_time %}
+            <span class="badge" style="background:#e8eaf6;color:#3949ab;font-size:0.85rem;">{{ batch_stat.batch.start_time }} – {{ batch_stat.batch.end_time }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ batch_stat.batch.trainer_name or '—' }}</td>
+          <td style="font-size:0.85rem;">{{ batch_stat.batch.branch_name }}</td>
+          <td class="text-center"><span class="stat-pill" style="background:#f8f9fa;color:#212529;">{{ batch_stat.total_students }}</span></td>
+          <td class="text-center"><span class="stat-pill" style="background:#d1ecf1;color:#0c5460;">{{ batch_stat.marked_count }}</span></td>
+          <td class="text-center"><span class="stat-pill" style="background:#f8d7da;color:#721c24;">{{ batch_stat.not_marked }}</span></td>
+          <td class="text-center"><span class="stat-pill" style="background:#d4edda;color:#155724;">{{ batch_stat.present }}</span></td>
+          <td class="text-center"><span class="stat-pill" style="background:#f8d7da;color:#721c24;">{{ batch_stat.absent }}</span></td>
+          <td>
+            <div class="prog-mini">
+              <div class="prog-mini-bar" style="width:{{ batch_stat.percentage_marked }}%;"></div>
+            </div>
+            <div style="font-size:0.78rem;color:#6c757d;margin-top:2px;">{{ "%.0f"|format(batch_stat.percentage_marked) }}%</div>
+          </td>
+          <td style="white-space:nowrap;">
+            <a href="{{ url_for('attendance.mark_attendance', batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-primary mb-1">✏️ Mark</a>
+            <a href="{{ url_for('attendance.view_batch', batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-outline-secondary mb-1">👁️ Details</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
   {% else %}
-  <div class="batch-card">
+  <div class="batch-table-wrap">
     <div class="empty-state">
       <div class="empty-state-icon">📭</div>
       <p class="mb-0">No active batches for today</p>
@@ -545,14 +582,14 @@ function nowHHMM() {
 }
 function highlightRunningDash() {
   const now = nowHHMM();
-  document.querySelectorAll('.batch-card[data-start]').forEach(function(card) {
-    const start = card.dataset.start, end = card.dataset.end;
+  document.querySelectorAll('.batch-table tbody tr[data-start]').forEach(function(row) {
+    const start = row.dataset.start, end = row.dataset.end;
     if (start && end && now >= start && now < end) {
-      card.classList.add('running-now');
-      card.querySelector('.live-badge-dash')?.classList.remove('d-none');
+      row.classList.add('running-now');
+      row.querySelector('.live-badge-dash')?.classList.remove('d-none');
     } else {
-      card.classList.remove('running-now');
-      card.querySelector('.live-badge-dash')?.classList.add('d-none');
+      row.classList.remove('running-now');
+      row.querySelector('.live-badge-dash')?.classList.add('d-none');
     }
   });
 }
