@@ -967,6 +967,30 @@ def mark_attendance():
                 except Exception:
                     payment_dues[sid]['upcoming_days'] = None
 
+        # Get last 7 days attendance history for each student
+        history_7days = {}
+        history_dates = []
+        if students and batch_id:
+            try:
+                hist_base = datetime.strptime(attendance_date, "%Y-%m-%d").date()
+            except Exception:
+                hist_base = datetime.now().date()
+            history_dates = [(hist_base - timedelta(days=i)).isoformat() for i in range(7, 0, -1)]
+            student_ids_h = [s['student_id'] for s in students]
+            ph_d = ','.join(['?' for _ in history_dates])
+            ph_s = ','.join(['?' for _ in student_ids_h])
+            cur.execute(f"""
+                SELECT student_id, attendance_date, status
+                FROM attendance_records
+                WHERE batch_id = ? AND attendance_date IN ({ph_d})
+                AND student_id IN ({ph_s})
+            """, [batch_id] + history_dates + student_ids_h)
+            for row in cur.fetchall():
+                sid = row['student_id']
+                if sid not in history_7days:
+                    history_7days[sid] = {}
+                history_7days[sid][row['attendance_date']] = row['status']
+
         if request.method == 'POST':
             action = request.form.get('action')
             
@@ -1020,6 +1044,8 @@ def mark_attendance():
                              batch_info=batch_info, students=students,
                              attendance_data=attendance_data,
                              payment_dues=payment_dues,
+                             history_7days=history_7days,
+                             history_dates=history_dates,
                              message=message, user=user)
     
     finally:

@@ -277,6 +277,68 @@
     background: #fffdf0 !important;
   }
 
+  /* Last 7 days history cells */
+  .hist-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .hist-cells {
+    display: flex;
+    gap: 3px;
+  }
+
+  .hist-cell {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: inline-block;
+    flex-shrink: 0;
+    cursor: default;
+  }
+
+  .hist-present { background: #28a745; }
+  .hist-absent  { background: #dc3545; }
+  .hist-late    { background: #ffc107; }
+  .hist-leave   { background: #0dcaf0; }
+  .hist-none    { background: #e9ecef; border: 1px solid #dee2e6; }
+
+  .hist-labels {
+    display: flex;
+    gap: 3px;
+  }
+
+  .hist-label {
+    font-size: 0.62rem;
+    color: #adb5bd;
+    width: 20px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .hist-legend {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-top: 10px;
+  }
+
+  .hist-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .hist-legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    display: inline-block;
+  }
+
   .form-actions {
     display: flex;
     gap: 12px;
@@ -498,6 +560,15 @@
     </div>
 
     <!-- Attendance Table -->
+    {% if history_dates %}
+    <div class="hist-legend">
+      <span class="hist-legend-item"><span class="hist-legend-dot hist-present"></span> Present</span>
+      <span class="hist-legend-item"><span class="hist-legend-dot hist-absent"></span> Absent</span>
+      <span class="hist-legend-item"><span class="hist-legend-dot hist-late"></span> Late</span>
+      <span class="hist-legend-item"><span class="hist-legend-dot hist-leave"></span> Leave</span>
+      <span class="hist-legend-item"><span class="hist-legend-dot hist-none"></span> No record</span>
+    </div>
+    {% endif %}
     <form method="POST">
       <input type="hidden" name="action" value="save">
       <input type="hidden" name="batch_id" value="{{ batch_id }}">
@@ -510,6 +581,7 @@
             <tr>
               <th style="width: 120px;">Code</th>
               <th>Name</th>
+              <th style="min-width: 185px;">Last 7 Days</th>
               <th style="width: 140px;">Status</th>
               <th style="width: 250px;">Remarks</th>
             </tr>
@@ -539,6 +611,23 @@
                 {% else %}{% set ud_label = dues.upcoming_date %}{% endif %}
                 <div><span class="due-badge due-badge-upcoming">💰 ₹{{ "{:,.0f}".format(dues.upcoming_amount) }} · {{ ud_label }}</span></div>
                 {% endif %}
+              </td>
+              <td>
+                {% set hist = history_7days.get(student.student_id, {}) %}
+                <div class="hist-wrap">
+                  <div class="hist-cells">
+                    {% for d in history_dates %}
+                    {% set s = hist.get(d) %}
+                    <span class="hist-cell hist-{{ s or 'none' }}"
+                          title="{{ d }}: {{ s | capitalize if s else 'No record' }}"></span>
+                    {% endfor %}
+                  </div>
+                  <div class="hist-labels">
+                    {% for d in history_dates %}
+                    <span class="hist-label">{{ d[5:] }}</span>
+                    {% endfor %}
+                  </div>
+                </div>
               </td>
               <td>
                 <select class="status-select" name="status_{{ student.student_id }}" 
