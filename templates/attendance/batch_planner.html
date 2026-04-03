@@ -177,6 +177,7 @@
             <th>Batch</th>
             <th>Course</th>
             <th>Time Slot</th>
+            <th>Hours</th>
             <th>Students</th>
             <th>Concurrent Used</th>
             <th>Computers Free</th>
@@ -190,6 +191,7 @@
             <td>
               <span class="time-chip">{{ batch.start_time or '?' }} – {{ batch.end_time or '?' }}</span>
             </td>
+            <td class="text-muted small">{{ batch.duration_str }}</td>
             <td><strong>{{ batch.student_count }}</strong></td>
             <td>{{ batch.concurrent_students }}</td>
             <td>

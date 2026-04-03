@@ -1979,6 +1979,22 @@ def batch_planner():
                 batch['concurrent_students'] = concurrent_students
                 batch['computers_free'] = max(0, no_of_computers - concurrent_students)
 
+                # Calculate duration
+                if batch['start_time'] and batch['end_time']:
+                    try:
+                        sh, sm = map(int, batch['start_time'].split(':'))
+                        eh, em = map(int, batch['end_time'].split(':'))
+                        diff_mins = (eh * 60 + em) - (sh * 60 + sm)
+                        if diff_mins > 0:
+                            h, m = divmod(diff_mins, 60)
+                            batch['duration_str'] = f"{h}h {m}m" if m else f"{h}h"
+                        else:
+                            batch['duration_str'] = '—'
+                    except Exception:
+                        batch['duration_str'] = '—'
+                else:
+                    batch['duration_str'] = '—'
+
             existing_batches = batch_list
 
             proposed_start = request.args.get('proposed_start', '')
