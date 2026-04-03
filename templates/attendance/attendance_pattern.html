@@ -95,7 +95,13 @@
     background: #fff;
     border-radius: 12px;
     box-shadow: 0 1px 4px rgba(0,0,0,.08);
-    overflow: hidden;
+    overflow: visible;  /* must NOT be hidden — breaks sticky */
+  }
+  .table-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 68vh;
+    border-radius: 12px;
   }
   .pattern-table {
     width: 100%;
@@ -112,7 +118,27 @@
     position: sticky;
     top: 0;
     z-index: 2;
+    box-shadow: 0 2px 4px rgba(0,0,0,.07);
   }
+
+  /* ── WhatsApp button ──────────────────────────── */
+  .wa-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: #25D366;
+    color: #fff;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: .72rem;
+    font-weight: 600;
+    text-decoration: none;
+    vertical-align: middle;
+    margin-left: 5px;
+    white-space: nowrap;
+  }
+  .wa-btn:hover { background: #128C7E; color: #fff; text-decoration: none; }
+  .student-phone { font-size: .8rem; color: #6c757d; margin-bottom: 5px; }
   .pattern-table tbody td {
     padding: 10px 14px;
     border-bottom: 1px solid #f0f0f0;
@@ -245,7 +271,8 @@
     .legend-bar span[style] { margin-left: 0 !important; width: 100%; }
 
     /* Turn table into stacked cards */
-    .pattern-wrap { border-radius: 10px; }
+    .pattern-wrap { border-radius: 10px; overflow: hidden; }
+    .table-scroll { max-height: none; overflow-y: visible; }
     .pattern-table,
     .pattern-table thead,
     .pattern-table tbody,
@@ -439,6 +466,17 @@
           <!-- Col 3: Name + 31-day pattern grid -->
           <td class="td-pattern">
             <div class="pattern-name">{{ student.full_name }}</div>
+            {% if student.phone %}
+            <div class="student-phone">
+              {{ student.phone }}
+              <a class="wa-btn"
+                 href="https://wa.me/{{ student.phone | replace(' ','') | replace('+','') | replace('-','') | replace('(','') | replace(')','') }}"
+                 target="_blank" rel="noopener">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.553 4.113 1.522 5.843L.057 23.882a.5.5 0 0 0 .612.612l6.102-1.463A11.952 11.952 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.826 9.826 0 0 1-5.01-1.374l-.36-.213-3.628.87.886-3.541-.233-.374A9.817 9.817 0 0 1 2.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/></svg>
+                WA
+              </a>
+            </div>
+            {% endif %}
             <div class="pattern-rows">
               {# Split date_range into two rows #}
               {% set half = ((date_range|length) / 2) | round(0, 'ceil') | int %}
