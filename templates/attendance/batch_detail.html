@@ -257,6 +257,9 @@
       <a href="{{ url_for('attendance.daily_report', batch_id=batch.id) }}" class="btn btn-outline-light">
         📊 View Attendance
       </a>
+      <a href="{{ url_for('attendance.mark_attendance', branch_id=batch.branch_id, batch_id=batch.id) }}" class="btn btn-outline-light">
+        ✅ Mark Attendance
+      </a>
     </div>
   </div>
 
