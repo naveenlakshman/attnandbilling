@@ -437,6 +437,13 @@ def branch_new():
         branch_name = request.form.get("branch_name", "").strip()
         branch_code = request.form.get("branch_code", "").strip()
         address = request.form.get("address", "").strip()
+        no_of_computers = request.form.get("no_of_computers", "0").strip()
+        try:
+            no_of_computers = int(no_of_computers)
+            if no_of_computers < 0:
+                no_of_computers = 0
+        except ValueError:
+            no_of_computers = 0
 
         if not branch_name or not branch_code:
             flash("Branch name and branch code are required.", "danger")
@@ -453,13 +460,14 @@ def branch_new():
         now = datetime.now().isoformat(timespec="seconds")
 
         cur.execute("""
-            INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO branches (branch_name, branch_code, address, is_active, no_of_computers, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (
             branch_name,
             branch_code,
             address,
             1,
+            no_of_computers,
             now
         ))
 
@@ -493,6 +501,13 @@ def branch_edit(branch_id):
         branch_name = request.form.get("branch_name", "").strip()
         branch_code = request.form.get("branch_code", "").strip()
         address = request.form.get("address", "").strip()
+        no_of_computers = request.form.get("no_of_computers", "0").strip()
+        try:
+            no_of_computers = int(no_of_computers)
+            if no_of_computers < 0:
+                no_of_computers = 0
+        except ValueError:
+            no_of_computers = 0
 
         if not branch_name or not branch_code:
             flash("Branch name and branch code are required.", "danger")
@@ -511,12 +526,14 @@ def branch_edit(branch_id):
             UPDATE branches
             SET branch_name = ?,
                 branch_code = ?,
-                address = ?
+                address = ?,
+                no_of_computers = ?
             WHERE id = ?
         """, (
             branch_name,
             branch_code,
             address,
+            no_of_computers,
             branch_id
         ))
 

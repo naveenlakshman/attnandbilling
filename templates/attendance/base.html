@@ -146,6 +146,13 @@
         ➕ Create Batch
       </a>
 
+      <!-- Batch Planner -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'attendance.batch_planner' else '' }}"
+        href="{{ url_for('attendance.batch_planner') }}">
+        🗓️ Batch Planner
+      </a>
+
       <div class="section-title mt-3">📈 Reports & Analytics</div>
 
       <!-- Daily Report -->

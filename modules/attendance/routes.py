@@ -1921,3 +1921,104 @@ def student_attendance_history(student_id):
     finally:
         conn.close()
 
+
+
+@attendance_bp.route('/batch-planner')
+@login_required
+def batch_planner():
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        can_view_all = session.get('can_view_all_branches', 1)
+        user_branch_id = session.get('branch_id')
+
+        if can_view_all:
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+        else:
+            cur.execute("SELECT * FROM branches WHERE id = ? AND is_active = 1", (user_branch_id,))
+        branches = cur.fetchall()
+
+        selected_branch_id = request.args.get('branch_id', type=int)
+        if not selected_branch_id and branches:
+            selected_branch_id = branches[0]['id']
+
+        selected_branch = None
+        existing_batches = []
+        capacity_info = {}
+
+        if selected_branch_id:
+            cur.execute("SELECT * FROM branches WHERE id = ?", (selected_branch_id,))
+            selected_branch = cur.fetchone()
+
+            cur.execute("""
+                SELECT b.id, b.batch_name, b.start_time, b.end_time, b.status,
+                       c.course_name,
+                       COUNT(sb.id) as student_count
+                FROM batches b
+                LEFT JOIN courses c ON b.course_id = c.id
+                LEFT JOIN student_batches sb ON sb.batch_id = b.id AND sb.status = 'active'
+                WHERE b.branch_id = ? AND b.status = 'active'
+                GROUP BY b.id
+                ORDER BY b.start_time
+            """, (selected_branch_id,))
+            raw_batches = cur.fetchall()
+
+            no_of_computers = selected_branch['no_of_computers'] if selected_branch['no_of_computers'] else 0
+
+            batch_list = [dict(row) for row in raw_batches]
+            for batch in batch_list:
+                s1 = batch['start_time'] or '00:00'
+                e1 = batch['end_time'] or '23:59'
+                concurrent_students = 0
+                for other in batch_list:
+                    s2 = other['start_time'] or '00:00'
+                    e2 = other['end_time'] or '23:59'
+                    if s1 < e2 and s2 < e1:
+                        concurrent_students += other['student_count']
+                batch['concurrent_students'] = concurrent_students
+                batch['computers_free'] = max(0, no_of_computers - concurrent_students)
+
+            existing_batches = batch_list
+
+            proposed_start = request.args.get('proposed_start', '')
+            proposed_end = request.args.get('proposed_end', '')
+            proposed_students = request.args.get('proposed_students', 0, type=int)
+
+            capacity_info = {
+                'no_of_computers': no_of_computers,
+                'proposed_start': proposed_start,
+                'proposed_end': proposed_end,
+                'proposed_students': proposed_students,
+                'checked': False,
+                'conflicting_batches': [],
+                'peak_concurrent': 0,
+                'computers_free': no_of_computers,
+                'can_fit': None,
+            }
+
+            if proposed_start and proposed_end:
+                capacity_info['checked'] = True
+                conflicting = []
+                peak = 0
+                for batch in existing_batches:
+                    s2 = batch['start_time'] or '00:00'
+                    e2 = batch['end_time'] or '23:59'
+                    if proposed_start < e2 and s2 < proposed_end:
+                        conflicting.append(batch)
+                        peak += batch['student_count']
+
+                computers_free = no_of_computers - peak
+                capacity_info['conflicting_batches'] = conflicting
+                capacity_info['peak_concurrent'] = peak
+                capacity_info['computers_free'] = computers_free
+                capacity_info['can_fit'] = (computers_free >= proposed_students) if no_of_computers > 0 else None
+
+        return render_template('attendance/batch_planner.html',
+                               branches=branches,
+                               selected_branch=selected_branch,
+                               selected_branch_id=selected_branch_id,
+                               existing_batches=existing_batches,
+                               capacity_info=capacity_info)
+    finally:
+        conn.close()

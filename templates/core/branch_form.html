@@ -109,6 +109,13 @@
                 <small>Enter the complete address of the branch</small>
             </div>
 
+            <div class="form-group">
+                <label for="no_of_computers">Number of Computers</label>
+                <input type="number" id="no_of_computers" name="no_of_computers" min="0"
+                       value="{{ branch.no_of_computers if branch else 0 }}">
+                <small>Total computers available at this branch (used for batch capacity planning)</small>
+            </div>
+
             <div class="button-group">
                 <button type="submit" class="btn-primary">
                     <i class="fas fa-save"></i> 
