@@ -1,0 +1,436 @@
+{% extends "attendance/base.html" %}
+
+{% block title %}Attendance Pattern - Global IT ERP{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ── Page header ──────────────────────────────── */
+  .page-header {
+    background: linear-gradient(135deg, #1a237e 0%, #283593 100%);
+    color: #fff;
+    border-radius: 14px;
+    padding: 26px 28px;
+    margin-bottom: 24px;
+  }
+  .page-header h1 { color: #fff; margin: 0 0 4px; font-size: 1.6rem; }
+  .page-header p  { margin: 0; opacity: .85; font-size: .95rem; }
+
+  /* ── Filter card ──────────────────────────────── */
+  .filter-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  .filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    align-items: end;
+  }
+  .filter-grid label {
+    display: block;
+    font-weight: 600;
+    font-size: .88rem;
+    color: #495057;
+    margin-bottom: 5px;
+  }
+  .filter-grid select,
+  .filter-grid input[type=date] {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    font-size: .93rem;
+  }
+  .filter-grid select:focus,
+  .filter-grid input[type=date]:focus {
+    border-color: #3949ab;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(57,73,171,.12);
+  }
+  .btn-filter {
+    padding: 9px 20px;
+    background: #3949ab;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: .93rem;
+    width: 100%;
+  }
+  .btn-filter:hover { background: #283593; }
+
+  /* ── Legend ───────────────────────────────────── */
+  .legend-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 14px;
+    font-size: .85rem;
+    color: #495057;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .ld-present { background: #28a745; }
+  .ld-absent  { background: #dc3545; }
+  .ld-late    { background: #ffc107; }
+  .ld-leave   { background: #0dcaf0; }
+  .ld-none    { background: #e9ecef; border: 1px solid #ced4da; }
+
+  /* ── Pattern table ────────────────────────────── */
+  .pattern-wrap {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    overflow: hidden;
+  }
+  .pattern-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .9rem;
+  }
+  .pattern-table thead th {
+    background: #f1f3f9;
+    font-weight: 700;
+    color: #3949ab;
+    padding: 11px 14px;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .pattern-table tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    vertical-align: middle;
+  }
+  .pattern-table tbody tr:last-child td { border-bottom: none; }
+  .pattern-table tbody tr:hover { background: #f8f9ff; }
+
+  /* ── Column 1 – Code ──────────────────────────── */
+  .td-code {
+    font-family: monospace;
+    font-size: .9rem;
+    color: #495057;
+    white-space: nowrap;
+  }
+
+  /* ── Column 2 – Photo ─────────────────────────── */
+  .td-photo { text-align: center; width: 70px; }
+  .student-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #dee2e6;
+  }
+  .student-avatar-placeholder {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #e9ecef;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    border: 2px solid #dee2e6;
+  }
+
+  /* ── Column 3 – Pattern grid ──────────────────── */
+  .td-pattern { min-width: 280px; }
+  .pattern-name {
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 6px;
+    font-size: .92rem;
+  }
+  .pattern-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .pattern-row {
+    display: flex;
+    gap: 3px;
+    flex-wrap: nowrap;
+  }
+  .p-labels {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 4px;
+  }
+  .p-label {
+    width: 22px;
+    font-size: 9px;
+    text-align: center;
+    color: #6c757d;
+    flex-shrink: 0;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+  }
+  .p-cell {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    cursor: default;
+    transition: transform .1s;
+  }
+  .p-cell:hover { transform: scale(1.3); z-index: 10; position: relative; }
+  .p-present { background: #28a745; }
+  .p-absent  { background: #dc3545; }
+  .p-late    { background: #ffc107; }
+  .p-leave   { background: #0dcaf0; }
+  .p-none    { background: #e9ecef; border: 1px solid #ced4da; }
+
+  .pattern-summary {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+    font-size: .78rem;
+  }
+  .ps-item {
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+  .ps-present { background: #d4edda; color: #155724; }
+  .ps-absent  { background: #f8d7da; color: #721c24; }
+  .ps-late    { background: #fff3cd; color: #856404; }
+  .ps-leave   { background: #cff4fc; color: #055160; }
+
+  /* ── Column 4 – Actions ───────────────────────── */
+  .td-actions { white-space: nowrap; width: 120px; }
+  .td-actions .btn { display: block; margin-bottom: 5px; font-size: .82rem; padding: 5px 10px; width: 100%; text-align: center; }
+
+  /* ── Empty/info states ────────────────────────── */
+  .info-box {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+  }
+  .info-box-icon { font-size: 3.5rem; margin-bottom: 12px; }
+
+  /* ── Scrollable table wrapper ─────────────────── */
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  .stat-summary-bar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    font-size: .88rem;
+  }
+  .ssb-item {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-weight: 600;
+    color: #495057;
+  }
+  .ssb-item span { font-size: 1.1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="page-header">
+  <h1>📊 Attendance Pattern</h1>
+  <p>Visual 31-day attendance grid per student — quickly spot patterns and irregularities</p>
+</div>
+
+<!-- Filters -->
+<div class="filter-card">
+  <form method="GET" id="filterForm">
+    <div class="filter-grid">
+      {% if user.can_view_all_branches %}
+      <div>
+        <label>🏢 Branch</label>
+        <select name="branch_id" onchange="document.getElementById('filterForm').submit()">
+          <option value="">All Branches</option>
+          {% for b in branches %}
+          <option value="{{ b.id }}" {% if selected_branch_id == b.id %}selected{% endif %}>
+            {{ b.branch_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% else %}
+      <input type="hidden" name="branch_id" value="{{ selected_branch_id }}">
+      {% endif %}
+
+      <div>
+        <label>📚 Batch</label>
+        <select name="batch_id" onchange="document.getElementById('filterForm').submit()">
+          <option value="">All Batches</option>
+          {% for bt in batches %}
+          <option value="{{ bt.id }}" {% if batch_id == bt.id %}selected{% endif %}>
+            {{ bt.batch_name }}{% if bt.course_name %} ({{ bt.course_name }}){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label>📅 From Date</label>
+        <input type="date" name="date_from" value="{{ date_from }}">
+      </div>
+
+      <div>
+        <label>📅 To Date</label>
+        <input type="date" name="date_to" value="{{ date_to }}">
+      </div>
+
+      <div>
+        <label>&nbsp;</label>
+        <button type="submit" class="btn-filter">🔍 Apply</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+{% if students %}
+
+<!-- Legend + summary -->
+<div class="legend-bar">
+  <strong>Legend:</strong>
+  <span class="legend-item"><span class="legend-dot ld-present"></span> Present</span>
+  <span class="legend-item"><span class="legend-dot ld-absent"></span> Absent</span>
+  <span class="legend-item"><span class="legend-dot ld-late"></span> Late</span>
+  <span class="legend-item"><span class="legend-dot ld-leave"></span> Leave</span>
+  <span class="legend-item"><span class="legend-dot ld-none"></span> No record</span>
+  <span style="margin-left:auto;color:#6c757d;">{{ date_from }} → {{ date_to }} &nbsp;|&nbsp; {{ date_range|length }} days &nbsp;|&nbsp; {{ students|length }} students</span>
+</div>
+
+<!-- Pattern Table -->
+<div class="pattern-wrap">
+  <div class="table-scroll">
+    <table class="pattern-table">
+      <thead>
+        <tr>
+          <th style="width:90px;">Code</th>
+          <th style="width:66px;">Photo</th>
+          <th>Name &amp; Attendance Pattern</th>
+          <th style="width:110px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for student in students %}
+        {% set hist = pattern.get(student.id, {}) %}
+        {% set n_present = hist.values() | select('equalto', 'present') | list | length %}
+        {% set n_absent  = hist.values() | select('equalto', 'absent')  | list | length %}
+        {% set n_late    = hist.values() | select('equalto', 'late')    | list | length %}
+        {% set n_leave   = hist.values() | select('equalto', 'leave')   | list | length %}
+        <tr>
+          <!-- Col 1: Code -->
+          <td class="td-code">{{ student.student_code }}</td>
+
+          <!-- Col 2: Photo -->
+          <td class="td-photo">
+            {% if student.photo_filename %}
+            <img src="/static/images/student_photos/{{ student.photo_filename }}"
+                 alt="{{ student.full_name }}"
+                 class="student-avatar"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
+            <span class="student-avatar-placeholder" style="display:none;">👤</span>
+            {% else %}
+            <span class="student-avatar-placeholder">👤</span>
+            {% endif %}
+          </td>
+
+          <!-- Col 3: Name + 31-day pattern grid -->
+          <td class="td-pattern">
+            <div class="pattern-name">{{ student.full_name }}</div>
+            <div class="pattern-rows">
+              {# Split date_range into two rows #}
+              {% set half = ((date_range|length) / 2) | round(0, 'ceil') | int %}
+              <div class="pattern-row">
+                {% for d in date_range[:half] %}
+                {% set s = hist.get(d) %}
+                <span class="p-cell p-{{ s or 'none' }}"
+                      title="{{ d }}: {{ s | capitalize if s else 'No record' }}"></span>
+                {% endfor %}
+              </div>
+              <div class="p-labels">
+                {% for d in date_range[:half] %}
+                <span class="p-label">{{ d[8:] }}</span>
+                {% endfor %}
+              </div>
+              {% if date_range|length > half %}
+              <div class="pattern-row">
+                {% for d in date_range[half:] %}
+                {% set s = hist.get(d) %}
+                <span class="p-cell p-{{ s or 'none' }}"
+                      title="{{ d }}: {{ s | capitalize if s else 'No record' }}"></span>
+                {% endfor %}
+              </div>
+              <div class="p-labels">
+                {% for d in date_range[half:] %}
+                <span class="p-label">{{ d[8:] }}</span>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+            <!-- Per-student summary counts -->
+            <div class="pattern-summary">
+              {% if n_present > 0 %}<span class="ps-item ps-present">✓ {{ n_present }}</span>{% endif %}
+              {% if n_absent  > 0 %}<span class="ps-item ps-absent" >✗ {{ n_absent  }}</span>{% endif %}
+              {% if n_late    > 0 %}<span class="ps-item ps-late"   >⏱ {{ n_late    }}</span>{% endif %}
+              {% if n_leave   > 0 %}<span class="ps-item ps-leave"  >📋 {{ n_leave   }}</span>{% endif %}
+              {% set n_total = date_range|length %}
+              {% if n_total > 0 %}
+              {% set pct = ((n_present + n_late) / n_total * 100) | round(0) | int %}
+              <span class="ps-item" style="background:#e8eaf6;color:#3949ab;">{{ pct }}% att.</span>
+              {% endif %}
+            </div>
+          </td>
+
+          <!-- Col 4: Actions -->
+          <td class="td-actions">
+            <a href="{{ url_for('attendance.student_attendance_history', student_id=student.id) }}"
+               class="btn btn-sm btn-outline-primary">📈 History</a>
+            <a href="{{ url_for('attendance.mark_attendance', batch_id=batch_id or '') }}"
+               class="btn btn-sm btn-primary">✏️ Mark</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% elif selected_branch_id or batch_id %}
+<div class="pattern-wrap">
+  <div class="info-box">
+    <div class="info-box-icon">📭</div>
+    <p>No active students found for the selected filter.</p>
+  </div>
+</div>
+{% else %}
+<div class="pattern-wrap">
+  <div class="info-box">
+    <div class="info-box-icon">🔍</div>
+    <p>Select a branch or batch above to view attendance patterns.</p>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -130,6 +130,13 @@
         ✓ Mark Attendance
       </a>
 
+      <!-- Attendance Pattern -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'attendance.attendance_pattern' else '' }}"
+        href="{{ url_for('attendance.attendance_pattern') }}">
+        🟩 Attendance Pattern
+      </a>
+
       <div class="section-title mt-3">🎓 Batch Management</div>
 
       <!-- Batch Management -->

@@ -2121,3 +2121,133 @@ def batch_planner():
                                batch_duration_mins=batch_duration_mins)
     finally:
         conn.close()
+
+
+@attendance_bp.route('/attendance-pattern')
+@login_required
+def attendance_pattern():
+    """Visual 31-day attendance pattern page per student"""
+    user_id = session.get('user_id')
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+
+        # Branch list
+        if user['can_view_all_branches']:
+            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+        else:
+            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1", (user['branch_id'],))
+        branches = cur.fetchall()
+
+        # Resolve selected branch
+        selected_branch_id = request.args.get('branch_id', type=int)
+        if not selected_branch_id:
+            selected_branch_id = user['branch_id'] if not user['can_view_all_branches'] else None
+        if not user['can_view_all_branches']:
+            selected_branch_id = user['branch_id']
+
+        # Date range  (default: last 30 days ending today)
+        today = datetime.now().date()
+        default_to = today.isoformat()
+        default_from = (today - timedelta(days=30)).isoformat()
+        date_from_str = request.args.get('date_from', default_from)
+        date_to_str   = request.args.get('date_to',   default_to)
+        try:
+            date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+            date_to   = datetime.strptime(date_to_str,   "%Y-%m-%d").date()
+        except ValueError:
+            date_from = today - timedelta(days=30)
+            date_to   = today
+            date_from_str = date_from.isoformat()
+            date_to_str   = date_to.isoformat()
+
+        # Cap to 31 days max
+        if (date_to - date_from).days > 30:
+            date_from = date_to - timedelta(days=30)
+            date_from_str = date_from.isoformat()
+
+        # Build ordered date list
+        num_days = (date_to - date_from).days + 1
+        date_range = [(date_from + timedelta(days=i)).isoformat() for i in range(num_days)]
+
+        # Batches for filter
+        batch_id = request.args.get('batch_id', type=int)
+        if selected_branch_id:
+            cur.execute("""
+                SELECT b.id, b.batch_name, c.course_name
+                FROM batches b
+                LEFT JOIN courses c ON b.course_id = c.id
+                WHERE b.branch_id = ? AND b.status = 'active'
+                ORDER BY b.start_time ASC
+            """, (selected_branch_id,))
+        else:
+            cur.execute("""
+                SELECT b.id, b.batch_name, c.course_name
+                FROM batches b
+                LEFT JOIN courses c ON b.course_id = c.id
+                WHERE b.status = 'active'
+                ORDER BY b.start_time ASC
+            """)
+        batches = cur.fetchall()
+
+        # Students in selected batch (or all students across branch if no batch)
+        students = []
+        if batch_id:
+            cur.execute("""
+                SELECT s.id, s.student_code, s.full_name, s.phone, s.photo_filename
+                FROM student_batches sb
+                JOIN students s ON sb.student_id = s.id
+                WHERE sb.batch_id = ? AND sb.status = 'active'
+                ORDER BY s.full_name ASC
+            """, (batch_id,))
+            students = cur.fetchall()
+        elif selected_branch_id:
+            cur.execute("""
+                SELECT DISTINCT s.id, s.student_code, s.full_name, s.phone, s.photo_filename
+                FROM student_batches sb
+                JOIN students s ON sb.student_id = s.id
+                JOIN batches b ON sb.batch_id = b.id
+                WHERE b.branch_id = ? AND sb.status = 'active' AND b.status = 'active'
+                ORDER BY s.full_name ASC
+            """, (selected_branch_id,))
+            students = cur.fetchall()
+
+        # Attendance records for the date range
+        pattern = {}  # {student_id: {date_str: status}}
+        if students and date_range:
+            student_ids = [s['id'] for s in students]
+            ph_d = ','.join(['?' for _ in date_range])
+            ph_s = ','.join(['?' for _ in student_ids])
+            batch_filter = ""
+            params = date_range + student_ids
+            if batch_id:
+                batch_filter = "AND batch_id = ?"
+                params.append(batch_id)
+            cur.execute(f"""
+                SELECT student_id, attendance_date, status
+                FROM attendance_records
+                WHERE attendance_date IN ({ph_d})
+                AND student_id IN ({ph_s})
+                {batch_filter}
+            """, params)
+            for row in cur.fetchall():
+                sid = row['student_id']
+                if sid not in pattern:
+                    pattern[sid] = {}
+                pattern[sid][row['attendance_date']] = row['status']
+
+        return render_template('attendance/attendance_pattern.html',
+                               branches=branches,
+                               batches=batches,
+                               students=students,
+                               selected_branch_id=selected_branch_id,
+                               batch_id=batch_id,
+                               date_from=date_from_str,
+                               date_to=date_to_str,
+                               date_range=date_range,
+                               pattern=pattern,
+                               user=user)
+    finally:
+        conn.close()
