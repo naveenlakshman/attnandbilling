@@ -444,6 +444,8 @@ def branch_new():
                 no_of_computers = 0
         except ValueError:
             no_of_computers = 0
+        opening_time = request.form.get("opening_time", "").strip() or None
+        closing_time = request.form.get("closing_time", "").strip() or None
 
         if not branch_name or not branch_code:
             flash("Branch name and branch code are required.", "danger")
@@ -460,14 +462,16 @@ def branch_new():
         now = datetime.now().isoformat(timespec="seconds")
 
         cur.execute("""
-            INSERT INTO branches (branch_name, branch_code, address, is_active, no_of_computers, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO branches (branch_name, branch_code, address, is_active, no_of_computers, opening_time, closing_time, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             branch_name,
             branch_code,
             address,
             1,
             no_of_computers,
+            opening_time,
+            closing_time,
             now
         ))
 
@@ -508,6 +512,8 @@ def branch_edit(branch_id):
                 no_of_computers = 0
         except ValueError:
             no_of_computers = 0
+        opening_time = request.form.get("opening_time", "").strip() or None
+        closing_time = request.form.get("closing_time", "").strip() or None
 
         if not branch_name or not branch_code:
             flash("Branch name and branch code are required.", "danger")
@@ -527,13 +533,17 @@ def branch_edit(branch_id):
             SET branch_name = ?,
                 branch_code = ?,
                 address = ?,
-                no_of_computers = ?
+                no_of_computers = ?,
+                opening_time = ?,
+                closing_time = ?
             WHERE id = ?
         """, (
             branch_name,
             branch_code,
             address,
             no_of_computers,
+            opening_time,
+            closing_time,
             branch_id
         ))
 

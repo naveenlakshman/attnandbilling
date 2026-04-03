@@ -1946,6 +1946,9 @@ def batch_planner():
         selected_branch = None
         existing_batches = []
         capacity_info = {}
+        suggested_slots = []
+        opening_time = None
+        closing_time = None
 
         if selected_branch_id:
             cur.execute("SELECT * FROM branches WHERE id = ?", (selected_branch_id,))
@@ -2030,11 +2033,77 @@ def batch_planner():
                 capacity_info['computers_free'] = computers_free
                 capacity_info['can_fit'] = (computers_free >= proposed_students) if no_of_computers > 0 else None
 
+            # Compute suggested free time slots using sweep-line algorithm
+            suggested_slots = []
+            opening_time = selected_branch['opening_time'] if selected_branch['opening_time'] else None
+            closing_time = selected_branch['closing_time'] if selected_branch['closing_time'] else None
+
+            if opening_time and closing_time and no_of_computers > 0:
+                breakpoints = set([opening_time, closing_time])
+                for batch in existing_batches:
+                    st = batch['start_time']
+                    et = batch['end_time']
+                    if st and opening_time <= st <= closing_time:
+                        breakpoints.add(st)
+                    if et and opening_time <= et <= closing_time:
+                        breakpoints.add(et)
+                breakpoints = sorted(breakpoints)
+
+                intervals = []
+                for i in range(len(breakpoints) - 1):
+                    seg_start = breakpoints[i]
+                    seg_end = breakpoints[i + 1]
+                    if seg_start >= closing_time:
+                        break
+                    occupied = 0
+                    for batch in existing_batches:
+                        bs = batch['start_time'] or '00:00'
+                        be = batch['end_time'] or '23:59'
+                        if bs < seg_end and be > seg_start:
+                            occupied += batch['student_count']
+                    free = max(0, no_of_computers - occupied)
+                    intervals.append({'start': seg_start, 'end': seg_end, 'free': free, 'occupied': occupied})
+
+                current = None
+                for iv in intervals:
+                    if iv['free'] > 0:
+                        if current is None:
+                            current = {'start': iv['start'], 'end': iv['end'], 'min_free': iv['free'], 'max_occupied': iv['occupied']}
+                        else:
+                            current['end'] = iv['end']
+                            current['min_free'] = min(current['min_free'], iv['free'])
+                            current['max_occupied'] = max(current['max_occupied'], iv['occupied'])
+                    else:
+                        if current:
+                            try:
+                                sh2, sm2 = map(int, current['start'].split(':'))
+                                eh2, em2 = map(int, current['end'].split(':'))
+                                dur = (eh2 * 60 + em2) - (sh2 * 60 + sm2)
+                                h2, m2 = divmod(dur, 60)
+                                current['duration_str'] = f"{h2}h {m2}m" if m2 else f"{h2}h"
+                            except Exception:
+                                current['duration_str'] = '—'
+                            suggested_slots.append(current)
+                            current = None
+                if current:
+                    try:
+                        sh2, sm2 = map(int, current['start'].split(':'))
+                        eh2, em2 = map(int, current['end'].split(':'))
+                        dur = (eh2 * 60 + em2) - (sh2 * 60 + sm2)
+                        h2, m2 = divmod(dur, 60)
+                        current['duration_str'] = f"{h2}h {m2}m" if m2 else f"{h2}h"
+                    except Exception:
+                        current['duration_str'] = '—'
+                    suggested_slots.append(current)
+
         return render_template('attendance/batch_planner.html',
                                branches=branches,
                                selected_branch=selected_branch,
                                selected_branch_id=selected_branch_id,
                                existing_batches=existing_batches,
-                               capacity_info=capacity_info)
+                               capacity_info=capacity_info,
+                               suggested_slots=suggested_slots,
+                               opening_time=opening_time,
+                               closing_time=closing_time)
     finally:
         conn.close()

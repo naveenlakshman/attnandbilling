@@ -515,6 +515,8 @@ def init_db():
     add_column_if_not_exists(cur, "receipts", "notes", "TEXT")
 
     add_column_if_not_exists(cur, "branches", "no_of_computers", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_not_exists(cur, "branches", "opening_time", "TEXT")
+    add_column_if_not_exists(cur, "branches", "closing_time", "TEXT")
 
     # ---------- MIGRATE asset_logs CONSTRAINT ----------
     # Update asset_logs table to allow 'Updated' action
