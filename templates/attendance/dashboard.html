@@ -198,6 +198,29 @@
     font-size: 0.95rem;
   }
 
+  .batch-card.running-now {
+    background: #f0fff4 !important;
+    border-color: #28a745 !important;
+    border-left: 4px solid #28a745 !important;
+  }
+
+  .live-badge-dash {
+    display: inline-block;
+    background: #dc3545;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-left: 6px;
+    animation: pulse-badge-dash 1.5s infinite;
+  }
+
+  @keyframes pulse-badge-dash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
   @media (max-width: 576px) {
     .stat-value {
       font-size: 2rem;
@@ -367,7 +390,7 @@
   <div class="row">
     <div class="col-12">
       {% for batch_stat in batch_stats %}
-      <div class="batch-card">
+      <div class="batch-card" data-start="{{ batch_stat.batch.start_time or '' }}" data-end="{{ batch_stat.batch.end_time or '' }}">
         <div class="batch-header">
           <div>
             <div class="batch-title">{{ batch_stat.batch.batch_name }}</div>
@@ -386,6 +409,7 @@
           </div>
           <div style="text-align: right;">
             <span class="badge bg-success" style="font-size: 0.95rem;">Active</span>
+            <span class="live-badge-dash d-none">● LIVE</span>
           </div>
         </div>
 
@@ -511,4 +535,28 @@
     </div>
   </div>
 
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function nowHHMM() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function highlightRunningDash() {
+  const now = nowHHMM();
+  document.querySelectorAll('.batch-card[data-start]').forEach(function(card) {
+    const start = card.dataset.start, end = card.dataset.end;
+    if (start && end && now >= start && now < end) {
+      card.classList.add('running-now');
+      card.querySelector('.live-badge-dash')?.classList.remove('d-none');
+    } else {
+      card.classList.remove('running-now');
+      card.querySelector('.live-badge-dash')?.classList.add('d-none');
+    }
+  });
+}
+highlightRunningDash();
+setInterval(highlightRunningDash, 60000);
+</script>
 {% endblock %}

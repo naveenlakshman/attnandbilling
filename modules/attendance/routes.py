@@ -182,7 +182,15 @@ def dashboard():
             total_leave += leave
             total_marked += marked_count
             total_not_marked += not_marked
-        
+
+        # Sort: currently running batches first, then by start_time ASC
+        now_time = datetime.now().strftime("%H:%M")
+        batch_stats.sort(key=lambda bs: (
+            0 if (bs['batch']['start_time'] and bs['batch']['end_time'] and
+                  bs['batch']['start_time'] <= now_time < bs['batch']['end_time']) else 1,
+            bs['batch']['start_time'] or '99:99'
+        ))
+
         # Get pending attendance followups
         cur.execute("""
             SELECT af.id, af.student_id, af.batch_id, af.followup_date, af.reason,
