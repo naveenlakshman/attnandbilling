@@ -16,8 +16,59 @@
     align-items: flex-start;
   }
 
+  /* Photo upload overlay */
   .profile-photo-wrapper {
     flex-shrink: 0;
+    position: relative;
+    display: inline-block;
+  }
+
+  .photo-upload-btn {
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    color: #667eea;
+    border: 2px solid #667eea;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    z-index: 2;
+    transition: background 0.2s, color 0.2s;
+  }
+  .photo-upload-btn:hover {
+    background: #667eea;
+    color: #fff;
+  }
+
+  /* Photo upload modal */
+  #photoModal .modal-content {
+    max-width: 400px;
+  }
+  #photoPreviewBox {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    background: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 2px dashed #ccc;
+    margin-bottom: 12px;
+    cursor: pointer;
+    position: relative;
+  }
+  #photoPreviewBox img {
+    width: 100%; height: 100%; object-fit: cover;
+  }
+  #photoPreviewBox .preview-hint {
+    color: #aaa; font-size: 14px; text-align: center; padding: 10px;
   }
 
   .profile-photo {
@@ -315,28 +366,76 @@
   @media (max-width: 768px) {
     .profile-header {
       flex-direction: column;
+      align-items: center;
       text-align: center;
+      padding: 20px 16px;
+    }
+
+    .profile-header-content h1 {
+      font-size: 22px;
+    }
+
+    .profile-header-content .student-code {
+      font-size: 14px;
     }
 
     .profile-header-quick-info {
       grid-template-columns: 1fr;
+      gap: 10px;
+      text-align: left;
     }
+
+    .quick-info-item {
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+      padding-bottom: 8px;
+    }
+    .quick-info-item:last-child { border-bottom: none; }
 
     .profile-grid {
       grid-template-columns: 1fr;
     }
 
     .billing-summary {
-      grid-template-columns: 1fr;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .billing-card-value {
+      font-size: 18px;
     }
 
     .info-item {
       flex-direction: column;
+      gap: 2px;
     }
 
     .info-label,
     .info-value {
       text-align: left;
+    }
+
+    .page-actions {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .page-actions .btn {
+      flex: 1;
+      min-width: 120px;
+      text-align: center;
+      font-size: 13px;
+    }
+
+    .data-table {
+      font-size: 12px;
+    }
+    .data-table th, .data-table td {
+      padding: 8px 6px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .billing-summary {
+      grid-template-columns: 1fr;
     }
   }
 
@@ -488,13 +587,16 @@
 <!-- Profile Header -->
 <div class="profile-header">
   <div class="profile-photo-wrapper">
-    <div class="profile-photo">
+    <div class="profile-photo" id="profilePhotoDisplay">
       {% if student.photo_filename %}
-        <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="Student Photo">
+        <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="Student Photo" id="profilePhotoImg">
       {% else %}
-        <div class="profile-photo-placeholder">👤</div>
+        <div class="profile-photo-placeholder" id="profilePhotoImg">👤</div>
       {% endif %}
     </div>
+    <button type="button" class="photo-upload-btn" onclick="openPhotoModal()">
+      📷 {% if student.photo_filename %}Change{% else %}Add Photo{% endif %}
+    </button>
   </div>
 
   <div class="profile-header-content">
@@ -510,6 +612,28 @@
         <span class="quick-info-label">Branch</span>
         <span class="quick-info-value">{{ student.branch_name or '-' }}</span>
       </div>
+      {% if student_batches %}
+      <div class="quick-info-item">
+        <span class="quick-info-label">Batches</span>
+        <span class="quick-info-value">
+          {% for b in student_batches %}
+          <div style="{% if not loop.first %}margin-top: 6px;{% endif %}">
+            <a href="{{ url_for('attendance.view_batch', batch_id=b.batch_id) }}"
+               style="color: #fff; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; opacity: 0.92;"
+               title="{{ b.course_name or '' }}">
+              {{ b.batch_name }}
+            </a>
+            {% if b.start_time %}
+            <span style="font-size: 11px; opacity: 0.75; margin-left: 6px;">{{ b.start_time }}–{{ b.end_time }}</span>
+            {% endif %}
+            {% if b.enroll_status != 'active' %}
+            <span style="font-size: 10px; background: rgba(255,255,255,0.2); border-radius: 10px; padding: 1px 7px; margin-left: 5px; opacity: 0.85;">{{ b.enroll_status | capitalize }}</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </span>
+      </div>
+      {% endif %}
       <div class="quick-info-item">
         <span class="quick-info-label">Joined Date</span>
         <span class="quick-info-value">{{ student.joined_date or '-' }}</span>
@@ -805,6 +929,155 @@
       }
     }
   });
+</script>
+
+<!-- ── Photo Upload Modal ─────────────────────────────────── -->
+<div id="photoModal" class="modal" onclick="if(event.target===this)closePhotoModal()">
+  <div class="modal-content" style="max-width:400px;">
+    <div class="modal-header">📷 Update Photo</div>
+    <div class="modal-body">
+      <!-- Preview box — click to pick file, or use camera button -->
+      <div id="photoPreviewBox" onclick="document.getElementById('photoFileInput').click()" title="Click to choose a photo">
+        <span class="preview-hint">Click here or use camera to select a photo</span>
+      </div>
+      <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="handlePhotoFile(this)">
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="document.getElementById('photoFileInput').click()">🖼 Choose File</button>
+        <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="openCamera()">📸 Camera</button>
+      </div>
+      <!-- Hidden camera stream -->
+      <video id="cameraVideo" style="display:none; width:100%; border-radius:8px;" autoplay playsinline></video>
+      <canvas id="cameraCanvas" style="display:none;"></canvas>
+      <button type="button" id="snapBtn" style="display:none; width:100%; margin-bottom:10px;" class="modal-btn primary" onclick="snapPhoto()">📷 Snap Photo</button>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="modal-btn secondary" onclick="closePhotoModal()">Cancel</button>
+      <button type="button" class="modal-btn primary" id="savePhotoBtn" onclick="savePhoto()" disabled>Save Photo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  let croppedDataUrl = null;
+  let cameraStream = null;
+
+  window.openPhotoModal = function() {
+    resetPhotoModal();
+    document.getElementById('photoModal').classList.add('show');
+  };
+  window.closePhotoModal = function() {
+    stopCamera();
+    document.getElementById('photoModal').classList.remove('show');
+  };
+
+  function resetPhotoModal() {
+    croppedDataUrl = null;
+    document.getElementById('savePhotoBtn').disabled = true;
+    const box = document.getElementById('photoPreviewBox');
+    box.innerHTML = '<span class="preview-hint">Click here or use camera to select a photo</span>';
+    document.getElementById('photoFileInput').value = '';
+    document.getElementById('cameraVideo').style.display = 'none';
+    document.getElementById('snapBtn').style.display = 'none';
+    stopCamera();
+  }
+
+  window.handlePhotoFile = function(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      showPreview(e.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  function showPreview(dataUrl) {
+    croppedDataUrl = dataUrl;
+    const box = document.getElementById('photoPreviewBox');
+    box.innerHTML = '<img src="' + dataUrl + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">';
+    document.getElementById('savePhotoBtn').disabled = false;
+    // Hide camera if open
+    document.getElementById('cameraVideo').style.display = 'none';
+    document.getElementById('snapBtn').style.display = 'none';
+    stopCamera();
+  }
+
+  window.openCamera = function() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Camera not supported on this device/browser.');
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+      .then(function(stream) {
+        cameraStream = stream;
+        const video = document.getElementById('cameraVideo');
+        video.srcObject = stream;
+        video.style.display = 'block';
+        document.getElementById('snapBtn').style.display = 'block';
+      })
+      .catch(function(err) {
+        alert('Could not access camera: ' + err.message);
+      });
+  };
+
+  window.snapPhoto = function() {
+    const video = document.getElementById('cameraVideo');
+    const canvas = document.getElementById('cameraCanvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    showPreview(dataUrl);
+    stopCamera();
+  };
+
+  function stopCamera() {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    const video = document.getElementById('cameraVideo');
+    if (video) { video.srcObject = null; video.style.display = 'none'; }
+    const snapBtn = document.getElementById('snapBtn');
+    if (snapBtn) snapBtn.style.display = 'none';
+  }
+
+  window.savePhoto = function() {
+    if (!croppedDataUrl) return;
+    const btn = document.getElementById('savePhotoBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const formData = new FormData();
+    formData.append('photo_data', croppedDataUrl);
+
+    fetch('{{ url_for("billing.student_upload_photo", student_id=student.id) }}', {
+      method: 'POST',
+      body: formData
+    })
+    .then(r => r.json())
+    .then(function(data) {
+      if (data.success) {
+        // Update photo on page live
+        const display = document.getElementById('profilePhotoDisplay');
+        display.innerHTML = '<img src="/static/images/student_photos/' + data.photo_filename + '?t=' + Date.now() + '" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;">';
+        // Update button label
+        document.querySelector('.photo-upload-btn').innerHTML = '📷 Change';
+        closePhotoModal();
+      } else {
+        alert('Error saving photo: ' + (data.error || 'Unknown error'));
+        btn.disabled = false;
+        btn.textContent = 'Save Photo';
+      }
+    })
+    .catch(function(err) {
+      alert('Network error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = 'Save Photo';
+    });
+  };
+})();
 </script>
 
 {% endblock %}

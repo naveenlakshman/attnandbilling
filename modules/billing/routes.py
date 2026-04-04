@@ -953,6 +953,45 @@ def student_edit(student_id):
         qualification_levels=QUALIFICATION_LEVELS
     )
 
+@billing_bp.route("/student/<int:student_id>/upload-photo", methods=["POST"])
+@login_required
+def student_upload_photo(student_id):
+    """Quick photo upload from student profile page."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, student_code, full_name FROM students WHERE id = ?", (student_id,))
+    student = cur.fetchone()
+    if not student:
+        conn.close()
+        return jsonify({"success": False, "error": "Student not found"}), 404
+
+    photo_data = request.form.get("photo_data", "").strip()
+    if not photo_data:
+        conn.close()
+        return jsonify({"success": False, "error": "No photo data received"}), 400
+
+    try:
+        photo_filename = save_student_photo(photo_data, student["student_code"])
+        now = datetime.now().isoformat(timespec="seconds")
+        cur.execute(
+            "UPDATE students SET photo_filename = ?, updated_at = ? WHERE id = ?",
+            (photo_filename, now, student_id)
+        )
+        conn.commit()
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=None,
+            action_type="update",
+            module_name="students",
+            record_id=student_id,
+            description=f"Updated photo for student {student['full_name']} ({student['student_code']})"
+        )
+        conn.close()
+        return jsonify({"success": True, "photo_filename": photo_filename})
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @billing_bp.route("/student/<int:student_id>")
 @login_required
 def student_profile(student_id):
@@ -1047,6 +1086,18 @@ def student_profile(student_id):
     total_paid = float(payment_summary["total_paid"] or 0)
     total_balance = total_billed - total_paid
 
+    # Fetch batches this student is enrolled in
+    cur.execute("""
+        SELECT b.id AS batch_id, b.batch_name, b.start_time, b.end_time,
+               b.status AS batch_status, c.course_name, sb.status AS enroll_status
+        FROM student_batches sb
+        JOIN batches b ON sb.batch_id = b.id
+        LEFT JOIN courses c ON b.course_id = c.id
+        WHERE sb.student_id = ?
+        ORDER BY sb.status ASC, b.batch_name ASC
+    """, (student_id,))
+    student_batches = cur.fetchall()
+
     conn.close()
 
     return render_template(
@@ -1058,7 +1109,8 @@ def student_profile(student_id):
         total_invoices=total_invoices,
         total_billed=total_billed,
         total_paid=total_paid,
-        total_balance=total_balance
+        total_balance=total_balance,
+        student_batches=student_batches
     )
 
 @billing_bp.route("/students/export-csv")
