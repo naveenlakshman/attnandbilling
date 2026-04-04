@@ -721,7 +721,7 @@
             <select name="student_id" id="student_id" required>
               <option value="">-- Select Student --</option>
               {% for s in students %}
-              <option value="{{ s.id }}" {% if mode == "edit" and invoice.student_id == s.id %}selected{% endif %}>
+              <option value="{{ s.id }}" {% if (mode == 'edit' and invoice.student_id == s.id) or (mode == 'create' and prefill_student_id and prefill_student_id == s.id) %}selected{% endif %}>
                 {{ s.student_code }} - {{ s.full_name }}
               </option>
               {% endfor %}
@@ -879,7 +879,7 @@
   // Initialize TomSelect for student dropdown
   function initStudentSelect() {
     if (!document.getElementById("student_id").tomselect) {
-      new TomSelect("#student_id", {
+      const ts = new TomSelect("#student_id", {
         create: false,
         placeholder: "Search student by name or code",
         searchField: ["text"],
@@ -887,6 +887,9 @@
           calculateInvoiceTotals();
         }
       });
+      {% if mode == 'create' and prefill_student_id %}
+      ts.setValue("{{ prefill_student_id }}");
+      {% endif %}
     }
   }
 

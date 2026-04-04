@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from db import get_conn, log_activity
 from functools import wraps
 
@@ -28,8 +28,9 @@ def dashboard():
         cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
         
-        # Get today's date in YYYY-MM-DD format
-        today = datetime.now().strftime("%Y-%m-%d")
+        # Get today's date in YYYY-MM-DD format (IST, UTC+5:30)
+        IST = timezone(timedelta(hours=5, minutes=30))
+        today = datetime.now(IST).strftime("%Y-%m-%d")
         
         # Get selected branch from query parameter
         selected_branch_id = request.args.get('branch_id', '', type=int)
@@ -202,7 +203,8 @@ def dashboard():
             total_not_marked += not_marked
 
         # Sort: currently running batches first, then by start_time ASC
-        now_time = datetime.now().strftime("%H:%M")
+        # Uses IST time (already set above) so this works correctly on UTC servers (e.g. PythonAnywhere)
+        now_time = datetime.now(IST).strftime("%H:%M")
         batch_stats.sort(key=lambda bs: (
             0 if (bs['batch']['start_time'] and bs['batch']['end_time'] and
                   bs['batch']['start_time'] <= now_time < bs['batch']['end_time']) else 1,

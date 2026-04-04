@@ -479,6 +479,7 @@
 <div class="page-actions no-print">
   <a class="btn btn-secondary" href="{{ url_for('billing.students') }}">← Back to Students</a>
   <a class="btn btn-primary" href="{{ url_for('billing.student_edit', student_id=student.id) }}">✎ Edit Student</a>
+  <a class="btn btn-success" href="{{ url_for('billing.invoice_new', student_id=student.id) }}">🧾 New Invoice</a>
   {% if invoices %}
   <button class="btn btn-secondary" onclick="showAgreementModal()">📄 Generate Enrollment Agreement</button>
   {% endif %}

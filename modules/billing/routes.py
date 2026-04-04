@@ -2072,12 +2072,15 @@ def invoice_new():
     students_dict = [row_to_dict(student) for student in (students or [])]
     courses_dict = [row_to_dict(course) for course in (courses or [])]
 
+    prefill_student_id = request.args.get('student_id', '', type=int) or None
+
     return render_template(
         "billing/invoice_form_modern.html",
         students=students_dict,
         courses=courses_dict,
         today=today,
-        mode="create"
+        mode="create",
+        prefill_student_id=prefill_student_id
     )
 
 @billing_bp.route("/invoice/<int:invoice_id>/edit", methods=["GET", "POST"])
