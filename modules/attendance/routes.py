@@ -163,6 +163,23 @@ def dashboard():
             late = status_counts.get('late', 0)
             leave = status_counts.get('leave', 0)
             not_marked = total_students - marked_count
+
+            # Fetch students in this batch for client-side search
+            cur.execute("""
+                SELECT s.full_name, s.student_code, s.phone
+                FROM student_batches sb
+                JOIN students s ON sb.student_id = s.id
+                WHERE sb.batch_id = ? AND sb.status = 'active'
+            """, (batch_id,))
+            students_in_batch = []
+            for st in cur.fetchall():
+                students_in_batch.append(
+                    '|'.join(filter(None, [
+                        (st['full_name'] or '').lower(),
+                        (st['student_code'] or '').lower(),
+                        (st['phone'] or '').lower()
+                    ]))
+                )
             
             batch_stats.append({
                 'batch': batch,
@@ -173,7 +190,8 @@ def dashboard():
                 'absent': absent,
                 'late': late,
                 'leave': leave,
-                'percentage_marked': (marked_count / total_students * 100) if total_students > 0 else 0
+                'percentage_marked': (marked_count / total_students * 100) if total_students > 0 else 0,
+                'students_search': ' '.join(students_in_batch)
             })
             
             total_present += present

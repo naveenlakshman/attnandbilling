@@ -438,9 +438,18 @@
   {% endif %}
 
   <!-- Today's Batches Section -->
-  <div class="section-title">
-    📚 Today's Batches ({{ batch_stats|length }})
+  <div class="section-title" style="justify-content: space-between; flex-wrap: wrap;">
+    <span>📚 Today's Batches ({{ batch_stats|length }})</span>
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weight: 400;">
+      <span style="font-size: 1rem;">🔍</span>
+      <input type="text" id="student-search" placeholder="Search by name / student code / mobile…"
+             style="padding: 6px 12px; border: 1px solid #ced4da; border-radius: 6px; font-size: 0.88rem; min-width: 260px; outline: none;"
+             oninput="filterBatchesByStudent(this.value)">
+      <button type="button" onclick="document.getElementById('student-search').value=''; filterBatchesByStudent('');" 
+              style="background: none; border: none; color: #6c757d; cursor: pointer; font-size: 1rem; padding: 0 4px;" title="Clear">✕</button>
+    </div>
   </div>
+  <div id="no-match-msg" style="display:none; color:#dc3545; font-size:0.9rem; margin-bottom:10px;">No batches found with that student.</div>
 
   {% if batch_stats|length > 0 %}
   <div class="batch-table-wrap">
@@ -462,7 +471,8 @@
       </thead>
       <tbody>
         {% for batch_stat in batch_stats %}
-        <tr data-start="{{ batch_stat.batch.start_time or '' }}" data-end="{{ batch_stat.batch.end_time or '' }}">
+        <tr data-start="{{ batch_stat.batch.start_time or '' }}" data-end="{{ batch_stat.batch.end_time or '' }}"
+            data-students="{{ batch_stat.students_search | lower }}">
           <td>
             <span class="fw-semibold">{{ batch_stat.batch.batch_name }}</span>
             <span class="live-badge-dash d-none">● LIVE</span>
@@ -600,5 +610,21 @@ function highlightRunningDash() {
 }
 highlightRunningDash();
 setInterval(highlightRunningDash, 60000);
+
+function filterBatchesByStudent(query) {
+  const q = query.trim().toLowerCase();
+  const rows = document.querySelectorAll('.batch-table tbody tr[data-students]');
+  let visibleCount = 0;
+  rows.forEach(function(row) {
+    const students = row.getAttribute('data-students') || '';
+    const match = !q || students.indexOf(q) !== -1;
+    row.style.display = match ? '' : 'none';
+    if (match) visibleCount++;
+  });
+  const noMsg = document.getElementById('no-match-msg');
+  noMsg.style.display = (q && visibleCount === 0) ? '' : 'none';
+  // Re-run live highlight after filter
+  highlightRunningDash();
+}
 </script>
 {% endblock %}
