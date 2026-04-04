@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, session, redirect, url_for, flash, Response
+from flask import Blueprint, render_template, request, session, redirect, url_for, flash, Response, jsonify
 from datetime import date, datetime, timedelta
 import calendar
 import uuid
@@ -991,6 +991,84 @@ def student_upload_photo(student_id):
     except Exception as e:
         conn.close()
         return jsonify({"success": False, "error": str(e)}), 500
+
+@billing_bp.route("/student/<int:student_id>/batches-available")
+@login_required
+def student_batches_available(student_id):
+    """Return active batches not already enrolled by this student (JSON)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    # Get student's branch first
+    cur.execute("SELECT branch_id FROM students WHERE id = ?", (student_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"batches": []})
+    branch_id = row["branch_id"]
+    cur.execute("""
+        SELECT b.id, b.batch_name, b.start_time, b.end_time,
+               c.course_name, br.branch_name
+        FROM batches b
+        LEFT JOIN courses c ON b.course_id = c.id
+        LEFT JOIN branches br ON b.branch_id = br.id
+        WHERE b.status = 'active'
+          AND b.branch_id = ?
+          AND b.id NOT IN (
+              SELECT batch_id FROM student_batches
+              WHERE student_id = ? AND status = 'active'
+          )
+        ORDER BY b.batch_name
+    """, (branch_id, student_id))
+    batches = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return jsonify({"batches": batches})
+
+@billing_bp.route("/student/<int:student_id>/add-to-batch", methods=["POST"])
+@login_required
+def student_add_to_batch(student_id):
+    """Enroll student in a batch."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, full_name, student_code FROM students WHERE id = ?", (student_id,))
+    student = cur.fetchone()
+    if not student:
+        conn.close()
+        return jsonify({"success": False, "error": "Student not found"}), 404
+
+    batch_id = request.form.get("batch_id", type=int)
+    if not batch_id:
+        conn.close()
+        return jsonify({"success": False, "error": "No batch selected"}), 400
+
+    cur.execute("SELECT id, batch_name, branch_id FROM batches WHERE id = ? AND status = 'active'", (batch_id,))
+    batch = cur.fetchone()
+    if not batch:
+        conn.close()
+        return jsonify({"success": False, "error": "Batch not found or inactive"}), 404
+
+    # Check for duplicate active enrollment
+    cur.execute("SELECT id FROM student_batches WHERE student_id = ? AND batch_id = ? AND status = 'active'",
+                (student_id, batch_id))
+    if cur.fetchone():
+        conn.close()
+        return jsonify({"success": False, "error": "Student is already enrolled in this batch"}), 409
+
+    now = datetime.now().isoformat(timespec="seconds")
+    cur.execute("""
+        INSERT INTO student_batches (student_id, batch_id, joined_on, status, created_at, updated_at)
+        VALUES (?, ?, ?, 'active', ?, ?)
+    """, (student_id, batch_id, now.split("T")[0], now, now))
+    conn.commit()
+    log_activity(
+        user_id=session["user_id"],
+        branch_id=batch["branch_id"],
+        action_type="create",
+        module_name="attendance",
+        record_id=batch_id,
+        description=f"Enrolled student {student['full_name']} ({student['student_code']}) in batch '{batch['batch_name']}'"
+    )
+    conn.close()
+    return jsonify({"success": True, "batch_name": batch["batch_name"]})
 
 @billing_bp.route("/student/<int:student_id>")
 @login_required

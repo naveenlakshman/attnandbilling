@@ -579,6 +579,7 @@
   <a class="btn btn-secondary" href="{{ url_for('billing.students') }}">← Back to Students</a>
   <a class="btn btn-primary" href="{{ url_for('billing.student_edit', student_id=student.id) }}">✎ Edit Student</a>
   <a class="btn btn-success" href="{{ url_for('billing.invoice_new', student_id=student.id) }}">🧾 New Invoice</a>
+  <button class="btn btn-info" onclick="openAddToBatchModal()">➕ Add to Batch</button>
   {% if invoices %}
   <button class="btn btn-secondary" onclick="showAgreementModal()">📄 Generate Enrollment Agreement</button>
   {% endif %}
@@ -929,6 +930,122 @@
       }
     }
   });
+</script>
+
+<!-- ── Add to Batch Modal ─────────────────────────────────── -->
+<div id="addToBatchModal" class="modal" onclick="if(event.target===this)closeAddToBatchModal()">
+  <div class="modal-content" style="max-width:480px;">
+    <div class="modal-header">➕ Add to Batch</div>
+    <div class="modal-body">
+      <div id="batchLoadMsg" style="text-align:center;padding:16px;color:#666;">Loading batches…</div>
+      <div id="batchSelectWrap" style="display:none;">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#374151;">Select Batch</label>
+        <select id="batchSelect" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none;">
+          <option value="">— Choose a batch —</option>
+        </select>
+        <div id="batchDetail" style="margin-top:10px;padding:10px 12px;background:#f3f4f6;border-radius:8px;font-size:13px;color:#374151;display:none;"></div>
+      </div>
+      <div id="batchEmptyMsg" style="display:none;text-align:center;padding:16px;color:#6b7280;">
+        No available batches. Student is already enrolled in all active batches.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="modal-btn secondary" onclick="closeAddToBatchModal()">Cancel</button>
+      <button type="button" class="modal-btn primary" id="saveAddToBatchBtn" onclick="saveAddToBatch()" disabled>Enroll</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var availableBatches = [];
+  var addToBatchUrl = "{{ url_for('billing.student_add_to_batch', student_id=student.id) }}";
+  var availableUrl  = "{{ url_for('billing.student_batches_available', student_id=student.id) }}";
+
+  window.openAddToBatchModal = function() {
+    document.getElementById('batchLoadMsg').style.display = 'block';
+    document.getElementById('batchSelectWrap').style.display = 'none';
+    document.getElementById('batchEmptyMsg').style.display = 'none';
+    document.getElementById('batchDetail').style.display = 'none';
+    document.getElementById('saveAddToBatchBtn').disabled = true;
+    document.getElementById('addToBatchModal').classList.add('show');
+
+    fetch(availableUrl)
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        availableBatches = data.batches || [];
+        document.getElementById('batchLoadMsg').style.display = 'none';
+        var sel = document.getElementById('batchSelect');
+        sel.innerHTML = '<option value="">— Choose a batch —</option>';
+        if (availableBatches.length === 0) {
+          document.getElementById('batchEmptyMsg').style.display = 'block';
+        } else {
+          availableBatches.forEach(function(b){
+            var opt = document.createElement('option');
+            opt.value = b.id;
+            var time = (b.start_time && b.end_time) ? ' · ' + b.start_time + '–' + b.end_time : '';
+            opt.textContent = b.batch_name + time + (b.branch_name ? ' [' + b.branch_name + ']' : '');
+            sel.appendChild(opt);
+          });
+          document.getElementById('batchSelectWrap').style.display = 'block';
+        }
+      })
+      .catch(function(){ 
+        document.getElementById('batchLoadMsg').textContent = 'Failed to load batches.';
+      });
+  };
+
+  window.closeAddToBatchModal = function() {
+    document.getElementById('addToBatchModal').classList.remove('show');
+  };
+
+  document.getElementById('batchSelect').addEventListener('change', function(){
+    var id = parseInt(this.value);
+    var btn = document.getElementById('saveAddToBatchBtn');
+    var detail = document.getElementById('batchDetail');
+    if (!id) { btn.disabled = true; detail.style.display = 'none'; return; }
+    btn.disabled = false;
+    var b = availableBatches.find(function(x){ return x.id === id; });
+    if (b) {
+      detail.style.display = 'block';
+      detail.innerHTML =
+        '<strong>' + b.batch_name + '</strong>' +
+        (b.course_name ? '<br>Course: ' + b.course_name : '') +
+        (b.start_time && b.end_time ? '<br>Time: ' + b.start_time + ' – ' + b.end_time : '') +
+        (b.branch_name ? '<br>Branch: ' + b.branch_name : '');
+    }
+  });
+
+  window.saveAddToBatch = function() {
+    var batchId = document.getElementById('batchSelect').value;
+    if (!batchId) return;
+    var btn = document.getElementById('saveAddToBatchBtn');
+    btn.disabled = true;
+    btn.textContent = 'Enrolling…';
+
+    var formData = new FormData();
+    formData.append('batch_id', batchId);
+
+    fetch(addToBatchUrl, { method: 'POST', body: formData })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (data.success) {
+          closeAddToBatchModal();
+          // Reload page to show new batch in profile
+          window.location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Enrollment failed'));
+          btn.disabled = false;
+          btn.textContent = 'Enroll';
+        }
+      })
+      .catch(function(err){
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Enroll';
+      });
+  };
+})();
 </script>
 
 <!-- ── Photo Upload Modal ─────────────────────────────────── -->
