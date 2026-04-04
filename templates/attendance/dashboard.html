@@ -202,10 +202,11 @@
     background: #fff;
     border-radius: 12px;
     border: 1px solid #dee2e6;
-    overflow: hidden;
+    overflow-x: auto;
     overflow-y: auto;
     max-height: 520px;
     margin-bottom: 16px;
+    -webkit-overflow-scrolling: touch;
   }
 
   .batch-table {
@@ -277,9 +278,9 @@
     border-radius: 3px;
   }
 
-  @media (max-width: 576px) {
+  @media (max-width: 767px) {
     .stat-value {
-      font-size: 2rem;
+      font-size: 1.8rem;
     }
 
     .erp-content, .container-fluid {
@@ -294,6 +295,63 @@
     .completion-inner .progress-wrap {
       margin-left: 0 !important;
       margin-top: 12px;
+    }
+
+    /* Section title stacks vertically on mobile */
+    .section-title {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    /* Search box takes full width */
+    .batch-search-wrap {
+      width: 100%;
+    }
+
+    .batch-search-wrap input {
+      flex: 1;
+      min-width: 0 !important;
+      width: 100%;
+    }
+
+    /* Tighter table on mobile */
+    .batch-table {
+      font-size: 0.82rem;
+    }
+
+    .batch-table thead th,
+    .batch-table tbody td {
+      padding: 7px 8px;
+    }
+
+    /* Allow actions to wrap on small screens */
+    .batch-actions-td {
+      white-space: normal !important;
+    }
+
+    .batch-actions-td .btn {
+      font-size: 0.78rem;
+      padding: 4px 7px;
+    }
+
+    /* Stat cards: branch name truncation */
+    .stat-card .branch-name {
+      max-width: 100px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Quick link buttons: smaller text on mobile */
+    .quick-links-row .btn-lg {
+      font-size: 0.85rem;
+      padding: 8px 6px;
+    }
+
+    /* Header: Manage Batches button smaller */
+    h1.mb-1 {
+      font-size: 1.6rem;
     }
   }
 </style>
@@ -343,9 +401,9 @@
         <div class="stat-card present" style="padding: 16px;">
           <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Present</div>
           {% for branch_id, stats in branch_stats.items() %}
-          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between;">
-            <span style="color: #666;">{{ stats.branch_name }}</span>
-            <strong style="color: #198754;">{{ stats.total_present }}</strong>
+          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between; gap: 6px;">
+            <span class="branch-name" style="color: #666;">{{ stats.branch_name }}</span>
+            <strong style="color: #198754; flex-shrink: 0;">{{ stats.total_present }}</strong>
           </div>
           {% endfor %}
         </div>
@@ -354,9 +412,9 @@
         <div class="stat-card absent" style="padding: 16px;">
           <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Absent</div>
           {% for branch_id, stats in branch_stats.items() %}
-          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between;">
-            <span style="color: #666;">{{ stats.branch_name }}</span>
-            <strong style="color: #dc3545;">{{ stats.total_absent }}</strong>
+          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between; gap: 6px;">
+            <span class="branch-name" style="color: #666;">{{ stats.branch_name }}</span>
+            <strong style="color: #dc3545; flex-shrink: 0;">{{ stats.total_absent }}</strong>
           </div>
           {% endfor %}
         </div>
@@ -365,9 +423,9 @@
         <div class="stat-card late" style="padding: 16px;">
           <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Late</div>
           {% for branch_id, stats in branch_stats.items() %}
-          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between;">
-            <span style="color: #666;">{{ stats.branch_name }}</span>
-            <strong style="color: #ffc107;">{{ stats.total_late }}</strong>
+          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between; gap: 6px;">
+            <span class="branch-name" style="color: #666;">{{ stats.branch_name }}</span>
+            <strong style="color: #ffc107; flex-shrink: 0;">{{ stats.total_late }}</strong>
           </div>
           {% endfor %}
         </div>
@@ -376,9 +434,9 @@
         <div class="stat-card leave" style="padding: 16px;">
           <div class="stat-label" style="font-size: 0.9rem; margin-bottom: 8px; font-weight: 600;">Leave</div>
           {% for branch_id, stats in branch_stats.items() %}
-          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between;">
-            <span style="color: #666;">{{ stats.branch_name }}</span>
-            <strong style="color: #0dcaf0;">{{ stats.total_leave }}</strong>
+          <div style="font-size: 0.85rem; margin: 4px 0; display: flex; justify-content: space-between; gap: 6px;">
+            <span class="branch-name" style="color: #666;">{{ stats.branch_name }}</span>
+            <strong style="color: #0dcaf0; flex-shrink: 0;">{{ stats.total_leave }}</strong>
           </div>
           {% endfor %}
         </div>
@@ -440,7 +498,7 @@
   <!-- Today's Batches Section -->
   <div class="section-title" style="justify-content: space-between; flex-wrap: wrap;">
     <span>📚 Today's Batches ({{ batch_stats|length }})</span>
-    <div style="display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weight: 400;">
+    <div class="batch-search-wrap" style="display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weight: 400;">
       <span style="font-size: 1rem;">🔍</span>
       <input type="text" id="student-search" placeholder="Search by name / student code / mobile…"
              style="padding: 6px 12px; border: 1px solid #ced4da; border-radius: 6px; font-size: 0.88rem; min-width: 260px; outline: none;"
@@ -458,14 +516,14 @@
         <tr>
           <th>Batch</th>
           <th>Time</th>
-          <th>Trainer</th>
-          <th>Branch</th>
-          <th class="text-center">Total</th>
-          <th class="text-center">Marked</th>
+          <th class="d-none d-md-table-cell">Trainer</th>
+          <th class="d-none d-md-table-cell">Branch</th>
+          <th class="text-center d-none d-md-table-cell">Total</th>
+          <th class="text-center d-none d-md-table-cell">Marked</th>
           <th class="text-center">Pending</th>
           <th class="text-center">Present</th>
           <th class="text-center">Absent</th>
-          <th>Progress</th>
+          <th class="d-none d-md-table-cell">Progress</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -485,20 +543,20 @@
             <span class="badge" style="background:#e8eaf6;color:#3949ab;font-size:0.85rem;">{{ batch_stat.batch.start_time }} – {{ batch_stat.batch.end_time }}</span>
             {% else %}—{% endif %}
           </td>
-          <td>{{ batch_stat.batch.trainer_name or '—' }}</td>
-          <td style="font-size:0.85rem;">{{ batch_stat.batch.branch_name }}</td>
-          <td class="text-center"><span class="stat-pill" style="background:#f8f9fa;color:#212529;">{{ batch_stat.total_students }}</span></td>
-          <td class="text-center"><span class="stat-pill" style="background:#d1ecf1;color:#0c5460;">{{ batch_stat.marked_count }}</span></td>
+          <td class="d-none d-md-table-cell">{{ batch_stat.batch.trainer_name or '—' }}</td>
+          <td class="d-none d-md-table-cell" style="font-size:0.85rem;">{{ batch_stat.batch.branch_name }}</td>
+          <td class="text-center d-none d-md-table-cell"><span class="stat-pill" style="background:#f8f9fa;color:#212529;">{{ batch_stat.total_students }}</span></td>
+          <td class="text-center d-none d-md-table-cell"><span class="stat-pill" style="background:#d1ecf1;color:#0c5460;">{{ batch_stat.marked_count }}</span></td>
           <td class="text-center"><span class="stat-pill" style="background:#f8d7da;color:#721c24;">{{ batch_stat.not_marked }}</span></td>
           <td class="text-center"><span class="stat-pill" style="background:#d4edda;color:#155724;">{{ batch_stat.present }}</span></td>
           <td class="text-center"><span class="stat-pill" style="background:#f8d7da;color:#721c24;">{{ batch_stat.absent }}</span></td>
-          <td>
+          <td class="d-none d-md-table-cell">
             <div class="prog-mini">
               <div class="prog-mini-bar" style="width:{{ batch_stat.percentage_marked }}%;"></div>
             </div>
             <div style="font-size:0.78rem;color:#6c757d;margin-top:2px;">{{ "%.0f"|format(batch_stat.percentage_marked) }}%</div>
           </td>
-          <td style="white-space:nowrap;">
+          <td class="batch-actions-td" style="white-space:nowrap;">
             <a href="{{ url_for('attendance.mark_attendance', branch_id=batch_stat.batch.branch_id, batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-primary mb-1">✏️ Mark</a>
             <a href="{{ url_for('attendance.view_batch', batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-outline-secondary mb-1">👁️ Details</a>
           </td>
@@ -554,7 +612,7 @@
     🔗 Quick Links
   </div>
 
-  <div class="row g-2" style="margin-bottom: 40px;">
+  <div class="row g-2 quick-links-row" style="margin-bottom: 40px;">
     <div class="col-6 col-md-2">
       <a href="{{ url_for('attendance.mark_attendance') }}" class="btn btn-outline-primary btn-lg w-100">
         ✏️ Mark Attendance

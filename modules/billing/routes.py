@@ -660,6 +660,28 @@ def students():
     cur.execute(query, params)
     students = cur.fetchall()
 
+    # Build batch lookup for all returned students (single query, no N+1)
+    student_batches_map = {}
+    if students:
+        student_ids = [s['id'] for s in students]
+        placeholders = ','.join('?' * len(student_ids))
+        cur.execute(f"""
+            SELECT sb.student_id, b.id AS batch_id, b.batch_name
+            FROM student_batches sb
+            JOIN batches b ON sb.batch_id = b.id
+            WHERE sb.student_id IN ({placeholders})
+            AND sb.status = 'active'
+            ORDER BY sb.student_id, b.batch_name
+        """, student_ids)
+        for row in cur.fetchall():
+            sid = row['student_id']
+            if sid not in student_batches_map:
+                student_batches_map[sid] = []
+            student_batches_map[sid].append({
+                'batch_id': row['batch_id'],
+                'batch_name': row['batch_name']
+            })
+
     # Branches for filter dropdown
     cur.execute("""
         SELECT id, branch_name, branch_code
@@ -679,7 +701,8 @@ def students():
         branch_filter=branch_filter,
         status_filter=status_filter,
         stats=stats,
-        branch_stats=branch_stats
+        branch_stats=branch_stats,
+        student_batches_map=student_batches_map
     )
 
 @billing_bp.route("/student/new", methods=["GET", "POST"])
