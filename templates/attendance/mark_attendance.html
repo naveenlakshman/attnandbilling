@@ -644,10 +644,10 @@
             {% set dues = payment_dues.get(student.student_id, {}) %}
             <tr class="{% if dues.get('past_due', 0) > 0 %}row-overdue{% elif dues.get('upcoming_amount', 0) > 0 %}row-upcoming{% endif %}">
               <td>
-                <span class="student-code">{{ student.student_code }}</span>
+                <a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration: none; color: #0d6efd; font-size: 0.9rem;" target="_blank">{{ student.student_code }}</a>
               </td>
               <td>
-                <span class="student-name">{{ student.full_name }}</span>
+                <a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration: none; color: inherit;" target="_blank"><span class="student-name">{{ student.full_name }}</span></a>
                 <div style="font-size: 0.85rem; color: #6c757d;">{{ student.phone }}</div>
                 {% if dues.get('past_due', 0) > 0 %}
                 {% set pd = dues.past_days %}
