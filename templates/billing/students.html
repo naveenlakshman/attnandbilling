@@ -184,18 +184,24 @@
   .status-completed { background: #dbeafe; color: #1e40af; }
   .status-dropped   { background: #fee2e2; color: #991b1b; }
 
+  /* ── Mobile sub-text (reg no inside name on mobile) ── */
+  .mobile-sub { display: none; }
+
   /* ── Mobile ── */
   @media (max-width: 767px) {
     .students-page-header h2 { font-size: 20px; }
     .header-actions .btn { font-size: 12px; padding: 8px 10px; }
+    .search-filter-section { padding: 14px; }
     .search-filter-form {
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      grid-template-columns: 1fr;
+      gap: 8px;
     }
-    .button-group .btn { flex: 1; text-align: center; }
+    .button-group { margin-top: 2px; }
+    .button-group .btn { width: 100%; text-align: center; }
     .billing-table th.hide-mobile,
     .billing-table td.hide-mobile { display: none; }
     .billing-table td, .billing-table th { padding: 8px 10px; font-size: 12px; }
+    .mobile-sub { display: block; font-size: 11px; color: #9ca3af; margin-top: 2px; font-weight: 400; }
   }
 </style>
 
@@ -293,7 +299,6 @@
       <div class="form-group-inline">
         <label for="search">Search</label>
         <input type="text" id="search" name="search" placeholder="Name, phone, email, reg no" value="{{ search_query }}">
-      
       </div>
 
       <div class="form-group-inline">
@@ -388,10 +393,10 @@
     <table width="100%" class="billing-table">
       <thead>
         <tr>
-          <th style="width: 42px;">#</th>
-          <th class="sortable" data-sort-key="regno" style="width: 90px;">Reg. No <span class="sort-icon">⇅</span></th>
+          <th class="hide-mobile" style="width: 42px;">#</th>
+          <th class="sortable hide-mobile" data-sort-key="regno" style="width: 90px;">Reg. No <span class="sort-icon">⇅</span></th>
           <th class="sortable" data-sort-key="name" style="width: 150px;">Name <span class="sort-icon">⇅</span></th>
-          <th class="sortable" data-sort-key="phone" style="width: 120px;">Phone <span class="sort-icon">⇅</span></th>
+          <th class="sortable hide-mobile" data-sort-key="phone" style="width: 120px;">Phone <span class="sort-icon">⇅</span></th>
           <th class="sortable hide-mobile" data-sort-key="gender" style="width: 70px;">Gender <span class="sort-icon">⇅</span></th>
           <th style="min-width: 140px;">Batches</th>
           <th class="sortable hide-mobile" data-sort-key="education" style="width: 110px;">Education <span class="sort-icon">⇅</span></th>
@@ -403,15 +408,16 @@
       <tbody>
         {% for s in students %}
         <tr>
-          <td style="text-align: center; color: #9ca3af; font-size: 12px;">{{ loop.index }}</td>
-          <td data-sort-key="regno" data-sort-value="{{ s.student_code or '' }}" style="font-weight: 600; color: #1a1f36; font-size: 12px;">{{ s.student_code or "—" }}</td>
+          <td class="hide-mobile" style="text-align: center; color: #9ca3af; font-size: 12px;">{{ loop.index }}</td>
+          <td data-sort-key="regno" data-sort-value="{{ s.student_code or '' }}" class="hide-mobile" style="font-weight: 600; color: #1a1f36; font-size: 12px;">{{ s.student_code or "—" }}</td>
           <td data-sort-key="name" data-sort-value="{{ s.full_name or '' }}">
             <a href="{{ url_for('billing.student_profile', student_id=s.id) }}"
                style="color: #2563eb; text-decoration: none; font-weight: 600;">
               {{ s.full_name }}
             </a>
+            <span class="mobile-sub">{{ s.student_code or '' }}</span>
           </td>
-          <td data-sort-key="phone" data-sort-value="{{ s.phone or '' }}">{{ s.phone or "—" }}</td>
+          <td data-sort-key="phone" data-sort-value="{{ s.phone or '' }}" class="hide-mobile">{{ s.phone or "—" }}</td>
           <td data-sort-key="gender" data-sort-value="{{ s.gender or '' }}" class="hide-mobile" style="text-align: center;">{{ s.gender or "—" }}</td>
           <td>
             {% set batches = student_batches_map.get(s.id, []) %}

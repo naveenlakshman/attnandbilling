@@ -14,16 +14,26 @@
 
     {% if session.get('role') == 'admin' %}
     <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card border-primary">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">📤 Quick Export</h5>
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">⚡ Quick Links</h5>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted mb-3">Export all database tables to a single Excel workbook with one click.</p>
-                    <a href="{{ url_for('import_export.export_all_tables') }}" class="btn btn-primary">
-                        <i class="fas fa-download"></i> Export All Tables
-                    </a>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="{{ url_for('leads.lead_create') }}" class="btn btn-outline-success">
+                            ➕ Add Lead
+                        </a>
+                        <a href="{{ url_for('billing.student_new') }}" class="btn btn-outline-primary">
+                            🎓 Add Student
+                        </a>
+                        <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-info">
+                            ✅ Mark Attendance
+                        </a>
+                        <a href="{{ url_for('billing.students') }}" class="btn btn-outline-secondary">
+                            👥 View Students
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
