@@ -1159,10 +1159,19 @@ def student_profile(student_id):
     """, (student_id,))
     installment_plans = cur.fetchall()
 
+    cur.execute("""
+        SELECT COALESCE(SUM(bw.amount_written_off), 0) AS total_written_off
+        FROM bad_debt_writeoffs bw
+        JOIN invoices i ON bw.invoice_id = i.id
+        WHERE i.student_id = ?
+    """, (student_id,))
+    writeoff_summary = cur.fetchone()
+
     total_invoices = int(invoice_summary["total_invoices"] or 0)
     total_billed = float(invoice_summary["total_billed"] or 0)
     total_paid = float(payment_summary["total_paid"] or 0)
-    total_balance = total_billed - total_paid
+    total_written_off_student = float(writeoff_summary["total_written_off"] or 0) if writeoff_summary else 0.0
+    total_balance = total_billed - total_paid - total_written_off_student
 
     # Fetch batches this student is enrolled in
     cur.execute("""
@@ -1629,11 +1638,28 @@ def invoice_view(invoice_id):
     writeoff_result = cur.fetchone()
     total_written_off = float(writeoff_result["total_written_off"] or 0) if writeoff_result else 0.0
 
-    # For written-off invoices, balance is zero (cannot receive further payments)
-    if invoice["status"] in ["write_off", "partially_written_off"]:
-        balance_amount = 0.0
+    # Compute effective status based on actual financials (guards against stale DB status)
+    invoice_total = float(invoice["total_amount"] or 0)
+    covered = round(total_paid + total_written_off, 2)
+    if covered >= round(invoice_total, 2):
+        if total_written_off > 0 and total_paid == 0:
+            effective_status = "write_off"
+        elif total_written_off > 0:
+            effective_status = "write_off"
+        else:
+            effective_status = "paid"
+    elif total_written_off > 0:
+        effective_status = "partially_written_off"
+    elif invoice["status"] in ["write_off", "partially_written_off"]:
+        effective_status = invoice["status"]
     else:
-        balance_amount = float(invoice["total_amount"] or 0) - total_paid - total_written_off
+        effective_status = invoice["status"]
+
+    # Balance is zero once fully covered by payments + write-offs
+    if covered >= round(invoice_total, 2) or effective_status in ["write_off", "partially_written_off"]:
+        balance_amount = max(0.0, invoice_total - total_paid - total_written_off)
+    else:
+        balance_amount = invoice_total - total_paid - total_written_off
 
     conn.close()
 
@@ -1645,7 +1671,8 @@ def invoice_view(invoice_id):
         payments=payments,
         total_paid=total_paid,
         balance_amount=balance_amount,
-        total_written_off=total_written_off
+        total_written_off=total_written_off,
+        effective_status=effective_status
     )
 
 @billing_bp.route("/invoice/<int:invoice_id>/print")
