@@ -1183,7 +1183,8 @@ def daily_report():
             'present': 0,
             'absent': 0,
             'late': 0,
-            'leave': 0
+            'leave': 0,
+            'total_unmarked': 0
         }
 
         if batch_id == 'all':
@@ -1215,6 +1216,20 @@ def daily_report():
                     summary_stats['late'] += 1
                 elif status == 'leave':
                     summary_stats['leave'] += 1
+
+            # Count total enrolled in active batches for this branch on this date
+            cur.execute("""
+                SELECT COUNT(DISTINCT sb.student_id) AS total_enrolled
+                FROM student_batches sb
+                JOIN batches b ON sb.batch_id = b.id
+                WHERE b.branch_id = ? AND b.status = 'active'
+                AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
+                AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
+                AND sb.status = 'active'
+            """, (branch_id, reported_date, reported_date))
+            enrolled_row = cur.fetchone()
+            total_enrolled = enrolled_row['total_enrolled'] if enrolled_row else 0
+            summary_stats['total_unmarked'] = max(0, total_enrolled - summary_stats['total_marked'])
 
         elif batch_id and str(batch_id).isdigit():
             batch_id = int(batch_id)
@@ -1260,6 +1275,16 @@ def daily_report():
                         summary_stats['late'] += 1
                     elif status == 'leave':
                         summary_stats['leave'] += 1
+
+                # Count enrolled students in this batch
+                cur.execute("""
+                    SELECT COUNT(*) AS total_enrolled
+                    FROM student_batches
+                    WHERE batch_id = ? AND status = 'active'
+                """, (batch_id,))
+                enrolled_row = cur.fetchone()
+                total_enrolled = enrolled_row['total_enrolled'] if enrolled_row else 0
+                summary_stats['total_unmarked'] = max(0, total_enrolled - summary_stats['total_marked'])
         
         return render_template('attendance/daily_report.html',
                              branches=branches, batches=batches,
