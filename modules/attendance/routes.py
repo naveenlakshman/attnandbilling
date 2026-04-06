@@ -1129,6 +1129,10 @@ def daily_report():
         reported_date = request.args.get('date') or datetime.now().strftime("%Y-%m-%d")
         branch_id = request.args.get('branch_id')
         batch_id = request.args.get('batch_id')
+
+        # Default batch_id to 'all' so report opens automatically on page load
+        if batch_id is None:
+            batch_id = 'all'
         
         # Get branches
         if user['can_view_all_branches']:
@@ -1181,8 +1185,38 @@ def daily_report():
             'late': 0,
             'leave': 0
         }
-        
-        if batch_id and batch_id.isdigit():
+
+        if batch_id == 'all':
+            # All batches for this branch on this date
+            batch_info = {'batch_name': 'All Batches', 'course_name': None, 'trainer_name': None}
+            cur.execute("""
+                SELECT ar.id, ar.attendance_date, ar.student_id, ar.status, ar.remarks,
+                       ar.marked_by, ar.created_at, ar.updated_at,
+                       s.student_code, s.full_name, s.phone,
+                       u.full_name as marked_by_name,
+                       b.batch_name
+                FROM attendance_records ar
+                JOIN students s ON ar.student_id = s.id
+                JOIN batches b ON ar.batch_id = b.id
+                LEFT JOIN users u ON ar.marked_by = u.id
+                WHERE b.branch_id = ? AND ar.attendance_date = ?
+                ORDER BY b.batch_name ASC, s.full_name ASC
+            """, (branch_id, reported_date))
+            attendance_records = cur.fetchall()
+
+            for record in attendance_records:
+                summary_stats['total_marked'] += 1
+                status = record['status']
+                if status == 'present':
+                    summary_stats['present'] += 1
+                elif status == 'absent':
+                    summary_stats['absent'] += 1
+                elif status == 'late':
+                    summary_stats['late'] += 1
+                elif status == 'leave':
+                    summary_stats['leave'] += 1
+
+        elif batch_id and str(batch_id).isdigit():
             batch_id = int(batch_id)
             
             # Get batch info
@@ -1202,9 +1236,11 @@ def daily_report():
                     SELECT ar.id, ar.attendance_date, ar.student_id, ar.status, ar.remarks,
                            ar.marked_by, ar.created_at, ar.updated_at,
                            s.student_code, s.full_name, s.phone,
-                           u.full_name as marked_by_name
+                           u.full_name as marked_by_name,
+                           b.batch_name
                     FROM attendance_records ar
                     JOIN students s ON ar.student_id = s.id
+                    JOIN batches b ON ar.batch_id = b.id
                     LEFT JOIN users u ON ar.marked_by = u.id
                     WHERE ar.batch_id = ? AND ar.attendance_date = ?
                     ORDER BY s.full_name ASC
