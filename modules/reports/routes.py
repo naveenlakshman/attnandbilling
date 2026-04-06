@@ -122,10 +122,12 @@ def daily_report():
 
     # ── 1. Today's Leads (global – no branch_id on leads table) ──
     cur.execute("""
-        SELECT id, name, phone, lead_source, stage, status, created_at
-        FROM leads
-        WHERE substr(created_at, 1, 10) = ? AND is_deleted = 0
-        ORDER BY created_at DESC
+        SELECT l.id, l.name, l.phone, l.lead_source, l.stage, l.status, l.created_at,
+               u.full_name AS owner_name
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE substr(l.created_at, 1, 10) = ? AND l.is_deleted = 0
+        ORDER BY l.created_at DESC
     """, (report_date,))
     new_leads = cur.fetchall()
 
@@ -282,10 +284,12 @@ def daily_report_download():
 
     # ── New Leads ─────────────────────────────────────────────────
     cur.execute("""
-        SELECT id, name, phone, lead_source, stage, status, created_at
-        FROM leads
-        WHERE substr(created_at, 1, 10) = ? AND is_deleted = 0
-        ORDER BY created_at DESC
+        SELECT l.id, l.name, l.phone, l.lead_source, l.stage, l.status, l.created_at,
+               u.full_name AS owner_name
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE substr(l.created_at, 1, 10) = ? AND l.is_deleted = 0
+        ORDER BY l.created_at DESC
     """, (report_date,))
     new_leads = cur.fetchall()
 
