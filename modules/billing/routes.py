@@ -657,7 +657,11 @@ def students():
         params.append(status_filter)
 
     # Batch filter
-    if batch_filter:
+    if batch_filter == 'none':
+        query += """ AND students.id NOT IN (
+            SELECT DISTINCT student_id FROM student_batches
+        )"""
+    elif batch_filter:
         query += """ AND students.id IN (
             SELECT student_id FROM student_batches WHERE batch_id = ?
         )"""

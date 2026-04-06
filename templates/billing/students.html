@@ -333,6 +333,7 @@
         <label for="batch">Batch</label>
         <select id="batch" name="batch">
           <option value="">All Batches</option>
+          <option value="none" {% if batch_filter == 'none' %}selected{% endif %}>— Not in any batch —</option>
           {% for bt in all_batches %}
             <option value="{{ bt.id }}" {% if batch_filter|string == bt.id|string %}selected{% endif %}>{{ bt.batch_name }}</option>
           {% endfor %}
@@ -377,7 +378,7 @@
 
         {% if batch_filter %}
           {% if search_query or branch_filter or status_filter %} • {% endif %}
-          Batch: <strong>{% for bt in all_batches %}{% if bt.id|string == batch_filter|string %}{{ bt.batch_name }}{% endif %}{% endfor %}</strong>
+          Batch: <strong>{% if batch_filter == 'none' %}Not in any batch{% else %}{% for bt in all_batches %}{% if bt.id|string == batch_filter|string %}{{ bt.batch_name }}{% endif %}{% endfor %}{% endif %}</strong>
         {% endif %}
       </div>
     {% endif %}
