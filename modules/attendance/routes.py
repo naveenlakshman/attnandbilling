@@ -1184,8 +1184,31 @@ def daily_report():
             'absent': 0,
             'late': 0,
             'leave': 0,
-            'total_unmarked': 0
+            'total_unmarked': 0,
+            'total_active_students': 0,
+            'not_in_any_batch': 0
         }
+
+        # Total active students in this branch (regardless of batch)
+        cur.execute("""
+            SELECT COUNT(*) AS cnt FROM students
+            WHERE branch_id = ? AND status = 'active'
+        """, (branch_id,))
+        row = cur.fetchone()
+        summary_stats['total_active_students'] = row['cnt'] if row else 0
+
+        # Students not enrolled in any active batch
+        cur.execute("""
+            SELECT COUNT(*) AS cnt FROM students s
+            WHERE s.branch_id = ? AND s.status = 'active'
+            AND s.id NOT IN (
+                SELECT DISTINCT sb.student_id FROM student_batches sb
+                JOIN batches b ON sb.batch_id = b.id
+                WHERE b.branch_id = ? AND b.status = 'active' AND sb.status = 'active'
+            )
+        """, (branch_id, branch_id))
+        row = cur.fetchone()
+        summary_stats['not_in_any_batch'] = row['cnt'] if row else 0
 
         if batch_id == 'all':
             # All batches for this branch on this date
