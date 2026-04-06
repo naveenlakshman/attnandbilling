@@ -45,7 +45,7 @@
   }
   .search-filter-form {
     display: grid;
-    grid-template-columns: 1fr 160px 160px auto;
+    grid-template-columns: 200px 130px 130px 160px auto;
     gap: 14px;
     align-items: flex-end;
     margin-bottom: 12px;
@@ -189,7 +189,7 @@
     .students-page-header h2 { font-size: 20px; }
     .header-actions .btn { font-size: 12px; padding: 8px 10px; }
     .search-filter-form {
-      grid-template-columns: 1fr;
+      grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
     .button-group .btn { flex: 1; text-align: center; }
@@ -293,7 +293,7 @@
       <div class="form-group-inline">
         <label for="search">Search</label>
         <input type="text" id="search" name="search" placeholder="Name, phone, email, reg no" value="{{ search_query }}">
-        <span class="search-hint">Name, phone, email, or reg number</span>
+      
       </div>
 
       <div class="form-group-inline">
@@ -324,13 +324,22 @@
         </select>
       </div>
 
+      <div class="form-group-inline">
+        <label for="batch">Batch</label>
+        <select id="batch" name="batch">
+          <option value="">All Batches</option>
+          {% for bt in all_batches %}
+            <option value="{{ bt.id }}" {% if batch_filter|string == bt.id|string %}selected{% endif %}>{{ bt.batch_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
       <div class="button-group">
-        <button type="submit" class="btn btn-primary" style="padding: 8px 12px;">Search</button>
         <a href="{{ url_for('billing.students') }}" class="btn" style="padding: 8px 12px; background-color: #6c757d; color: white;">Reset</a>
       </div>
     </div>
 
-    {% if search_query or branch_filter or status_filter %}
+    {% if search_query or branch_filter or status_filter or batch_filter %}
       <div class="filters-applied">
         <strong>Filters:</strong>
 
@@ -359,6 +368,11 @@
         {% if status_filter %}
           {% if search_query or branch_filter %} • {% endif %}
           Status: <strong>{{ status_filter | capitalize }}</strong>
+        {% endif %}
+
+        {% if batch_filter %}
+          {% if search_query or branch_filter or status_filter %} • {% endif %}
+          Batch: <strong>{% for bt in all_batches %}{% if bt.id|string == batch_filter|string %}{{ bt.batch_name }}{% endif %}{% endfor %}</strong>
         {% endif %}
       </div>
     {% endif %}
@@ -503,6 +517,26 @@ document.addEventListener('DOMContentLoaded', function () {
     header.appendChild(resizer);
   });
 });
+</script>
+
+<script>
+(function() {
+  const form = document.querySelector('.search-filter-section form');
+  // Dropdowns: submit instantly on change
+  ['branch', 'status', 'batch'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', function() { form.submit(); });
+  });
+  // Search text: debounce 500ms
+  const searchInput = document.getElementById('search');
+  if (searchInput) {
+    let timer;
+    searchInput.addEventListener('input', function() {
+      clearTimeout(timer);
+      timer = setTimeout(function() { form.submit(); }, 500);
+    });
+  }
+})();
 </script>
 
 {% endblock %}

@@ -589,6 +589,7 @@ def students():
     search_query = request.args.get("search", "").strip()
     branch_filter = request.args.get("branch", "").strip()
     status_filter = request.args.get("status", "").strip()
+    batch_filter = request.args.get("batch", "").strip()
 
     # Get student statistics
     cur.execute("""
@@ -655,6 +656,13 @@ def students():
         query += " AND students.status = ?"
         params.append(status_filter)
 
+    # Batch filter
+    if batch_filter:
+        query += """ AND students.id IN (
+            SELECT student_id FROM student_batches WHERE batch_id = ?
+        )"""
+        params.append(batch_filter)
+
     query += " ORDER BY students.id DESC"
 
     cur.execute(query, params)
@@ -691,15 +699,25 @@ def students():
     """)
     branches = cur.fetchall()
 
+    # All batches for filter dropdown
+    cur.execute("""
+        SELECT id, batch_name
+        FROM batches
+        ORDER BY batch_name
+    """)
+    all_batches = cur.fetchall()
+
     conn.close()
 
     return render_template(
         "billing/students.html",
         students=students,
         branches=branches,
+        all_batches=all_batches,
         search_query=search_query,
         branch_filter=branch_filter,
         status_filter=status_filter,
+        batch_filter=batch_filter,
         stats=stats,
         branch_stats=branch_stats,
         student_batches_map=student_batches_map
