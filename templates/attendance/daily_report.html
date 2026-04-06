@@ -309,6 +309,42 @@
       padding: 10px;
     }
   }
+
+  @media print {
+    /* Hide everything except the report card */
+    body * { visibility: hidden; }
+    .report-card, .report-card * { visibility: visible; }
+    .report-card {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      box-shadow: none;
+      border-radius: 0;
+      padding: 16px;
+    }
+
+    /* Hide interactive/nav elements inside report card */
+    .export-buttons { display: none !important; }
+
+    /* Clean table for print */
+    .attendance-table { font-size: 11px; }
+    .attendance-table th,
+    .attendance-table td { padding: 6px 8px; }
+
+    /* Keep status badge colors visible in print */
+    .status-badge { border: 1px solid #ccc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .summary-stats { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    /* Print-only title */
+    .print-title { display: block !important; margin-bottom: 12px; font-size: 13px; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+
+    /* Avoid page break inside a row */
+    .attendance-table tr { page-break-inside: avoid; }
+
+    /* Print header info */
+    .header-card { display: none !important; }
+    .filter-card { display: none !important; }
+  }
 </style>
 {% endblock %}
 
@@ -508,6 +544,12 @@
     <div class="export-buttons">
       <button class="btn-export" onclick="window.print()">🖨️ Print Report</button>
       <button class="btn-export" onclick="exportToCSV()">📥 Export to CSV</button>
+    </div>
+
+    <!-- Print-only header (hidden on screen) -->
+    <div class="print-title" style="display:none;">
+      <strong>Global IT Education – Daily Attendance Report</strong><br>
+      Date: {{ reported_date }} &nbsp;|&nbsp; {{ batch_info.batch_name }}
     </div>
   </div>
 
