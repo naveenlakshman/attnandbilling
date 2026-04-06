@@ -151,6 +151,15 @@
     <p>Export data from all database tables for analysis and reporting</p>
   </div>
 
+  <!-- Quick access to Daily Report -->
+  <div style="background: linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; border-radius:10px; padding:18px 22px; margin-bottom:22px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+    <div>
+      <div style="font-size:16px; font-weight:800;">📋 Daily Report</div>
+      <div style="font-size:13px; opacity:0.88; margin-top:3px;">Today's leads, followups, invoices, receipts &amp; attendance in one view</div>
+    </div>
+    <a href="{{ url_for('reports.daily_report') }}" class="btn" style="background:#fff; color:#4f46e5; font-weight:700; font-size:13px; padding:9px 20px;">View Daily Report →</a>
+  </div>
+
   <div class="export-info">
     <strong>💡 Tip:</strong> Click the "Export CSV" button on any card to download the data. Files are timestamped to prevent overwrites.
   </div>

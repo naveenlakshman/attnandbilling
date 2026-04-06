@@ -218,6 +218,11 @@
         📊 Reports
         </a>
 
+        <a class="nav-link {% if request.endpoint == 'reports.daily_report' %}active{% endif %}"
+        href="{{ url_for('reports.daily_report') }}">
+        📋 Daily Report
+        </a>
+
         <a class="nav-link {% if request.endpoint == 'reports.import_page' %}active{% endif %}"
         href="{{ url_for('reports.import_page') }}">
         📥 Import Data

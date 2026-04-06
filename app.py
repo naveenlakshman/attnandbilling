@@ -8,7 +8,7 @@ from modules.reports.routes import reports_bp
 from modules.import_export.routes import import_export_bp
 from modules.baddebt.routes import baddebt_bp
 from modules.attendance.routes import attendance_bp
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def format_datetime(value):
     """Jinja2 filter to format ISO datetime to user-friendly format"""
@@ -25,6 +25,20 @@ def format_datetime(value):
             return dt.strftime("%d-%b-%Y")  # 23-Mar-2026
     except (ValueError, AttributeError):
         return str(value)
+
+def to_ist_time(value):
+    """Jinja2 filter: convert a UTC datetime string to IST HH:MM (adds +5:30)"""
+    if not value:
+        return ""
+    try:
+        if 'T' in str(value):
+            dt = datetime.fromisoformat(str(value))
+        else:
+            dt = datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
+        ist = dt + timedelta(hours=5, minutes=30)
+        return ist.strftime("%I:%M %p")  # e.g. 12:23 PM
+    except (ValueError, AttributeError):
+        return str(value)[11:16]
 
 def create_app():
     app = Flask(__name__)
@@ -44,6 +58,7 @@ def create_app():
 
     # Register Jinja2 filters
     app.jinja_env.filters['format_datetime'] = format_datetime
+    app.jinja_env.filters['to_ist_time'] = to_ist_time
 
     return app
 
