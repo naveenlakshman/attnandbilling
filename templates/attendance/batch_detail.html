@@ -324,8 +324,8 @@
         <tbody>
           {% for student in students %}
           <tr>
-            <td><a href="{{ url_for('billing.student_profile', student_id=student.id) }}" style="text-decoration: none; color: #0d6efd; font-weight: bold;" target="_blank">{{ student.student_code }}</a></td>
-            <td><a href="{{ url_for('billing.student_profile', student_id=student.id) }}" style="text-decoration: none; color: inherit;" target="_blank">{{ student.full_name }}</a></td>
+            <td><a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration: none; color: #0d6efd; font-weight: bold;" target="_blank">{{ student.student_code }}</a></td>
+            <td><a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration: none; color: inherit;" target="_blank">{{ student.full_name }}</a></td>
             <td>{{ student.phone }}</td>
             <td>{{ student.joined_on }}</td>
             <td>
@@ -337,7 +337,7 @@
               </span>
             </td>
             <td>
-              <a href="{{ url_for('attendance.student_attendance_history', student_id=student.id) }}" class="btn btn-sm btn-outline-primary">View History</a>
+              <a href="{{ url_for('attendance.student_attendance_history', student_id=student.student_id) }}" class="btn btn-sm btn-outline-primary">View History</a>
             </td>
           </tr>
           {% endfor %}

@@ -1180,6 +1180,7 @@
         cropBoxResizable: true,
         toggleDragModeOnDblclick: true,
       });
+      document.getElementById('savePhotoBtn').disabled = false;
     }, 100);
   }
 
@@ -1248,6 +1249,17 @@
   }
 
   window.savePhoto = function() {
+    // If user hasn't clicked "Crop & Use", auto-crop from the cropper
+    if (!croppedDataUrl && photoCropper) {
+      const canvas = photoCropper.getCroppedCanvas({
+        maxWidth: 800,
+        maxHeight: 800,
+        fillColor: '#fff',
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high',
+      });
+      croppedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    }
     if (!croppedDataUrl) return;
     const btn = document.getElementById('savePhotoBtn');
     btn.disabled = true;

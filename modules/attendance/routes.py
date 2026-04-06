@@ -473,7 +473,7 @@ def view_batch(batch_id):
         
         # Get students in batch
         cur.execute("""
-            SELECT sb.id, s.student_code, s.full_name, s.phone, sb.joined_on, 
+            SELECT sb.id, s.id AS student_id, s.student_code, s.full_name, s.phone, sb.joined_on, 
                    sb.status, sb.created_at
             FROM student_batches sb
             JOIN students s ON sb.student_id = s.id
