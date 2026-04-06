@@ -1048,24 +1048,61 @@
 })();
 </script>
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+<style>
+  #photoCropWrapper {
+    background: #fff;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    overflow: auto;
+    max-height: 400px;
+    margin-bottom: 10px;
+  }
+  #photoCropWrapper img {
+    max-width: 100%;
+    display: block;
+  }
+</style>
+
 <!-- ── Photo Upload Modal ─────────────────────────────────── -->
 <div id="photoModal" class="modal" onclick="if(event.target===this)closePhotoModal()">
-  <div class="modal-content" style="max-width:400px;">
+  <div class="modal-content" style="max-width:520px;">
     <div class="modal-header">📷 Update Photo</div>
     <div class="modal-body">
-      <!-- Preview box — click to pick file, or use camera button -->
-      <div id="photoPreviewBox" onclick="document.getElementById('photoFileInput').click()" title="Click to choose a photo">
-        <span class="preview-hint">Click here or use camera to select a photo</span>
+      <!-- Step 1: Select source -->
+      <div id="photoStep1">
+        <div id="photoPreviewBox" onclick="document.getElementById('photoFileInput').click()" title="Click to choose a photo">
+          <span class="preview-hint">Click here or use camera to select a photo</span>
+        </div>
+        <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="handlePhotoFile(this)">
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="document.getElementById('photoFileInput').click()">🖼 Choose File</button>
+          <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="openCamera()">📸 Camera</button>
+        </div>
+        <!-- Hidden camera stream -->
+        <video id="cameraVideo" style="display:none; width:100%; border-radius:8px;" autoplay playsinline></video>
+        <canvas id="cameraCanvas" style="display:none;"></canvas>
+        <button type="button" id="snapBtn" style="display:none; width:100%; margin-bottom:10px;" class="modal-btn primary" onclick="snapPhoto()">📷 Snap Photo</button>
       </div>
-      <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="handlePhotoFile(this)">
-      <div style="display:flex; gap:8px; margin-bottom:12px;">
-        <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="document.getElementById('photoFileInput').click()">🖼 Choose File</button>
-        <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="openCamera()">📸 Camera</button>
+
+      <!-- Step 2: Crop -->
+      <div id="photoStep2" style="display:none;">
+        <div id="photoCropWrapper">
+          <img id="photoCropImage" src="" alt="Crop">
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:4px;">
+          <button type="button" class="modal-btn primary" style="flex:1;" onclick="applyCrop()">✂️ Crop & Use</button>
+          <button type="button" class="modal-btn secondary" style="flex:1;" onclick="backToStep1()">← Back</button>
+        </div>
       </div>
-      <!-- Hidden camera stream -->
-      <video id="cameraVideo" style="display:none; width:100%; border-radius:8px;" autoplay playsinline></video>
-      <canvas id="cameraCanvas" style="display:none;"></canvas>
-      <button type="button" id="snapBtn" style="display:none; width:100%; margin-bottom:10px;" class="modal-btn primary" onclick="snapPhoto()">📷 Snap Photo</button>
+
+      <!-- Step 3: Preview cropped result -->
+      <div id="photoStep3" style="display:none; text-align:center;">
+        <img id="photoCroppedPreview" src="" alt="Cropped preview" style="max-width:100%; max-height:280px; border-radius:8px; border:1px solid #dee2e6;">
+        <div style="margin-top:10px;">
+          <button type="button" class="modal-btn secondary" style="font-size:13px;" onclick="backToStep1()">🔄 Change Photo</button>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button type="button" class="modal-btn secondary" onclick="closePhotoModal()">Cancel</button>
@@ -1074,10 +1111,12 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 <script>
 (function(){
   let croppedDataUrl = null;
   let cameraStream = null;
+  let photoCropper = null;
 
   window.openPhotoModal = function() {
     resetPhotoModal();
@@ -1085,6 +1124,7 @@
   };
   window.closePhotoModal = function() {
     stopCamera();
+    destroyCropper();
     document.getElementById('photoModal').classList.remove('show');
   };
 
@@ -1094,9 +1134,22 @@
     const box = document.getElementById('photoPreviewBox');
     box.innerHTML = '<span class="preview-hint">Click here or use camera to select a photo</span>';
     document.getElementById('photoFileInput').value = '';
-    document.getElementById('cameraVideo').style.display = 'none';
-    document.getElementById('snapBtn').style.display = 'none';
+    showStep(1);
     stopCamera();
+    destroyCropper();
+  }
+
+  function showStep(n) {
+    document.getElementById('photoStep1').style.display = n === 1 ? '' : 'none';
+    document.getElementById('photoStep2').style.display = n === 2 ? '' : 'none';
+    document.getElementById('photoStep3').style.display = n === 3 ? '' : 'none';
+  }
+
+  function destroyCropper() {
+    if (photoCropper) {
+      photoCropper.destroy();
+      photoCropper = null;
+    }
   }
 
   window.handlePhotoFile = function(input) {
@@ -1104,21 +1157,55 @@
     const file = input.files[0];
     const reader = new FileReader();
     reader.onload = function(e) {
-      showPreview(e.target.result);
+      loadIntoCropper(e.target.result);
     };
     reader.readAsDataURL(file);
   };
 
-  function showPreview(dataUrl) {
-    croppedDataUrl = dataUrl;
-    const box = document.getElementById('photoPreviewBox');
-    box.innerHTML = '<img src="' + dataUrl + '" alt="Preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">';
-    document.getElementById('savePhotoBtn').disabled = false;
-    // Hide camera if open
-    document.getElementById('cameraVideo').style.display = 'none';
-    document.getElementById('snapBtn').style.display = 'none';
+  function loadIntoCropper(dataUrl) {
     stopCamera();
+    destroyCropper();
+    const img = document.getElementById('photoCropImage');
+    img.src = dataUrl;
+    showStep(2);
+    setTimeout(function() {
+      photoCropper = new Cropper(img, {
+        aspectRatio: 1,
+        viewMode: 1,
+        autoCropArea: 0.9,
+        responsive: true,
+        guides: true,
+        highlight: true,
+        cropBoxMovable: true,
+        cropBoxResizable: true,
+        toggleDragModeOnDblclick: true,
+      });
+    }, 100);
   }
+
+  window.applyCrop = function() {
+    if (!photoCropper) return;
+    const canvas = photoCropper.getCroppedCanvas({
+      maxWidth: 800,
+      maxHeight: 800,
+      fillColor: '#fff',
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+    croppedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    document.getElementById('photoCroppedPreview').src = croppedDataUrl;
+    document.getElementById('savePhotoBtn').disabled = false;
+    destroyCropper();
+    showStep(3);
+  };
+
+  window.backToStep1 = function() {
+    croppedDataUrl = null;
+    document.getElementById('savePhotoBtn').disabled = true;
+    destroyCropper();
+    showStep(1);
+    document.getElementById('photoFileInput').value = '';
+  };
 
   window.openCamera = function() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1144,9 +1231,9 @@
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext('2d').drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    showPreview(dataUrl);
+    const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
     stopCamera();
+    loadIntoCropper(dataUrl);
   };
 
   function stopCamera() {

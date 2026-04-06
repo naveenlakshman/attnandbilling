@@ -456,14 +456,14 @@ function cropPhoto() {
   if (!cropper) return;
 
   const canvas = cropper.getCroppedCanvas({
-    maxWidth: 500,
-    maxHeight: 500,
+    maxWidth: 800,
+    maxHeight: 800,
     fillColor: '#fff',
     imageSmoothingEnabled: true,
     imageSmoothingQuality: 'high',
   });
 
-  currentPhotoData = canvas.toDataURL('image/jpeg', 0.9);
+  currentPhotoData = canvas.toDataURL('image/jpeg', 0.95);
 
   const branch = document.querySelector('select[name="branch_id"]').value;
   const fullName = document.querySelector('input[name="full_name"]').value;

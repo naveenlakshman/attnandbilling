@@ -208,7 +208,7 @@ def create():
                     ))
 
                 # Update invoice status
-                if balance == amount_written_off:
+                if round(balance - amount_written_off, 2) <= 0:
                     new_status = "write_off"
                 else:
                     new_status = "partially_written_off"
@@ -218,6 +218,15 @@ def create():
                     SET status = ?, updated_at = ?
                     WHERE id = ?
                 """, (new_status, now, invoice_id))
+
+                # Mark all unpaid installment_plans for this invoice as written_off
+                # so they no longer appear in receivables
+                cur.execute("""
+                    UPDATE installment_plans
+                    SET status = 'paid', amount_paid = amount_due,
+                        remarks = 'Written off', updated_at = ?
+                    WHERE invoice_id = ? AND status != 'paid'
+                """, (now, invoice_id))
 
                 # Commit transaction
                 cur.execute("COMMIT")

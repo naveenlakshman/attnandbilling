@@ -2966,7 +2966,15 @@ def receipt_new():
         WHERE invoice_id = ?
     """, (invoice_id,))
     total_paid = float(cur.fetchone()["total_paid"] or 0)
-    balance_amount = float(invoice["total_amount"] or 0) - total_paid
+
+    # Subtract any write-offs from the displayed balance
+    cur.execute("""
+        SELECT COALESCE(SUM(amount_written_off), 0) AS total_written_off
+        FROM bad_debt_writeoffs WHERE invoice_id = ?
+    """, (invoice_id,))
+    written_off_result = cur.fetchone()
+    total_written_off_new = float(written_off_result["total_written_off"] or 0) if written_off_result else 0.0
+    balance_amount = float(invoice["total_amount"] or 0) - total_paid - total_written_off_new
 
     conn.close()
 
@@ -3068,18 +3076,35 @@ def receipt_edit(receipt_id):
             """, (receipt["invoice_id"],))
             total_received = float(cur.fetchone()["total_received"] or 0)
 
-            if total_received >= invoice_total:
-                new_status = "paid"
-            elif total_received > 0:
-                new_status = "partially_paid"
-            else:
-                new_status = "unpaid"
-
+            # Check current invoice status — don't override write-off statuses
             cur.execute("""
-                UPDATE invoices
-                SET status = ?, updated_at = ?
-                WHERE id = ?
-            """, (new_status, now, receipt["invoice_id"]))
+                SELECT status,
+                       (SELECT COALESCE(SUM(bw.amount_written_off), 0)
+                        FROM bad_debt_writeoffs bw WHERE bw.invoice_id = invoices.id) AS total_written_off
+                FROM invoices WHERE id = ?
+            """, (receipt["invoice_id"],))
+            inv_row = cur.fetchone()
+            current_status = inv_row["status"] if inv_row else "unpaid"
+            total_written_off = float(inv_row["total_written_off"] or 0) if inv_row else 0.0
+
+            if current_status not in ("write_off", "partially_written_off"):
+                # Recalculate status including any write-offs
+                if round(total_received + total_written_off, 2) >= round(invoice_total, 2):
+                    new_status = "write_off" if total_received == 0 else "paid"
+                elif total_written_off > 0:
+                    new_status = "partially_written_off"
+                elif total_received >= invoice_total:
+                    new_status = "paid"
+                elif total_received > 0:
+                    new_status = "partially_paid"
+                else:
+                    new_status = "unpaid"
+
+                cur.execute("""
+                    UPDATE invoices
+                    SET status = ?, updated_at = ?
+                    WHERE id = ?
+                """, (new_status, now, receipt["invoice_id"]))
 
             conn.commit()
             conn.close()
@@ -3195,6 +3220,10 @@ def receivables():
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND (
+            (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
+            + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
+          ) < i.total_amount
     """
     past_dues_params = [today]
 
@@ -3234,6 +3263,10 @@ def receivables():
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND (
+            (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
+            + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
+          ) < i.total_amount
     """
     todays_dues_params = [today]
 
@@ -3273,6 +3306,10 @@ def receivables():
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) > ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND (
+            (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
+            + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
+          ) < i.total_amount
     """
     upcoming_dues_params = [today]
 
