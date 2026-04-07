@@ -4,204 +4,286 @@
 
 {% block extra_css %}
 <style>
+  /* ── Batch header ── */
   .batch-header-card {
     background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
     color: white;
     border-radius: 12px;
-    padding: 28px;
-    margin-bottom: 28px;
+    padding: 24px;
+    margin-bottom: 20px;
   }
-
   .batch-header-card h1 {
     color: white;
-    margin-bottom: 16px;
+    margin: 0 0 16px;
+    font-size: 1.5rem;
+    line-height: 1.3;
   }
-
   .batch-info-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin-top: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
   }
-
   .info-item {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 16px;
+    background: rgba(255,255,255,0.12);
+    padding: 12px 14px;
     border-radius: 8px;
-    border-left: 3px solid rgba(255, 255, 255, 0.5);
+    border-left: 3px solid rgba(255,255,255,0.4);
   }
-
   .info-label {
-    font-size: 0.9rem;
-    opacity: 0.9;
-    margin-bottom: 6px;
+    font-size: 0.78rem;
+    opacity: 0.85;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
   }
-
   .info-value {
-    font-size: 1.1rem;
+    font-size: 1rem;
     font-weight: 600;
   }
 
+  /* ── Actions bar ── */
   .actions-bar {
     display: flex;
-    gap: 12px;
-    margin-top: 20px;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
   }
-
   .actions-bar .btn {
-    padding: 10px 16px;
+    padding: 9px 14px;
+    font-size: 13px;
+    flex: 1 1 auto;
+    text-align: center;
+    min-width: 120px;
   }
 
+  /* ── Detail cards ── */
   .detail-card {
     background: white;
     border-radius: 12px;
-    padding: 24px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   }
-
   .detail-title {
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin-bottom: 20px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 16px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     border-bottom: 2px solid #f0f0f0;
-    padding-bottom: 12px;
+    padding-bottom: 10px;
   }
-
   .detail-row {
     display: grid;
-    grid-template-columns: 200px 1fr;
-    gap: 20px;
-    padding: 12px 0;
-    border-bottom: 1px solid #f0f0f0;
+    grid-template-columns: 180px 1fr;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f5f5f5;
   }
 
-  .detail-row:last-child {
-    border-bottom: none;
-  }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-label { color: #6c757d; font-weight: 500; font-size: 13px; }
+  .detail-value { color: #212529; font-size: 14px; }
 
-  .detail-label {
-    color: #6c757d;
-    font-weight: 500;
-  }
-
-  .detail-value {
-    color: #212529;
-  }
-
+  /* ── Status badges ── */
   .status-badge {
     display: inline-block;
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-weight: 500;
-    font-size: 0.9rem;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 12px;
   }
+  .status-badge.active    { background: #d1ecf1; color: #0c5460; }
+  .status-badge.completed { background: #d4edda; color: #155724; }
+  .status-badge.cancelled { background: #f8d7da; color: #721c24; }
 
-  .status-badge.active {
-    background: #d1ecf1;
-    color: #0c5460;
-  }
-
-  .status-badge.completed {
-    background: #d4edda;
-    color: #155724;
-  }
-
-  .status-badge.cancelled {
-    background: #f8d7da;
-    color: #721c24;
-  }
-
+  /* ── Desktop students table ── */
   .students-table {
     width: 100%;
     border-collapse: collapse;
   }
-
   .students-table thead {
     background: #f8f9fa;
     border-bottom: 2px solid #dee2e6;
   }
-
   .students-table th {
-    padding: 12px;
+    padding: 11px 12px;
     text-align: left;
     font-weight: 600;
-    color: #212529;
+    font-size: 12px;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
   }
-
   .students-table td {
-    padding: 12px;
-    border-bottom: 1px solid #dee2e6;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f3f5;
+    font-size: 13px;
+    vertical-align: middle;
+  }
+  .students-table tbody tr:last-child td { border-bottom: none; }
+  .students-table tbody tr:hover td { background: #f8f9fa; }
+  .student-avatar-sm {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e5e7eb;
+    flex-shrink: 0;
+  }
+  .student-initials-sm {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: #dbeafe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1d4ed8;
   }
 
-  .students-table tbody tr:hover {
-    background: #f8f9fa;
-  }
-
+  /* ── Student status inline badges ── */
   .student-status {
     display: inline-block;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
   }
+  .student-status.active    { background: #d1ecf1; color: #0c5460; }
+  .student-status.completed { background: #d4edda; color: #155724; }
+  .student-status.dropped   { background: #f8d7da; color: #721c24; }
 
-  .student-status.active {
-    background: #d1ecf1;
-    color: #0c5460;
-  }
-
-  .student-status.completed {
-    background: #d4edda;
-    color: #155724;
-  }
-
-  .student-status.dropped {
-    background: #f8d7da;
-    color: #721c24;
-  }
-
+  /* ── Back link ── */
   .back-link {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     color: #0d6efd;
     text-decoration: none;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
+    font-size: 14px;
+  }
+  .back-link:hover { text-decoration: underline; }
+
+  /* ── Empty state ── */
+  .empty-state { text-align: center; padding: 40px 20px; color: #6c757d; }
+  .empty-state-icon { font-size: 3rem; margin-bottom: 12px; }
+
+  /* ── Mobile student cards ── */
+  .mobile-student-list { display: none; }
+  .student-card-m {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    text-decoration: none;
+    color: inherit;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    transition: box-shadow 0.15s;
+  }
+  .student-card-m:active { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .student-card-photo-m {
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid #e5e7eb;
+  }
+  .student-card-avatar-m {
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    background: #dbeafe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #1d4ed8;
+  }
+  .student-card-body-m { flex: 1; min-width: 0; }
+  .student-card-name-m {
+    font-weight: 700;
+    font-size: 14px;
+    color: #1a1f36;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .student-card-sub-m {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+  .student-card-meta-m {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+    flex-wrap: wrap;
   }
 
-  .back-link:hover {
-    text-decoration: underline;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 40px 20px;
-    color: #6c757d;
-  }
-
-  .empty-state-icon {
-    font-size: 3rem;
-    margin-bottom: 12px;
-  }
-
+  /* ── Mobile responsive ── */
   @media (max-width: 768px) {
-    .batch-info-grid {
-      grid-template-columns: 1fr;
-    }
+    .batch-header-card { padding: 18px; }
+    .batch-header-card h1 { font-size: 1.25rem; }
+    .batch-info-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .info-item { padding: 10px 12px; }
+    .info-value { font-size: 0.9rem; }
+    .actions-bar .btn { font-size: 12px; padding: 8px 10px; min-width: 0; }
+    .detail-row { grid-template-columns: 1fr; gap: 4px; }
+    /* Hide desktop table, show cards */
+    .desktop-students-table { display: none; }
+    .mobile-student-list { display: flex; flex-direction: column; gap: 8px; }
 
-    .detail-row {
-      grid-template-columns: 1fr;
-      gap: 8px;
-    }
+    .detail-label { font-weight: 600; margin-bottom: 2px; }
+    .detail-card { padding: 16px; }
+    .batch-details-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .detail-pill { padding: 10px 11px; }
+    .detail-pill-value { font-size: 12px; }
+  }
 
-    .detail-label {
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
+  /* ── Batch details grid ── */
+  .batch-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .detail-pill {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .detail-pill-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .detail-pill-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #9ca3af;
+    margin-bottom: 3px;
+  }
+  .detail-pill-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1f36;
+    line-height: 1.3;
   }
 </style>
 {% endblock %}
@@ -266,42 +348,62 @@
   <!-- Details Section -->
   <div class="detail-card">
     <div class="detail-title">📋 Batch Details</div>
+    <div class="batch-details-grid">
 
-    {% if batch.start_date %}
-    <div class="detail-row">
-      <div class="detail-label">Start Date</div>
-      <div class="detail-value">{{ batch.start_date }}</div>
-    </div>
+      {% if batch.start_date %}
+      <div class="detail-pill">
+        <span class="detail-pill-icon">📅</span>
+        <div>
+          <div class="detail-pill-label">Start Date</div>
+          <div class="detail-pill-value">{{ batch.start_date }}</div>
+        </div>
+      </div>
+      <div class="detail-pill">
+        <span class="detail-pill-icon">🏁</span>
+        <div>
+          <div class="detail-pill-label">End Date</div>
+          <div class="detail-pill-value">{{ batch.end_date or 'Ongoing' }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="detail-pill">
+        <span class="detail-pill-icon">📅</span>
+        <div>
+          <div class="detail-pill-label">Duration</div>
+          <div class="detail-pill-value">Ongoing</div>
+        </div>
+      </div>
+      {% endif %}
 
-    <div class="detail-row">
-      <div class="detail-label">End Date</div>
-      <div class="detail-value">{{ batch.end_date or 'Ongoing' }}</div>
-    </div>
-    {% else %}
-    <div class="detail-row">
-      <div class="detail-label">Duration</div>
-      <div class="detail-value">Ongoing (No end date)</div>
-    </div>
-    {% endif %}
+      {% if batch.start_time %}
+      <div class="detail-pill">
+        <span class="detail-pill-icon">🕐</span>
+        <div>
+          <div class="detail-pill-label">Timing</div>
+          <div class="detail-pill-value">{{ batch.start_time }} – {{ batch.end_time }}</div>
+        </div>
+      </div>
+      {% endif %}
 
-    {% if batch.start_time %}
-    <div class="detail-row">
-      <div class="detail-label">Timing</div>
-      <div class="detail-value">{{ batch.start_time }} - {{ batch.end_time }}</div>
-    </div>
-    {% endif %}
+      <div class="detail-pill">
+        <span class="detail-pill-icon">🗓️</span>
+        <div>
+          <div class="detail-pill-label">Created</div>
+          <div class="detail-pill-value">{{ batch.created_at | replace('T', ' ') | truncate(16, True, '') }}</div>
+        </div>
+      </div>
 
-    <div class="detail-row">
-      <div class="detail-label">Created</div>
-      <div class="detail-value">{{ batch.created_at }}</div>
-    </div>
+      {% if batch.updated_at %}
+      <div class="detail-pill">
+        <span class="detail-pill-icon">✏️</span>
+        <div>
+          <div class="detail-pill-label">Last Updated</div>
+          <div class="detail-pill-value">{{ batch.updated_at | replace('T', ' ') | truncate(16, True, '') }}</div>
+        </div>
+      </div>
+      {% endif %}
 
-    {% if batch.updated_at %}
-    <div class="detail-row">
-      <div class="detail-label">Last Updated</div>
-      <div class="detail-value">{{ batch.updated_at }}</div>
     </div>
-    {% endif %}
   </div>
 
   <!-- Students Section -->
@@ -309,11 +411,14 @@
     <div class="detail-title">👥 Enrolled Students ({{ students|length }})</div>
 
     {% if students|length > 0 %}
-    <div style="overflow-x: auto;">
+
+    <!-- Desktop table -->
+    <div class="desktop-students-table" style="overflow-x: auto;">
       <table class="students-table">
         <thead>
           <tr>
-            <th>Student Code</th>
+            <th style="width:36px;"></th>
+            <th>Reg. No</th>
             <th>Name</th>
             <th>Phone</th>
             <th>Joined On</th>
@@ -324,25 +429,60 @@
         <tbody>
           {% for student in students %}
           <tr>
-            <td><a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration: none; color: #0d6efd; font-weight: bold;" target="_blank">{{ student.student_code }}</a></td>
-            <td><a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration: none; color: inherit;" target="_blank">{{ student.full_name }}</a></td>
-            <td>{{ student.phone }}</td>
-            <td>{{ student.joined_on }}</td>
+            <td>
+              {% if student.photo_filename %}
+                <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="" class="student-avatar-sm">
+              {% else %}
+                <div class="student-initials-sm">{{ (student.full_name or '?')[0] | upper }}</div>
+              {% endif %}
+            </td>
+            <td style="font-weight:600; color:#1a1f36; font-size:12px;"><a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration:none; color:#0d6efd;">{{ student.student_code }}</a></td>
+            <td><a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration:none; color:inherit; font-weight:500;">{{ student.full_name }}</a></td>
+            <td>{{ student.phone or '—' }}</td>
+            <td style="font-size:12px;">{{ student.joined_on or '—' }}</td>
             <td>
               <span class="student-status {{ student.status }}">
                 {% if student.status == 'active' %}✓ Active
                 {% elif student.status == 'completed' %}✓ Completed
-                {% else %}✗ Dropped
-                {% endif %}
+                {% else %}✗ Dropped{% endif %}
               </span>
             </td>
-            <td>
-              <a href="{{ url_for('attendance.student_attendance_history', student_id=student.student_id) }}" class="btn btn-sm btn-outline-primary">View History</a>
-            </td>
+            <td><a href="{{ url_for('attendance.student_attendance_history', student_id=student.student_id) }}" class="btn btn-sm btn-outline-primary">History</a></td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+
+    <!-- Mobile cards -->
+    <div class="mobile-student-list">
+      {% for student in students %}
+      <a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" class="student-card-m">
+        {% if student.photo_filename %}
+          <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="" class="student-card-photo-m">
+        {% else %}
+          <div class="student-card-avatar-m">{{ (student.full_name or '?')[0] | upper }}</div>
+        {% endif %}
+        <div class="student-card-body-m">
+          <div class="student-card-name-m">{{ student.full_name }}</div>
+          <div class="student-card-sub-m">
+            {{ student.student_code }}
+            {% if student.phone %} &nbsp;·&nbsp; 📞 {{ student.phone }}{% endif %}
+          </div>
+          <div class="student-card-meta-m">
+            <span class="student-status {{ student.status }}">
+              {% if student.status == 'active' %}✓ Active
+              {% elif student.status == 'completed' %}✓ Completed
+              {% else %}✗ Dropped{% endif %}
+            </span>
+            {% if student.joined_on %}
+              <span style="font-size:11px; color:#9ca3af;">Joined {{ student.joined_on }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <span style="color:#9ca3af; font-size:16px; flex-shrink:0;">›</span>
+      </a>
+      {% endfor %}
     </div>
     {% else %}
     <div class="empty-state">

@@ -295,7 +295,7 @@ def list_batches():
         user = cur.fetchone()
         
         # Get filter parameters
-        status_filter = request.args.get('status', 'all')
+        status_filter = request.args.get('status', 'active')
         branch_filter = request.args.get('branch_id', '')
         
         # Build query
@@ -474,7 +474,7 @@ def view_batch(batch_id):
         # Get students in batch
         cur.execute("""
             SELECT sb.id, s.id AS student_id, s.student_code, s.full_name, s.phone, sb.joined_on, 
-                   sb.status, sb.created_at
+                   sb.status, sb.created_at, s.photo_filename
             FROM student_batches sb
             JOIN students s ON sb.student_id = s.id
             WHERE sb.batch_id = ?
