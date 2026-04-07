@@ -1071,18 +1071,27 @@
     <div class="modal-body">
       <!-- Step 1: Select source -->
       <div id="photoStep1">
-        <div id="photoPreviewBox" onclick="document.getElementById('photoFileInput').click()" title="Click to choose a photo">
-          <span class="preview-hint">Click here or use camera to select a photo</span>
+        <!-- Default: file/camera choice -->
+        <div id="photoStep1Default">
+          <div id="photoPreviewBox" onclick="document.getElementById('photoFileInput').click()" title="Click to choose a photo">
+            <span class="preview-hint">Click here or use camera to select a photo</span>
+          </div>
+          <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="handlePhotoFile(this)">
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="document.getElementById('photoFileInput').click()">🖼 Choose File</button>
+            <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="openCamera()">📸 Camera</button>
+          </div>
         </div>
-        <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="handlePhotoFile(this)">
-        <div style="display:flex; gap:8px; margin-bottom:12px;">
-          <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="document.getElementById('photoFileInput').click()">🖼 Choose File</button>
-          <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="openCamera()">📸 Camera</button>
+        <!-- Camera active UI (shown when camera is running) -->
+        <div id="cameraControls" style="display:none;">
+          <div style="position:relative; margin-bottom:8px;">
+            <video id="cameraVideo" style="width:100%; border-radius:8px; display:block;" autoplay playsinline></video>
+            <button type="button" class="modal-btn secondary" style="position:absolute; top:8px; right:8px; padding:5px 11px; font-size:12px; opacity:0.9;" onclick="flipCamera()">🔄 Flip</button>
+          </div>
+          <canvas id="cameraCanvas" style="display:none;"></canvas>
+          <button type="button" class="modal-btn primary" style="width:100%; margin-bottom:6px;" onclick="snapPhoto()">📷 Snap Photo</button>
+          <button type="button" class="modal-btn secondary" style="width:100%; font-size:13px;" onclick="stopCamera()">✕ Cancel</button>
         </div>
-        <!-- Hidden camera stream -->
-        <video id="cameraVideo" style="display:none; width:100%; border-radius:8px;" autoplay playsinline></video>
-        <canvas id="cameraCanvas" style="display:none;"></canvas>
-        <button type="button" id="snapBtn" style="display:none; width:100%; margin-bottom:10px;" class="modal-btn primary" onclick="snapPhoto()">📷 Snap Photo</button>
       </div>
 
       <!-- Step 2: Crop -->
@@ -1117,6 +1126,7 @@
   let croppedDataUrl = null;
   let cameraStream = null;
   let photoCropper = null;
+  let currentFacingMode = 'environment';
 
   window.openPhotoModal = function() {
     resetPhotoModal();
@@ -1213,17 +1223,27 @@
       alert('Camera not supported on this device/browser.');
       return;
     }
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+    // Stop existing stream before (re)starting
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
       .then(function(stream) {
         cameraStream = stream;
         const video = document.getElementById('cameraVideo');
         video.srcObject = stream;
-        video.style.display = 'block';
-        document.getElementById('snapBtn').style.display = 'block';
+        document.getElementById('photoStep1Default').style.display = 'none';
+        document.getElementById('cameraControls').style.display = '';
       })
       .catch(function(err) {
         alert('Could not access camera: ' + err.message);
       });
+  };
+
+  window.flipCamera = function() {
+    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+    window.openCamera();
   };
 
   window.snapPhoto = function() {
@@ -1237,16 +1257,18 @@
     loadIntoCropper(dataUrl);
   };
 
-  function stopCamera() {
+  window.stopCamera = function() {
     if (cameraStream) {
       cameraStream.getTracks().forEach(t => t.stop());
       cameraStream = null;
     }
     const video = document.getElementById('cameraVideo');
-    if (video) { video.srcObject = null; video.style.display = 'none'; }
-    const snapBtn = document.getElementById('snapBtn');
-    if (snapBtn) snapBtn.style.display = 'none';
-  }
+    if (video) { video.srcObject = null; }
+    document.getElementById('cameraControls').style.display = 'none';
+    document.getElementById('photoStep1Default').style.display = '';
+  };
+  // Local alias for calls within the IIFE
+  function stopCamera() { window.stopCamera(); }
 
   window.savePhoto = function() {
     // If user hasn't clicked "Crop & Use", auto-crop from the cropper

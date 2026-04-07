@@ -750,7 +750,22 @@ def student_new():
         parent_contact = request.form.get("parent_contact", "").strip() or None
         photo_data = request.form.get("photo_data", "").strip()
 
-        # Get next registration number
+        # Photo is required for new students
+        if not photo_data:
+            cur.execute("""
+                SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name
+            """)
+            branches = cur.fetchall()
+            conn.close()
+            return render_template(
+                "billing/student_form.html",
+                student=None,
+                branches=branches,
+                education_levels=QUALIFICATION_LEVELS.keys(),
+                qualification_levels=QUALIFICATION_LEVELS,
+                error="Student photo is required.",
+                form_data=request.form
+            )
         cur.execute("""
             SELECT student_code
             FROM students

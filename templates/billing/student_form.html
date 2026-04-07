@@ -134,57 +134,160 @@
       font-size: 16px;
     }
 
-    .photo-input-wrapper {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .photo-input-wrapper .btn {
-      width: 100%;
-    }
-
-    .crop-actions {
-      flex-direction: column;
-    }
-
-    .crop-actions .btn {
-      width: 100%;
-    }
-
-    .crop-preview-wrapper {
-      max-height: 280px;
-    }
   }
 
-  .photo-upload-section {
-    padding: 16px;
-    background: #f8f9fa;
-    border-radius: 6px;
-    border: 1px dashed #dee2e6;
-  }
-
-  .photo-input-wrapper {
+  /* ── Photo section ───────────────────────────────── */
+  .form-photo-section {
     display: flex;
-    gap: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .form-photo-wrapper {
+    position: relative;
+    display: inline-block;
+  }
+  .form-photo-display {
+    width: 150px;
+    height: 150px;
+    border-radius: 10px;
+    background: #f0f0f5;
+    display: flex;
     align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    border: 2px solid #e2e8f0;
+  }
+  .form-photo-placeholder {
+    font-size: 56px;
+    color: #a0aec0;
+    line-height: 1;
+  }
+  .form-photo-btn {
+    position: absolute;
+    bottom: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    color: #5b21b6;
+    border: 1.5px solid #7c3aed;
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    transition: background 0.15s;
+  }
+  .form-photo-btn:hover {
+    background: #f3e8ff;
+  }
+  .form-photo-section.photo-required-error .form-photo-display {
+    border-color: #dc3545;
+    background: #fff5f5;
+  }
+  .photo-error-msg {
+    display: none;
+    color: #dc3545;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 20px;
+  }
+  .form-photo-section.photo-required-error .photo-error-msg {
+    display: block;
   }
 
-  .crop-preview-wrapper {
-    background: white;
-    padding: 12px;
-    border-radius: 6px;
-    border: 1px solid #dee2e6;
-    overflow: auto;
-    max-height: 450px;
-  }
-
-  .crop-actions {
+  /* ── Photo Modal ─────────────────────────────────── */
+  .form-photo-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 9999;
+    align-items: center;
     justify-content: center;
   }
-
-  .btn-sm {
-    padding: 6px 12px;
+  .form-photo-modal.show {
+    display: flex;
+  }
+  .form-photo-modal-content {
+    background: #fff;
+    border-radius: 12px;
+    max-width: 480px;
+    width: calc(100% - 32px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    overflow: hidden;
+  }
+  .form-photo-modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    padding: 16px 20px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .form-photo-modal-body {
+    padding: 16px 20px;
+  }
+  .form-photo-modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+  #photoPreviewBox {
+    aspect-ratio: 1;
+    border: 2px dashed #a78bfa;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: #faf5ff;
+    min-height: 180px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  #photoPreviewBox .preview-hint {
+    color: #7c3aed;
     font-size: 13px;
+    text-align: center;
+    padding: 12px;
+  }
+  #photoCropWrapper {
+    max-height: 340px;
+    overflow: hidden;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    line-height: 0;
+  }
+  #photoCropWrapper img {
+    max-width: 100%;
+    display: block;
+  }
+  .modal-btn {
+    padding: 9px 20px;
+    border-radius: 7px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .modal-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .modal-btn.primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+  }
+  .modal-btn.secondary {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
   }
 </style>
 
@@ -198,7 +301,12 @@
   </div>
 
   <div class="student-form-card">
-    <form method="post">
+    {% if error %}
+    <div style="background:#fee2e2; border:1px solid #fca5a5; color:#991b1b; border-radius:7px; padding:12px 16px; margin-bottom:18px; font-size:13px; font-weight:600;">
+      ⚠️ {{ error }}
+    </div>
+    {% endif %}
+    <form method="post" id="studentForm">
       <div class="student-form-grid">
         <div class="form-group">
           <label>Branch</label>
@@ -263,39 +371,22 @@
         </div>
 
         <div class="form-group full-width">
-          <label>Student Photo</label>
-          <div class="photo-upload-section">
-            <div class="photo-input-wrapper">
-              <input type="file" id="photo_input" accept="image/*" style="display: none;">
-              <button type="button" class="btn btn-secondary" onclick="document.getElementById('photo_input').click()">
-                Choose Photo
+          <label>Student Photo {% if not student %}<span style="color:#dc3545;">*</span>{% endif %}</label>
+          <div class="form-photo-section{% if error and 'photo' in error|lower %} photo-required-error{% endif %}" id="photoUploadSection">
+            <div class="form-photo-wrapper">
+              <div class="form-photo-display" id="formPhotoDisplay">
+                {% if student and student.photo_filename %}
+                  <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;">
+                {% else %}
+                  <span class="form-photo-placeholder">👤</span>
+                {% endif %}
+              </div>
+              <button type="button" class="form-photo-btn" onclick="openPhotoModal()">
+                📷 {% if student and student.photo_filename %}Change Photo{% else %}Add Photo{% endif %}
               </button>
-              {% if student and student.photo_filename %}
-                <small class="field-help" style="display: block; margin-top: 8px;">Current photo: {{ student.photo_filename }}</small>
-              {% endif %}
             </div>
-
-            <div id="crop_container" style="display: none; margin-top: 15px;">
-              <div class="crop-preview-wrapper">
-                <img id="crop_image" src="" alt="Crop preview" style="max-width: 100%; max-height: 400px;">
-              </div>
-              <div class="crop-actions" style="margin-top: 12px; display: flex; gap: 10px;">
-                <button type="button" class="btn btn-primary" onclick="cropPhoto()">Crop & Save</button>
-                <button type="button" class="btn btn-secondary" onclick="cancelPhotoUpload()">Cancel</button>
-              </div>
-            </div>
-
-            <div id="photo_preview" style="display: none; margin-top: 15px;">
-              <div style="text-align: center;">
-                <img id="preview_image" src="" alt="Photo preview" style="max-width: 100%; max-height: 300px; border-radius: 6px;">
-                <div style="margin-top: 12px; display: flex; gap: 10px; justify-content: center;">
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="changePhoto()">Change Photo</button>
-                  <button type="button" class="btn btn-secondary btn-sm" onclick="removePhoto()">Remove Photo</button>
-                </div>
-              </div>
-              <input type="hidden" id="photo_data" name="photo_data">
-              <small class="field-help" style="display: block; margin-top: 8px; text-align: center;">Photo will be saved as: <span id="filename_preview"></span></small>
-            </div>
+            {% if not student %}<div class="photo-error-msg" id="photoErrorMsg">📷 Please upload a student photo before saving.</div>{% endif %}
+            <input type="hidden" id="photo_data" name="photo_data">
           </div>
         </div>
 
@@ -380,8 +471,6 @@
 <script>
 const qualificationLevels = {{ qualification_levels | tojson }};
 
-let cropper = null;
-let currentPhotoData = null;
 let studentCode = "{% if student %}{{ student.student_code }}{% endif %}";
 
 const educationLevelSelect = document.querySelector('select[name="education_level"]');
@@ -418,102 +507,28 @@ qualificationSelect.addEventListener('change', function() {
 
 educationLevelSelect.addEventListener('change', updateQualifications);
 
-// Photo upload handler
-document.getElementById('photo_input').addEventListener('change', function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = function(event) {
-    const cropImage = document.getElementById('crop_image');
-    cropImage.src = event.target.result;
-
-    if (cropper) {
-      cropper.destroy();
-    }
-
-    document.getElementById('crop_container').style.display = 'block';
-    document.getElementById('photo_preview').style.display = 'none';
-
-    setTimeout(() => {
-      cropper = new Cropper(cropImage, {
-        aspectRatio: 1,
-        viewMode: 1,
-        autoCropArea: 1,
-        responsive: true,
-        guides: true,
-        highlight: true,
-        cropBoxMovable: true,
-        cropBoxResizable: true,
-        toggleDragModeOnDblclick: true,
-      });
-    }, 100);
-  };
-  reader.readAsDataURL(file);
-});
-
-function cropPhoto() {
-  if (!cropper) return;
-
-  const canvas = cropper.getCroppedCanvas({
-    maxWidth: 800,
-    maxHeight: 800,
-    fillColor: '#fff',
-    imageSmoothingEnabled: true,
-    imageSmoothingQuality: 'high',
-  });
-
-  currentPhotoData = canvas.toDataURL('image/jpeg', 0.95);
-
-  const branch = document.querySelector('select[name="branch_id"]').value;
-  const fullName = document.querySelector('input[name="full_name"]').value;
-  const branchCode = branch || 'NEW';
-  
-  document.getElementById('photo_data').value = currentPhotoData;
-  document.getElementById('preview_image').src = currentPhotoData;
-  
-  const filename = `${branchCode}-${fullName.replace(/\s+/g, '_')}-${Date.now()}.jpg`;
-  document.getElementById('filename_preview').textContent = filename;
-
-  document.getElementById('crop_container').style.display = 'none';
-  document.getElementById('photo_preview').style.display = 'block';
-  document.getElementById('photo_input').value = '';
-
-  if (cropper) {
-    cropper.destroy();
-    cropper = null;
-  }
-}
-
-function changePhoto() {
-  document.getElementById('photo_input').click();
-}
-
-function removePhoto() {
-  currentPhotoData = null;
-  document.getElementById('photo_data').value = '';
-  document.getElementById('photo_preview').style.display = 'none';
-  document.getElementById('crop_container').style.display = 'none';
-  document.getElementById('photo_input').value = '';
-  
-  if (cropper) {
-    cropper.destroy();
-    cropper = null;
-  }
-}
-
-function cancelPhotoUpload() {
-  document.getElementById('crop_container').style.display = 'none';
-  document.getElementById('photo_input').value = '';
-  
-  if (cropper) {
-    cropper.destroy();
-    cropper = null;
-  }
-}
-
 document.addEventListener('DOMContentLoaded', function() {
   updateQualifications();
+
+  // Photo required validation (new student only)
+  const studentForm = document.getElementById('studentForm');
+  const isNewStudent = !{{ 'true' if student else 'false' }};
+  if (studentForm && isNewStudent) {
+    studentForm.addEventListener('submit', function(e) {
+      const photoData = document.getElementById('photo_data');
+      const section = document.getElementById('photoUploadSection');
+      const errMsg = document.getElementById('photoErrorMsg');
+      if (!photoData || !photoData.value) {
+        e.preventDefault();
+        if (section) {
+          section.classList.add('photo-required-error');
+          section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        if (errMsg) errMsg.style.display = 'block';
+        return false;
+      }
+    });
+  }
 
   {% if student and student.qualification %}
     const existingQualification = {{ student.qualification | tojson }};
@@ -532,6 +547,239 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   {% endif %}
 });
+</script>
+
+<!-- ── Photo Upload Modal ─────────────────────────────────── -->
+<div id="photoModal" class="form-photo-modal" onclick="if(event.target===this)closePhotoModal()">
+  <div class="form-photo-modal-content">
+    <div class="form-photo-modal-header">📷 {% if student %}Update Photo{% else %}Add Photo{% endif %}</div>
+    <div class="form-photo-modal-body">
+      <!-- Step 1: Select source -->
+      <div id="photoStep1">
+        <!-- Default: file/camera choice -->
+        <div id="photoStep1Default">
+          <div id="photoPreviewBox" onclick="document.getElementById('photoFileInput').click()" title="Click to choose a photo">
+            <span class="preview-hint">Click here or use camera to select a photo</span>
+          </div>
+          <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="handlePhotoFile(this)">
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="document.getElementById('photoFileInput').click()">🖼 Choose File</button>
+            <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="openCamera()">📸 Camera</button>
+          </div>
+        </div>
+        <!-- Camera active UI (shown when camera is running) -->
+        <div id="cameraControls" style="display:none;">
+          <div style="position:relative; margin-bottom:8px;">
+            <video id="cameraVideo" style="width:100%; border-radius:8px; display:block;" autoplay playsinline></video>
+            <button type="button" class="modal-btn secondary" style="position:absolute; top:8px; right:8px; padding:5px 11px; font-size:12px; opacity:0.9;" onclick="flipCamera()">🔄 Flip</button>
+          </div>
+          <canvas id="cameraCanvas" style="display:none;"></canvas>
+          <button type="button" class="modal-btn primary" style="width:100%; margin-bottom:6px;" onclick="snapPhoto()">📷 Snap Photo</button>
+          <button type="button" class="modal-btn secondary" style="width:100%; font-size:13px;" onclick="stopCamera()">✕ Cancel</button>
+        </div>
+      </div>
+      <!-- Step 2: Crop -->
+      <div id="photoStep2" style="display:none;">
+        <div id="photoCropWrapper">
+          <img id="photoCropImage" src="" alt="Crop">
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:4px;">
+          <button type="button" class="modal-btn primary" style="flex:1;" onclick="applyCrop()">✂️ Crop & Use</button>
+          <button type="button" class="modal-btn secondary" style="flex:1;" onclick="backToStep1()">← Back</button>
+        </div>
+      </div>
+      <!-- Step 3: Preview cropped result -->
+      <div id="photoStep3" style="display:none; text-align:center;">
+        <img id="photoCroppedPreview" src="" alt="Cropped preview" style="max-width:100%; max-height:280px; border-radius:8px; border:1px solid #dee2e6;">
+        <div style="margin-top:10px;">
+          <button type="button" class="modal-btn secondary" style="font-size:13px;" onclick="backToStep1()">🔄 Change Photo</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-photo-modal-footer">
+      <button type="button" class="modal-btn secondary" onclick="closePhotoModal()">Cancel</button>
+      <button type="button" class="modal-btn primary" id="savePhotoBtn" onclick="savePhoto()" disabled>Use Photo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  let croppedDataUrl = null;
+  let cameraStream = null;
+  let photoCropper = null;
+  let currentFacingMode = 'environment';
+
+  window.openPhotoModal = function() {
+    resetPhotoModal();
+    document.getElementById('photoModal').classList.add('show');
+  };
+  window.closePhotoModal = function() {
+    stopCamera();
+    destroyCropper();
+    document.getElementById('photoModal').classList.remove('show');
+  };
+
+  function resetPhotoModal() {
+    croppedDataUrl = null;
+    document.getElementById('savePhotoBtn').disabled = true;
+    const box = document.getElementById('photoPreviewBox');
+    box.innerHTML = '<span class="preview-hint">Click here or use camera to select a photo</span>';
+    document.getElementById('photoFileInput').value = '';
+    showStep(1);
+    stopCamera();
+    destroyCropper();
+  }
+
+  function showStep(n) {
+    document.getElementById('photoStep1').style.display = n === 1 ? '' : 'none';
+    document.getElementById('photoStep2').style.display = n === 2 ? '' : 'none';
+    document.getElementById('photoStep3').style.display = n === 3 ? '' : 'none';
+  }
+
+  function destroyCropper() {
+    if (photoCropper) {
+      photoCropper.destroy();
+      photoCropper = null;
+    }
+  }
+
+  window.handlePhotoFile = function(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      loadIntoCropper(e.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  function loadIntoCropper(dataUrl) {
+    stopCamera();
+    destroyCropper();
+    const img = document.getElementById('photoCropImage');
+    img.src = dataUrl;
+    showStep(2);
+    setTimeout(function() {
+      photoCropper = new Cropper(img, {
+        aspectRatio: 1,
+        viewMode: 1,
+        autoCropArea: 0.9,
+        responsive: true,
+        guides: true,
+        highlight: true,
+        cropBoxMovable: true,
+        cropBoxResizable: true,
+        toggleDragModeOnDblclick: true,
+      });
+      document.getElementById('savePhotoBtn').disabled = false;
+    }, 100);
+  }
+
+  window.applyCrop = function() {
+    if (!photoCropper) return;
+    const canvas = photoCropper.getCroppedCanvas({
+      maxWidth: 800,
+      maxHeight: 800,
+      fillColor: '#fff',
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+    croppedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    document.getElementById('photoCroppedPreview').src = croppedDataUrl;
+    document.getElementById('savePhotoBtn').disabled = false;
+    destroyCropper();
+    showStep(3);
+  };
+
+  window.backToStep1 = function() {
+    croppedDataUrl = null;
+    document.getElementById('savePhotoBtn').disabled = true;
+    destroyCropper();
+    showStep(1);
+    document.getElementById('photoFileInput').value = '';
+  };
+
+  window.openCamera = function() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Camera not supported on this device/browser.');
+      return;
+    }
+    // Stop existing stream before (re)starting
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
+      .then(function(stream) {
+        cameraStream = stream;
+        const video = document.getElementById('cameraVideo');
+        video.srcObject = stream;
+        document.getElementById('photoStep1Default').style.display = 'none';
+        document.getElementById('cameraControls').style.display = '';
+      })
+      .catch(function(err) {
+        alert('Could not access camera: ' + err.message);
+      });
+  };
+
+  window.flipCamera = function() {
+    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+    window.openCamera();
+  };
+
+  window.snapPhoto = function() {
+    const video = document.getElementById('cameraVideo');
+    const canvas = document.getElementById('cameraCanvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
+    stopCamera();
+    loadIntoCropper(dataUrl);
+  };
+
+  window.stopCamera = function() {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    const video = document.getElementById('cameraVideo');
+    if (video) { video.srcObject = null; }
+    document.getElementById('cameraControls').style.display = 'none';
+    document.getElementById('photoStep1Default').style.display = '';
+  };
+  // Local alias for calls within the IIFE
+  function stopCamera() { window.stopCamera(); }
+
+  window.savePhoto = function() {
+    if (!croppedDataUrl && photoCropper) {
+      const canvas = photoCropper.getCroppedCanvas({
+        maxWidth: 800,
+        maxHeight: 800,
+        fillColor: '#fff',
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high',
+      });
+      croppedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    }
+    if (!croppedDataUrl) return;
+
+    document.getElementById('photo_data').value = croppedDataUrl;
+
+    const display = document.getElementById('formPhotoDisplay');
+    display.innerHTML = '<img src="' + croppedDataUrl + '" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;">';
+
+    document.querySelector('.form-photo-btn').innerHTML = '📷 Change Photo';
+
+    const section = document.getElementById('photoUploadSection');
+    const errMsg = document.getElementById('photoErrorMsg');
+    if (section) section.classList.remove('photo-required-error');
+    if (errMsg) errMsg.style.display = 'none';
+
+    closePhotoModal();
+  };
+})();
 </script>
 
 {% endblock %}
