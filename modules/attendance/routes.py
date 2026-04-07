@@ -901,7 +901,7 @@ def mark_attendance():
             if batch_info:
                 # Get students in this batch
                 cur.execute("""
-                    SELECT sb.id, sb.student_id, s.student_code, s.full_name, s.phone
+                    SELECT sb.id, sb.student_id, s.student_code, s.full_name, s.phone, s.photo_filename
                     FROM student_batches sb
                     JOIN students s ON sb.student_id = s.id
                     WHERE sb.batch_id = ? AND sb.status = 'active'
