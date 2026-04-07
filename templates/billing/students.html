@@ -187,6 +187,86 @@
   /* ── Mobile sub-text (reg no inside name on mobile) ── */
   .mobile-sub { display: none; }
 
+  /* ── Mobile card list ── */
+  .mobile-card-list { display: none; }
+  .student-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    text-decoration: none;
+    color: inherit;
+    transition: box-shadow 0.15s;
+  }
+  .student-card:active { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+  .student-card-photo {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid #e5e7eb;
+  }
+  .student-card-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: #dbeafe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: #1d4ed8;
+  }
+  .student-card-body { flex: 1; min-width: 0; }
+  .student-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .student-card-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: #1a1f36;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .student-card-regno {
+    font-size: 11px;
+    color: #6b7280;
+    margin-bottom: 6px;
+  }
+  .student-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 5px;
+    align-items: center;
+  }
+  .student-card-phone {
+    font-size: 12px;
+    color: #374151;
+  }
+  .batch-pill {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 20px;
+    padding: 2px 9px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
   /* ── Mobile ── */
   @media (max-width: 767px) {
     .students-page-header h2 { font-size: 20px; }
@@ -198,9 +278,9 @@
     }
     .button-group { margin-top: 2px; }
     .button-group .btn { width: 100%; text-align: center; }
-    .billing-table th.hide-mobile,
-    .billing-table td.hide-mobile { display: none; }
-    .billing-table td, .billing-table th { padding: 8px 10px; font-size: 12px; }
+    /* Hide table, show cards */
+    .card.table-wrapper { display: none; }
+    .mobile-card-list { display: flex; flex-direction: column; gap: 10px; }
     .mobile-sub { display: block; font-size: 11px; color: #9ca3af; margin-top: 2px; font-weight: 400; }
   }
 </style>
@@ -389,6 +469,48 @@
   📊 <strong>{{ students | length }}</strong> student(s) found
 </div>
 
+<!-- ── Mobile card list (visible only on mobile) ── -->
+<div class="mobile-card-list">
+  {% if students %}
+    {% for s in students %}
+    <a href="{{ url_for('billing.student_profile', student_id=s.id) }}" class="student-card">
+      {% if s.photo_filename %}
+        <img src="/static/images/student_photos/{{ s.photo_filename }}" alt="" class="student-card-photo">
+      {% else %}
+        <div class="student-card-avatar">{{ (s.full_name or '?')[0] | upper }}</div>
+      {% endif %}
+      <div class="student-card-body">
+        <div class="student-card-top">
+          <div class="student-card-name">{{ s.full_name }}</div>
+          <span class="status-badge {% if s.status == 'active' %}status-active{% elif s.status == 'completed' %}status-completed{% elif s.status == 'dropped' %}status-dropped{% endif %}" style="flex-shrink:0;">
+            {{ s.status | capitalize }}
+          </span>
+        </div>
+        <div class="student-card-regno">
+          {{ s.student_code or '' }}
+          {% if s.branch_name %} &nbsp;·&nbsp; {{ s.branch_name }}{% endif %}
+        </div>
+        <div class="student-card-meta">
+          {% if s.phone %}
+            <span class="student-card-phone">📞 {{ s.phone }}</span>
+          {% endif %}
+          {% set batches = student_batches_map.get(s.id, []) %}
+          {% for b in batches %}
+            <span class="batch-pill">{{ b.batch_name }}</span>
+          {% endfor %}
+        </div>
+      </div>
+    </a>
+    {% endfor %}
+  {% else %}
+    <div style="padding: 40px; text-align: center; color: #999;">
+      <p style="font-size: 15px; margin: 0;">🔍 No students found matching your search criteria.</p>
+      <p style="font-size: 12px; margin: 8px 0 0 0;">Try adjusting your search or filters</p>
+    </div>
+  {% endif %}
+</div>
+
+<!-- ── Desktop table (hidden on mobile by CSS) ── -->
 <div class="card table-wrapper" style="padding: 0;">
   {% if students %}
     <table width="100%" class="billing-table">
@@ -412,11 +534,24 @@
           <td class="hide-mobile" style="text-align: center; color: #9ca3af; font-size: 12px;">{{ loop.index }}</td>
           <td data-sort-key="regno" data-sort-value="{{ s.student_code or '' }}" class="hide-mobile" style="font-weight: 600; color: #1a1f36; font-size: 12px;">{{ s.student_code or "—" }}</td>
           <td data-sort-key="name" data-sort-value="{{ s.full_name or '' }}">
-            <a href="{{ url_for('billing.student_profile', student_id=s.id) }}"
-               style="color: #2563eb; text-decoration: none; font-weight: 600;">
-              {{ s.full_name }}
-            </a>
-            <span class="mobile-sub">{{ s.student_code or '' }}</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              {% if s.photo_filename %}
+                <img src="/static/images/student_photos/{{ s.photo_filename }}"
+                     alt=""
+                     style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid #e5e7eb;">
+              {% else %}
+                <div style="width: 36px; height: 36px; border-radius: 50%; background: #dbeafe; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; font-weight: 700; color: #1d4ed8;">
+                  {{ (s.full_name or '?')[0] | upper }}
+                </div>
+              {% endif %}
+              <div>
+                <a href="{{ url_for('billing.student_profile', student_id=s.id) }}"
+                   style="color: #2563eb; text-decoration: none; font-weight: 600;">
+                  {{ s.full_name }}
+                </a>
+                <span class="mobile-sub">{{ s.student_code or '' }}</span>
+              </div>
+            </div>
           </td>
           <td data-sort-key="phone" data-sort-value="{{ s.phone or '' }}" class="hide-mobile">{{ s.phone or "—" }}</td>
           <td data-sort-key="gender" data-sort-value="{{ s.gender or '' }}" class="hide-mobile" style="text-align: center;">{{ s.gender or "—" }}</td>
