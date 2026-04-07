@@ -795,6 +795,53 @@
   .sig-status-msg.success { color: #16a34a; font-weight: 700; }
   .sig-status-msg.error   { color: #dc2626; font-weight: 600; }
 
+  /* Tabs */
+  .sig-tab-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .sig-tab {
+    flex: 1;
+    padding: 8px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    background: white;
+    font-size: 13px;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sig-tab.active {
+    border-color: #2563eb;
+    color: #2563eb;
+    background: #eff6ff;
+  }
+
+  /* Upload drop zone */
+  #sigUploadDrop {
+    width: 100%;
+    height: 190px;
+    border: 2px dashed #d1d5db;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: #f9fafb;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  #sigUploadDrop:hover { border-color: #2563eb; background: #eff6ff; }
+  #sigUploadDrop.has-image { border-style: solid; border-color: #2563eb; background: white; }
+  #sigUploadHint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
 </style>
 
 <div class="page-actions no-print">
@@ -1643,12 +1690,59 @@
   <div class="sig-modal-box">
     <div class="sig-modal-title" id="sigModalTitle">✍️ Student Signature</div>
     <div class="sig-modal-subtitle" id="sigModalSubtitle">Sign clearly within the box. Use finger or stylus on mobile.</div>
-    <canvas id="sigCanvas"></canvas>
-    <div class="sig-toolbar">
-      <button class="sig-tool-btn" onclick="sigUndo()">↩ Undo</button>
-      <button class="sig-tool-btn" onclick="sigClear()">🗑 Clear</button>
-      <span class="sig-stroke-hint" id="sigStrokeHint">Draw your signature above</span>
+
+    <!-- Tab switcher -->
+    <div class="sig-tab-row">
+      <button class="sig-tab active" id="tabDraw"   onclick="switchSigTab('draw')">✍️ Draw</button>
+      <button class="sig-tab"        id="tabUpload" onclick="switchSigTab('upload')">🖼 Upload Image</button>
     </div>
+
+    <!-- Draw panel -->
+    <div id="sigDrawPanel">
+      <canvas id="sigCanvas"></canvas>
+      <div class="sig-toolbar">
+        <button class="sig-tool-btn" onclick="sigUndo()">↩ Undo</button>
+        <button class="sig-tool-btn" onclick="sigClear()">🗑 Clear</button>
+        <span class="sig-stroke-hint" id="sigStrokeHint">Draw your signature above</span>
+      </div>
+    </div>
+
+    <!-- Upload panel -->
+    <div id="sigUploadPanel" style="display:none;">
+
+      <!-- Step A: Pick file -->
+      <div id="sigPickStep">
+        <div id="sigUploadDrop" onclick="document.getElementById('sigFileInput').click()">
+          <div id="sigUploadHint">
+            <div style="font-size:32px; margin-bottom:8px;">🖼</div>
+            <div style="font-size:14px; font-weight:600; color:#374151;">Tap to choose an image</div>
+            <div style="font-size:12px; color:#9ca3af; margin-top:4px;">JPG, PNG, WEBP supported</div>
+          </div>
+        </div>
+        <input type="file" id="sigFileInput" accept="image/*" style="display:none" onchange="handleSigUpload(this)">
+      </div>
+
+      <!-- Step B: Crop -->
+      <div id="sigCropStep" style="display:none;">
+        <div id="sigCropWrapper" style="width:100%; max-height:220px; overflow:hidden; border-radius:8px; border:1px solid #e5e7eb; background:#f9fafb;">
+          <img id="sigCropImage" src="" alt="Crop" style="display:block; max-width:100%;">
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="sig-tool-btn" style="flex:1; background:#2563eb; color:white; border:none; font-weight:700;" onclick="applySigCrop()">✂️ Crop & Use</button>
+          <button class="sig-tool-btn" style="flex:1;" onclick="backToSigPick()">← Change</button>
+        </div>
+      </div>
+
+      <!-- Step C: Preview after crop -->
+      <div id="sigPreviewStep" style="display:none;">
+        <div style="width:100%; height:160px; display:flex; align-items:center; justify-content:center; border:2px solid #2563eb; border-radius:8px; background:white; overflow:hidden;">
+          <img id="sigUploadPreview" src="" alt="Preview" style="max-width:100%; max-height:156px; object-fit:contain;">
+        </div>
+        <button class="sig-tool-btn" style="width:100%; margin-top:8px;" onclick="clearSigUpload()">🗑 Remove &amp; Re-pick</button>
+      </div>
+
+    </div>
+
     <div class="sig-save-row">
       <button class="sig-btn-save" id="sigSaveBtn" onclick="saveSig()" disabled>💾 Save Signature</button>
       <button class="sig-btn-cancel" onclick="closeSigModal()">Cancel</button>
@@ -1661,6 +1755,7 @@
 (function(){
   var sigType = null;
   var pad = null;
+  var sigCropper = null;
   var saveUrl = "{{ url_for('billing.student_save_signature', student_id=student.id) }}";
 
   /* ═══════════════════════════════════════════════════════
@@ -1844,6 +1939,10 @@
       hint.textContent = n + ' stroke' + (n === 1 ? '' : 's');
       btn.disabled = false;
     }
+    // Also handle upload mode
+    if (sigMode === 'upload') {
+      btn.disabled = !uploadedDataURL;
+    }
   }
 
   function _clearMsg() {
@@ -1851,6 +1950,88 @@
     el.textContent = '';
     el.className = 'sig-status-msg';
   }
+
+  /* ═══════════════════════════════════════════════════════
+     Tab switching
+  ═══════════════════════════════════════════════════════ */
+  var sigMode = 'draw';   // 'draw' or 'upload'
+  var uploadedDataURL = null;
+
+  window.switchSigTab = function(mode) {
+    sigMode = mode;
+    document.getElementById('tabDraw').classList.toggle('active',   mode === 'draw');
+    document.getElementById('tabUpload').classList.toggle('active', mode === 'upload');
+    document.getElementById('sigDrawPanel').style.display   = mode === 'draw'   ? '' : 'none';
+    document.getElementById('sigUploadPanel').style.display = mode === 'upload' ? '' : 'none';
+    _onUpdate();
+    if (mode === 'draw' && pad) { pad.resize(); }
+  };
+
+  window.handleSigUpload = function(input) {
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      // Show crop step
+      document.getElementById('sigPickStep').style.display    = 'none';
+      document.getElementById('sigCropStep').style.display    = '';
+      document.getElementById('sigPreviewStep').style.display = 'none';
+
+      var img = document.getElementById('sigCropImage');
+      img.src = e.target.result;
+
+      // Destroy any previous cropper
+      if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+
+      img.onload = function() {
+        sigCropper = new Cropper(img, {
+          viewMode: 1,
+          dragMode: 'move',
+          autoCropArea: 0.9,
+          responsive: true,
+          checkCrossOrigin: false,
+          background: false,
+          movable: true,
+          zoomable: true,
+          rotatable: false
+        });
+      };
+    };
+    reader.readAsDataURL(file);
+  };
+
+  window.applySigCrop = function() {
+    if (!sigCropper) return;
+    var canvas = sigCropper.getCroppedCanvas({ maxWidth: 800, maxHeight: 400, fillColor: '#fff' });
+    uploadedDataURL = canvas.toDataURL('image/png');
+    sigCropper.destroy();
+    sigCropper = null;
+
+    // Show preview step
+    document.getElementById('sigUploadPreview').src         = uploadedDataURL;
+    document.getElementById('sigPickStep').style.display    = 'none';
+    document.getElementById('sigCropStep').style.display    = 'none';
+    document.getElementById('sigPreviewStep').style.display = '';
+    _onUpdate();
+  };
+
+  window.backToSigPick = function() {
+    if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+    document.getElementById('sigCropStep').style.display = 'none';
+    document.getElementById('sigPickStep').style.display = '';
+    document.getElementById('sigFileInput').value = '';
+  };
+
+  window.clearSigUpload = function() {
+    uploadedDataURL = null;
+    if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+    document.getElementById('sigUploadPreview').src         = '';
+    document.getElementById('sigPickStep').style.display    = '';
+    document.getElementById('sigCropStep').style.display    = 'none';
+    document.getElementById('sigPreviewStep').style.display = 'none';
+    document.getElementById('sigFileInput').value = '';
+    _onUpdate();
+  };
 
   /* ═══════════════════════════════════════════════════════
      Modal open / close
@@ -1867,6 +2048,14 @@
     _clearMsg();
     document.getElementById('sigSaveBtn').textContent  = '💾 Save Signature';
     document.getElementById('sigSaveBtn').disabled     = true;
+    // Reset to Draw tab
+    sigMode = 'draw';
+    uploadedDataURL = null;
+    document.getElementById('tabDraw').classList.add('active');
+    document.getElementById('tabUpload').classList.remove('active');
+    document.getElementById('sigDrawPanel').style.display   = '';
+    document.getElementById('sigUploadPanel').style.display = 'none';
+    clearSigUpload();
     document.getElementById('sigPadModal').classList.add('show');
     document.body.style.overflow = 'hidden';
 
@@ -1886,23 +2075,35 @@
     document.body.style.overflow = '';
     pad = null;
     sigType = null;
+    uploadedDataURL = null;
+    if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+    clearSigUpload();
   };
 
-  window.sigUndo  = function() { if (pad) pad.undo(); };
+  window.sigUndo  = function() { if (pad && sigMode === 'draw') pad.undo(); };
   window.sigClear = function() {
-    if (!pad || pad.isEmpty()) return;
-    if (!confirm('Clear the signature?')) return;
-    pad.clear();
+    if (sigMode === 'draw') {
+      if (!pad || pad.isEmpty()) return;
+      if (!confirm('Clear the signature?')) return;
+      pad.clear();
+    }
   };
 
   /* ═══════════════════════════════════════════════════════
      Save to server
   ═══════════════════════════════════════════════════════ */
   window.saveSig = function() {
-    if (!pad || pad.isEmpty()) return;
     var btn = document.getElementById('sigSaveBtn');
     var msg = document.getElementById('sigStatusMsg');
-    var dataURL = pad.toDataURL();
+    var dataURL;
+
+    if (sigMode === 'upload') {
+      if (!uploadedDataURL) return;
+      dataURL = uploadedDataURL;
+    } else {
+      if (!pad || pad.isEmpty()) return;
+      dataURL = pad.toDataURL();
+    }
 
     btn.disabled     = true;
     btn.textContent  = '⏳ Saving…';
