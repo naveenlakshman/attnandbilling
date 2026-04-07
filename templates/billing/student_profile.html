@@ -1694,7 +1694,8 @@
     <!-- Tab switcher -->
     <div class="sig-tab-row">
       <button class="sig-tab active" id="tabDraw"   onclick="switchSigTab('draw')">✍️ Draw</button>
-      <button class="sig-tab"        id="tabUpload" onclick="switchSigTab('upload')">🖼 Upload Image</button>
+      <button class="sig-tab"        id="tabCamera" onclick="switchSigTab('camera')">📷 Camera</button>
+      <button class="sig-tab"        id="tabUpload" onclick="switchSigTab('upload')">🖼 Upload</button>
     </div>
 
     <!-- Draw panel -->
@@ -1704,6 +1705,29 @@
         <button class="sig-tool-btn" onclick="sigUndo()">↩ Undo</button>
         <button class="sig-tool-btn" onclick="sigClear()">🗑 Clear</button>
         <span class="sig-stroke-hint" id="sigStrokeHint">Draw your signature above</span>
+      </div>
+    </div>
+
+    <!-- Camera panel -->
+    <div id="sigCameraPanel" style="display:none;">
+      <!-- Live view -->
+      <div id="sigCamLive">
+        <div style="position:relative; border-radius:8px; overflow:hidden; background:#000;">
+          <video id="sigCamVideo" style="width:100%; max-height:220px; display:block; object-fit:cover;" autoplay playsinline></video>
+          <button type="button" style="position:absolute; top:8px; right:8px; padding:5px 11px; border:none; border-radius:6px; background:rgba(0,0,0,0.55); color:white; font-size:12px; font-weight:600; cursor:pointer;" onclick="flipSigCam()">🔄 Flip</button>
+        </div>
+        <canvas id="sigCamCanvas" style="display:none;"></canvas>
+        <button type="button" class="sig-btn-save" style="margin-top:8px; width:100%;" onclick="snapSigCam()">📸 Capture</button>
+      </div>
+      <!-- Snap preview -->
+      <div id="sigCamPreview" style="display:none;">
+        <div style="width:100%; height:160px; display:flex; align-items:center; justify-content:center; border:2px solid #2563eb; border-radius:8px; background:white; overflow:hidden;">
+          <img id="sigCamImg" src="" alt="Captured" style="max-width:100%; max-height:156px; object-fit:contain;">
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="sig-tool-btn" style="flex:1;" onclick="retakeSigCam()">🔄 Retake</button>
+          <button class="sig-tool-btn" style="flex:1; background:#2563eb; color:white; border:none; font-weight:700;" onclick="useSigCamSnap()">✔ Use This</button>
+        </div>
       </div>
     </div>
 
@@ -1939,8 +1963,8 @@
       hint.textContent = n + ' stroke' + (n === 1 ? '' : 's');
       btn.disabled = false;
     }
-    // Also handle upload mode
-    if (sigMode === 'upload') {
+    // Also handle upload/camera mode
+    if (sigMode === 'upload' || sigMode === 'camera') {
       btn.disabled = !uploadedDataURL;
     }
   }
@@ -1954,17 +1978,87 @@
   /* ═══════════════════════════════════════════════════════
      Tab switching
   ═══════════════════════════════════════════════════════ */
-  var sigMode = 'draw';   // 'draw' or 'upload'
+  var sigMode = 'draw';   // 'draw', 'camera', or 'upload'
   var uploadedDataURL = null;
+  var camStream = null;
+  var camFacingMode = 'user';   // prefer front camera for signatures
 
   window.switchSigTab = function(mode) {
+    // Stop camera if leaving camera tab
+    if (sigMode === 'camera' && mode !== 'camera') { _stopSigCam(); }
     sigMode = mode;
     document.getElementById('tabDraw').classList.toggle('active',   mode === 'draw');
+    document.getElementById('tabCamera').classList.toggle('active', mode === 'camera');
     document.getElementById('tabUpload').classList.toggle('active', mode === 'upload');
     document.getElementById('sigDrawPanel').style.display   = mode === 'draw'   ? '' : 'none';
+    document.getElementById('sigCameraPanel').style.display = mode === 'camera' ? '' : 'none';
     document.getElementById('sigUploadPanel').style.display = mode === 'upload' ? '' : 'none';
     _onUpdate();
     if (mode === 'draw' && pad) { pad.resize(); }
+    if (mode === 'camera') { _startSigCam(); }
+  };
+
+  /* ── Camera helpers ─────────────────────────────────── */
+  function _startSigCam() {
+    _stopSigCam();
+    document.getElementById('sigCamLive').style.display    = '';
+    document.getElementById('sigCamPreview').style.display = 'none';
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacingMode }, audio: false })
+      .then(function(stream) {
+        camStream = stream;
+        var v = document.getElementById('sigCamVideo');
+        v.srcObject = stream;
+        v.play();
+      })
+      .catch(function(err) {
+        var msg = document.getElementById('sigStatusMsg');
+        msg.textContent = '✗ Camera error: ' + err.message;
+        msg.className = 'sig-status-msg error';
+      });
+  }
+
+  function _stopSigCam() {
+    if (camStream) {
+      camStream.getTracks().forEach(function(t){ t.stop(); });
+      camStream = null;
+    }
+    var v = document.getElementById('sigCamVideo');
+    v.srcObject = null;
+  }
+
+  window.flipSigCam = function() {
+    camFacingMode = camFacingMode === 'user' ? 'environment' : 'user';
+    _startSigCam();
+  };
+
+  window.snapSigCam = function() {
+    var v = document.getElementById('sigCamVideo');
+    var c = document.getElementById('sigCamCanvas');
+    c.width  = v.videoWidth  || 640;
+    c.height = v.videoHeight || 480;
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    var snap = c.toDataURL('image/png');
+    _stopSigCam();
+    document.getElementById('sigCamImg').src = snap;
+    document.getElementById('sigCamLive').style.display    = 'none';
+    document.getElementById('sigCamPreview').style.display = '';
+    // Temporarily store so Use This can commit
+    window._sigCamSnap = snap;
+  };
+
+  window.retakeSigCam = function() {
+    window._sigCamSnap = null;
+    _startSigCam();
+    document.getElementById('sigCamPreview').style.display = 'none';
+    document.getElementById('sigCamLive').style.display    = '';
+    _onUpdate();
+  };
+
+  window.useSigCamSnap = function() {
+    if (!window._sigCamSnap) return;
+    uploadedDataURL = window._sigCamSnap;
+    window._sigCamSnap = null;
+    _onUpdate();
   };
 
   window.handleSigUpload = function(input) {
@@ -2049,11 +2143,15 @@
     document.getElementById('sigSaveBtn').textContent  = '💾 Save Signature';
     document.getElementById('sigSaveBtn').disabled     = true;
     // Reset to Draw tab
+    _stopSigCam();
+    window._sigCamSnap = null;
     sigMode = 'draw';
     uploadedDataURL = null;
     document.getElementById('tabDraw').classList.add('active');
+    document.getElementById('tabCamera').classList.remove('active');
     document.getElementById('tabUpload').classList.remove('active');
     document.getElementById('sigDrawPanel').style.display   = '';
+    document.getElementById('sigCameraPanel').style.display = 'none';
     document.getElementById('sigUploadPanel').style.display = 'none';
     clearSigUpload();
     document.getElementById('sigPadModal').classList.add('show');
@@ -2071,6 +2169,8 @@
   };
 
   window.closeSigModal = function() {
+    _stopSigCam();
+    window._sigCamSnap = null;
     document.getElementById('sigPadModal').classList.remove('show');
     document.body.style.overflow = '';
     pad = null;
@@ -2097,7 +2197,7 @@
     var msg = document.getElementById('sigStatusMsg');
     var dataURL;
 
-    if (sigMode === 'upload') {
+    if (sigMode === 'upload' || sigMode === 'camera') {
       if (!uploadedDataURL) return;
       dataURL = uploadedDataURL;
     } else {
