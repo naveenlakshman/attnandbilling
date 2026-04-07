@@ -619,6 +619,182 @@
     background-color: #d0d0d0;
   }
 
+  /* ── Signature Section ────────────────────────────────── */
+  .sig-status-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 600px) {
+    .sig-status-grid { grid-template-columns: 1fr; }
+  }
+  .sig-status-box {
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 18px 16px;
+    background: #fafafa;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+  }
+  .sig-box-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .sig-preview-img {
+    max-width: 100%;
+    max-height: 80px;
+    object-fit: contain;
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+    background: white;
+    padding: 4px;
+  }
+  .sig-date-info {
+    font-size: 11px;
+    color: #6b7280;
+  }
+  .sig-empty-box {
+    width: 100%;
+    height: 64px;
+    border: 2px dashed #d1d5db;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 13px;
+  }
+  .sig-collect-btn {
+    padding: 9px 0;
+    width: 100%;
+    border: none;
+    border-radius: 7px;
+    background: #2563eb;
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .sig-collect-btn:hover { background: #1d4ed8; }
+
+  /* ── Signature Pad Modal ──────────────────────────────── */
+  #sigPadModal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+  }
+  #sigPadModal.show {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  @media (min-width: 640px) {
+    #sigPadModal.show { align-items: center; }
+    #sigPadModal .sig-modal-box { border-radius: 14px; }
+  }
+  #sigPadModal .sig-modal-box {
+    background: white;
+    width: 100%;
+    max-width: 640px;
+    border-radius: 18px 18px 0 0;
+    padding: 22px 20px 30px;
+    box-shadow: 0 -6px 32px rgba(0,0,0,0.25);
+  }
+  .sig-modal-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #111;
+    margin-bottom: 4px;
+  }
+  .sig-modal-subtitle {
+    font-size: 13px;
+    color: #6b7280;
+    margin-bottom: 14px;
+  }
+  #sigCanvas {
+    width: 100%;
+    height: 210px;
+    display: block;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    cursor: crosshair;
+    background: white;
+    touch-action: none;
+    user-select: none;
+  }
+  #sigCanvas:active { border-color: #2563eb; }
+  .sig-toolbar {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    margin-bottom: 16px;
+    align-items: center;
+  }
+  .sig-tool-btn {
+    padding: 6px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: white;
+    font-size: 13px;
+    cursor: pointer;
+    color: #374151;
+    font-weight: 500;
+  }
+  .sig-tool-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
+  .sig-stroke-hint {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-left: auto;
+  }
+  .sig-save-row {
+    display: flex;
+    gap: 10px;
+  }
+  .sig-btn-save {
+    flex: 2;
+    padding: 13px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 9px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .sig-btn-save:hover:not(:disabled) { background: #1d4ed8; }
+  .sig-btn-save:disabled { background: #93c5fd; cursor: not-allowed; }
+  .sig-btn-cancel {
+    flex: 1;
+    padding: 13px;
+    background: #f3f4f6;
+    color: #374151;
+    border: none;
+    border-radius: 9px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .sig-btn-cancel:hover { background: #e5e7eb; }
+  .sig-status-msg {
+    font-size: 13px;
+    margin-top: 10px;
+    text-align: center;
+    min-height: 18px;
+    color: #6b7280;
+  }
+  .sig-status-msg.success { color: #16a34a; font-weight: 700; }
+  .sig-status-msg.error   { color: #dc2626; font-weight: 600; }
+
 </style>
 
 <div class="page-actions no-print">
@@ -807,6 +983,58 @@
   </div>
 </div>
 {% endif %}
+
+<!-- ── Enrollment Signatures Section ──────────────────── -->
+<div class="section">
+  <h3>✍️ Enrollment Signatures</h3>
+  <div class="sig-status-grid">
+
+    <!-- Student Signature -->
+    <div class="sig-status-box" id="sigBox_student">
+      <div class="sig-box-label">Student Signature</div>
+      {% if student.student_signature_filename %}
+        <img class="sig-preview-img" id="sigImg_student"
+             src="/static/images/student_signatures/{{ student.student_signature_filename }}"
+             alt="Student Signature">
+        <div class="sig-date-info" id="sigDate_student">
+          Signed: {{ student.student_signature_date[:10] if student.student_signature_date else '' }}
+        </div>
+      {% else %}
+        <div class="sig-empty-box" id="sigEmpty_student">Not yet collected</div>
+        <div id="sigPreviewWrap_student" style="display:none; width:100%;">
+          <img class="sig-preview-img" id="sigImg_student" src="" alt="Student Signature" style="display:block; margin:0 auto;">
+          <div class="sig-date-info" id="sigDate_student"></div>
+        </div>
+      {% endif %}
+      <button class="sig-collect-btn" id="sigBtn_student" onclick="openSigModal('student')">
+        {% if student.student_signature_filename %}🔄 Update Signature{% else %}✍️ Collect Signature{% endif %}
+      </button>
+    </div>
+
+    <!-- Parent/Guardian Signature -->
+    <div class="sig-status-box" id="sigBox_parent">
+      <div class="sig-box-label">Parent / Guardian Signature</div>
+      {% if student.parent_signature_filename %}
+        <img class="sig-preview-img" id="sigImg_parent"
+             src="/static/images/student_signatures/{{ student.parent_signature_filename }}"
+             alt="Parent Signature">
+        <div class="sig-date-info" id="sigDate_parent">
+          Signed: {{ student.parent_signature_date[:10] if student.parent_signature_date else '' }}
+        </div>
+      {% else %}
+        <div class="sig-empty-box" id="sigEmpty_parent">Not yet collected</div>
+        <div id="sigPreviewWrap_parent" style="display:none; width:100%;">
+          <img class="sig-preview-img" id="sigImg_parent" src="" alt="Parent Signature" style="display:block; margin:0 auto;">
+          <div class="sig-date-info" id="sigDate_parent"></div>
+        </div>
+      {% endif %}
+      <button class="sig-collect-btn" id="sigBtn_parent" onclick="openSigModal('parent')">
+        {% if student.parent_signature_filename %}🔄 Update Signature{% else %}✍️ Collect Signature{% endif %}
+      </button>
+    </div>
+
+  </div>
+</div>
 
 <!-- Invoices Section -->
 <div class="section">
@@ -1407,6 +1635,330 @@
       btn.textContent = 'Save Photo';
     });
   };
+})();
+</script>
+
+<!-- ── Signature Pad Modal ────────────────────────────────────────── -->
+<div id="sigPadModal" onclick="if(event.target===this)closeSigModal()">
+  <div class="sig-modal-box">
+    <div class="sig-modal-title" id="sigModalTitle">✍️ Student Signature</div>
+    <div class="sig-modal-subtitle" id="sigModalSubtitle">Sign clearly within the box. Use finger or stylus on mobile.</div>
+    <canvas id="sigCanvas"></canvas>
+    <div class="sig-toolbar">
+      <button class="sig-tool-btn" onclick="sigUndo()">↩ Undo</button>
+      <button class="sig-tool-btn" onclick="sigClear()">🗑 Clear</button>
+      <span class="sig-stroke-hint" id="sigStrokeHint">Draw your signature above</span>
+    </div>
+    <div class="sig-save-row">
+      <button class="sig-btn-save" id="sigSaveBtn" onclick="saveSig()" disabled>💾 Save Signature</button>
+      <button class="sig-btn-cancel" onclick="closeSigModal()">Cancel</button>
+    </div>
+    <div class="sig-status-msg" id="sigStatusMsg"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var sigType = null;
+  var pad = null;
+  var saveUrl = "{{ url_for('billing.student_save_signature', student_id=student.id) }}";
+
+  /* ═══════════════════════════════════════════════════════
+     SignaturePad — smooth Bézier-interpolated drawing
+  ═══════════════════════════════════════════════════════ */
+  function SignaturePad(canvas) {
+    this.canvas   = canvas;
+    this.ctx      = canvas.getContext('2d');
+    this.strokes  = [];      // Array of completed point arrays
+    this.live     = null;    // Current in-progress stroke
+    this.drawing  = false;
+    this._bindEvents();
+  }
+
+  SignaturePad.prototype._setupCtx = function() {
+    this.ctx.strokeStyle = '#1a1a2e';
+    this.ctx.lineWidth   = 2.2;
+    this.ctx.lineCap     = 'round';
+    this.ctx.lineJoin    = 'round';
+  };
+
+  SignaturePad.prototype._getPos = function(e) {
+    var r = this.canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  SignaturePad.prototype._bindEvents = function() {
+    var self = this, c = this.canvas;
+    c.addEventListener('pointerdown',  function(e){ e.preventDefault(); self._down(e); },  { passive: false });
+    c.addEventListener('pointermove',  function(e){ e.preventDefault(); self._move(e); },  { passive: false });
+    c.addEventListener('pointerup',    function(e){ self._up(e); });
+    c.addEventListener('pointercancel',function(e){ self._up(e); });
+    c.addEventListener('pointerleave', function(e){ self._up(e); });
+  };
+
+  SignaturePad.prototype._down = function(e) {
+    this.canvas.setPointerCapture(e.pointerId);
+    this.drawing = true;
+    var p = this._getPos(e);
+    this.live = [p];
+    this._setupCtx();
+    this.ctx.beginPath();
+    this.ctx.moveTo(p.x, p.y);
+    _onUpdate();
+  };
+
+  SignaturePad.prototype._move = function(e) {
+    if (!this.drawing || !this.live) return;
+    var p = this._getPos(e);
+    this.live.push(p);
+    var pts = this.live, n = pts.length;
+    if (n >= 3) {
+      var p1 = pts[n-3], p2 = pts[n-2], p3 = pts[n-1];
+      var mid1 = { x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2 };
+      var mid2 = { x:(p2.x+p3.x)/2, y:(p2.y+p3.y)/2 };
+      if (n === 3) {
+        this.ctx.beginPath();
+        this.ctx.moveTo(mid1.x, mid1.y);
+      }
+      this.ctx.quadraticCurveTo(p2.x, p2.y, mid2.x, mid2.y);
+      this.ctx.stroke();
+    } else if (n === 2) {
+      this.ctx.beginPath();
+      this.ctx.moveTo(pts[0].x, pts[0].y);
+      this.ctx.lineTo(pts[1].x,  pts[1].y);
+      this.ctx.stroke();
+    }
+  };
+
+  SignaturePad.prototype._up = function() {
+    if (!this.drawing) return;
+    this.drawing = false;
+    if (this.live && this.live.length > 0) {
+      this.strokes.push(this.live.slice());
+    }
+    this.live = null;
+    _onUpdate();
+  };
+
+  SignaturePad.prototype.resize = function() {
+    var dpr = window.devicePixelRatio || 1;
+    var r = this.canvas.getBoundingClientRect();
+    var w = r.width, h = r.height;
+    var saved = this.strokes.slice();
+    this.canvas.width  = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
+    this.ctx = this.canvas.getContext('2d');
+    this.ctx.scale(dpr, dpr);
+    this.strokes = saved;
+    this._setupCtx();
+    this._drawGuide();
+    this._redraw();
+  };
+
+  SignaturePad.prototype._drawGuide = function() {
+    var r = this.canvas.getBoundingClientRect();
+    var w = r.width, h = r.height;
+    this.ctx.save();
+    this.ctx.strokeStyle = '#e5e7eb';
+    this.ctx.lineWidth   = 1;
+    this.ctx.setLineDash([5, 5]);
+    this.ctx.beginPath();
+    this.ctx.moveTo(14, h * 0.78);
+    this.ctx.lineTo(w - 14, h * 0.78);
+    this.ctx.stroke();
+    this.ctx.setLineDash([]);
+    this.ctx.restore();
+  };
+
+  SignaturePad.prototype._redraw = function() {
+    this._setupCtx();
+    for (var s = 0; s < this.strokes.length; s++) {
+      var pts = this.strokes[s];
+      if (!pts.length) continue;
+      if (pts.length === 1) {
+        this.ctx.beginPath();
+        this.ctx.arc(pts[0].x, pts[0].y, 1.2, 0, Math.PI * 2);
+        this.ctx.fillStyle = '#1a1a2e';
+        this.ctx.fill();
+        continue;
+      }
+      this.ctx.beginPath();
+      this.ctx.moveTo(pts[0].x, pts[0].y);
+      for (var i = 1; i < pts.length - 1; i++) {
+        var mid = { x: (pts[i].x + pts[i+1].x) / 2, y: (pts[i].y + pts[i+1].y) / 2 };
+        this.ctx.quadraticCurveTo(pts[i].x, pts[i].y, mid.x, mid.y);
+      }
+      this.ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+      this.ctx.stroke();
+    }
+  };
+
+  SignaturePad.prototype.undo = function() {
+    if (this.strokes.length === 0) return;
+    this.strokes.pop();
+    var r = this.canvas.getBoundingClientRect();
+    this.ctx.clearRect(0, 0, r.width, r.height);
+    this._drawGuide();
+    this._redraw();
+    _onUpdate();
+  };
+
+  SignaturePad.prototype.clear = function() {
+    this.strokes = [];
+    var r = this.canvas.getBoundingClientRect();
+    this.ctx.clearRect(0, 0, r.width, r.height);
+    this._drawGuide();
+    _onUpdate();
+  };
+
+  SignaturePad.prototype.isEmpty = function() {
+    return this.strokes.length === 0;
+  };
+
+  /* Returns a white-background PNG data URL suitable for server storage */
+  SignaturePad.prototype.toDataURL = function() {
+    var dpr = window.devicePixelRatio || 1;
+    var r   = this.canvas.getBoundingClientRect();
+    var off = document.createElement('canvas');
+    off.width  = this.canvas.width;
+    off.height = this.canvas.height;
+    var ctx = off.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, off.width, off.height);
+    ctx.drawImage(this.canvas, 0, 0);
+    return off.toDataURL('image/png');
+  };
+
+  /* ═══════════════════════════════════════════════════════
+     UI helpers
+  ═══════════════════════════════════════════════════════ */
+  function _onUpdate() {
+    if (!pad) return;
+    var n    = pad.strokes.length;
+    var hint = document.getElementById('sigStrokeHint');
+    var btn  = document.getElementById('sigSaveBtn');
+    if (n === 0) {
+      hint.textContent = 'Draw your signature above';
+      btn.disabled = true;
+    } else {
+      hint.textContent = n + ' stroke' + (n === 1 ? '' : 's');
+      btn.disabled = false;
+    }
+  }
+
+  function _clearMsg() {
+    var el = document.getElementById('sigStatusMsg');
+    el.textContent = '';
+    el.className = 'sig-status-msg';
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     Modal open / close
+  ═══════════════════════════════════════════════════════ */
+  window.openSigModal = function(type) {
+    sigType = type;
+    var isParent = (type === 'parent');
+    document.getElementById('sigModalTitle').textContent =
+      isParent ? '✍️ Parent / Guardian Signature' : '✍️ Student Signature';
+    document.getElementById('sigModalSubtitle').textContent =
+      isParent
+        ? ({{ (student.parent_name or 'Parent/Guardian') | tojson }}) + ': please sign clearly within the box.'
+        : ({{ student.full_name | tojson }}) + ': please sign clearly within the box.';
+    _clearMsg();
+    document.getElementById('sigSaveBtn').textContent  = '💾 Save Signature';
+    document.getElementById('sigSaveBtn').disabled     = true;
+    document.getElementById('sigPadModal').classList.add('show');
+    document.body.style.overflow = 'hidden';
+
+    /* Init pad after modal is visible so getBoundingClientRect() is accurate */
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        var canvas = document.getElementById('sigCanvas');
+        pad = new SignaturePad(canvas);
+        pad.resize();
+        _onUpdate();
+      });
+    });
+  };
+
+  window.closeSigModal = function() {
+    document.getElementById('sigPadModal').classList.remove('show');
+    document.body.style.overflow = '';
+    pad = null;
+    sigType = null;
+  };
+
+  window.sigUndo  = function() { if (pad) pad.undo(); };
+  window.sigClear = function() {
+    if (!pad || pad.isEmpty()) return;
+    if (!confirm('Clear the signature?')) return;
+    pad.clear();
+  };
+
+  /* ═══════════════════════════════════════════════════════
+     Save to server
+  ═══════════════════════════════════════════════════════ */
+  window.saveSig = function() {
+    if (!pad || pad.isEmpty()) return;
+    var btn = document.getElementById('sigSaveBtn');
+    var msg = document.getElementById('sigStatusMsg');
+    var dataURL = pad.toDataURL();
+
+    btn.disabled     = true;
+    btn.textContent  = '⏳ Saving…';
+    msg.textContent  = '';
+    msg.className    = 'sig-status-msg';
+
+    var fd = new FormData();
+    fd.append('sig_type', sigType);
+    fd.append('sig_data',  dataURL);
+
+    fetch(saveUrl, { method: 'POST', body: fd })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          msg.textContent = '✓ Saved on ' + data.signed_at;
+          msg.className   = 'sig-status-msg success';
+          btn.textContent = '✓ Saved!';
+          _updateStatusBox(sigType, dataURL, data.signed_at);
+          setTimeout(closeSigModal, 1100);
+        } else {
+          msg.textContent = '✗ ' + (data.error || 'Save failed');
+          msg.className   = 'sig-status-msg error';
+          btn.disabled    = false;
+          btn.textContent = '💾 Save Signature';
+        }
+      })
+      .catch(function(err) {
+        msg.textContent = '✗ Network error: ' + err.message;
+        msg.className   = 'sig-status-msg error';
+        btn.disabled    = false;
+        btn.textContent = '💾 Save Signature';
+      });
+  };
+
+  /* ═══════════════════════════════════════════════════════
+     Refresh signature status box without page reload
+  ═══════════════════════════════════════════════════════ */
+  function _updateStatusBox(type, dataURL, signedAt) {
+    var dateStr = signedAt ? 'Signed: ' + signedAt.substring(0, 10) : '';
+
+    var emptyEl = document.getElementById('sigEmpty_'       + type);
+    var wrapEl  = document.getElementById('sigPreviewWrap_' + type);
+    var imgEl   = document.getElementById('sigImg_'         + type);
+    var dateEl  = document.getElementById('sigDate_'        + type);
+    var btnEl   = document.getElementById('sigBtn_'         + type);
+
+    if (emptyEl)  emptyEl.style.display  = 'none';
+    if (wrapEl)   wrapEl.style.display   = 'block';
+    if (imgEl)    imgEl.src              = dataURL;
+    if (dateEl)   dateEl.textContent     = dateStr;
+    if (btnEl)    btnEl.textContent      = '🔄 Update Signature';
+  }
+
+  /* Resize canvas if modal size changes (e.g. virtual keyboard hides) */
+  window.addEventListener('resize', function() { if (pad) pad.resize(); });
+
 })();
 </script>
 

@@ -503,6 +503,10 @@ def init_db():
     add_column_if_not_exists(cur, "students", "parent_name", "TEXT")
     add_column_if_not_exists(cur, "students", "parent_contact", "TEXT")
     add_column_if_not_exists(cur, "students", "photo_filename", "TEXT")
+    add_column_if_not_exists(cur, "students", "student_signature_filename", "TEXT")
+    add_column_if_not_exists(cur, "students", "student_signature_date", "TEXT")
+    add_column_if_not_exists(cur, "students", "parent_signature_filename", "TEXT")
+    add_column_if_not_exists(cur, "students", "parent_signature_date", "TEXT")
     add_column_if_not_exists(cur, "leads", "lead_location", "TEXT")
 
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")

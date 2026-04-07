@@ -5,6 +5,16 @@
 {% block content %}
 
 <style>
+  /* Override print_base .print-container for this document */
+  .print-container {
+    width: 100%;
+    max-width: 860px;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 auto;
+  }
+
   * {
     margin: 0;
     padding: 0;
@@ -21,6 +31,7 @@
     padding: 0;
     background: white;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow-x: hidden;
   }
 
   .document-wrapper {
@@ -348,30 +359,9 @@
   }
 
   @media print {
-    * {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-      color-adjust: exact !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-
     html, body {
       width: 100% !important;
-      height: 100% !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      background: white !important;
-    }
-
-    @page {
-      size: A4;
-      margin: 6mm;
-      orphans: 3;
-      widows: 3;
-    }
-
-    body {
+      height: auto !important;
       margin: 0 !important;
       padding: 0 !important;
       background: white !important;
@@ -379,11 +369,25 @@
       font-size: 10px !important;
     }
 
+    @page {
+      size: A4;
+      margin: 10mm;
+    }
+
+    .print-container {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
     .document-wrapper {
       width: 100% !important;
       max-width: 100% !important;
       margin: 0 !important;
-      padding: 6mm !important;
+      padding: 0 !important;
       box-sizing: border-box !important;
       background: white !important;
     }
@@ -424,6 +428,13 @@
       page-break-inside: avoid;
       print-color-adjust: exact !important;
       -webkit-print-color-adjust: exact !important;
+    }
+
+    /* Preserve background colors in print */
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
     }
 
     .page-actions {
@@ -485,15 +496,15 @@
 
     .student-info-wrapper {
       display: grid !important;
-      grid-template-columns: 60px 1fr !important;
+      grid-template-columns: 140px 1fr !important;
       gap: 4mm !important;
       align-items: flex-start !important;
       width: 100% !important;
     }
 
     .student-photo {
-      width: 60px !important;
-      height: 75px !important;
+      width: 140px !important;
+      height: 175px !important;
       border: 1px solid #667eea !important;
       border-radius: 2px !important;
       overflow: hidden !important;
@@ -690,12 +701,34 @@
   }
 
   @media (max-width: 768px) {
+    .print-container {
+      max-width: 100% !important;
+      width: 100% !important;
+      overflow-x: hidden !important;
+    }
+
     .document-wrapper {
-      padding: 15px;
+      padding: 12px;
     }
 
     .info-grid {
       grid-template-columns: 1fr;
+    }
+
+    .student-info-wrapper {
+      grid-template-columns: 70px 1fr;
+    }
+
+    .student-photo {
+      width: 70px !important;
+      height: 85px !important;
+    }
+
+    .courses-table,
+    .installments-table {
+      display: block;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .payment-summary {
@@ -724,6 +757,46 @@
   @media print and (max-width: 768px) {
     .info-grid {
       grid-template-columns: 1fr 1fr !important;
+    }
+
+    .student-info-wrapper {
+      grid-template-columns: 140px 1fr !important;
+    }
+
+    .student-photo {
+      width: 140px !important;
+      height: 175px !important;
+    }
+
+    .courses-table,
+    .installments-table {
+      display: table !important;
+      width: 100% !important;
+      overflow: visible !important;
+      border-collapse: collapse !important;
+      -webkit-overflow-scrolling: unset !important;
+    }
+
+    .courses-table thead,
+    .installments-table thead {
+      display: table-header-group !important;
+    }
+
+    .courses-table tbody,
+    .installments-table tbody {
+      display: table-row-group !important;
+    }
+
+    .courses-table tr,
+    .installments-table tr {
+      display: table-row !important;
+    }
+
+    .courses-table th,
+    .courses-table td,
+    .installments-table th,
+    .installments-table td {
+      display: table-cell !important;
     }
 
     .payment-summary {
@@ -949,19 +1022,37 @@
     <div class="signature-grid">
       <div class="signature-block">
         <div class="signature-label">STUDENT'S SIGNATURE</div>
-        <div style="height: 80px; border-bottom: 2px solid #333;"></div>
+        {% if student.student_signature_filename %}
+          <div style="height: 80px; display: flex; align-items: flex-end; padding-bottom: 4px;">
+            <img src="/static/images/student_signatures/{{ student.student_signature_filename }}"
+                 style="max-height: 76px; max-width: 100%; object-fit: contain;"
+                 alt="Student Signature">
+          </div>
+          <div style="border-bottom: 2px solid #333; margin-bottom: 6px;"></div>
+        {% else %}
+          <div style="height: 80px; border-bottom: 2px solid #333;"></div>
+        {% endif %}
         <div class="signature-line">
           {{ student.full_name }}<br>
-          Date: ______________
+          Date: {{ student.student_signature_date[:10] if student.student_signature_date else '______________' }}
         </div>
       </div>
 
       <div class="signature-block">
         <div class="signature-label">PARENT/GUARDIAN SIGNATURE</div>
-        <div style="height: 80px; border-bottom: 2px solid #333;"></div>
+        {% if student.parent_signature_filename %}
+          <div style="height: 80px; display: flex; align-items: flex-end; padding-bottom: 4px;">
+            <img src="/static/images/student_signatures/{{ student.parent_signature_filename }}"
+                 style="max-height: 76px; max-width: 100%; object-fit: contain;"
+                 alt="Parent Signature">
+          </div>
+          <div style="border-bottom: 2px solid #333; margin-bottom: 6px;"></div>
+        {% else %}
+          <div style="height: 80px; border-bottom: 2px solid #333;"></div>
+        {% endif %}
         <div class="signature-line">
           {{ student.parent_name or 'Parent/Guardian Name' }}<br>
-          Date: ______________
+          Date: {{ student.parent_signature_date[:10] if student.parent_signature_date else '______________' }}
         </div>
       </div>
     </div>

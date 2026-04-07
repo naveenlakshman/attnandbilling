@@ -1029,6 +1029,71 @@ def student_upload_photo(student_id):
         conn.close()
         return jsonify({"success": False, "error": str(e)}), 500
 
+
+@billing_bp.route("/student/<int:student_id>/save-signature", methods=["POST"])
+@login_required
+def student_save_signature(student_id):
+    """Save student or parent digital signature from profile page."""
+    import os, base64
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, student_code, full_name FROM students WHERE id = ?", (student_id,))
+    student = cur.fetchone()
+    if not student:
+        conn.close()
+        return jsonify({"success": False, "error": "Student not found"}), 404
+
+    sig_type = request.form.get("sig_type", "").strip()   # "student" or "parent"
+    sig_data = request.form.get("sig_data", "").strip()   # base64 PNG data URL
+
+    if sig_type not in ("student", "parent"):
+        conn.close()
+        return jsonify({"success": False, "error": "Invalid signature type"}), 400
+    if not sig_data:
+        conn.close()
+        return jsonify({"success": False, "error": "No signature data"}), 400
+
+    try:
+        if ',' in sig_data:
+            sig_data = sig_data.split(',')[1]
+        sig_bytes = base64.b64decode(sig_data)
+
+        sig_dir = os.path.join("static", "images", "student_signatures")
+        os.makedirs(sig_dir, exist_ok=True)
+
+        code = student["student_code"]
+        filename = f"{code}_{sig_type}_signature.png"
+        filepath = os.path.join(sig_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(sig_bytes)
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if sig_type == "student":
+            cur.execute(
+                "UPDATE students SET student_signature_filename=?, student_signature_date=?, updated_at=? WHERE id=?",
+                (filename, now, now, student_id)
+            )
+        else:
+            cur.execute(
+                "UPDATE students SET parent_signature_filename=?, parent_signature_date=?, updated_at=? WHERE id=?",
+                (filename, now, now, student_id)
+            )
+        conn.commit()
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=None,
+            action_type="update",
+            module_name="students",
+            record_id=student_id,
+            description=f"Saved {sig_type} signature for {student['full_name']} ({code})"
+        )
+        conn.close()
+        return jsonify({"success": True, "filename": filename, "signed_at": now})
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @billing_bp.route("/student/<int:student_id>/batches-available")
 @login_required
 def student_batches_available(student_id):
