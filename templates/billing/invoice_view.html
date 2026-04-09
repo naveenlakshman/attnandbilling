@@ -76,9 +76,78 @@
   }
 
   .invoice-footer {
-    margin-top: 30px;
-    padding-top: 20px;
+    margin-top: 20px;
+    padding-top: 15px;
     border-top: 1px solid #dee2e6;
+    font-size: 13px;
+    color: #555;
+  }
+
+  /* ── Mobile styles ── */
+  @media (max-width: 768px) {
+    h2 {
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+
+    .page-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .page-actions .btn {
+      flex: 1 1 calc(50% - 8px);
+      text-align: center;
+      font-size: 13px;
+      padding: 8px 6px;
+    }
+
+    .invoice-header h1 {
+      font-size: 20px;
+    }
+
+    .invoice-header p {
+      font-size: 12px;
+    }
+
+    .grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .card {
+      padding: 14px;
+    }
+
+    .card h3 {
+      font-size: 14px;
+    }
+
+    .card p {
+      font-size: 13px;
+    }
+
+    /* Make tables horizontally scrollable */
+    .table-responsive-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .billing-table th,
+    .billing-table td {
+      font-size: 12px;
+      padding: 8px 6px;
+      white-space: nowrap;
+    }
+
+    /* BILL OF SUPPLY stamp */
+    .bill-of-supply-stamp {
+      font-size: 13px !important;
+      padding: 2px 8px !important;
+      letter-spacing: 1px !important;
+    }
   }
 
   @media print {
@@ -257,7 +326,7 @@
   }
 </style>
 
-<h2>Invoice Details</h2>
+<h2>Bill of Supply</h2>
 
 <div class="page-actions">
   {% if session.get("role") == "admin" %}
@@ -269,22 +338,29 @@
   {% if session.get("role") == "admin" and effective_status in ['unpaid', 'partially_paid'] %}
   <a class="btn btn-danger" href="{{ url_for('baddebt.create') }}?invoice_id={{ invoice.id }}" title="Write-off outstanding balance">✗ Write-off</a>
   {% endif %}
-  <a class="btn btn-secondary" href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}" target="_blank"> Print Invoice </a>
+  <a class="btn btn-secondary" href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}" target="_blank"> Print Bill </a>
+  <a href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}?mode=pdf" target="_blank" class="btn btn-success">⬇️ Download PDF</a>
 </div>
+<div id="invoice-pdf-content">
 <div class="invoice-header">
 
   <h1>Global IT Education</h1>
   <p>Computer Training & Billing System</p>
+  <p style="font-size: 13px; margin: 4px 0 0 0; color: #333;"><strong>GSTIN:</strong> 29AMEPL6934C2ZZ &nbsp;|&nbsp; <em>Composition Dealer — Tax not applicable</em></p>
 
   <hr>
 
 </div>
 
+<div style="text-align: center; margin: 8px 0;">
+  <span class="bill-of-supply-stamp" style="font-size: 16px; font-weight: bold; color: #1e3a8a; letter-spacing: 2px; border: 2px solid #1e3a8a; padding: 2px 12px;">BILL OF SUPPLY</span>
+</div>
+
 <div class="grid">
     <div class="card">
-      <h3>Invoice Summary</h3>
-      <p><strong>Invoice No:</strong> {{ invoice.invoice_no }}</p>
-      <p><strong>Invoice Date:</strong> {{ invoice.invoice_date }}</p>
+      <h3>Bill of Supply</h3>
+      <p><strong>Bill No:</strong> {{ invoice.invoice_no }}</p>
+      <p><strong>Bill Date:</strong> {{ invoice.invoice_date }}</p>
       <p><strong>Student:</strong> <a href="{{ url_for('billing.student_profile', student_id=invoice.student_id) }}" style="text-decoration: none; color: #0d6efd;">{{ invoice.student_code }} - {{ invoice.full_name }}</a></p>
       <p><strong>Phone:</strong> {{ invoice.phone }}</p>
       <p><strong>Branch:</strong> {{ invoice.branch_name or "-" }}</p>
@@ -312,6 +388,7 @@
 
 <div class="card">
   <h3>Invoice Items</h3>
+  <div class="table-responsive-wrap">
   <table border="1" width="100%" cellpadding="10" class="billing-table">
     <tr>
       <th>Description</th>
@@ -329,10 +406,12 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 </div>
 
 <div class="card">
   <h3>Installment Plan</h3>
+  <div class="table-responsive-wrap">
   <table border="1" width="100%" cellpadding="10" class="billing-table">
     <tr>
       <th>No</th>
@@ -362,10 +441,12 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 </div>
 
 <div class="card">
   <h3>Receipts</h3>
+  <div class="table-responsive-wrap">
   <table border="1" width="100%" cellpadding="10" class="billing-table">
     <tr>
       <th>Receipt No</th>
@@ -387,25 +468,13 @@
     </tr>
     {% endfor %}
   </table>
-
-  <div class="invoice-footer">
-
-  <div style="margin-top:40px; display:flex; justify-content:space-between;">
-
-    <div>
-      <p><strong>Prepared By:</strong> {{ session.get("full_name") }}</p>
-    </div>
-
-    <div style="text-align:center; min-width:200px;">
-      <br><br>
-      <hr>
-      <p>Authorized Signature</p>
-    </div>
-
   </div>
 
+  <div class="invoice-footer">
+    <p><strong>Prepared By:</strong> {{ session.get("full_name") }}</p>
+  </div>
 </div>
-</div>
+</div><!-- end invoice-pdf-content -->
 
 <!-- Edit Installment Modal -->
 <div id="editInstallmentModal" class="modal">

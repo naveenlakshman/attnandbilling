@@ -1884,6 +1884,8 @@ def invoice_print(invoice_id):
 
     conn.close()
 
+    pdf_mode = request.args.get('mode') == 'pdf'
+
     return render_template(
         "billing/invoice_print.html",
         invoice=invoice,
@@ -1893,7 +1895,8 @@ def invoice_print(invoice_id):
         total_paid=total_paid,
         balance_amount=balance_amount,
         net_total=net_total,
-        prepared_by=prepared_by
+        prepared_by=prepared_by,
+        pdf_mode=pdf_mode
     )
 
 @billing_bp.route("/installment/<int:installment_id>/edit", methods=["POST"])
@@ -3303,6 +3306,41 @@ def receipt_view(receipt_id):
     conn.close()
 
     return render_template("billing/receipt_view.html", receipt=receipt)
+
+@billing_bp.route("/receipt/<int:receipt_id>/print")
+@login_required
+def receipt_print(receipt_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            receipts.*,
+            invoices.id AS invoice_id,
+            invoices.invoice_no,
+            invoices.total_amount,
+            invoices.invoice_date,
+            students.student_code,
+            students.full_name,
+            students.phone,
+            students.email,
+            users.full_name AS created_by_name
+        FROM receipts
+        JOIN invoices ON receipts.invoice_id = invoices.id
+        JOIN students ON invoices.student_id = students.id
+        LEFT JOIN users ON receipts.created_by = users.id
+        WHERE receipts.id = ?
+    """, (receipt_id,))
+    receipt = cur.fetchone()
+    conn.close()
+
+    if not receipt:
+        flash("Receipt not found.", "danger")
+        return redirect(url_for("billing.receipts"))
+
+    pdf_mode = request.args.get('mode') == 'pdf'
+
+    return render_template("billing/receipt_print.html", receipt=receipt, pdf_mode=pdf_mode)
 
 @billing_bp.route("/receivables")
 @login_required

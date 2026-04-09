@@ -1,0 +1,233 @@
+{% extends "print_base.html" %}
+
+{% block title %}Receipt {{ receipt.receipt_no }} - Print{% endblock %}
+
+{% block content %}
+
+<style>
+  .receipt-header {
+    text-align: center;
+    margin-bottom: 8mm;
+    border-bottom: 2px solid #333;
+    padding-bottom: 5mm;
+  }
+
+  .receipt-header h1 {
+    margin: 0 0 3px 0;
+    font-size: 24px;
+    color: #01070e;
+  }
+
+  .receipt-header p {
+    margin: 2px 0;
+    font-size: 12px;
+    color: #000;
+  }
+
+  .org-branch {
+    font-size: 11px;
+    color: #444;
+    margin-top: 2px;
+  }
+
+  .receipt-title {
+    font-size: 22px;
+    font-weight: bold;
+    color: #1e3a8a;
+    margin: 5mm 0 3mm 0;
+    text-align: center;
+  }
+
+  .receipt-info {
+    display: flex;
+    justify-content: center;
+    gap: 30mm;
+    font-size: 12px;
+    margin-bottom: 3mm;
+  }
+
+  .receipt-section {
+    margin-bottom: 5mm;
+    padding-bottom: 4mm;
+    border-bottom: 1px solid #eee;
+  }
+
+  .receipt-section:last-of-type {
+    border-bottom: 2px solid #333;
+  }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #1e3a8a;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+    font-size: 12px;
+  }
+
+  .label {
+    font-weight: 600;
+    color: #333;
+    min-width: 45mm;
+  }
+
+  .value {
+    text-align: right;
+    color: #444;
+    flex: 1;
+  }
+
+  .amount-highlight {
+    font-size: 14px;
+    font-weight: bold;
+    color: #27ae60;
+  }
+
+  .receipt-footer {
+    text-align: center;
+    margin-top: 8mm;
+    padding-top: 4mm;
+    border-top: 1px solid #ddd;
+  }
+
+  .footer-text {
+    font-size: 11px;
+    color: #666;
+    margin: 2px 0;
+  }
+
+  .footer-text.smaller {
+    font-size: 10px;
+    color: #999;
+  }
+
+  @page {
+    size: A4;
+    margin: 5mm;
+  }
+</style>
+
+<!-- Header -->
+<div class="receipt-header">
+  <h1>Global IT Education <sup>®</sup></h1>
+  <p>Phone: 9071717161 Email: help@globaliteducation.com</p>
+  <div class="org-branch">J C Galaxy Building, 2nd Floor, College Road, Near Ayyapaswamy Temple Hoskote - 562114</div>
+</div>
+
+<div class="receipt-title">RECEIPT</div>
+
+<div class="receipt-info">
+  <div><strong>Receipt No:</strong> {{ receipt.receipt_no }}</div>
+  <div><strong>Date:</strong> {{ receipt.receipt_date }}</div>
+</div>
+
+<hr style="border: 1px solid #333; margin-bottom: 5mm;">
+
+<!-- Student Details -->
+<div class="receipt-section">
+  <div class="section-title">Student Details</div>
+  <div class="detail-row">
+    <div class="label">Student Code:</div>
+    <div class="value">{{ receipt.student_code }}</div>
+  </div>
+  <div class="detail-row">
+    <div class="label">Student Name:</div>
+    <div class="value">{{ receipt.full_name }}</div>
+  </div>
+  {% if receipt.phone %}
+  <div class="detail-row">
+    <div class="label">Phone:</div>
+    <div class="value">{{ receipt.phone }}</div>
+  </div>
+  {% endif %}
+  {% if receipt.email %}
+  <div class="detail-row">
+    <div class="label">Email:</div>
+    <div class="value">{{ receipt.email }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Invoice Details -->
+<div class="receipt-section">
+  <div class="section-title">Invoice Details</div>
+  <div class="detail-row">
+    <div class="label">Invoice No:</div>
+    <div class="value">{{ receipt.invoice_no }}</div>
+  </div>
+  <div class="detail-row">
+    <div class="label">Invoice Date:</div>
+    <div class="value">{{ receipt.invoice_date }}</div>
+  </div>
+  <div class="detail-row">
+    <div class="label">Invoice Amount:</div>
+    <div class="value">₹ {{ "%.2f"|format(receipt.total_amount or 0) }}</div>
+  </div>
+</div>
+
+<!-- Payment Details -->
+<div class="receipt-section">
+  <div class="section-title">Payment Details</div>
+  <div class="detail-row">
+    <div class="label">Amount Received:</div>
+    <div class="value amount-highlight">₹ {{ "%.2f"|format(receipt.amount_received or 0) }}</div>
+  </div>
+  <div class="detail-row">
+    <div class="label">Payment Mode:</div>
+    <div class="value">
+      {% set mode_labels = {'cash': 'Cash', 'upi': 'UPI', 'bank_transfer': 'Bank Transfer', 'card': 'Card'} %}
+      {{ mode_labels.get(receipt.payment_mode, receipt.payment_mode) }}
+    </div>
+  </div>
+  {% if receipt.notes %}
+  <div class="detail-row">
+    <div class="label">Reference No:</div>
+    <div class="value">{{ receipt.notes }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Recorded By -->
+<div class="receipt-section">
+  <div class="detail-row">
+    <div class="label">Recorded By:</div>
+    <div class="value">{{ receipt.created_by_name or 'System' }}</div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="receipt-footer">
+  <div class="footer-text">Thank you for your payment</div>
+  <div class="footer-text smaller">This is a computer-generated receipt</div>
+</div>
+
+<script src="{{ url_for('static', filename='js/html2pdf.bundle.min.js') }}"></script>
+<script>
+  window.addEventListener('load', function() {
+    {% if pdf_mode %}
+    const receiptNo = '{{ receipt.receipt_no }}'.replace(/\//g, '-');
+    const opt = {
+      margin: 0,
+      filename: 'Receipt-' + receiptNo + '.pdf',
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: true, scrollX: 0, scrollY: 0 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    const target = document.querySelector('.print-container');
+    html2pdf().set(opt).from(target).save().then(function() {
+      window.close();
+    });
+    {% else %}
+    window.print();
+    {% endif %}
+  });
+</script>
+
+{% endblock %}
