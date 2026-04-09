@@ -2,82 +2,130 @@
 
 {% block content %}
 <style>
-  /* Screen View Styling */
-  .invoice-header {
-    margin-bottom: 25px;
-    border-bottom: 2px solid #007bff;
-    padding-bottom: 15px;
+  /* ── Base styles ── */
+  .bos-page { max-width: 900px; margin: 0 auto; padding: 0 4px; }
+
+  /* Page heading */
+  .bos-page h2 { font-size: 22px; font-weight: 700; margin: 0 0 12px 0; color: #1a1a2e; }
+
+  /* Action buttons bar */
+  .page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .page-actions .btn { font-size: 14px; padding: 8px 14px; border-radius: 8px; font-weight: 500; }
+
+  /* Document header card */
+  .doc-header {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 16px 20px 12px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .doc-header h1 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0 0 3px 0; }
+  .doc-header .sub { font-size: 13px; color: #666; margin: 0 0 6px 0; }
+  .doc-header .gstin-line {
+    font-size: 12px;
+    color: #333;
+    background: #f0f4ff;
+    border-radius: 6px;
+    padding: 5px 10px;
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    max-width: 100%;
+    word-break: break-word;
+  }
+  .doc-header hr { margin: 10px 0 8px; border-color: #007bff; border-width: 2px; }
+  .bos-stamp {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1e3a8a;
+    letter-spacing: 2px;
+    border: 2px solid #1e3a8a;
+    border-radius: 4px;
+    padding: 3px 14px;
+    margin: 4px 0 0 0;
   }
 
-  .invoice-header h1 {
-    margin: 0 0 5px 0;
-    color: #2c3e50;
-  }
-
-  .invoice-header p {
-    margin: 0;
-    color: #666;
-  }
-
+  /* Two-column summary grid */
   .grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    margin-bottom: 25px;
+    gap: 14px;
+    margin-bottom: 14px;
   }
 
+  /* Cards */
   .card {
     border: 1px solid #dee2e6;
-    border-radius: 6px;
-    padding: 20px;
+    border-radius: 10px;
+    padding: 16px;
     background: #fff;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    margin-bottom: 14px;
   }
-
   .card h3 {
-    margin: 0 0 15px 0;
-    color: #2c3e50;
+    margin: 0 0 12px 0;
+    color: #1a1a2e;
     border-bottom: 2px solid #007bff;
-    padding-bottom: 10px;
-    font-size: 16px;
+    padding-bottom: 8px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .card p { margin: 7px 0; line-height: 1.5; font-size: 14px; }
+  .card p strong { color: #333; }
+
+  /* Info rows for financial summary */
+  .fin-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 14px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .fin-row:last-child { border-bottom: none; }
+  .fin-row.total { border-top: 2px solid #dee2e6; margin-top: 4px; padding-top: 8px; font-weight: 700; font-size: 15px; }
+  .fin-row.balance { font-weight: 700; color: #d9534f; font-size: 15px; }
+  .fin-row .amount { font-weight: 600; }
+  .amount-green { color: #27ae60; }
+  .amount-red { color: #d9534f; }
+
+  /* Status badge */
+  .status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
   }
 
-  .card p {
-    margin: 8px 0;
-    line-height: 1.6;
-  }
-
-  .card p strong {
-    color: #333;
-  }
-
-  .billing-table {
-    margin: 15px 0;
-    width: 100%;
-    border-collapse: collapse;
-  }
-
+  /* Tables */
+  .table-responsive-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 6px; }
+  .billing-table { margin: 0; width: 100%; border-collapse: collapse; }
   .billing-table th {
     background-color: #007bff;
     color: white;
-    padding: 12px;
+    padding: 10px 12px;
     text-align: left;
     font-weight: 600;
     font-size: 13px;
+    white-space: nowrap;
   }
-
-  .billing-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid #dee2e6;
-  }
-
-  .billing-table tbody tr:hover {
-    background-color: #f9f9f9;
-  }
+  .billing-table td { padding: 9px 12px; border-bottom: 1px solid #dee2e6; font-size: 13px; }
+  .billing-table tbody tr:hover { background-color: #f9f9f9; }
+  .billing-table tbody tr:last-child td { border-bottom: none; }
 
   .invoice-footer {
-    margin-top: 20px;
-    padding-top: 15px;
+    margin-top: 16px;
+    padding-top: 12px;
     border-top: 1px solid #dee2e6;
     font-size: 13px;
     color: #555;
@@ -85,69 +133,42 @@
 
   /* ── Mobile styles ── */
   @media (max-width: 768px) {
-    h2 {
-      font-size: 20px;
-      margin-bottom: 10px;
-    }
+    .bos-page { padding: 0; }
+    .bos-page h2 { font-size: 18px; }
 
-    .page-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 14px;
-    }
-
+    .page-actions { gap: 6px; }
     .page-actions .btn {
-      flex: 1 1 calc(50% - 8px);
+      flex: 1 1 calc(50% - 6px);
+      font-size: 12px;
+      padding: 9px 4px;
       text-align: center;
-      font-size: 13px;
-      padding: 8px 6px;
     }
+    /* Make Download PDF full width on mobile */
+    .page-actions .btn-success { flex: 1 1 100%; }
 
-    .invoice-header h1 {
-      font-size: 20px;
-    }
+    .doc-header { padding: 12px 14px 10px; }
+    .doc-header h1 { font-size: 18px; }
+    .doc-header .sub { font-size: 12px; }
+    .doc-header .gstin-line { font-size: 11px; padding: 4px 8px; }
+    .bos-stamp { font-size: 12px; letter-spacing: 1px; padding: 2px 10px; }
 
-    .invoice-header p {
-      font-size: 12px;
-    }
+    .grid { grid-template-columns: 1fr; gap: 10px; }
 
-    .grid {
-      grid-template-columns: 1fr;
-      gap: 12px;
-    }
+    .card { padding: 12px; border-radius: 8px; margin-bottom: 10px; }
+    .card h3 { font-size: 14px; margin-bottom: 10px; }
+    .card p { font-size: 13px; margin: 5px 0; }
 
-    .card {
-      padding: 14px;
-    }
+    .fin-row { font-size: 13px; }
+    .fin-row.total, .fin-row.balance { font-size: 14px; }
 
-    .card h3 {
-      font-size: 14px;
-    }
+    .billing-table th { font-size: 12px; padding: 8px 8px; }
+    .billing-table td { font-size: 12px; padding: 7px 8px; }
+  }
 
-    .card p {
-      font-size: 13px;
-    }
-
-    /* Make tables horizontally scrollable */
-    .table-responsive-wrap {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .billing-table th,
-    .billing-table td {
-      font-size: 12px;
-      padding: 8px 6px;
-      white-space: nowrap;
-    }
-
-    /* BILL OF SUPPLY stamp */
-    .bill-of-supply-stamp {
-      font-size: 13px !important;
-      padding: 2px 8px !important;
-      letter-spacing: 1px !important;
-    }
+  @media (max-width: 400px) {
+    .page-actions .btn { font-size: 11px; padding: 8px 2px; }
+    .doc-header h1 { font-size: 16px; }
+    .card p { font-size: 12px; }
   }
 
   @media print {
@@ -222,23 +243,23 @@
     }
 
     /* Invoice styling for print - ONE PAGE */
-    .invoice-header {
+    .doc-header {
       margin: 0 0 10mm 0;
       padding-bottom: 5mm;
     }
 
-    .invoice-header h1 {
+    .doc-header h1 {
       margin: 0;
       font-size: 20px;
       padding: 5px 0;
     }
 
-    .invoice-header p {
+    .doc-header p {
       margin: 2px 0;
       font-size: 12px;
     }
 
-    .invoice-header hr {
+    .doc-header hr {
       margin: 5px 0;
     }
 
@@ -326,9 +347,11 @@
   }
 </style>
 
+<div class="bos-page">
 <h2>Bill of Supply</h2>
 
 <div class="page-actions">
+  <a class="btn btn-outline-secondary" href="{{ url_for('billing.invoices') }}">← Back</a>
   {% if session.get("role") == "admin" %}
   <a class="btn btn-warning" href="{{ url_for('billing.invoice_edit', invoice_id=invoice.id) }}">Edit Invoice</a>
   {% endif %}
@@ -342,19 +365,6 @@
   <a href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}?mode=pdf" target="_blank" class="btn btn-success">⬇️ Download PDF</a>
 </div>
 <div id="invoice-pdf-content">
-<div class="invoice-header">
-
-  <h1>Global IT Education</h1>
-  <p>Computer Training & Billing System</p>
-  <p style="font-size: 13px; margin: 4px 0 0 0; color: #333;"><strong>GSTIN:</strong> 29AMEPL6934C2ZZ &nbsp;|&nbsp; <em>Composition Dealer — Tax not applicable</em></p>
-
-  <hr>
-
-</div>
-
-<div style="text-align: center; margin: 8px 0;">
-  <span class="bill-of-supply-stamp" style="font-size: 16px; font-weight: bold; color: #1e3a8a; letter-spacing: 2px; border: 2px solid #1e3a8a; padding: 2px 12px;">BILL OF SUPPLY</span>
-</div>
 
 <div class="grid">
     <div class="card">
@@ -375,14 +385,14 @@
 
     <div class="card">
       <h3>Financial Summary</h3>
-      <p><strong>Subtotal:</strong> <span style="float: right;">₹ {{ "%.2f"|format(invoice.subtotal or 0) }}</span></p>
-      <p><strong>Total Discount:</strong> <span style="float: right;">₹ {{ "%.2f"|format(invoice.discount_amount or 0) }}</span></p>
-      <p style="border-top: 1px solid #ddd; padding-top: 8px; margin-top: 8px;"><strong>Net Total:</strong> <span style="float: right; font-weight: bold; font-size: 14px;">₹ {{ "%.2f"|format(invoice.total_amount or 0) }}</span></p>
-      <p><strong>Paid Amount:</strong> <span style="float: right; color: green;">₹ {{ "%.2f"|format(total_paid or 0) }}</span></p>
+      <div class="fin-row"><span>Subtotal</span><span class="amount">₹ {{ "%.2f"|format(invoice.subtotal or 0) }}</span></div>
+      <div class="fin-row"><span>Total Discount</span><span class="amount">₹ {{ "%.2f"|format(invoice.discount_amount or 0) }}</span></div>
+      <div class="fin-row total"><span>Net Total</span><span class="amount">₹ {{ "%.2f"|format(invoice.total_amount or 0) }}</span></div>
+      <div class="fin-row"><span>Paid Amount</span><span class="amount amount-green">₹ {{ "%.2f"|format(total_paid or 0) }}</span></div>
       {% if total_written_off > 0 %}
-      <p><strong>Written Off Amount:</strong> <span style="float: right; color: #ff6b6b;">₹ {{ "%.2f"|format(total_written_off or 0) }}</span></p>
+      <div class="fin-row"><span>Written Off</span><span class="amount amount-red">₹ {{ "%.2f"|format(total_written_off or 0) }}</span></div>
       {% endif %}
-      <p style="border-top: 1px solid #ddd; padding-top: 8px; margin-top: 8px;"><strong>Balance Amount:</strong> <span style="float: right; color: #d9534f; font-weight: bold;">₹ {{ "%.2f"|format(balance_amount or 0) }}</span></p>
+      <div class="fin-row balance"><span>Balance Amount</span><span class="amount">₹ {{ "%.2f"|format(balance_amount or 0) }}</span></div>
     </div>
 </div>
 
@@ -475,6 +485,7 @@
   </div>
 </div>
 </div><!-- end invoice-pdf-content -->
+</div><!-- end bos-page -->
 
 <!-- Edit Installment Modal -->
 <div id="editInstallmentModal" class="modal">
