@@ -12,6 +12,7 @@
 
     <div class="receipt-actions">
       <button onclick="window.print()" class="btn btn-primary">🖨️ Print Receipt</button>
+      <button onclick="downloadReceiptPDF()" class="btn btn-success" id="downloadPdfBtn">⬇️ Download PDF</button>
 
       {% if session.get("role") == "admin" %}
       <a href="{{ url_for('billing.receipt_edit', receipt_id=receipt.id) }}" class="btn btn-secondary">✎ Edit</a>
@@ -299,6 +300,11 @@
     }
   }
 
+  #downloadPdfBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
   @media print {
     html, body {
       width: 100%;
@@ -461,4 +467,48 @@
     }
   }
 </style>
+
+<script src="{{ url_for('static', filename='js/html2pdf.bundle.min.js') }}"></script>
+
+<script>
+function downloadReceiptPDF() {
+  if (typeof html2pdf === 'undefined') {
+    alert('PDF library not loaded. Please refresh the page and try again.');
+    return;
+  }
+
+  const btn = document.getElementById('downloadPdfBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating...';
+
+  const element = document.querySelector('.receipt-paper').cloneNode(true);
+  const receiptNo = '{{ receipt.receipt_no }}'.replace(/\//g, '-');
+
+  const opt = {
+    margin: [10, 10, 10, 10],
+    filename: 'Receipt-' + receiptNo + '.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  // Timeout safety - reset button after 30 seconds
+  const timeout = setTimeout(function() {
+    btn.disabled = false;
+    btn.textContent = '⬇️ Download PDF';
+    alert('PDF generation timed out. Please try again.');
+  }, 30000);
+
+  html2pdf().set(opt).from(element).save().then(function() {
+    clearTimeout(timeout);
+    btn.disabled = false;
+    btn.textContent = '⬇️ Download PDF';
+  }).catch(function(err) {
+    clearTimeout(timeout);
+    btn.disabled = false;
+    btn.textContent = '⬇️ Download PDF';
+    alert('Error generating PDF: ' + err);
+  });
+}
+</script>
 {% endblock %}
