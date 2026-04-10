@@ -3376,8 +3376,18 @@ def receivables():
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
+            s.photo_filename,
             b.branch_name,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            (ip.amount_due - ip.amount_paid) AS balance_due,
+            (SELECT GROUP_CONCAT(bt.batch_name, ', ')
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS batch_names,
+            (SELECT GROUP_CONCAT(DISTINCT u.full_name)
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             JOIN users u ON bt.trainer_id = u.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS trainer_names
         FROM installment_plans ip
         JOIN invoices i
             ON ip.invoice_id = i.id
@@ -3420,8 +3430,18 @@ def receivables():
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
+            s.photo_filename,
             b.branch_name,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            (ip.amount_due - ip.amount_paid) AS balance_due,
+            (SELECT GROUP_CONCAT(bt.batch_name, ', ')
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS batch_names,
+            (SELECT GROUP_CONCAT(DISTINCT u.full_name)
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             JOIN users u ON bt.trainer_id = u.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS trainer_names
         FROM installment_plans ip
         JOIN invoices i
             ON ip.invoice_id = i.id
@@ -3464,8 +3484,18 @@ def receivables():
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
+            s.photo_filename,
             b.branch_name,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            (ip.amount_due - ip.amount_paid) AS balance_due,
+            (SELECT GROUP_CONCAT(bt.batch_name, ', ')
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS batch_names,
+            (SELECT GROUP_CONCAT(DISTINCT u.full_name)
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             JOIN users u ON bt.trainer_id = u.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS trainer_names
         FROM installment_plans ip
         JOIN invoices i
             ON ip.invoice_id = i.id

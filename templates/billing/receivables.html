@@ -131,12 +131,29 @@
 } %}
 <div class="card border-0 shadow-sm mb-2 installment-card" style="border-left:4px solid {{ border_color }}!important;">
   <div class="card-body py-2 px-3">
-    <!-- Row 1: Name + badge + balance -->
+    <!-- Row 1: Photo + Name + badge + balance -->
     <div class="d-flex justify-content-between align-items-start gap-2 mb-1 flex-wrap">
-      <div>
-        <span class="fw-semibold" style="font-size:14px;">{{ item.student_name }}</span>
-        <span class="text-muted" style="font-size:12px;"> · {{ item.student_code }}</span>
-        <span class="badge {{ badge_class }} ms-1" style="font-size:10px;">{{ rtype | upper | replace('_',' ') }}</span>
+      <div class="d-flex align-items-center gap-2">
+        {% if item.photo_filename %}
+        <img src="{{ url_for('static', filename='images/student_photos/' ~ item.photo_filename) }}"
+             alt="{{ item.student_name }}"
+             style="width:52px;height:52px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid {{ border_color }};">
+        {% else %}
+        <div style="width:52px;height:52px;border-radius:50%;background:#e9ecef;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;font-weight:700;color:#6c757d;border:2px solid #dee2e6;">
+          {{ item.student_name[0] | upper }}
+        </div>
+        {% endif %}
+        <div>
+          <span class="fw-semibold" style="font-size:14px;">{{ item.student_name }}</span>
+          <span class="text-muted" style="font-size:12px;"> · {{ item.student_code }}</span>
+          <span class="badge {{ badge_class }} ms-1" style="font-size:10px;">{{ rtype | upper | replace('_',' ') }}</span>
+          {% if item.batch_names %}
+          <div style="font-size:11.5px;color:#6c757d;margin-top:1px;">🎓 {{ item.batch_names }}</div>
+          {% endif %}
+          {% if item.trainer_names %}
+          <div style="font-size:11.5px;color:#6c757d;margin-top:1px;">👨‍🏫 {{ item.trainer_names }}</div>
+          {% endif %}
+        </div>
       </div>
       <span class="balance-amount {{ amount_class }}">₹{{ "{:,.0f}".format(item.balance_due or 0) }}</span>
     </div>
