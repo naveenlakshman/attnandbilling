@@ -273,7 +273,21 @@
           </select>
         </div>
         {% endif %}
-        <div style="display:flex; align-items:flex-end;">
+        {% if available_trainers|length > 1 %}
+        <div class="filter-group">
+          <label for="trainer_id">Trainer</label>
+          <select class="form-select" id="trainer_id" name="trainer_id">
+            <option value="">All Trainers</option>
+            {% for trainer in available_trainers %}
+            <option value="{{ trainer.id }}" {% if trainer_filter == trainer.id|string %}selected{% endif %}>
+              {{ trainer.full_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div style="display:flex; align-items:flex-end; gap:8px;">
+          <button type="submit" class="btn btn-primary" style="white-space:nowrap;">🔍 Filter</button>
           <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-secondary" style="white-space:nowrap;">↺ Reset</a>
         </div>
       </div>

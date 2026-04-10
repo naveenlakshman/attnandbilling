@@ -35,6 +35,9 @@ def dashboard():
         # Get selected branch and trainer from query parameters
         selected_branch_id = request.args.get('branch_id', '', type=int)
         selected_trainer_id = request.args.get('trainer_id', 0, type=int)
+        # Staff users (trainers) automatically see only their own batches
+        if not selected_trainer_id and session.get('role') != 'admin':
+            selected_trainer_id = user_id
         
         # Determine which branch to use
         if user['can_view_all_branches']:
@@ -323,6 +326,10 @@ def list_batches():
         # Get filter parameters
         status_filter = request.args.get('status', 'active')
         branch_filter = request.args.get('branch_id', '')
+        trainer_filter = request.args.get('trainer_id', '')
+        # Staff users (trainers) automatically see only their own batches
+        if not trainer_filter and session.get('role') != 'admin':
+            trainer_filter = str(user_id)
         
         # Build query
         query = """
@@ -346,6 +353,11 @@ def list_batches():
             query += " AND b.branch_id = ?"
             params.append(int(branch_filter))
         
+        # Add trainer filter
+        if trainer_filter:
+            query += " AND b.trainer_id = ?"
+            params.append(int(trainer_filter))
+        
         # Add status filter
         if status_filter != 'all':
             query += " AND b.status = ?"
@@ -363,12 +375,35 @@ def list_batches():
         else:
             branches = []
         
+        # Get available trainers for filter dropdown
+        trainer_query = """
+            SELECT DISTINCT u.id, u.full_name
+            FROM batches b
+            JOIN users u ON b.trainer_id = u.id
+            WHERE 1=1
+        """
+        trainer_params = []
+        if not user['can_view_all_branches']:
+            trainer_query += " AND b.branch_id = ?"
+            trainer_params.append(user['branch_id'])
+        elif branch_filter:
+            trainer_query += " AND b.branch_id = ?"
+            trainer_params.append(int(branch_filter))
+        if status_filter != 'all':
+            trainer_query += " AND b.status = ?"
+            trainer_params.append(status_filter)
+        trainer_query += " ORDER BY u.full_name ASC"
+        cur.execute(trainer_query, trainer_params)
+        available_trainers = cur.fetchall()
+        
         return render_template(
             'attendance/batch_list.html',
             batches=batches,
             branches=branches,
             status_filter=status_filter,
             branch_filter=branch_filter,
+            trainer_filter=trainer_filter,
+            available_trainers=available_trainers,
             user=user
         )
     
@@ -860,10 +895,14 @@ def mark_attendance():
         cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
         
-        # Get selected batch and date from request
+        # Get selected batch, date, trainer from request
         batch_id = request.args.get('batch_id') or request.form.get('batch_id')
         attendance_date = request.args.get('date') or request.form.get('attendance_date')
         branch_id = request.args.get('branch_id') or request.form.get('branch_id')
+        trainer_id = request.args.get('trainer_id', 0, type=int) or request.form.get('trainer_id', 0, type=int)
+        # Staff users (trainers) automatically see only their own batches
+        if not trainer_id and session.get('role') != 'admin':
+            trainer_id = user_id
         
         # If no date provided, use today
         if not attendance_date:
@@ -888,12 +927,25 @@ def mark_attendance():
         if not user['can_view_all_branches'] and branch_id != user['branch_id']:
             return redirect(url_for('attendance.mark_attendance'))
         
-        # Get batches for selected branch
+        # Get available trainers for selected branch
+        cur.execute("""
+            SELECT DISTINCT u.id, u.full_name
+            FROM batches b
+            JOIN users u ON b.trainer_id = u.id
+            WHERE b.branch_id = ? AND b.status = 'active'
+            AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
+            AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
+            ORDER BY u.full_name ASC
+        """, (branch_id, attendance_date, attendance_date))
+        available_trainers = cur.fetchall()
+
+        # Get batches for selected branch (optionally filtered by trainer)
         cur.execute("""
             SELECT b.id, b.batch_name, c.course_name, b.start_time, b.end_time
             FROM batches b
             LEFT JOIN courses c ON b.course_id = c.id
             WHERE b.branch_id = ? AND b.status = 'active'
+            AND (b.trainer_id = ? OR ? = 0)
             AND (
                 b.start_date IS NULL 
                 OR date(b.start_date) <= date(?)
@@ -903,7 +955,7 @@ def mark_attendance():
                 OR date(b.end_date) >= date(?)
             )
             ORDER BY b.start_time ASC
-        """, (branch_id, attendance_date, attendance_date))
+        """, (branch_id, trainer_id, trainer_id, attendance_date, attendance_date))
         
         batches = cur.fetchall()
         
@@ -1096,7 +1148,9 @@ def mark_attendance():
                              payment_dues=payment_dues,
                              history_7days=history_7days,
                              history_dates=history_dates,
-                             message=message, user=user)
+                             message=message, user=user,
+                             available_trainers=available_trainers,
+                             trainer_id=trainer_id)
     
     finally:
         conn.close()

@@ -607,6 +607,22 @@
           </select>
         </div>
 
+        {% if available_trainers|length > 1 %}
+        <div class="form-group">
+          <label for="trainer_id" class="form-label">👨‍🏫 Trainer</label>
+          <select class="form-select" id="trainer_id" name="trainer_id" onchange="this.form.submit()">
+            <option value="0">All Trainers</option>
+            {% for trainer in available_trainers %}
+            <option value="{{ trainer.id }}" {% if trainer_id == trainer.id %}selected{% endif %}>
+              {{ trainer.full_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% else %}
+        <input type="hidden" name="trainer_id" value="0">
+        {% endif %}
+
         <div class="form-group">
           <label for="batch_id" class="form-label">📚 Batch</label>
           <select class="form-select" id="batch_id" name="batch_id" onchange="this.form.submit()">
