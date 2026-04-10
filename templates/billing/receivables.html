@@ -159,8 +159,10 @@
         {% endif %}
       </span>
       <div class="d-flex gap-1 flex-wrap btn-action-group">
+        {% if session.get('role') == 'admin' %}
         <button onclick="openEditModal({{ item.id }}, '{{ item.due_date }}', {{ item.amount_due }}, {{ item.amount_paid }}, '{{ (item.remarks or '')|replace("'","&#39;") }}')"
           class="btn btn-sm btn-outline-secondary">Edit</button>
+        {% endif %}
         <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
           class="btn btn-sm btn-primary">Pay</a>
         <button class="btn btn-sm btn-warning remind-btn"
