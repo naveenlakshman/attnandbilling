@@ -76,6 +76,7 @@ def dashboard():
             ON i.student_id = s.id
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
         ORDER BY parse_date(ip.due_date) ASC
     """
 
@@ -104,6 +105,7 @@ def dashboard():
             ON i.student_id = s.id
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
         ORDER BY s.full_name ASC
     """
 
