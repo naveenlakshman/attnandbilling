@@ -32,8 +32,9 @@ def dashboard():
         IST = timezone(timedelta(hours=5, minutes=30))
         today = datetime.now(IST).strftime("%Y-%m-%d")
         
-        # Get selected branch from query parameter
+        # Get selected branch and trainer from query parameters
         selected_branch_id = request.args.get('branch_id', '', type=int)
+        selected_trainer_id = request.args.get('trainer_id', 0, type=int)
         
         # Determine which branch to use
         if user['can_view_all_branches']:
@@ -53,6 +54,26 @@ def dashboard():
             """)
             available_branches = cur.fetchall()
         
+        # Get available trainers for the trainer filter dropdown
+        trainer_filter_query = """
+            SELECT DISTINCT u.id, u.full_name
+            FROM batches b
+            JOIN users u ON b.trainer_id = u.id
+            WHERE b.status = 'active'
+            AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
+            AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
+        """
+        trainer_filter_params = [today, today]
+        if not user['can_view_all_branches']:
+            trainer_filter_query += " AND b.branch_id = ?"
+            trainer_filter_params.append(user['branch_id'])
+        elif working_branch_id:
+            trainer_filter_query += " AND b.branch_id = ?"
+            trainer_filter_params.append(working_branch_id)
+        trainer_filter_query += " ORDER BY u.full_name ASC"
+        cur.execute(trainer_filter_query, trainer_filter_params)
+        available_trainers = cur.fetchall()
+        
         # Get batches for today based on branch
         if working_branch_id:
             # Filter by specific branch
@@ -65,6 +86,7 @@ def dashboard():
                 LEFT JOIN branches br ON b.branch_id = br.id
                 WHERE b.status = 'active'
                 AND b.branch_id = ?
+                AND (b.trainer_id = ? OR ? = 0)
                 AND (
                     b.start_date IS NULL 
                     OR date(b.start_date) <= date(?)
@@ -74,7 +96,7 @@ def dashboard():
                     OR date(b.end_date) >= date(?)
                 )
                 ORDER BY b.start_time ASC
-            """, (working_branch_id, today, today))
+            """, (working_branch_id, selected_trainer_id, selected_trainer_id, today, today))
         elif user['can_view_all_branches']:
             # Show all batches if admin didn't select a specific branch
             cur.execute("""
@@ -85,6 +107,7 @@ def dashboard():
                 LEFT JOIN users u ON b.trainer_id = u.id
                 LEFT JOIN branches br ON b.branch_id = br.id
                 WHERE b.status = 'active'
+                AND (b.trainer_id = ? OR ? = 0)
                 AND (
                     b.start_date IS NULL 
                     OR date(b.start_date) <= date(?)
@@ -94,7 +117,7 @@ def dashboard():
                     OR date(b.end_date) >= date(?)
                 )
                 ORDER BY b.start_time ASC
-            """, (today, today))
+            """, (selected_trainer_id, selected_trainer_id, today, today))
         else:
             # Non-admin users see only their branch
             cur.execute("""
@@ -106,6 +129,7 @@ def dashboard():
                 LEFT JOIN branches br ON b.branch_id = br.id
                 WHERE b.status = 'active'
                 AND b.branch_id = ?
+                AND (b.trainer_id = ? OR ? = 0)
                 AND (
                     b.start_date IS NULL 
                     OR date(b.start_date) <= date(?)
@@ -115,7 +139,7 @@ def dashboard():
                     OR date(b.end_date) >= date(?)
                 )
                 ORDER BY b.start_time ASC
-            """, (user['branch_id'], today, today))
+            """, (user['branch_id'], selected_trainer_id, selected_trainer_id, today, today))
         
         batches = cur.fetchall()
         
@@ -272,7 +296,9 @@ def dashboard():
             pending_followups=pending_followups,
             user=user,
             available_branches=available_branches,
-            selected_branch_id=selected_branch_id
+            selected_branch_id=selected_branch_id,
+            available_trainers=available_trainers,
+            selected_trainer_id=selected_trainer_id
         )
     
     finally:
