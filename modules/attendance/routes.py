@@ -1041,9 +1041,13 @@ def mark_attendance():
             elif action == 'save':
                 # Save individual attendance records
                 for student in students:
-                    status = request.form.get(f"status_{student['student_id']}", 'absent')
+                    status = request.form.get(f"status_{student['student_id']}", 'not_marked')
                     remarks = request.form.get(f"remarks_{student['student_id']}", "").strip()
-                    
+
+                    # Skip students where attendance was not marked
+                    if status == 'not_marked':
+                        continue
+
                     if status not in ['present', 'absent', 'late', 'leave']:
                         status = 'absent'
                     
