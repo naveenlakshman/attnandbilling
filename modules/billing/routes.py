@@ -3350,6 +3350,13 @@ def receivables():
 
     today = datetime.now().date().isoformat()
     branch_id = request.args.get("branch_id", "").strip()
+    trainer_id = request.args.get("trainer_id", "").strip()
+    user_id = session.get("user_id")
+    user_role = session.get("role", "staff")
+
+    # Staff users auto-filtered to their own students
+    if not trainer_id and user_role != "admin":
+        trainer_id = str(user_id)
 
     # Branches for filter
     cur.execute("""
@@ -3359,6 +3366,32 @@ def receivables():
         ORDER BY branch_name
     """)
     branches = cur.fetchall()
+
+    # Trainers for filter dropdown (only for admin)
+    available_trainers = []
+    if user_role == "admin":
+        cur.execute("""
+            SELECT DISTINCT u.id, u.full_name
+            FROM users u
+            JOIN batches bt ON bt.trainer_id = u.id
+            WHERE bt.status = 'active'
+            ORDER BY u.full_name ASC
+        """)
+        available_trainers = cur.fetchall()
+
+    # Trainer filter SQL snippet (added to WHERE clause of each query)
+    trainer_filter_sql = ""
+    trainer_filter_param = []
+    if trainer_id:
+        trainer_filter_sql = """
+          AND s.id IN (
+              SELECT DISTINCT sb.student_id
+              FROM student_batches sb
+              JOIN batches bt ON sb.batch_id = bt.id
+              WHERE bt.trainer_id = ? AND sb.status = 'active'
+          )
+        """
+        trainer_filter_param = [trainer_id]
 
     # Past dues
     past_dues_query = """
@@ -3408,6 +3441,10 @@ def receivables():
     if branch_id:
         past_dues_query += " AND i.branch_id = ?"
         past_dues_params.append(branch_id)
+
+    if trainer_filter_sql:
+        past_dues_query += trainer_filter_sql
+        past_dues_params.extend(trainer_filter_param)
 
     past_dues_query += " ORDER BY parse_date(ip.due_date) ASC"
 
@@ -3463,6 +3500,10 @@ def receivables():
         todays_dues_query += " AND i.branch_id = ?"
         todays_dues_params.append(branch_id)
 
+    if trainer_filter_sql:
+        todays_dues_query += trainer_filter_sql
+        todays_dues_params.extend(trainer_filter_param)
+
     todays_dues_query += " ORDER BY s.full_name ASC"
 
     cur.execute(todays_dues_query, todays_dues_params)
@@ -3517,6 +3558,10 @@ def receivables():
         upcoming_dues_query += " AND i.branch_id = ?"
         upcoming_dues_params.append(branch_id)
 
+    if trainer_filter_sql:
+        upcoming_dues_query += trainer_filter_sql
+        upcoming_dues_params.extend(trainer_filter_param)
+
     upcoming_dues_query += " ORDER BY parse_date(ip.due_date) ASC LIMIT 50"
 
     cur.execute(upcoming_dues_query, upcoming_dues_params)
@@ -3552,7 +3597,10 @@ def receivables():
         today=today,
         branches=branches,
         branch_id=branch_id,
-        reminder_stats=reminder_stats
+        reminder_stats=reminder_stats,
+        available_trainers=available_trainers,
+        trainer_id=trainer_id,
+        user_role=user_role
     )
 
 

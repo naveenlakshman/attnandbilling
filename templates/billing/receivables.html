@@ -62,7 +62,7 @@
   <h4 class="mb-0 fw-bold">Receivables — Student Installments</h4>
 </div>
 
-<!-- Branch Filter -->
+<!-- Filters -->
 <div class="card border-0 shadow-sm mb-3">
   <div class="card-body py-2 px-3">
     <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
@@ -75,7 +75,20 @@
         </option>
         {% endfor %}
       </select>
-      {% if branch_id %}
+      {% if user_role == 'admin' and available_trainers %}
+      <label class="fw-semibold mb-0 text-muted small ms-2">Trainer:</label>
+      <select name="trainer_id" class="form-select form-select-sm" style="max-width:200px;" onchange="this.form.submit()">
+        <option value="">All Trainers</option>
+        {% for trainer in available_trainers %}
+        <option value="{{ trainer.id }}" {% if trainer_id|string == trainer.id|string %}selected{% endif %}>
+          {{ trainer.full_name }}
+        </option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <input type="hidden" name="trainer_id" value="{{ trainer_id }}">
+      {% endif %}
+      {% if branch_id or trainer_id %}
       <a href="{{ url_for('billing.receivables') }}" class="btn btn-sm btn-outline-secondary">✕ Clear</a>
       {% endif %}
     </form>
