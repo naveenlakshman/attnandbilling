@@ -3,396 +3,481 @@
 {% block title %}Global IT ERP - Receivables{% endblock %}
 
 {% block content %}
-
 <style>
-  .receivables-header {
-    display: flex;
-    justify-content: space-between;
+  .section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: .3px;
+  }
+  .installment-card {
+    border-left-width: 4px !important;
+    transition: box-shadow .15s;
+  }
+  .installment-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,.10) !important;
+  }
+  .balance-amount {
+    font-size: 1.15rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .info-pill {
+    display: inline-flex;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
-  }
-
-  .receivables-header h2 {
-    margin: 0;
-    font-size: 28px;
-  }
-
-  .receivables-filter-card {
-    margin-bottom: 20px;
-  }
-
-  .receivables-filter-form {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .receivables-filter-form label {
-    font-weight: 600;
-    margin: 0;
-    color: #333;
-  }
-
-  .receivables-filter-form select {
-    min-width: 220px;
-    padding: 10px 12px;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
-    font-size: 14px;
-    background: #fff;
-  }
-
-  .receivables-filter-form select:focus {
-    outline: none;
-    border-color: #0d6efd;
-    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
-  }
-
-  .summary-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin-bottom: 20px;
-  }
-
-  .summary-card {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.06);
-    border: 1px solid #e5e7eb;
-  }
-
-  .summary-card h3 {
-    margin: 0 0 10px 0;
-    font-size: 16px;
+    gap: 4px;
+    font-size: 13px;
     color: #555;
   }
-
-  .summary-amount {
-    font-size: 28px;
-    font-weight: bold;
-    margin: 10px 0;
-    color: #2c3e50;
+  .reminder-info-text {
+    font-size: 11.5px;
   }
-
-  .summary-count {
-    font-size: 14px;
-    color: #7f8c8d;
-    margin: 5px 0 0 0;
+  .summary-card-amount {
+    font-size: 1.3rem;
+    font-weight: 700;
+    line-height: 1.2;
   }
-
-  .receivables-table {
-    border-collapse: collapse;
+  .summary-card-label {
+    font-size: 12px;
+    color: #888;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: .5px;
   }
-
-  .receivables-table th {
-    padding: 10px 8px;
-    text-align: left;
-    font-weight: 600;
-    font-size: 13px;
-    color: #333;
-    border: 1px solid #ddd;
-    background-color: #f5f6f7;
+  .summary-card-count {
+    font-size: 11.5px;
+    color: #aaa;
+    margin-top: 2px;
   }
-
-  .receivables-table td {
-    padding: 10px 8px;
-    border: 1px solid #ddd;
-    font-size: 13px;
-    vertical-align: middle;
-  }
-
-  .receivables-table tbody tr:hover {
-    background-color: #f9f9f9;
-  }
-
-  .section-empty {
-    padding: 20px;
-    text-align: center;
-    color: #7f8c8d;
-  }
-
-  .amount-overdue {
-    color: #c0392b;
-    font-weight: bold;
-  }
-
-  .amount-today {
-    color: #e67e22;
-    font-weight: bold;
-  }
-
-  .amount-upcoming {
-    color: #3498db;
-    font-weight: bold;
+  @media (max-width: 576px) {
+    .btn-action-group .btn {
+      font-size: 11.5px;
+      padding: 4px 8px;
+    }
+    .balance-amount { font-size: 1rem; }
   }
 </style>
 
-<div class="receivables-header">
-  <h2>Receivables - Student Installments</h2>
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="mb-0 fw-bold">Receivables — Student Installments</h4>
 </div>
 
 <!-- Branch Filter -->
-<div class="card receivables-filter-card">
-  <form method="get" class="receivables-filter-form">
-    <label for="branch_id">Filter by Branch:</label>
-
-    <select name="branch_id" id="branch_id" onchange="this.form.submit()">
-      <option value="">All Branches</option>
-      {% for branch in branches %}
-      <option value="{{ branch.id }}" {% if branch_id|string == branch.id|string %}selected{% endif %}>
-        {{ branch.branch_name }}
-      </option>
-      {% endfor %}
-    </select>
-
-    {% if branch_id %}
-    <a href="{{ url_for('billing.receivables') }}" class="btn btn-secondary">Clear Filter</a>
-    {% endif %}
-  </form>
-</div>
-
-<div class="summary-cards">
-  <div class="summary-card" style="border-left: 4px solid #e74c3c;">
-    <h3>Past Due</h3>
-    <p class="summary-amount">₹ {{ "%.2f"|format(total_past_due or 0) }}</p>
-    <p class="summary-count">{{ past_dues|length }} installment(s)</p>
-  </div>
-
-  <div class="summary-card" style="border-left: 4px solid #f39c12;">
-    <h3>Due Today</h3>
-    <p class="summary-amount">₹ {{ "%.2f"|format(total_today_due or 0) }}</p>
-    <p class="summary-count">{{ todays_dues|length }} installment(s)</p>
-  </div>
-
-  <div class="summary-card" style="border-left: 4px solid #3498db;">
-    <h3>Upcoming</h3>
-    <p class="summary-amount">₹ {{ "%.2f"|format(total_upcoming_due or 0) }}</p>
-    <p class="summary-count">{{ upcoming_dues|length }} installment(s)</p>
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body py-2 px-3">
+    <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+      <label class="fw-semibold mb-0 text-muted small">Branch:</label>
+      <select name="branch_id" class="form-select form-select-sm" style="max-width:220px;" onchange="this.form.submit()">
+        <option value="">All Branches</option>
+        {% for branch in branches %}
+        <option value="{{ branch.id }}" {% if branch_id|string == branch.id|string %}selected{% endif %}>
+          {{ branch.branch_name }}
+        </option>
+        {% endfor %}
+      </select>
+      {% if branch_id %}
+      <a href="{{ url_for('billing.receivables') }}" class="btn btn-sm btn-outline-secondary">✕ Clear</a>
+      {% endif %}
+    </form>
   </div>
 </div>
 
-<!-- Past Dues Section -->
-<div class="card" style="margin-top: 20px;">
-  <h3 style="color: #e74c3c; margin-bottom: 15px;">Past Due (Overdue)</h3>
-
-  {% if past_dues %}
-  <div style="overflow-x: auto;">
-    <table border="1" width="100%" cellpadding="10" class="receivables-table">
-      <thead>
-        <tr>
-          <th>Due Date</th>
-          <th>Student</th>
-          <th>Phone</th>
-          <th>Invoice No</th>
-          <th>Remarks</th>
-          <th>Balance Due</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-    <tbody>
-      {% for item in past_dues %}
-      <tr style="background-color: #ffe6e6;">
-        <td><strong>{{ item.due_date }}</strong></td>
-        <td>{{ item.student_code }} - {{ item.student_name }}</td>
-        <td>{{ item.student_phone or "-" }}</td>
-        <td>
-          <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}">
-            {{ item.invoice_no }}
-          </a>
-        </td>
-        <td>{{ item.remarks or '-' }}</td>
-        <td class="amount-overdue">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
-        <td style="display: flex; gap: 8px; align-items: center;">
-          <a href="javascript:void(0)" 
-             onclick="openEditModal({{ item.id }}, '{{ item.due_date }}', {{ item.amount_due }}, {{ item.amount_paid }}, '{{ (item.remarks or '')|replace("'", "&#39;") }}')"
-             class="btn btn-sm btn-secondary"
-             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
-            Edit
-          </a>
-          <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
-             class="btn btn-sm btn-primary"
-             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
-            Record Payment
-          </a>
-        </td>
-      </tr>
-      {% endfor %}
-
-      <tr style="background-color: #f8f9fa; font-weight: bold;">
-        <td colspan="6" style="text-align: right;">Total Past Due:</td>
-        <td class="amount-overdue">₹ {{ "%.2f"|format(total_past_due or 0) }}</td>
-      </tr>
-    </tbody>
-    </table>
-  </div>
-  {% else %}
-  <p class="section-empty" style="color: #27ae60;">No past due installments.</p>
-  {% endif %}
-</div>
-
-<!-- Today's Dues Section -->
-<div class="card" style="margin-top: 20px;">
-  <h3 style="color: #f39c12; margin-bottom: 15px;">Due Today</h3>
-
-  {% if todays_dues %}
-  <div style="overflow-x: auto;">
-    <table border="1" width="100%" cellpadding="10" class="receivables-table">
-    <thead>
-      <tr>
-        <th>Due Date</th>
-        <th>Student</th>
-        <th>Phone</th>
-        <th>Invoice No</th>
-        <th>Remarks</th>
-        <th>Balance Due</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in todays_dues %}
-      <tr style="background-color: #fff8e6;">
-        <td><strong>{{ item.due_date }}</strong></td>
-        <td>{{ item.student_code }} - {{ item.student_name }}</td>
-        <td>{{ item.student_phone or "-" }}</td>
-        <td>
-          <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}">
-            {{ item.invoice_no }}
-          </a>
-        </td>
-        <td>{{ item.remarks or '-' }}</td>
-        <td class="amount-today">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
-        <td style="display: flex; gap: 8px; align-items: center;">
-          <a href="javascript:void(0)" 
-             onclick="openEditModal({{ item.id }}, '{{ item.due_date }}', {{ item.amount_due }}, {{ item.amount_paid }}, '{{ (item.remarks or '')|replace("'", "&#39;") }}')"
-             class="btn btn-sm btn-secondary"
-             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
-            Edit
-          </a>
-          <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
-             class="btn btn-sm btn-primary"
-             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
-            Record Payment
-          </a>
-        </td>
-      </tr>
-      {% endfor %}
-
-      <tr style="background-color: #f8f9fa; font-weight: bold;">
-        <td colspan="6" style="text-align: right;">Total Due Today:</td>
-        <td class="amount-today">₹ {{ "%.2f"|format(total_today_due or 0) }}</td>
-      </tr>
-    </tbody>
-    </table>
-  </div>
-  {% else %}
-  <p class="section-empty">No installments due today.</p>
-  {% endif %}
-</div>
-
-<!-- Upcoming Dues Section -->
-<div class="card" style="margin-top: 20px;">
-  <h3 style="color: #3498db; margin-bottom: 15px;">Upcoming Dues (Next 50)</h3>
-
-  {% if upcoming_dues %}
-  <div style="overflow-x: auto;">
-    <table border="1" width="100%" cellpadding="10" class="receivables-table">
-    <thead>
-      <tr>
-        <th>Due Date</th>
-        <th>Student</th>
-        <th>Phone</th>
-        <th>Invoice No</th>
-        <th>Remarks</th>
-        <th>Balance Due</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in upcoming_dues %}
-      <tr>
-        <td><strong>{{ item.due_date }}</strong></td>
-        <td>{{ item.student_code }} - {{ item.student_name }}</td>
-        <td>{{ item.student_phone or "-" }}</td>
-        <td>
-          <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}">
-            {{ item.invoice_no }}
-          </a>
-        </td>
-        <td>{{ item.remarks or '-' }}</td>
-        <td class="amount-upcoming">₹ {{ "%.2f"|format(item.balance_due or 0) }}</td>
-        <td style="display: flex; gap: 8px; align-items: center;">
-          <a href="javascript:void(0)" 
-             onclick="openEditModal({{ item.id }}, '{{ item.due_date }}', {{ item.amount_due }}, {{ item.amount_paid }}, '{{ (item.remarks or '')|replace("'", "&#39;") }}')"
-             class="btn btn-sm btn-secondary"
-             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
-            Edit
-          </a>
-          <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
-             class="btn btn-sm btn-primary"
-             style="padding: 6px 12px; font-size: 12px; white-space: nowrap;">
-            Record Payment
-          </a>
-        </td>
-      </tr>
-      {% endfor %}
-
-      <tr style="background-color: #f8f9fa; font-weight: bold;">
-        <td colspan="6" style="text-align: right;">Total Upcoming:</td>
-        <td class="amount-upcoming">₹ {{ "%.2f"|format(total_upcoming_due or 0) }}</td>
-      </tr>
-    </tbody>
-    </table>
-  </div>
-  {% else %}
-  <p class="section-empty">No upcoming installments.</p>
-  {% endif %}
-</div>
-
-<!-- Edit Installment Modal -->
-<div id="editInstallmentModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
-  <div class="modal-content" style="background-color: #fefefe; margin: 5% auto; padding: 0; border: 1px solid #888; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-    <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center;">
-      <h3 style="margin: 0; font-size: 18px; color: #333;">Edit Installment</h3>
-      <span class="close" onclick="closeEditModal()" style="font-size: 28px; font-weight: bold; color: #aaa; cursor: pointer; padding: 0; line-height: 20px;">&times;</span>
+<!-- Summary Cards -->
+<div class="row g-2 mb-3">
+  <div class="col-4">
+    <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #dc3545!important;">
+      <div class="card-body py-2 px-3">
+        <div class="summary-card-label">Past Due</div>
+        <div class="summary-card-amount text-danger">₹{{ "{:,.0f}".format(total_past_due or 0) }}</div>
+        <div class="summary-card-count">{{ past_dues|length }} item(s)</div>
+      </div>
     </div>
+  </div>
+  <div class="col-4">
+    <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #fd7e14!important;">
+      <div class="card-body py-2 px-3">
+        <div class="summary-card-label">Due Today</div>
+        <div class="summary-card-amount text-warning">₹{{ "{:,.0f}".format(total_today_due or 0) }}</div>
+        <div class="summary-card-count">{{ todays_dues|length }} item(s)</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #0d6efd!important;">
+      <div class="card-body py-2 px-3">
+        <div class="summary-card-label">Upcoming</div>
+        <div class="summary-card-amount text-primary">₹{{ "{:,.0f}".format(total_upcoming_due or 0) }}</div>
+        <div class="summary-card-count">{{ upcoming_dues|length }} item(s)</div>
+      </div>
+    </div>
+  </div>
+</div>
 
+{# ── MACRO: render one installment card ── #}
+{% macro installment_card(item, rtype, border_color, badge_class, amount_class) %}
+{% set stats = reminder_stats.get(item.id) %}
+{% set reminder_data = {
+  "installmentId": item.id,
+  "invoiceId": item.invoice_id,
+  "studentId": item.student_id,
+  "studentName": item.student_name,
+  "phone": item.student_phone or "",
+  "invoiceNo": item.invoice_no,
+  "dueDate": item.due_date,
+  "balance": item.balance_due or 0,
+  "reminderType": rtype,
+  "lastSent": stats.last_sent_at if stats else "",
+  "count": stats.count if stats else 0
+} %}
+<div class="card border-0 shadow-sm mb-2 installment-card" style="border-left:4px solid {{ border_color }}!important;">
+  <div class="card-body py-2 px-3">
+    <!-- Row 1: Name + badge + balance -->
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-1 flex-wrap">
+      <div>
+        <span class="fw-semibold" style="font-size:14px;">{{ item.student_name }}</span>
+        <span class="text-muted" style="font-size:12px;"> · {{ item.student_code }}</span>
+        <span class="badge {{ badge_class }} ms-1" style="font-size:10px;">{{ rtype | upper | replace('_',' ') }}</span>
+      </div>
+      <span class="balance-amount {{ amount_class }}">₹{{ "{:,.0f}".format(item.balance_due or 0) }}</span>
+    </div>
+    <!-- Row 2: Info pills -->
+    <div class="d-flex flex-wrap gap-2 mb-1">
+      <span class="info-pill">📞 {{ item.student_phone or '—' }}</span>
+      <span class="info-pill">📄 <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}" class="text-decoration-none">{{ item.invoice_no }}</a></span>
+      <span class="info-pill">📅 {{ item.due_date }}</span>
+    </div>
+    {% if item.remarks %}
+    <div class="text-muted mb-1" style="font-size:12px;">💬 {{ item.remarks }}</div>
+    {% endif %}
+    <!-- Row 3: Reminder info + actions -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 mt-1 border-top">
+      <span class="reminder-info-text {{ 'text-warning' if stats else 'text-muted' }}" id="rinfo-{{ item.id }}">
+        {% if stats %}
+          ⏰ {{ stats.last_sent_at[:10] }} &nbsp;·&nbsp; {{ stats.count }}× sent
+        {% else %}
+          ⏰ Never reminded
+        {% endif %}
+      </span>
+      <div class="d-flex gap-1 flex-wrap btn-action-group">
+        <button onclick="openEditModal({{ item.id }}, '{{ item.due_date }}', {{ item.amount_due }}, {{ item.amount_paid }}, '{{ (item.remarks or '')|replace("'","&#39;") }}')"
+          class="btn btn-sm btn-outline-secondary">Edit</button>
+        <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
+          class="btn btn-sm btn-primary">Pay</a>
+        <button class="btn btn-sm btn-warning remind-btn"
+          data-reminder='{{ reminder_data | tojson }}'
+          onclick="openReminderModal(this)">🔔 Remind</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+<!-- ── PAST DUE ── -->
+<div class="mb-4">
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <span class="section-title text-danger">⚠ Past Due (Overdue)</span>
+    <span class="badge bg-danger rounded-pill">{{ past_dues|length }}</span>
+  </div>
+  {% if past_dues %}
+    {% for item in past_dues %}
+      {{ installment_card(item, 'overdue', '#dc3545', 'bg-danger', 'text-danger') }}
+    {% endfor %}
+    <div class="text-end text-danger fw-semibold small mt-1 pe-1">
+      Total: ₹{{ "{:,.2f}".format(total_past_due or 0) }}
+    </div>
+  {% else %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center text-success py-3">✓ No past due installments.</div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- ── DUE TODAY ── -->
+<div class="mb-4">
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <span class="section-title text-warning">⏳ Due Today</span>
+    <span class="badge bg-warning text-dark rounded-pill">{{ todays_dues|length }}</span>
+  </div>
+  {% if todays_dues %}
+    {% for item in todays_dues %}
+      {{ installment_card(item, 'due_today', '#fd7e14', 'bg-warning text-dark', 'text-warning') }}
+    {% endfor %}
+    <div class="text-end fw-semibold small mt-1 pe-1" style="color:#fd7e14;">
+      Total: ₹{{ "{:,.2f}".format(total_today_due or 0) }}
+    </div>
+  {% else %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center text-muted py-3">No installments due today.</div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- ── UPCOMING ── -->
+<div class="mb-4">
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <span class="section-title text-primary">📅 Upcoming (Next 50)</span>
+    <span class="badge bg-primary rounded-pill">{{ upcoming_dues|length }}</span>
+  </div>
+  {% if upcoming_dues %}
+    {% for item in upcoming_dues %}
+      {{ installment_card(item, 'upcoming', '#0d6efd', 'bg-primary', 'text-primary') }}
+    {% endfor %}
+    <div class="text-end text-primary fw-semibold small mt-1 pe-1">
+      Total: ₹{{ "{:,.2f}".format(total_upcoming_due or 0) }}
+    </div>
+  {% else %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center text-muted py-3">No upcoming installments.</div>
+    </div>
+  {% endif %}
+</div>
+
+
+<!-- ══════════════════════════════════════════
+     EDIT INSTALLMENT MODAL (existing)
+══════════════════════════════════════════ -->
+<div id="editInstallmentModal" class="modal" style="display:none;position:fixed;z-index:1050;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:10px;width:90%;max-width:480px;box-shadow:0 8px 24px rgba(0,0,0,.15);">
+    <div style="padding:16px 20px;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between;align-items:center;">
+      <h5 style="margin:0;font-size:17px;">Edit Installment</h5>
+      <span onclick="closeEditModal()" style="font-size:24px;cursor:pointer;color:#999;line-height:1;">&times;</span>
+    </div>
     <form method="post" id="editInstallmentForm">
-      <div class="modal-body" style="padding: 20px;">
-        <div class="form-group" style="margin-bottom: 16px;">
-          <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px;">Due Date *</label>
-          <input type="date" id="modal_due_date" name="due_date" required style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px;">
+      <div style="padding:20px;">
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">Due Date *</label>
+          <input type="date" id="modal_due_date" name="due_date" class="form-control" required>
         </div>
-
-        <div class="form-group" style="margin-bottom: 16px;">
-          <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px;">Amount Due * <small id="modal_amount_constraint" style="color: #c0392b; font-weight: normal;"></small></label>
-          <input type="number" id="modal_amount_due" name="amount_due" step="0.01" min="0" required style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px;">
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">Amount Due * <small id="modal_amount_constraint" class="text-danger fw-normal"></small></label>
+          <input type="number" id="modal_amount_due" name="amount_due" class="form-control" step="0.01" min="0" required>
         </div>
-
-        <div class="form-group" style="margin-bottom: 16px;">
-          <label style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px;">Remarks</label>
-          <textarea id="modal_remarks" name="remarks" rows="3" style="width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
+        <div class="mb-3">
+          <label class="form-label fw-semibold small">Remarks</label>
+          <textarea id="modal_remarks" name="remarks" class="form-control" rows="3"></textarea>
         </div>
         <input type="hidden" id="modal_redirect_to" name="redirect_to" value="receivables">
       </div>
-
-      <div class="modal-footer" style="padding: 12px 20px; border-top: 1px solid #e0e0e0; display: flex; justify-content: flex-end; gap: 8px;">
-        <button type="button" class="btn" onclick="closeEditModal()" style="padding: 8px 16px; border: 1px solid #ced4da; background-color: #fff; color: #333; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px;">
-          Cancel
-        </button>
-        <button type="submit" class="btn btn-primary" style="padding: 8px 16px; background-color: #0d6efd; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px;">
-          Save Changes
-        </button>
+      <div style="padding:12px 20px;border-top:1px solid #e0e0e0;display:flex;justify-content:flex-end;gap:8px;">
+        <button type="button" class="btn btn-outline-secondary" onclick="closeEditModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
       </div>
     </form>
   </div>
 </div>
 
+
+<!-- ══════════════════════════════════════════
+     REMINDER MODAL (Bootstrap 5)
+══════════════════════════════════════════ -->
+<div class="modal fade" id="reminderModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header py-2 px-3">
+        <h6 class="modal-title fw-bold">🔔 Send Payment Reminder</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body px-3 py-2">
+        <!-- Student info strip -->
+        <div class="bg-light rounded-2 p-2 mb-3 border">
+          <div class="fw-semibold small" id="rm_student_info"></div>
+          <div class="text-muted" style="font-size:12px;" id="rm_due_info"></div>
+          <div style="font-size:11.5px;" id="rm_last_info" class="mt-1 text-muted"></div>
+        </div>
+        <!-- Message -->
+        <label class="form-label fw-semibold small mb-1">
+          Message <span class="text-muted fw-normal">(you can edit before sending)</span>
+        </label>
+        <textarea id="rm_message" class="form-control" rows="6" style="font-size:13px;resize:vertical;"></textarea>
+      </div>
+      <div class="modal-footer py-2 px-3 gap-2 flex-wrap justify-content-between">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-outline-dark btn-sm" onclick="copyReminderMessage()">📋 Copy</button>
+          <button class="btn btn-success btn-sm" onclick="openWhatsApp()">💬 WhatsApp</button>
+          <button class="btn btn-primary btn-sm" onclick="logReminderSent()">✓ Mark Sent</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:9999;">
+  <div id="reminderToast" class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive">
+    <div class="d-flex">
+      <div class="toast-body fw-semibold" id="toastBody">Done!</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+
 <script>
+/* ── Config ── */
+const CONTACT_NUMBER = '9071717161';
+let currentReminder = {};
+let reminderModalInstance = null;
+
+/* ── Reminder Modal ── */
+function openReminderModal(btn) {
+  currentReminder = JSON.parse(btn.dataset.reminder);
+
+  const message = generateMessage(
+    currentReminder.reminderType,
+    currentReminder.studentName,
+    currentReminder.balance,
+    currentReminder.invoiceNo,
+    currentReminder.dueDate
+  );
+
+  document.getElementById('rm_student_info').textContent =
+    currentReminder.studentName + ' · ' + currentReminder.invoiceNo;
+
+  document.getElementById('rm_due_info').textContent =
+    'Due: ' + formatDateDisplay(currentReminder.dueDate) +
+    '  |  Balance: ₹' + parseFloat(currentReminder.balance).toLocaleString('en-IN');
+
+  const lastSent = currentReminder.lastSent;
+  const count = parseInt(currentReminder.count) || 0;
+  const infoEl = document.getElementById('rm_last_info');
+  if (lastSent) {
+    infoEl.textContent = '⏰ Last reminded: ' + formatDateDisplay(lastSent.split('T')[0]) +
+      ' (' + count + ' time' + (count !== 1 ? 's' : '') + ')';
+    infoEl.className = 'text-warning fw-semibold mt-1';
+  } else {
+    infoEl.textContent = '⏰ Never reminded';
+    infoEl.className = 'text-muted mt-1';
+  }
+
+  document.getElementById('rm_message').value = message;
+
+  reminderModalInstance = new bootstrap.Modal(document.getElementById('reminderModal'));
+  reminderModalInstance.show();
+}
+
+function generateMessage(type, name, balance, invoiceNo, dueDate) {
+  const firstName = name.split(' ')[0];
+  const amt = '₹' + parseInt(parseFloat(balance)).toLocaleString('en-IN');
+  const dateStr = formatDateDisplay(dueDate);
+
+  if (type === 'overdue') {
+    return `Dear ${firstName}, this is a reminder from Global IT Education that your pending fee amount of ${amt} for Invoice ${invoiceNo} was due on ${dateStr}. Kindly make the payment at the earliest. For any clarification, contact ${CONTACT_NUMBER}.`;
+  } else if (type === 'due_today') {
+    return `Dear ${firstName}, this is a reminder from Global IT Education that your fee amount of ${amt} for Invoice ${invoiceNo} is due today. Kindly make the payment on time. For any clarification, contact ${CONTACT_NUMBER}.`;
+  } else {
+    return `Dear ${firstName}, this is a friendly reminder from Global IT Education that your upcoming installment of ${amt} is due on ${dateStr}. Kindly be prepared to make the payment on or before the due date. For any clarification, contact ${CONTACT_NUMBER}.`;
+  }
+}
+
+function formatDateDisplay(dateStr) {
+  if (!dateStr) return '';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) { // YYYY-MM-DD
+      return parts[2] + '-' + months[parseInt(parts[1]) - 1] + '-' + parts[0];
+    } else { // DD-MM-YYYY
+      return parts[0] + '-' + months[parseInt(parts[1]) - 1] + '-' + parts[2];
+    }
+  }
+  return dateStr;
+}
+
+async function logReminder(status, sentVia) {
+  const message = document.getElementById('rm_message').value;
+  const payload = {
+    installment_id: currentReminder.installmentId,
+    invoice_id: currentReminder.invoiceId,
+    student_id: currentReminder.studentId,
+    phone_number: currentReminder.phone,
+    reminder_type: currentReminder.reminderType,
+    message_text: message,
+    status: status,
+    sent_via: sentVia
+  };
+
+  try {
+    const res = await fetch('/billing/reminder/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      updateReminderInfo(currentReminder.installmentId, data.sent_at);
+    }
+  } catch (e) {
+    console.error('Failed to log reminder:', e);
+  }
+}
+
+function updateReminderInfo(installmentId, sentAt) {
+  // Update all cards with this installment
+  document.querySelectorAll('.remind-btn').forEach(btn => {
+    const rd = JSON.parse(btn.dataset.reminder);
+    if (rd.installmentId == installmentId) {
+      rd.count = (parseInt(rd.count) || 0) + 1;
+      rd.lastSent = sentAt;
+      btn.dataset.reminder = JSON.stringify(rd);
+
+      const infoEl = document.getElementById('rinfo-' + installmentId);
+      if (infoEl) {
+        infoEl.textContent = '⏰ ' + sentAt.slice(0, 10) + '  ·  ' + rd.count + '× sent';
+        infoEl.className = 'reminder-info-text text-warning';
+      }
+    }
+  });
+  // Also sync currentReminder
+  currentReminder.count = (parseInt(currentReminder.count) || 0) + 1;
+  currentReminder.lastSent = sentAt;
+  document.getElementById('rm_last_info').textContent =
+    '⏰ Last reminded: ' + formatDateDisplay(sentAt.split('T')[0]) +
+    ' (' + currentReminder.count + ' time' + (currentReminder.count !== 1 ? 's' : '') + ')';
+  document.getElementById('rm_last_info').className = 'text-warning fw-semibold mt-1';
+}
+
+function copyReminderMessage() {
+  const msg = document.getElementById('rm_message').value;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(msg).then(() => {
+      showToast('Message copied!', 'success');
+      logReminder('copied', 'manual');
+    });
+  } else {
+    const ta = document.getElementById('rm_message');
+    ta.select();
+    document.execCommand('copy');
+    showToast('Message copied!', 'success');
+    logReminder('copied', 'manual');
+  }
+}
+
+function openWhatsApp() {
+  const msg = document.getElementById('rm_message').value;
+  let phone = (currentReminder.phone || '').replace(/\D/g, '');
+  if (phone.length === 10) phone = '91' + phone;
+  const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+  logReminder('whatsapp_opened', 'whatsapp');
+}
+
+function logReminderSent() {
+  logReminder('sent', 'manual');
+  showToast('Reminder logged!', 'success');
+  if (reminderModalInstance) reminderModalInstance.hide();
+}
+
+function showToast(message, type) {
+  const el = document.getElementById('reminderToast');
+  document.getElementById('toastBody').textContent = message;
+  el.className = 'toast align-items-center text-white border-0 ' +
+    (type === 'success' ? 'bg-success' : 'bg-danger');
+  new bootstrap.Toast(el, { delay: 2500 }).show();
+}
+
+/* ── Edit Installment Modal (existing logic) ── */
 let currentInstallmentId = null;
 let currentAmountPaid = 0;
 
@@ -400,31 +485,24 @@ function openEditModal(installmentId, dueDate, amountDue, amountPaid, remarks) {
   currentInstallmentId = installmentId;
   currentAmountPaid = amountPaid;
 
-  // Convert date format if needed (DD-MM-YYYY to YYYY-MM-DD)
   let formattedDate = dueDate;
   if (dueDate.includes('-') && dueDate.split('-')[0].length === 2) {
     const parts = dueDate.split('-');
     formattedDate = parts[2] + '-' + parts[1] + '-' + parts[0];
   }
   document.getElementById('modal_due_date').value = formattedDate;
-
   document.getElementById('modal_amount_due').value = amountDue;
   document.getElementById('modal_amount_due').min = amountPaid;
   document.getElementById('modal_remarks').value = remarks || '';
 
-  // Show constraint message
   if (amountPaid > 0) {
     document.getElementById('modal_amount_constraint').textContent =
-      '(Minimum: ₹' + parseFloat(amountPaid).toFixed(2) + ' - already paid)';
-    document.getElementById('modal_amount_constraint').style.color = '#c0392b';
+      '(Min: ₹' + parseFloat(amountPaid).toFixed(2) + ')';
   } else {
     document.getElementById('modal_amount_constraint').textContent = '';
   }
 
-  // Set form action
   document.getElementById('editInstallmentForm').action = '/billing/installment/' + installmentId + '/edit';
-
-  // Show modal
   document.getElementById('editInstallmentModal').style.display = 'flex';
 }
 
@@ -434,15 +512,11 @@ function closeEditModal() {
   currentAmountPaid = 0;
 }
 
-// Close modal when clicking outside
-window.onclick = function(event) {
+window.addEventListener('click', function(event) {
   const modal = document.getElementById('editInstallmentModal');
-  if (event.target === modal) {
-    closeEditModal();
-  }
-};
+  if (event.target === modal) closeEditModal();
+});
 
-// Validate form submission
 document.getElementById('editInstallmentForm').addEventListener('submit', function(e) {
   const amountDue = parseFloat(document.getElementById('modal_amount_due').value || 0);
   if (amountDue < currentAmountPaid) {

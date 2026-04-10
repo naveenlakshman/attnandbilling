@@ -3372,6 +3372,7 @@ def receivables():
             i.invoice_no,
             i.id AS invoice_id,
             i.branch_id,
+            s.id AS student_id,
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
@@ -3415,6 +3416,7 @@ def receivables():
             i.invoice_no,
             i.id AS invoice_id,
             i.branch_id,
+            s.id AS student_id,
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
@@ -3458,6 +3460,7 @@ def receivables():
             i.invoice_no,
             i.id AS invoice_id,
             i.branch_id,
+            s.id AS student_id,
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
@@ -3493,6 +3496,19 @@ def receivables():
     total_today_due = sum(float(row["balance_due"] or 0) for row in todays_dues)
     total_upcoming_due = sum(float(row["balance_due"] or 0) for row in upcoming_dues)
 
+    # Reminder stats per installment
+    all_ids = [r['id'] for r in list(past_dues) + list(todays_dues) + list(upcoming_dues)]
+    reminder_stats = {}
+    if all_ids:
+        placeholders = ','.join(['?'] * len(all_ids))
+        cur.execute(f"""
+            SELECT installment_id, COUNT(*) as count, MAX(sent_at) as last_sent_at
+            FROM reminder_logs
+            WHERE installment_id IN ({placeholders})
+            GROUP BY installment_id
+        """, all_ids)
+        reminder_stats = {row['installment_id']: dict(row) for row in cur.fetchall()}
+
     conn.close()
 
     return render_template(
@@ -3505,8 +3521,48 @@ def receivables():
         total_upcoming_due=total_upcoming_due,
         today=today,
         branches=branches,
-        branch_id=branch_id
+        branch_id=branch_id,
+        reminder_stats=reminder_stats
     )
+
+
+@billing_bp.route("/reminder/log", methods=["POST"])
+@login_required
+def reminder_log():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "No data"}), 400
+
+    installment_id = data.get("installment_id")
+    invoice_id = data.get("invoice_id")
+    student_id = data.get("student_id")
+    phone_number = data.get("phone_number", "")
+    reminder_type = data.get("reminder_type", "")
+    message_text = data.get("message_text", "")
+    status = data.get("status", "sent")
+    sent_via = data.get("sent_via", "manual")
+
+    if not all([installment_id, invoice_id, student_id, reminder_type, message_text]):
+        return jsonify({"success": False, "error": "Missing required fields"}), 400
+
+    conn = get_conn()
+    cur = conn.cursor()
+    now = datetime.now().isoformat(timespec="seconds")
+    user_id = session.get("user_id")
+
+    cur.execute("""
+        INSERT INTO reminder_logs (
+            student_id, invoice_id, installment_id, phone_number,
+            reminder_type, message_text, status, sent_via, sent_by, sent_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (student_id, invoice_id, installment_id, phone_number,
+          reminder_type, message_text, status, sent_via, user_id, now))
+    conn.commit()
+    log_id = cur.lastrowid
+    conn.close()
+
+    return jsonify({"success": True, "log_id": log_id, "sent_at": now})
+
 
 @billing_bp.route("/expenses")
 @login_required

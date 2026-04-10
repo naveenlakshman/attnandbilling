@@ -487,6 +487,27 @@ def init_db():
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS reminder_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            invoice_id INTEGER NOT NULL,
+            installment_id INTEGER NOT NULL,
+            phone_number TEXT,
+            reminder_type TEXT NOT NULL,
+            message_text TEXT NOT NULL,
+            status TEXT NOT NULL,
+            sent_via TEXT NOT NULL,
+            followup_note TEXT,
+            sent_by INTEGER,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(invoice_id) REFERENCES invoices(id),
+            FOREIGN KEY(installment_id) REFERENCES installment_plans(id),
+            FOREIGN KEY(sent_by) REFERENCES users(id)
+        )
+    """)
+
     # ---------- SAFE MIGRATIONS ----------
     add_column_if_not_exists(cur, "users", "phone", "TEXT")
     add_column_if_not_exists(cur, "users", "branch_id", "INTEGER")
