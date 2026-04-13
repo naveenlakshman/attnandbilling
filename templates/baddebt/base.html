@@ -126,8 +126,9 @@
       <div class="topbar bg-white border-bottom px-4 py-3 shadow-sm">
         <div class="d-flex justify-content-between align-items-center">
           <h5 class="mb-0">{% block page_title %}Bad Debt Management{% endblock %}</h5>
-          <div class="text-end">
-            <small class="text-muted">Logged in: <strong>{{ session.full_name }}</strong></small>
+          <div class="d-flex align-items-center gap-2">
+            <small class="text-muted d-none d-sm-block">Logged in: <strong>{{ session.full_name }}</strong></small>
+            <a href="{{ url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary" title="Back to Main Dashboard">🏠 Home</a>
           </div>
         </div>
       </div>

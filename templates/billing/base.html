@@ -57,6 +57,124 @@
     .content-wrap {
       min-width: 0;
     }
+
+    /* ===== MOBILE BOTTOM NAV ===== */
+    .mobile-bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-top: 1px solid #dee2e6;
+      z-index: 1030;
+      padding: 4px 0 env(safe-area-inset-bottom, 4px);
+      box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+    }
+    .mobile-bottom-nav a {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      text-decoration: none;
+      color: #6c757d;
+      font-size: 10px;
+      padding: 4px 2px;
+      border-radius: 8px;
+      transition: color .15s;
+    }
+    .mobile-bottom-nav a .nav-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+    .mobile-bottom-nav a.active,
+    .mobile-bottom-nav a:hover {
+      color: #0d6efd;
+    }
+    .mobile-bottom-nav a.add-btn {
+      color: #fff;
+      background: #0d6efd;
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      justify-content: center;
+      margin-top: -12px;
+      box-shadow: 0 2px 8px rgba(13,110,253,.4);
+      flex: none;
+      padding: 0;
+      font-size: 24px;
+      cursor: pointer;
+      border: none;
+    }
+    .mobile-bottom-nav a.add-btn .nav-icon {
+      font-size: 24px;
+    }
+
+    /* FAB quick-create menu */
+    .fab-menu-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1025;
+      background: rgba(0,0,0,.35);
+      backdrop-filter: blur(2px);
+    }
+    .fab-menu-overlay.show { display: block; }
+    .fab-menu {
+      position: fixed;
+      bottom: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1035;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .18s, transform .18s;
+      transform: translateX(-50%) translateY(16px);
+    }
+    .fab-menu.show {
+      pointer-events: auto;
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .fab-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      border-radius: 30px;
+      padding: 10px 20px 10px 14px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      text-decoration: none;
+      color: #1f2937;
+      font-weight: 600;
+      font-size: 14px;
+      white-space: nowrap;
+      min-width: 180px;
+    }
+    .fab-menu-item:hover { background: #f0f4ff; color: #0d6efd; }
+    .fab-menu-item .fmi-icon {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .fab-menu-label {
+      font-size: 10px;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    @media (max-width: 991.98px) {
+      .mobile-bottom-nav { display: flex; }
+      .main-content-pad { padding-bottom: 72px !important; }
+    }
   </style>
 
   {% block extra_css %}{% endblock %}
@@ -161,14 +279,17 @@
         <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainSidebar" aria-controls="mainSidebar" aria-label="Menu">☰</button>
         <div class="fw-semibold">Global IT ERP - Billing</div>
       </div>
-      <div class="small text-muted d-none d-sm-block">
-        Logged in:
-        <span class="fw-semibold">{{ session.get("username", "User") }}</span>
-        <span class="d-none d-md-inline">({{ session.get("role", "staff") }})</span>
+      <div class="d-flex align-items-center gap-2">
+        <div class="small text-muted d-none d-sm-block">
+          Logged in:
+          <span class="fw-semibold">{{ session.get("username", "User") }}</span>
+          <span class="d-none d-md-inline">({{ session.get("role", "staff") }})</span>
+        </div>
+        <a href="{{ url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary" title="Back to Main Dashboard">🏠 Home</a>
       </div>
     </div>
 
-    <div class="container-fluid p-3">
+    <div class="container-fluid p-3 main-content-pad">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
@@ -185,8 +306,82 @@
   </main>
 </div>
 
+<!-- FAB overlay + pop-up menu -->
+<div class="fab-menu-overlay" id="fabOverlay"></div>
+<div class="fab-menu" id="fabMenu">
+  <div class="fab-menu-label">Quick Create</div>
+  <a href="{{ url_for('billing.student_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dbeafe;">🎓</span>
+    New Student
+  </a>
+  <a href="{{ url_for('billing.invoice_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dcfce7;">🧾</span>
+    New Invoice
+  </a>
+  <a href="{{ url_for('billing.expense_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#fef9c3;">💸</span>
+    Add Expense
+  </a>
+</div>
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+  <a href="{{ url_for('billing.students') }}" class="{{ 'active' if request.endpoint == 'billing.students' or request.endpoint == 'billing.student_profile' else '' }}">
+    <span class="nav-icon">🎓</span>
+    <span>Students</span>
+  </a>
+  <a href="{{ url_for('billing.invoices') }}" class="{{ 'active' if request.endpoint == 'billing.invoices' or request.endpoint == 'billing.invoice_view' else '' }}">
+    <span class="nav-icon">🧾</span>
+    <span>Invoices</span>
+  </a>
+  <a href="#" class="add-btn" id="fabToggle" title="Quick Create" role="button" aria-label="Quick create menu">
+    <span class="nav-icon" id="fabIcon">+</span>
+  </a>
+  <a href="{{ url_for('billing.receipts') }}" class="{{ 'active' if request.endpoint == 'billing.receipts' or request.endpoint == 'billing.receipt_view' else '' }}">
+    <span class="nav-icon">💵</span>
+    <span>Receipts</span>
+  </a>
+  <a href="{{ url_for('billing.receivables') }}" class="{{ 'active' if request.endpoint == 'billing.receivables' else '' }}">
+    <span class="nav-icon">📊</span>
+    <span>Receivables</span>
+  </a>
+</nav>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
+
+<script>
+  (function() {
+    const toggle = document.getElementById('fabToggle');
+    const menu   = document.getElementById('fabMenu');
+    const overlay= document.getElementById('fabOverlay');
+    const icon   = document.getElementById('fabIcon');
+    if (!toggle) return;
+
+    function openMenu() {
+      menu.classList.add('show');
+      overlay.classList.add('show');
+      icon.textContent = '✕';
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+    function closeMenu() {
+      menu.classList.remove('show');
+      overlay.classList.remove('show');
+      icon.textContent = '+';
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+
+    toggle.addEventListener('click', function(e) {
+      e.preventDefault();
+      menu.classList.contains('show') ? closeMenu() : openMenu();
+    });
+    overlay.addEventListener('click', closeMenu);
+    // Close when a menu item is tapped
+    menu.querySelectorAll('.fab-menu-item').forEach(function(el) {
+      el.addEventListener('click', closeMenu);
+    });
+  })();
+</script>
 
 {% block extra_js %}{% endblock %}
 </body>

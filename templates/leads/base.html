@@ -219,15 +219,18 @@
   <!-- Main -->
   <main class="flex-grow-1 content-wrap">
     <!-- Top bar -->
-    <div class="topbar px-3 py-2 bg-white border-bottom d-flex align-items-center justify-content-between">
-      <div class="d-flex align-items-center gap-2">
+    <div class="topbar px-3 py-2 bg-white border-bottom" style="display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:8px; min-width:0;">
         <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainSidebar" aria-controls="mainSidebar" aria-label="Menu">☰</button>
-        <div class="fw-semibold">Global IT ERP - Leads</div>
+        <div class="fw-semibold" style="white-space:nowrap;">Global IT ERP - Leads</div>
       </div>
-      <div class="small text-muted d-none d-sm-block">
-        Logged in:
-        <span class="fw-semibold">{{ session.get("username", "User") }}</span>
-        <span class="d-none d-md-inline">({{ session.get("role", "staff") }})</span>
+      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+        <div class="small text-muted d-none d-sm-block">
+          Logged in:
+          <span class="fw-semibold">{{ session.get("username", "User") }}</span>
+          <span class="d-none d-md-inline">({{ session.get("role", "staff") }})</span>
+        </div>
+        <a href="{{ url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary" title="Back to Main Dashboard">🏠 Home</a>
       </div>
     </div>
 
