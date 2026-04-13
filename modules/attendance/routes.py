@@ -543,9 +543,25 @@ def view_batch(batch_id):
         """, (batch_id,))
         
         students = cur.fetchall()
-        
+
+        # Get out-of-time warnings for this batch
+        cur.execute("""
+            SELECT tw.id, tw.attendance_date, tw.actual_time,
+                   tw.batch_start_time, tw.batch_end_time,
+                   tw.warning_type, tw.attendance_status, tw.marked_at,
+                   s.full_name AS student_name, s.student_code,
+                   u.full_name AS marked_by_name
+            FROM attendance_time_warnings tw
+            JOIN students s ON tw.student_id = s.id
+            JOIN users u ON tw.marked_by = u.id
+            WHERE tw.batch_id = ?
+            ORDER BY tw.marked_at DESC
+        """, (batch_id,))
+        time_warnings = cur.fetchall()
+
         return render_template('attendance/batch_detail.html',
-                             batch=batch, students=students, user=user)
+                             batch=batch, students=students,
+                             time_warnings=time_warnings, user=user)
     
     finally:
         conn.close()
@@ -968,7 +984,7 @@ def mark_attendance():
             
             # Get batch info
             cur.execute("""
-                SELECT b.id, b.batch_name, b.branch_id, c.course_name
+                SELECT b.id, b.batch_name, b.branch_id, c.course_name, b.start_time, b.end_time
                 FROM batches b
                 LEFT JOIN courses c ON b.course_id = c.id
                 WHERE b.id = ? AND b.branch_id = ?
@@ -1091,7 +1107,35 @@ def mark_attendance():
 
         if request.method == 'POST':
             action = request.form.get('action')
-            
+
+            # --- Out-of-time warning check ---
+            IST = timezone(timedelta(hours=5, minutes=30))
+            now_ist = datetime.now(IST)
+            actual_time = now_ist.strftime("%H:%M")
+            marked_at = now_ist.isoformat(timespec="seconds")
+            batch_start_time = batch_info['start_time'] if batch_info else None
+            batch_end_time   = batch_info['end_time']   if batch_info else None
+            warning_type = None
+            if batch_start_time and batch_end_time:
+                if actual_time < batch_start_time:
+                    warning_type = 'before_start'
+                elif actual_time > batch_end_time:
+                    warning_type = 'after_end'
+
+            def _maybe_warn(student_id, att_status):
+                """Insert an out-of-time warning row (ignored if one already exists for the day)."""
+                if not warning_type:
+                    return
+                cur.execute("""
+                    INSERT OR IGNORE INTO attendance_time_warnings (
+                        batch_id, branch_id, student_id, attendance_date,
+                        attendance_status, marked_at, actual_time,
+                        batch_start_time, batch_end_time, warning_type, marked_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (batch_id, branch_id, student_id, attendance_date,
+                      att_status, marked_at, actual_time,
+                      batch_start_time, batch_end_time, warning_type, user_id))
+
             if action == 'mark-all-present':
                 # Mark all students as present
                 for student in students:
@@ -1099,7 +1143,9 @@ def mark_attendance():
                     remarks = request.form.get(f"remarks_{student['student_id']}", "").strip()
                     _save_attendance(cur, batch_id, student['student_id'], branch_id, 
                                    attendance_date, status, remarks, user_id, conn)
-                
+                    _maybe_warn(student['student_id'], status)
+                conn.commit()
+
                 return redirect(url_for('attendance.mark_attendance', 
                                       batch_id=batch_id, date=attendance_date, 
                                       branch_id=branch_id, msg="marked_all_present"))
@@ -1111,7 +1157,9 @@ def mark_attendance():
                     remarks = request.form.get(f"remarks_{student['student_id']}", "").strip()
                     _save_attendance(cur, batch_id, student['student_id'], branch_id,
                                    attendance_date, status, remarks, user_id, conn)
-                
+                    _maybe_warn(student['student_id'], status)
+                conn.commit()
+
                 return redirect(url_for('attendance.mark_attendance',
                                       batch_id=batch_id, date=attendance_date,
                                       branch_id=branch_id, msg="marked_all_absent"))
@@ -1131,7 +1179,9 @@ def mark_attendance():
                     
                     _save_attendance(cur, batch_id, student['student_id'], branch_id,
                                    attendance_date, status, remarks, user_id, conn)
-                
+                    _maybe_warn(student['student_id'], status)
+                conn.commit()
+
                 return redirect(url_for('attendance.mark_attendance',
                                       batch_id=batch_id, date=attendance_date,
                                       branch_id=branch_id, msg="saved"))
@@ -1139,6 +1189,9 @@ def mark_attendance():
         # Get message from redirect
         message = request.args.get('msg')
         
+        batch_start_time_tpl = batch_info['start_time'] if batch_info else None
+        batch_end_time_tpl   = batch_info['end_time']   if batch_info else None
+
         return render_template('attendance/mark_attendance.html',
                              branches=branches, batches=batches,
                              branch_id=branch_id, batch_id=batch_id,
@@ -1150,7 +1203,9 @@ def mark_attendance():
                              history_dates=history_dates,
                              message=message, user=user,
                              available_trainers=available_trainers,
-                             trainer_id=trainer_id)
+                             trainer_id=trainer_id,
+                             batch_start_time=batch_start_time_tpl,
+                             batch_end_time=batch_end_time_tpl)
     
     finally:
         conn.close()

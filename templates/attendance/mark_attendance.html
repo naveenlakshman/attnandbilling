@@ -919,23 +919,92 @@ Global IT Education
     document.getElementById('leave-count').textContent = counts.leave;
   }
 
-  // Initialise WA buttons for already-absent students on page load
-  document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('select[class*="status-select"]').forEach(select => {
-      const sid = select.id.replace('status_', '');
-      if (select.value === 'absent' || select.value === 'late') {
-        const waBtn = document.getElementById('wa_absent_' + sid);
-        if (waBtn) {
-          const name  = waBtn.dataset.name;
-          const phone = waBtn.dataset.phone.replace(/\D/g, '');
-          const fullPhone = phone.length === 10 ? '91' + phone : phone;
-          waBtn.href = 'https://wa.me/' + fullPhone +
-            '?text=' + encodeURIComponent(ABSENT_MSG_TEMPLATE(name));
-          waBtn.style.display = 'inline-flex';
+  // ── Out-of-time attendance warning ──
+  (function() {
+    const batchStart = "{{ batch_start_time or '' }}";
+    const batchEnd   = "{{ batch_end_time or '' }}";
+    const batchSelected = {{ 'true' if batch_id else 'false' }};
+
+    function getCurrentHHMM() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      return h + ':' + m;
+    }
+
+    function formatTime12(hhmm) {
+      if (!hhmm) return hhmm;
+      const [h, m] = hhmm.split(':').map(Number);
+      const suffix = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return h12 + ':' + String(m).padStart(2, '0') + ' ' + suffix;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      // WA buttons init (existing logic)
+      document.querySelectorAll('select[class*="status-select"]').forEach(select => {
+        const sid = select.id.replace('status_', '');
+        if (select.value === 'absent' || select.value === 'late') {
+          const waBtn = document.getElementById('wa_absent_' + sid);
+          if (waBtn) {
+            const name  = waBtn.dataset.name;
+            const phone = waBtn.dataset.phone.replace(/\D/g, '');
+            const fullPhone = phone.length === 10 ? '91' + phone : phone;
+            waBtn.href = 'https://wa.me/' + fullPhone +
+              '?text=' + encodeURIComponent(ABSENT_MSG_TEMPLATE(name));
+            waBtn.style.display = 'inline-flex';
+          }
+        }
+      });
+      updateStatistics();
+
+      // Out-of-time check
+      if (batchSelected && batchStart && batchEnd) {
+        const nowHHMM = getCurrentHHMM();
+        let warningType = null;
+        if (nowHHMM < batchStart) warningType = 'before_start';
+        else if (nowHHMM > batchEnd) warningType = 'after_end';
+
+        if (warningType) {
+          const nowDisplay   = formatTime12(nowHHMM);
+          const startDisplay = formatTime12(batchStart);
+          const endDisplay   = formatTime12(batchEnd);
+          const typeLabel = warningType === 'before_start'
+            ? 'before the batch start time'
+            : 'after the batch end time';
+          const msgEl = document.getElementById('timeWarnMsg');
+          if (msgEl) {
+            msgEl.innerHTML =
+              '<strong>Current time: ' + nowDisplay + '</strong><br>' +
+              'This batch is scheduled <strong>' + startDisplay + ' – ' + endDisplay + '</strong>.<br>' +
+              'You are marking attendance <strong>' + typeLabel + '</strong>.<br>' +
+              'Attendance will still be saved, but this will be flagged for admin review.';
+          }
+          const modal = document.getElementById('timeWarnModal');
+          if (modal && typeof bootstrap !== 'undefined') {
+            new bootstrap.Modal(modal).show();
+          }
         }
       }
     });
-    updateStatistics();
-  });
+  })();
 </script>
+
+<!-- Out-of-time attendance warning modal -->
+<div class="modal fade" id="timeWarnModal" tabindex="-1" aria-labelledby="timeWarnModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-warning">
+      <div class="modal-header bg-warning bg-opacity-10 border-warning">
+        <h5 class="modal-title text-warning" id="timeWarnModalLabel">
+          ⚠️ Outside Batch Schedule
+        </h5>
+      </div>
+      <div class="modal-body" id="timeWarnMsg">
+      </div>
+      <div class="modal-footer border-warning">
+        <button type="button" class="btn btn-warning" data-bs-dismiss="modal">OK, Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}

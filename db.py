@@ -261,6 +261,30 @@ def init_db():
         )
     """)
 
+    # ---------- ATTENDANCE TIME WARNINGS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS attendance_time_warnings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            branch_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            attendance_date TEXT NOT NULL,
+            attendance_status TEXT NOT NULL,
+            marked_at TEXT NOT NULL,
+            actual_time TEXT NOT NULL,
+            batch_start_time TEXT,
+            batch_end_time TEXT,
+            warning_type TEXT NOT NULL
+                CHECK(warning_type IN ('before_start', 'after_end')),
+            marked_by INTEGER,
+            UNIQUE(batch_id, student_id, attendance_date),
+            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+            FOREIGN KEY (marked_by) REFERENCES users(id)
+        )
+    """)
+
     # ---------- ATTENDANCE FOLLOWUPS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS attendance_followups (

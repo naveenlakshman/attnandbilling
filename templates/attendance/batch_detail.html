@@ -406,9 +406,35 @@
     </div>
   </div>
 
-  <!-- Students Section -->
-  <div class="detail-card">
-    <div class="detail-title">👥 Enrolled Students ({{ students|length }})</div>
+  <!-- Tabs: Students + Time Warnings -->
+  <div class="detail-card" style="padding-bottom: 0;">
+    <ul class="nav nav-tabs" id="batchTabs" role="tablist" style="border-bottom: none; margin-bottom: -1px;">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="students-tab" data-bs-toggle="tab" data-bs-target="#students-pane"
+                type="button" role="tab" aria-controls="students-pane" aria-selected="true">
+          👥 Students <span class="badge bg-secondary ms-1">{{ students|length }}</span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link {% if time_warnings %}text-warning{% endif %}" id="warnings-tab" data-bs-toggle="tab" data-bs-target="#warnings-pane"
+                type="button" role="tab" aria-controls="warnings-pane" aria-selected="false">
+          ⚠️ Time Warnings
+          {% if time_warnings %}
+            <span class="badge bg-warning text-dark ms-1">{{ time_warnings|length }}</span>
+          {% else %}
+            <span class="badge bg-secondary ms-1">0</span>
+          {% endif %}
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="tab-content" id="batchTabsContent">
+
+    <!-- ── Tab 1: Students ── -->
+    <div class="tab-pane fade show active" id="students-pane" role="tabpanel" aria-labelledby="students-tab">
+      <div class="detail-card">
+        <div class="detail-title">👥 Enrolled Students ({{ students|length }})</div>
 
     {% if students|length > 0 %}
 
@@ -493,6 +519,76 @@
       </p>
     </div>
     {% endif %}
-  </div>
+      </div>
+    </div>
+
+    <!-- ── Tab 2: Time Warnings ── -->
+    <div class="tab-pane fade" id="warnings-pane" role="tabpanel" aria-labelledby="warnings-tab">
+      <div class="detail-card">
+        <div class="detail-title">⚠️ Out-of-Schedule Attendance Warnings</div>
+        <p class="text-muted small mb-3">
+          These records were marked outside the batch's scheduled hours
+          ({{ batch.start_time or '—' }} – {{ batch.end_time or '—' }}).
+        </p>
+
+        {% if time_warnings %}
+        <div style="overflow-x: auto;">
+          <table class="students-table" style="font-size: 13px;">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Student</th>
+                <th>Time Marked</th>
+                <th>Scheduled</th>
+                <th>Warning</th>
+                <th>Status Marked</th>
+                <th>Marked By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for w in time_warnings %}
+              <tr>
+                <td style="white-space:nowrap;">{{ w.attendance_date }}</td>
+                <td>
+                  <div style="font-weight:600; font-size:11px; color:#6b7280;">{{ w.student_code }}</div>
+                  <div>{{ w.student_name }}</div>
+                </td>
+                <td style="white-space:nowrap; font-weight:600;">{{ w.actual_time }}</td>
+                <td style="white-space:nowrap; color:#6b7280;">{{ w.batch_start_time or '—' }} – {{ w.batch_end_time or '—' }}</td>
+                <td>
+                  {% if w.warning_type == 'before_start' %}
+                    <span class="badge bg-info text-dark">Before Start</span>
+                  {% else %}
+                    <span class="badge bg-warning text-dark">After End</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if w.attendance_status == 'present' %}
+                    <span class="badge bg-success">Present</span>
+                  {% elif w.attendance_status == 'absent' %}
+                    <span class="badge bg-danger">Absent</span>
+                  {% elif w.attendance_status == 'late' %}
+                    <span class="badge bg-warning text-dark">Late</span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ w.attendance_status | capitalize }}</span>
+                  {% endif %}
+                </td>
+                <td style="color:#6b7280;">{{ w.marked_by_name }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+          <div class="empty-state-icon">✅</div>
+          <p class="mb-2">No time warnings for this batch</p>
+          <p class="small text-muted">All attendance has been marked within the scheduled hours.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div><!-- /tab-content -->
 
 {% endblock %}
