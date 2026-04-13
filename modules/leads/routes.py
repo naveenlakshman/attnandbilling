@@ -1137,13 +1137,16 @@ def followups_today():
 
     conn.close()
 
+    overdue_count = sum(1 for l in leads if l["next_followup_date"] and l["next_followup_date"] < today)
+
     return render_template(
         "leads/followups.html",
         leads=leads,
         today=today,
         all_users=all_users,
         selected_user_id=user_filter,
-        is_admin=(current_user_role == "admin")
+        is_admin=(current_user_role == "admin"),
+        overdue_count=overdue_count
     )
 @leads_bp.route("/pipeline")
 @login_required
