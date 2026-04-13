@@ -1393,7 +1393,7 @@
     var formData = new FormData();
     formData.append('batch_id', batchId);
 
-    fetch(addToBatchUrl, { method: 'POST', body: formData })
+    fetch(addToBatchUrl, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content }, body: formData })
       .then(function(r){ return r.json(); })
       .then(function(data){
         if (data.success) {
@@ -1659,6 +1659,7 @@
 
     fetch('{{ url_for("billing.student_upload_photo", student_id=student.id) }}', {
       method: 'POST',
+      headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
       body: formData
     })
     .then(r => r.json())
@@ -2214,7 +2215,7 @@
     fd.append('sig_type', sigType);
     fd.append('sig_data',  dataURL);
 
-    fetch(saveUrl, { method: 'POST', body: fd })
+    fetch(saveUrl, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content }, body: fd })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.success) {

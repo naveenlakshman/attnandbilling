@@ -3,6 +3,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime
 from db import get_conn
 from .utils import login_required, admin_required
+from extensions import limiter
 
 core_bp = Blueprint("core", __name__)
 
@@ -14,6 +15,7 @@ def home():
 
 
 @core_bp.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")
 def login():
     if "user_id" in session:
         return redirect(url_for("core.dashboard"))
@@ -32,6 +34,7 @@ def login():
         conn.close()
 
         if user and check_password_hash(user["password_hash"], password):
+            session.permanent = True
             session["user_id"] = user["id"]
             session["full_name"] = user["full_name"]
             session["username"] = user["username"]

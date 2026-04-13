@@ -1,4 +1,5 @@
 from flask import Flask
+from extensions import csrf, limiter
 from config import Config
 from db import init_db
 from modules.leads.routes import leads_bp
@@ -43,6 +44,9 @@ def to_ist_time(value):
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    csrf.init_app(app)
+    limiter.init_app(app)
 
     init_db()
 
