@@ -1,108 +1,139 @@
 {% extends "leads/base.html" %}
 {% block title %}Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Dashboard mobile styles */
+  .kpi-card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 1px 6px rgba(0,0,0,.07);
+    overflow: hidden;
+  }
+  .kpi-card .kpi-accent {
+    width: 4px;
+    border-radius: 4px 0 0 4px;
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+  }
+  .kpi-card .card-body { padding: 12px 14px 12px 18px; position: relative; }
+  .kpi-card .kpi-label { font-size: 11px; color: #6c757d; font-weight: 500; text-transform: uppercase; letter-spacing: .4px; }
+  .kpi-card .kpi-main { font-size: 26px; font-weight: 700; line-height: 1.1; }
+  .kpi-card .kpi-sub { font-size: 13px; font-weight: 600; }
+  .kpi-card .kpi-this-month { font-size: 10px; color: #9ca3af; }
+
+  .section-card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 1px 6px rgba(0,0,0,.07);
+  }
+  .section-card .card-header {
+    background: #fff;
+    border-bottom: 1px solid #f0f0f0;
+    border-radius: 12px 12px 0 0 !important;
+    font-size: 13px;
+    padding: 10px 14px;
+  }
+  .section-card .card-body { padding: 0; }
+
+  /* touch-friendly list items */
+  .lead-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f5f5f5;
+    text-decoration: none;
+    color: inherit;
+    transition: background .12s;
+  }
+  .lead-list-item:last-child { border-bottom: none; }
+  .lead-list-item:hover, .lead-list-item:active { background: #f8f9fa; }
+  .lead-list-item .lname { font-weight: 600; font-size: 14px; }
+  .lead-list-item .lmeta { font-size: 11px; color: #6c757d; margin-top: 1px; }
+  .lead-list-item .lbadge { flex-shrink: 0; margin-left: 8px; }
+
+  .stage-pill {
+    display: inline-block;
+    background: #e9ecef;
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #495057;
+  }
+
+  .progress-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; }
+  .progress-cell { text-align: center; padding: 10px 4px; }
+  .progress-cell + .progress-cell { border-left: 1px solid #f0f0f0; }
+  .progress-cell .pval { font-size: 22px; font-weight: 700; line-height: 1; }
+  .progress-cell .plabel { font-size: 10px; color: #9ca3af; margin-top: 3px; }
+</style>
+{% endblock %}
+
 {% block content %}
 
-<div class="mb-4">
-  <h5 class="mb-3">
+<!-- Page header -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h6 class="mb-0 fw-bold">
     {% if is_admin %}👥 Team Dashboard{% else %}📊 My Dashboard{% endif %}
-  </h5>
+  </h6>
+  <a href="{{ url_for('leads.lead_create') }}" class="btn btn-primary btn-sm">+ New Lead</a>
 </div>
 
-<!-- Main KPIs Row -->
-<div class="row g-3 mb-3">
-  <div class="col-md-3">
-    <div class="card p-3 border-start border-primary border-3">
-      <div class="text-muted small">Total Leads</div>
-      <div class="d-flex justify-content-between align-items-end mt-1">
-        <div>
-          <div class="fs-3 fw-bold">{{ total_leads }}</div>
-          <div class="small text-muted">Overall</div>
-        </div>
-        <div class="text-end">
-          <div class="fs-5 fw-semibold text-primary">{{ total_leads_this_month }}</div>
-          <div class="small text-muted">This Month</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card p-3 border-start border-success border-3">
-      <div class="text-muted small">Converted</div>
-      <div class="d-flex justify-content-between align-items-end mt-1">
-        <div>
-          <div class="fs-3 fw-bold">{{ converted_total }}</div>
-          <div class="small text-muted">Overall</div>
-        </div>
-        <div class="text-end">
-          <div class="fs-5 fw-semibold text-success">{{ converted_this_month }}</div>
-          <div class="small text-muted">This Month</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card p-3 border-start border-warning border-3">
-      <div class="text-muted small">Lost</div>
-      <div class="d-flex justify-content-between align-items-end mt-1">
-        <div>
-          <div class="fs-3 fw-bold">{{ lost_total }}</div>
-          <div class="small text-muted">Overall</div>
-        </div>
-        <div class="text-end">
-          <div class="fs-5 fw-semibold text-warning">{{ lost_this_month }}</div>
-          <div class="small text-muted">This Month</div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card p-3 border-start border-info border-3">
-      <div class="text-muted small">New Today</div>
-      <div class="fs-3 fw-bold">{{ new_leads_today }}</div>
-      <div class="small text-muted mt-1">{{ followups_due_count }} followups due</div>
-    </div>
-  </div>
-</div>
-
-<!-- Secondary KPIs -->
-<div class="row g-3 mb-3">
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header fw-semibold">📈 This Month's Progress</div>
+<!-- Main KPIs: 2 cols on mobile, 4 on desktop -->
+<div class="row g-2 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card h-100">
       <div class="card-body">
-        <div class="d-flex justify-content-around text-center">
-          <div>
-            <div class="text-muted small">Active This Month</div>
-            <div class="fs-4 fw-bold text-primary">{{ active_this_month }}</div>
-          </div>
-          <div class="border-start"></div>
-          <div>
-            <div class="text-muted small">Converted This Month</div>
-            <div class="fs-4 fw-bold text-success">{{ converted_this_month }}</div>
-          </div>
-          <div class="border-start"></div>
-          <div>
-            <div class="text-muted small">Lost This Month</div>
-            <div class="fs-4 fw-bold text-warning">{{ lost_this_month }}</div>
-          </div>
+        <div class="kpi-accent bg-primary"></div>
+        <div class="kpi-label">Total</div>
+        <div class="kpi-main">{{ total_leads }}</div>
+        <div class="d-flex justify-content-between align-items-center mt-1">
+          <span class="kpi-this-month">Overall</span>
+          <span class="kpi-sub text-primary">{{ total_leads_this_month }}<span class="kpi-this-month ms-1">mo</span></span>
         </div>
       </div>
     </div>
   </div>
-
-  <div class="col-md-6">
-    <div class="card">
-      <div class="card-header fw-semibold">🎯 Pipeline Stages</div>
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card h-100">
       <div class="card-body">
-        <div class="d-flex flex-wrap gap-2">
-          {% for stage, count in stage_breakdown %}
-            <div class="badge bg-light text-dark p-2">
-              <strong>{{ stage }}</strong><br>
-              <small>{{ count }} leads</small>
-            </div>
-          {% endfor %}
-          {% if not stage_breakdown %}
-            <div class="text-muted small">No active leads in pipeline</div>
+        <div class="kpi-accent bg-success"></div>
+        <div class="kpi-label">Converted</div>
+        <div class="kpi-main text-success">{{ converted_total }}</div>
+        <div class="d-flex justify-content-between align-items-center mt-1">
+          <span class="kpi-this-month">Overall</span>
+          <span class="kpi-sub text-success">{{ converted_this_month }}<span class="kpi-this-month ms-1">mo</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card h-100">
+      <div class="card-body">
+        <div class="kpi-accent bg-warning"></div>
+        <div class="kpi-label">Lost</div>
+        <div class="kpi-main text-warning">{{ lost_total }}</div>
+        <div class="d-flex justify-content-between align-items-center mt-1">
+          <span class="kpi-this-month">Overall</span>
+          <span class="kpi-sub text-warning">{{ lost_this_month }}<span class="kpi-this-month ms-1">mo</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card kpi-card h-100">
+      <div class="card-body">
+        <div class="kpi-accent bg-info"></div>
+        <div class="kpi-label">New Today</div>
+        <div class="kpi-main text-info">{{ new_leads_today }}</div>
+        <div class="d-flex justify-content-between align-items-center mt-1">
+          <span class="kpi-this-month">Today</span>
+          {% if followups_due_count > 0 %}
+            <span class="badge bg-danger" style="font-size:10px;">{{ followups_due_count }} due</span>
+          {% else %}
+            <span class="kpi-this-month">0 due</span>
           {% endif %}
         </div>
       </div>
@@ -110,58 +141,98 @@
   </div>
 </div>
 
-<!-- Follow-ups and Hot Leads -->
-<div class="row g-3 mb-3">
-  <div class="col-lg-6">
-    <div class="card h-100">
-      <div class="card-header fw-semibold">🔔 Follow-ups Due ({{ followups_due_count }})</div>
+<!-- This Month's Progress + Pipeline -->
+<div class="row g-2 mb-3">
+  <div class="col-12 col-md-6">
+    <div class="card section-card">
+      <div class="card-header fw-semibold">📈 This Month</div>
+      <div class="card-body p-0">
+        <div class="progress-grid">
+          <div class="progress-cell">
+            <div class="pval text-primary">{{ active_this_month }}</div>
+            <div class="plabel">Active</div>
+          </div>
+          <div class="progress-cell">
+            <div class="pval text-success">{{ converted_this_month }}</div>
+            <div class="plabel">Converted</div>
+          </div>
+          <div class="progress-cell">
+            <div class="pval text-warning">{{ lost_this_month }}</div>
+            <div class="plabel">Lost</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-md-6">
+    <div class="card section-card">
+      <div class="card-header fw-semibold">🎯 Pipeline Stages</div>
+      <div class="card-body p-2">
+        <div class="d-flex flex-wrap gap-1">
+          {% for stage, count in stage_breakdown %}
+            <a href="{{ url_for('leads.leads_list') }}?stage={{ stage | urlencode }}" class="text-decoration-none">
+              <span class="stage-pill">{{ stage }} <strong>{{ count }}</strong></span>
+            </a>
+          {% endfor %}
+          {% if not stage_breakdown %}
+            <div class="text-muted small p-2">No active leads in pipeline</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Follow-ups Due -->
+<div class="row g-2 mb-3">
+  <div class="col-12 col-lg-6">
+    <div class="card section-card">
+      <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+        <span>🔔 Follow-ups Due</span>
+        {% if followups_due_count > 0 %}
+          <span class="badge bg-danger rounded-pill">{{ followups_due_count }}</span>
+        {% endif %}
+      </div>
       <div class="card-body">
         {% if followups_due %}
-          <div class="table-responsive">
-            <table class="table table-sm">
-              <thead class="table-light"><tr><th>Name</th><th>Stage</th><th>Next</th><th></th></tr></thead>
-              <tbody>
-                {% for l in followups_due %}
-                <tr class="{% if loop.index <= 3 %}table-warning{% endif %}">
-                  <td><strong>{{ l.name }}</strong></td>
-                  <td><small>{{ l.stage }}</small></td>
-                  <td><small class="text-danger">{{ l.next_followup_date }}</small></td>
-                  <td><a class="btn btn-xs btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">📋</a></td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+          {% for l in followups_due %}
+          <a class="lead-list-item {% if loop.index <= 3 %}border-start border-warning border-3{% endif %}" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">
+            <div style="flex:1; min-width:0;">
+              <div class="lname">{{ l.name }}</div>
+              <div class="lmeta">{{ l.stage }} &bull; <span class="text-danger">{{ l.next_followup_date }}</span></div>
+            </div>
+            <span class="lbadge text-muted" style="flex-shrink:0; font-size:18px;">&rsaquo;</span>
+          </a>
+          {% endfor %}
         {% else %}
           <div class="text-success text-center py-3">
-            <div style="font-size: 2em;">✓</div>
-            All caught up! 🎉 No follow-ups due today.
+            <div style="font-size:2em;">✓</div>
+            <small>All caught up! No follow-ups due today.</small>
           </div>
         {% endif %}
       </div>
     </div>
   </div>
 
-  <div class="col-lg-6">
-    <div class="card h-100">
+  <!-- Hot Leads -->
+  <div class="col-12 col-lg-6">
+    <div class="card section-card">
       <div class="card-header fw-semibold">🔥 Hot Leads (Score 60+)</div>
       <div class="card-body">
         {% if hot_leads %}
-          <div class="table-responsive">
-            <table class="table table-sm">
-              <thead class="table-light"><tr><th>Name</th><th>Score</th><th>Stage</th><th></th></tr></thead>
-              <tbody>
-                {% for l in hot_leads %}
-                <tr>
-                  <td><strong>{{ l.name }}</strong></td>
-                  <td><span class="badge bg-danger">{{ l.lead_score }}</span></td>
-                  <td><small>{{ l.stage }}</small></td>
-                  <td><a class="btn btn-xs btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">📋</a></td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
+          {% for l in hot_leads %}
+          <a class="lead-list-item" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">
+            <div style="flex:1; min-width:0;">
+              <div class="lname">{{ l.name }}</div>
+              <div class="lmeta">{{ l.stage }}</div>
+            </div>
+            <div class="lbadge" style="flex-shrink:0; display:flex; align-items:center; gap:8px;">
+              <span class="badge bg-danger">{{ l.lead_score }}</span>
+              <span class="text-muted" style="font-size:18px;">›</span>
+            </div>
+          </a>
+          {% endfor %}
         {% else %}
           <div class="text-muted small text-center py-3">No hot leads right now.</div>
         {% endif %}
@@ -170,72 +241,61 @@
   </div>
 </div>
 
-<!-- High-Risk Leads -->
-<div class="row g-3 mb-3">
-  <div class="col-lg-12">
-    <div class="card">
-      <div class="card-header fw-semibold">⚠️ Leads to Review (Last Contact)</div>
-      <div class="card-body">
-        {% if high_risk_leads %}
-          <div class="table-responsive">
-            <table class="table table-sm">
-              <thead class="table-light"><tr><th>Name</th><th>Phone</th><th>Stage</th><th>Last Contact</th><th>Score</th><th></th></tr></thead>
-              <tbody>
-                {% for l in high_risk_leads %}
-                <tr class="{% if not l.last_contact_date %}table-danger{% elif (now - l.last_contact_date).days > 7 %}table-warning{% endif %}">
-                  <td><strong>{{ l.name }}</strong></td>
-                  <td>{{ l.phone }}</td>
-                  <td><small>{{ l.stage }}</small></td>
-                  <td>
-                    {% if l.last_contact_date %}
-                      <small class="text-muted">{{ l.last_contact_date.strftime('%d-%b-%Y') }}</small>
-                    {% else %}
-                      <span class="badge bg-danger">Never</span>
-                    {% endif %}
-                  </td>
-                  <td><span class="badge bg-info">{{ l.lead_score }}</span></td>
-                  <td><a class="btn btn-xs btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">📋</a></td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+<!-- Leads to Review -->
+<div class="card section-card mb-3">
+  <div class="card-header fw-semibold">⚠️ Leads to Review</div>
+  <div class="card-body">
+    {% if high_risk_leads %}
+      {% for l in high_risk_leads %}
+      <a class="lead-list-item {% if not l.last_contact_date %}border-start border-danger border-3{% elif (now - l.last_contact_date).days > 7 %}border-start border-warning border-3{% endif %}" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">
+        <div style="flex:1; min-width:0;">
+          <div class="lname">{{ l.name }}</div>
+          <div class="lmeta">
+            {{ l.stage }}
+            &bull;
+            {% if l.last_contact_date %}
+              {{ l.last_contact_date.strftime('%d-%b-%Y') }}
+            {% else %}
+              <span class="text-danger fw-semibold">Never contacted</span>
+            {% endif %}
           </div>
-        {% else %}
-          <div class="text-muted small text-center py-3">All leads are up-to-date!</div>
-        {% endif %}
-      </div>
-    </div>
+        </div>
+        <div class="lbadge" style="flex-shrink:0; display:flex; align-items:center; gap:8px;">
+          <span class="badge bg-info">{{ l.lead_score }}</span>
+          <span class="text-muted" style="font-size:18px;">›</span>
+        </div>
+      </a>
+      {% endfor %}
+    {% else %}
+      <div class="text-muted small text-center py-3">All leads are up-to-date!</div>
+    {% endif %}
   </div>
 </div>
 
 <!-- Admin Team Performance -->
 {% if is_admin and team_stats %}
-<div class="row g-3">
-  <div class="col-lg-12">
-    <div class="card">
-      <div class="card-header fw-semibold">👥 Team Performance</div>
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-sm">
-            <thead class="table-light"><tr><th>Counselor</th><th class="text-center">Total Leads</th><th class="text-center">Converted</th><th class="text-center">Conv. Rate</th></tr></thead>
-            <tbody>
-              {% for stat in team_stats %}
-              <tr>
-                <td><strong>{{ stat.name }}</strong></td>
-                <td class="text-center">{{ stat.total }}</td>
-                <td class="text-center"><span class="badge bg-success">{{ stat.converted }}</span></td>
-                <td class="text-center">
-                  <strong class="{% if stat.rate >= 30 %}text-success{% elif stat.rate >= 15 %}text-warning{% else %}text-danger{% endif %}">
-                    {{ stat.rate }}%
-                  </strong>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+<div class="card section-card mb-3">
+  <div class="card-header fw-semibold">👥 Team Performance</div>
+  <div class="card-body p-0">
+    {% for stat in team_stats %}
+    <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom" style="border-bottom: 1px solid #f0f0f0 !important;">
+      <div class="fw-semibold" style="font-size:13px;">{{ stat.name }}</div>
+      <div class="d-flex align-items-center gap-3">
+        <div class="text-center">
+          <div style="font-size:13px; font-weight:700;">{{ stat.total }}</div>
+          <div style="font-size:9px; color:#9ca3af;">Total</div>
+        </div>
+        <div class="text-center">
+          <span class="badge bg-success">{{ stat.converted }}</span>
+          <div style="font-size:9px; color:#9ca3af;">Conv.</div>
+        </div>
+        <div class="text-center">
+          <div style="font-size:13px; font-weight:700;" class="{% if stat.rate >= 30 %}text-success{% elif stat.rate >= 15 %}text-warning{% else %}text-danger{% endif %}">{{ stat.rate }}%</div>
+          <div style="font-size:9px; color:#9ca3af;">Rate</div>
         </div>
       </div>
     </div>
+    {% endfor %}
   </div>
 </div>
 {% endif %}

@@ -66,6 +66,60 @@
       min-width: 0;
       flex: 1;
     }
+
+    /* ===== MOBILE BOTTOM NAV ===== */
+    .mobile-bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-top: 1px solid #dee2e6;
+      z-index: 1030;
+      padding: 4px 0 env(safe-area-inset-bottom, 4px);
+      box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+    }
+    .mobile-bottom-nav a {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      text-decoration: none;
+      color: #6c757d;
+      font-size: 10px;
+      padding: 4px 2px;
+      border-radius: 8px;
+      transition: color .15s;
+    }
+    .mobile-bottom-nav a .nav-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+    .mobile-bottom-nav a.active, .mobile-bottom-nav a:hover {
+      color: #0d6efd;
+    }
+    .mobile-bottom-nav a.add-btn {
+      color: #fff;
+      background: #0d6efd;
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      justify-content: center;
+      margin-top: -12px;
+      box-shadow: 0 2px 8px rgba(13,110,253,.4);
+      flex: none;
+      padding: 0;
+      font-size: 24px;
+    }
+    .mobile-bottom-nav a.add-btn .nav-icon {
+      font-size: 22px;
+    }
+    @media (max-width: 991.98px) {
+      .mobile-bottom-nav { display: flex; }
+      .main-content-pad { padding-bottom: 72px !important; }
+    }
   </style>
 </head>
 <body>
@@ -177,7 +231,7 @@
       </div>
     </div>
 
-    <div class="container-fluid p-3">
+    <div class="container-fluid p-3 main-content-pad">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
@@ -193,6 +247,29 @@
     </div>
   </main>
 </div>
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+  <a href="{{ url_for('leads.dashboard') }}" class="{{ 'active' if request.endpoint == 'leads.dashboard' else '' }}">
+    <span class="nav-icon">📊</span>
+    <span>Dashboard</span>
+  </a>
+  <a href="{{ url_for('leads.leads_list') }}" class="{{ 'active' if request.endpoint == 'leads.leads_list' else '' }}">
+    <span class="nav-icon">👥</span>
+    <span>Leads</span>
+  </a>
+  <a href="{{ url_for('leads.lead_create') }}" class="add-btn" title="Add Lead">
+    <span class="nav-icon">+</span>
+  </a>
+  <a href="{{ url_for('leads.followups_today') }}" class="{{ 'active' if request.endpoint == 'leads.followups_today' else '' }}">
+    <span class="nav-icon">📞</span>
+    <span>Follow-ups</span>
+  </a>
+  <a href="{{ url_for('leads.pipeline') }}" class="{{ 'active' if request.endpoint == 'leads.pipeline' else '' }}">
+    <span class="nav-icon">🧩</span>
+    <span>Pipeline</span>
+  </a>
+</nav>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
