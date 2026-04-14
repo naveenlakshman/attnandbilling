@@ -321,7 +321,6 @@ def init_db():
                 CHECK(warning_type IN ('before_start', 'after_end')),
             reason TEXT,
             marked_by INTEGER,
-            UNIQUE(batch_id, student_id, attendance_date),
             FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
             FOREIGN KEY (branch_id) REFERENCES branches(id),
             FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
@@ -853,6 +852,48 @@ def init_db():
 
         # Add reason to attendance_time_warnings if missing (added Apr 2026)
         add_column_if_not_exists(cur, 'attendance_time_warnings', 'reason', 'TEXT')
+
+        # Remove UNIQUE(batch_id, student_id, attendance_date) from attendance_time_warnings
+        # so multiple warnings per student per day can be stored (added Apr 2026)
+        res = cur.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='attendance_time_warnings'"
+        ).fetchone()
+        if res and 'UNIQUE(batch_id, student_id, attendance_date)' in res[0]:
+            cur.execute("""
+                CREATE TABLE attendance_time_warnings_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    batch_id INTEGER NOT NULL,
+                    branch_id INTEGER NOT NULL,
+                    student_id INTEGER NOT NULL,
+                    attendance_date TEXT NOT NULL,
+                    attendance_status TEXT NOT NULL,
+                    marked_at TEXT NOT NULL,
+                    actual_time TEXT NOT NULL,
+                    batch_start_time TEXT,
+                    batch_end_time TEXT,
+                    warning_type TEXT NOT NULL
+                        CHECK(warning_type IN ('before_start', 'after_end')),
+                    reason TEXT,
+                    marked_by INTEGER,
+                    FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
+                    FOREIGN KEY (branch_id) REFERENCES branches(id),
+                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                    FOREIGN KEY (marked_by) REFERENCES users(id)
+                )
+            """)
+            cur.execute("""
+                INSERT INTO attendance_time_warnings_new
+                    (id, batch_id, branch_id, student_id, attendance_date,
+                     attendance_status, marked_at, actual_time,
+                     batch_start_time, batch_end_time, warning_type, reason, marked_by)
+                SELECT
+                    id, batch_id, branch_id, student_id, attendance_date,
+                    attendance_status, marked_at, actual_time,
+                    batch_start_time, batch_end_time, warning_type, reason, marked_by
+                FROM attendance_time_warnings
+            """)
+            cur.execute("DROP TABLE attendance_time_warnings")
+            cur.execute("ALTER TABLE attendance_time_warnings_new RENAME TO attendance_time_warnings")
     except:
         pass
 

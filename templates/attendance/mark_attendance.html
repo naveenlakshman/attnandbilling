@@ -929,7 +929,6 @@ If you have any issue, feel free to contact us.
     const batchSelected = {{ 'true' if batch_id else 'false' }};
     const batchId       = "{{ batch_id or '' }}";
     const attendanceDate = "{{ attendance_date or '' }}";
-    // Key scoped to batch + date so switching batch/date triggers fresh popup
     const storageKey    = 'timeWarnReason_' + batchId + '_' + attendanceDate;
 
     function getCurrentHHMM() {
@@ -953,6 +952,45 @@ If you have any issue, feel free to contact us.
       });
     }
 
+    function isOutsideTime() {
+      if (!batchSelected || !batchStart || !batchEnd) return null;
+      const nowHHMM = getCurrentHHMM();
+      if (nowHHMM < batchStart) return 'before_start';
+      if (nowHHMM > batchEnd)   return 'after_end';
+      return null;
+    }
+
+    // Reference to the form that triggered the modal, so we can submit it after
+    let pendingForm = null;
+
+    function showWarningModal(form, warningType) {
+      pendingForm = form;
+      const nowDisplay   = formatTime12(getCurrentHHMM());
+      const startDisplay = formatTime12(batchStart);
+      const endDisplay   = formatTime12(batchEnd);
+      const typeLabel = warningType === 'before_start'
+        ? 'before the batch start time'
+        : 'after the batch end time';
+      const msgEl = document.getElementById('timeWarnMsg');
+      if (msgEl) {
+        msgEl.innerHTML =
+          '<strong>Current time: ' + nowDisplay + '</strong><br>' +
+          'This batch is scheduled <strong>' + startDisplay + ' – ' + endDisplay + '</strong>.<br>' +
+          'You are marking attendance <strong>' + typeLabel + '</strong>.<br>' +
+          'Attendance will still be saved, but this will be flagged for admin review.';
+      }
+      // Clear previous input
+      const textarea = document.getElementById('timeWarnReasonInput');
+      if (textarea) textarea.value = '';
+      const errEl = document.getElementById('timeWarnReasonError');
+      if (errEl) errEl.style.display = 'none';
+
+      const modal = document.getElementById('timeWarnModal');
+      if (modal && typeof bootstrap !== 'undefined') {
+        new bootstrap.Modal(modal, { backdrop: 'static', keyboard: false }).show();
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
       // WA buttons init (existing logic)
       document.querySelectorAll('select[class*="status-select"]').forEach(select => {
@@ -971,44 +1009,19 @@ If you have any issue, feel free to contact us.
       });
       updateStatistics();
 
-      // Out-of-time check
-      if (batchSelected && batchStart && batchEnd) {
-        const nowHHMM = getCurrentHHMM();
-        let warningType = null;
-        if (nowHHMM < batchStart) warningType = 'before_start';
-        else if (nowHHMM > batchEnd) warningType = 'after_end';
+      // Intercept all attendance form submits
+      document.querySelectorAll('.attendance-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+          const warningType = isOutsideTime();
+          if (!warningType) return; // in-time — submit normally
 
-        if (warningType) {
-          // If user already provided a reason for this batch+date in this session, skip the popup
-          let savedReason = null;
-          try { savedReason = sessionStorage.getItem(storageKey); } catch(e) {}
-          if (savedReason) {
-            applyReason(savedReason);
-          } else {
-            // Show the modal
-            const nowDisplay   = formatTime12(nowHHMM);
-            const startDisplay = formatTime12(batchStart);
-            const endDisplay   = formatTime12(batchEnd);
-            const typeLabel = warningType === 'before_start'
-              ? 'before the batch start time'
-              : 'after the batch end time';
-            const msgEl = document.getElementById('timeWarnMsg');
-            if (msgEl) {
-              msgEl.innerHTML =
-                '<strong>Current time: ' + nowDisplay + '</strong><br>' +
-                'This batch is scheduled <strong>' + startDisplay + ' – ' + endDisplay + '</strong>.<br>' +
-                'You are marking attendance <strong>' + typeLabel + '</strong>.<br>' +
-                'Attendance will still be saved, but this will be flagged for admin review.';
-            }
-            const modal = document.getElementById('timeWarnModal');
-            if (modal && typeof bootstrap !== 'undefined') {
-              new bootstrap.Modal(modal, { backdrop: 'static', keyboard: false }).show();
-            }
-          }
-        }
-      }
+          // Always ask for a reason on every out-of-time submit
+          e.preventDefault();
+          showWarningModal(form, warningType);
+        });
+      });
 
-      // OK button handler
+      // OK button: validate reason, save it, then submit the pending form
       const okBtn = document.getElementById('timeWarnOkBtn');
       if (okBtn) {
         okBtn.addEventListener('click', function() {
@@ -1021,12 +1034,16 @@ If you have any issue, feel free to contact us.
             return;
           }
           if (errEl) errEl.style.display = 'none';
-          // Remember reason for this batch+date so returning skips the popup
-          try { sessionStorage.setItem(storageKey, reason); } catch(e) {}
           applyReason(reason);
           const modalEl = document.getElementById('timeWarnModal');
           if (modalEl && typeof bootstrap !== 'undefined') {
-            bootstrap.Modal.getInstance(modalEl).hide();
+            const bsModal = bootstrap.Modal.getInstance(modalEl);
+            if (bsModal) bsModal.hide();
+          }
+          // Submit the form that was intercepted
+          if (pendingForm) {
+            pendingForm.submit();
+            pendingForm = null;
           }
         });
       }

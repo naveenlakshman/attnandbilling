@@ -1126,11 +1126,11 @@ def mark_attendance():
             time_warn_reason = request.form.get('time_warn_reason', '').strip()
 
             def _maybe_warn(student_id, att_status):
-                """Insert an out-of-time warning row (ignored if one already exists for the day)."""
+                """Insert an out-of-time warning row for every out-of-schedule save."""
                 if not warning_type:
                     return
                 cur.execute("""
-                    INSERT OR IGNORE INTO attendance_time_warnings (
+                    INSERT INTO attendance_time_warnings (
                         batch_id, branch_id, student_id, attendance_date,
                         attendance_status, marked_at, actual_time,
                         batch_start_time, batch_end_time, warning_type, reason, marked_by
