@@ -7,6 +7,7 @@
 {% block content %}
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 
 <style>
   .student-form-wrap {
@@ -134,6 +135,53 @@
       font-size: 16px;
     }
 
+  }
+
+  /* ── Flatpickr calendar styling ─────────────────── */
+  .flatpickr-calendar {
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+    border: 1px solid #dee2e6;
+    font-family: inherit;
+  }
+  .flatpickr-months .flatpickr-month,
+  .flatpickr-current-month .flatpickr-monthDropdown-months {
+    background: #0d6efd;
+    color: #fff;
+    border-radius: 10px 10px 0 0;
+  }
+  .flatpickr-current-month .flatpickr-monthDropdown-months,
+  .flatpickr-current-month input.cur-year {
+    color: #fff;
+    font-weight: 700;
+  }
+  .flatpickr-months .flatpickr-prev-month,
+  .flatpickr-months .flatpickr-next-month {
+    color: #fff;
+    fill: #fff;
+  }
+  .flatpickr-months .flatpickr-prev-month:hover svg,
+  .flatpickr-months .flatpickr-next-month:hover svg {
+    fill: #cfe2ff;
+  }
+  .flatpickr-day.selected,
+  .flatpickr-day.selected:hover {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+  }
+  .flatpickr-day:hover {
+    background: #e7f1ff;
+    border-color: #e7f1ff;
+  }
+  .flatpickr-day.today {
+    border-color: #0d6efd;
+    color: #0d6efd;
+    font-weight: 700;
+  }
+  .flatpickr-day.today:hover {
+    background: #e7f1ff;
+    color: #0d6efd;
   }
 
   /* ── Photo section ───────────────────────────────── */
@@ -347,7 +395,10 @@
 
         <div class="form-group">
           <label>Date of Birth</label>
-          <input type="date" name="date_of_birth" {% if student %}value="{{ student.date_of_birth }}"{% endif %}>
+          <input type="text" id="date_of_birth" name="date_of_birth"
+                 placeholder="Select date of birth"
+                 {% if student %}value="{{ student.date_of_birth }}"{% endif %}
+                 autocomplete="off" readonly>
         </div>
 
         <div class="form-group">
@@ -468,6 +519,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
 const qualificationLevels = {{ qualification_levels | tojson }};
 
@@ -509,6 +561,29 @@ educationLevelSelect.addEventListener('change', updateQualifications);
 
 document.addEventListener('DOMContentLoaded', function() {
   updateQualifications();
+
+  // Flatpickr date picker for Date of Birth
+  flatpickr('#date_of_birth', {
+    dateFormat: 'Y-m-d',
+    altInput: true,
+    altFormat: 'd M Y',
+    maxDate: 'today',
+    defaultDate: {% if student and student.date_of_birth %}"{{ student.date_of_birth }}"{% else %}null{% endif %},
+    yearRange: [1950, new Date().getFullYear() - 5],
+    disableMobile: false,
+    allowInput: false,
+    onReady: function(selectedDates, dateStr, instance) {
+      instance.altInput.style.cssText = 'padding:10px 12px; border:1px solid #ced4da; border-radius:6px; font-size:14px; font-family:inherit; background:#fff; width:100%; box-sizing:border-box;';
+      instance.altInput.addEventListener('focus', function() {
+        this.style.borderColor = '#0d6efd';
+        this.style.boxShadow = '0 0 0 3px rgba(13,110,253,0.08)';
+      });
+      instance.altInput.addEventListener('blur', function() {
+        this.style.borderColor = '#ced4da';
+        this.style.boxShadow = '';
+      });
+    }
+  });
 
   // Photo required validation (new student only)
   const studentForm = document.getElementById('studentForm');
