@@ -1169,6 +1169,15 @@ def mark_attendance():
                                       branch_id=branch_id, msg="marked_all_absent"))
             
             elif action == 'save':
+                # Fetch existing attendance records to detect new/changed records
+                existing_status = {}
+                cur.execute("""
+                    SELECT student_id, status FROM attendance_records
+                    WHERE batch_id = ? AND attendance_date = ?
+                """, (batch_id, attendance_date))
+                for row in cur.fetchall():
+                    existing_status[row['student_id']] = row['status']
+
                 # Save individual attendance records
                 for student in students:
                     status = request.form.get(f"status_{student['student_id']}", 'not_marked')
@@ -1180,10 +1189,15 @@ def mark_attendance():
 
                     if status not in ['present', 'absent', 'late', 'leave']:
                         status = 'absent'
-                    
+
+                    prev = existing_status.get(student['student_id'])
+
                     _save_attendance(cur, batch_id, student['student_id'], branch_id,
                                    attendance_date, status, remarks, user_id, conn)
-                    _maybe_warn(student['student_id'], status)
+
+                    # Only warn if this is a new record or the status actually changed
+                    if prev is None or prev != status:
+                        _maybe_warn(student['student_id'], status)
                 conn.commit()
 
                 return redirect(url_for('attendance.mark_attendance',
