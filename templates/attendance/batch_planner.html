@@ -120,7 +120,7 @@
     <h6 class="fw-bold mb-3">📍 {{ selected_branch.branch_name }} — Capacity Overview</h6>
 
     {% set total_computers = capacity_info.no_of_computers if capacity_info else 0 %}
-    {% set peak_used = existing_batches | map(attribute='concurrent_students') | max if existing_batches else 0 %}
+    {% set peak_used = existing_batches | map(attribute='concurrent_computers') | max if existing_batches else 0 %}
 
     <div class="row g-3 mb-4">
       <div class="col-6 col-md-3">
@@ -132,7 +132,7 @@
       <div class="col-6 col-md-3">
         <div class="stat-box" style="border-color: #fca5a5;">
           <div class="stat-val text-danger">{{ peak_used }}</div>
-          <div class="stat-lbl">Peak Concurrent Students</div>
+          <div class="stat-lbl">Peak Computers Used</div>
         </div>
       </div>
       <div class="col-6 col-md-3">
@@ -178,8 +178,8 @@
             <th>Course</th>
             <th>Time Slot</th>
             <th>Hours</th>
-            <th>Students</th>
-            <th>Concurrent Used</th>
+            <th>Total Students</th>
+            <th>On Computers</th>
             <th>Computers Free</th>
           </tr>
         </thead>
@@ -192,8 +192,15 @@
               <span class="time-chip">{{ batch.start_time or '?' }} – {{ batch.end_time or '?' }}</span>
             </td>
             <td class="text-muted small">{{ batch.duration_str }}</td>
-            <td><strong>{{ batch.student_count }}</strong></td>
-            <td>{{ batch.concurrent_students }}</td>
+            <td>
+              {% if batch.student_count != batch.computer_count %}
+                <strong>{{ batch.student_count }}</strong>
+                <span class="text-muted small ms-1">({{ batch.student_count - batch.computer_count }} 💻)</span>
+              {% else %}
+                <strong>{{ batch.student_count }}</strong>
+              {% endif %}
+            </td>
+            <td>{{ batch.concurrent_computers }}</td>
             <td>
               {% if capacity_info.no_of_computers > 0 %}
                 {% if batch.computers_free == 0 %}
@@ -281,7 +288,9 @@
           </div>
           <div class="d-flex align-items-center gap-3">
             <span class="time-chip">{{ batch.start_time or '?' }} – {{ batch.end_time or '?' }}</span>
-            <span class="badge bg-secondary">{{ batch.student_count }} students</span>
+        <span class="badge bg-secondary">{{ batch.student_count }} students
+          {%- if batch.student_count != batch.computer_count %} ({{ batch.student_count - batch.computer_count }} 💻){% endif -%}
+        </span>
           </div>
         </div>
         {% endfor %}

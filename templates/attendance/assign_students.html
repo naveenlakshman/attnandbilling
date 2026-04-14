@@ -337,6 +337,7 @@
             <th>Name</th>
             <th>Phone</th>
             <th>Joined On</th>
+            <th>Laptop</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -352,6 +353,19 @@
             </td>
             <td>{{ student.phone }}</td>
             <td>{{ student.joined_on }}</td>
+            <td>
+              <form method="POST" style="display:inline;">
+                <input type="hidden" name="action" value="update-laptop">
+                <input type="hidden" name="student_batch_id" value="{{ student.id }}">
+                {% if student.uses_own_laptop %}
+                  <input type="hidden" name="uses_own_laptop" value="0">
+                  <button type="submit" class="btn-sm" style="background:#0d6efd;color:white;" title="Using own laptop — click to unset">💻 Own</button>
+                {% else %}
+                  <input type="hidden" name="uses_own_laptop" value="1">
+                  <button type="submit" class="btn-sm" style="background:#e9ecef;color:#6c757d;" title="Using institute computer — click to set laptop">🖥️ PC</button>
+                {% endif %}
+              </form>
+            </td>
             <td>
               <form method="POST" style="display: inline;">
                 <input type="hidden" name="action" value="update-status">
@@ -392,17 +406,25 @@
     </div>
 
     {% if available_students|length > 0 %}
-    <form method="POST" class="add-student-form">
+    <form method="POST">
       <input type="hidden" name="action" value="add">
-      <select class="form-select" name="student_id" required>
-        <option value="">-- Select a student to add --</option>
-        {% for student in available_students %}
-        <option value="{{ student.id }}">
-          {{ student.student_code }} - {{ student.full_name }} ({{ student.phone }})
-        </option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="add-btn">➕ Add Student</button>
+      <div class="add-student-form">
+        <select class="form-select" name="student_id" required>
+          <option value="">-- Select a student to add --</option>
+          {% for student in available_students %}
+          <option value="{{ student.id }}">
+            {{ student.student_code }} - {{ student.full_name }} ({{ student.phone }})
+          </option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="add-btn">➕ Add Student</button>
+      </div>
+      <div style="margin-top: -8px; margin-bottom: 16px;">
+        <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-size:0.95rem;">
+          <input type="checkbox" name="uses_own_laptop" value="1" style="width:16px;height:16px;">
+          💻 Student brings own laptop (won't occupy a computer)
+        </label>
+      </div>
     </form>
 
     <div class="stats-row">

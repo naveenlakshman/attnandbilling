@@ -752,7 +752,7 @@ def assign_students(batch_id):
         
         # Get already assigned students in this batch
         cur.execute("""
-            SELECT sb.id, sb.student_id, sb.batch_id, sb.joined_on, sb.status,
+            SELECT sb.id, sb.student_id, sb.batch_id, sb.joined_on, sb.status, sb.uses_own_laptop,
                    s.student_code, s.full_name, s.phone
             FROM student_batches sb
             JOIN students s ON sb.student_id = s.id
@@ -790,6 +790,7 @@ def assign_students(batch_id):
             
             if action == 'add':
                 student_id = request.form.get('student_id')
+                uses_own_laptop = 1 if request.form.get('uses_own_laptop') else 0
                 
                 if not student_id:
                     assigned_students = cur.fetchall()
@@ -804,10 +805,10 @@ def assign_students(batch_id):
                 try:
                     cur.execute("""
                         INSERT INTO student_batches (
-                            student_id, batch_id, joined_on, status, created_at, updated_at
+                            student_id, batch_id, joined_on, status, uses_own_laptop, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (int(student_id), batch_id, now.split('T')[0], 'active', now, now))
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (int(student_id), batch_id, now.split('T')[0], 'active', uses_own_laptop, now, now))
                     
                     conn.commit()
                     
@@ -837,7 +838,7 @@ def assign_students(batch_id):
                 
                 except Exception as e:
                     cur.execute("""
-                        SELECT sb.id, sb.student_id, sb.batch_id, sb.joined_on, sb.status,
+                        SELECT sb.id, sb.student_id, sb.batch_id, sb.joined_on, sb.status, sb.uses_own_laptop,
                                s.student_code, s.full_name, s.phone
                         FROM student_batches sb
                         JOIN students s ON sb.student_id = s.id
@@ -850,6 +851,24 @@ def assign_students(batch_id):
                                          available_students=available_students,
                                          error=str(e), user=user)
             
+            elif action == 'update-laptop':
+                student_batch_id = request.form.get('student_batch_id')
+                new_val = int(request.form.get('uses_own_laptop', 0))
+                now = datetime.now().isoformat(timespec="seconds")
+
+                try:
+                    cur.execute("""
+                        UPDATE student_batches
+                        SET uses_own_laptop = ?, updated_at = ?
+                        WHERE id = ? AND batch_id = ?
+                    """, (new_val, now, int(student_batch_id), batch_id))
+                    conn.commit()
+                    log_activity(user_id, batch['branch_id'], 'UPDATE', 'attendance',
+                               batch_id, f'Updated student laptop flag to {new_val}')
+                    return redirect(url_for('attendance.assign_students', batch_id=batch_id))
+                except Exception as e:
+                    return redirect(url_for('attendance.assign_students', batch_id=batch_id))
+
             elif action == 'update-status':
                 student_batch_id = request.form.get('student_batch_id')
                 new_status = request.form.get('status')
@@ -875,7 +894,7 @@ def assign_students(batch_id):
                 
                 except Exception as e:
                     cur.execute("""
-                        SELECT sb.id, sb.student_id, sb.batch_id, sb.joined_on, sb.status,
+                        SELECT sb.id, sb.student_id, sb.batch_id, sb.joined_on, sb.status, sb.uses_own_laptop,
                                s.student_code, s.full_name, s.phone
                         FROM student_batches sb
                         JOIN students s ON sb.student_id = s.id
@@ -2255,7 +2274,8 @@ def batch_planner():
             cur.execute("""
                 SELECT b.id, b.batch_name, b.start_time, b.end_time, b.status,
                        c.course_name,
-                       COUNT(sb.id) as student_count
+                       COUNT(sb.id) as student_count,
+                       COUNT(CASE WHEN sb.uses_own_laptop = 0 THEN 1 END) as computer_count
                 FROM batches b
                 LEFT JOIN courses c ON b.course_id = c.id
                 LEFT JOIN student_batches sb ON sb.batch_id = b.id AND sb.status = 'active'
@@ -2272,13 +2292,16 @@ def batch_planner():
                 s1 = batch['start_time'] or '00:00'
                 e1 = batch['end_time'] or '23:59'
                 concurrent_students = 0
+                concurrent_computers = 0
                 for other in batch_list:
                     s2 = other['start_time'] or '00:00'
                     e2 = other['end_time'] or '23:59'
                     if s1 < e2 and s2 < e1:
                         concurrent_students += other['student_count']
+                        concurrent_computers += other['computer_count']
                 batch['concurrent_students'] = concurrent_students
-                batch['computers_free'] = max(0, no_of_computers - concurrent_students)
+                batch['concurrent_computers'] = concurrent_computers
+                batch['computers_free'] = max(0, no_of_computers - concurrent_computers)
 
                 # Calculate duration
                 if batch['start_time'] and batch['end_time']:
@@ -2323,7 +2346,7 @@ def batch_planner():
                     e2 = batch['end_time'] or '23:59'
                     if proposed_start < e2 and s2 < proposed_end:
                         conflicting.append(batch)
-                        peak += batch['student_count']
+                        peak += batch['computer_count']
 
                 computers_free = no_of_computers - peak
                 capacity_info['conflicting_batches'] = conflicting
@@ -2348,13 +2371,13 @@ def batch_planner():
                     slot_end_mins = candidate + batch_duration_mins
                     slot_end = f"{slot_end_mins // 60:02d}:{slot_end_mins % 60:02d}"
 
-                    # Count students concurrent during this proposed slot
+                    # Count computer-using students concurrent during this proposed slot
                     peak = 0
                     for batch in existing_batches:
                         bs = batch['start_time'] or '00:00'
                         be = batch['end_time'] or '23:59'
                         if slot_start < be and bs < slot_end:
-                            peak += batch['student_count']
+                            peak += batch['computer_count']
 
                     free = max(0, no_of_computers - peak)
                     if free > 0:

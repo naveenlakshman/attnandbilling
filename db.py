@@ -610,6 +610,8 @@ def init_db():
     add_column_if_not_exists(cur, "branches", "opening_time", "TEXT")
     add_column_if_not_exists(cur, "branches", "closing_time", "TEXT")
 
+    add_column_if_not_exists(cur, "student_batches", "uses_own_laptop", "INTEGER NOT NULL DEFAULT 0")
+
     # ---------- MIGRATE asset_logs CONSTRAINT ----------
     # Update asset_logs table to allow 'Updated' action
     try:
