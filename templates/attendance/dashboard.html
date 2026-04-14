@@ -236,6 +236,11 @@
     border-left: 4px solid #28a745;
   }
 
+  .batch-table tbody tr.fully-marked {
+    background: #f0f5ff !important;
+    border-left: 4px solid #0d6efd;
+  }
+
   .live-badge-dash {
     display: inline-block;
     background: #dc3545;
@@ -290,6 +295,25 @@
   .today-card-m.running-now {
     border-left: 3px solid #28a745;
     background: #f0fff4;
+  }
+  .today-card-m.fully-marked {
+    border-left: 3px solid #0d6efd;
+    background: #f0f5ff;
+  }
+  .done-badge {
+    display: inline-block;
+    background: #0d6efd;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+    margin-left: 4px;
+  }
+  .prog-mini-bar.done {
+    background: #198754;
   }
   .today-card-top {
     display: flex;
@@ -664,7 +688,7 @@
   <!-- Mobile Today's Batches cards (hidden on desktop) -->
   <div class="mobile-today-list">
     {% for batch_stat in batch_stats %}
-    <div class="today-card-m"
+    <div class="today-card-m{% if batch_stat.not_marked == 0 and batch_stat.total_students > 0 %} fully-marked{% endif %}"
          data-start="{{ batch_stat.batch.start_time or '' }}"
          data-end="{{ batch_stat.batch.end_time or '' }}"
          data-students="{{ batch_stat.students_search | lower }}">
@@ -672,6 +696,7 @@
         <div class="today-card-name">
           {{ batch_stat.batch.batch_name }}
           <span class="live-badge-dash d-none">● LIVE</span>
+          {% if batch_stat.not_marked == 0 and batch_stat.total_students > 0 %}<span class="done-badge">✓ Done</span>{% endif %}
           {% if batch_stat.batch.course_name %}
           <div style="font-size:11px;color:#6c757d;font-weight:400;margin-top:2px;">{{ batch_stat.batch.course_name }}</div>
           {% endif %}
@@ -708,9 +733,9 @@
       </div>
       <div style="margin:4px 0 8px 0;">
         <div class="prog-mini">
-          <div class="prog-mini-bar" style="width:{{ batch_stat.percentage_marked }}%;"></div>
+          <div class="prog-mini-bar{% if batch_stat.not_marked == 0 and batch_stat.total_students > 0 %} done{% endif %}" style="width:{{ batch_stat.percentage_marked }}%;"></div>
         </div>
-        <div style="font-size:11px;color:#6c757d;margin-top:2px;">{{ "%.0f"|format(batch_stat.percentage_marked) }}% marked</div>
+        <div style="font-size:11px;color:{% if batch_stat.not_marked == 0 and batch_stat.total_students > 0 %}#198754{% else %}#6c757d{% endif %};margin-top:2px;">{{ "%.0f"|format(batch_stat.percentage_marked) }}% marked</div>
       </div>
       <div class="today-card-actions">
         <a href="{{ url_for('attendance.mark_attendance', branch_id=batch_stat.batch.branch_id, batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-primary" style="flex:1;text-align:center;">✏️ Mark</a>
@@ -740,10 +765,12 @@
       <tbody>
         {% for batch_stat in batch_stats %}
         <tr data-start="{{ batch_stat.batch.start_time or '' }}" data-end="{{ batch_stat.batch.end_time or '' }}"
-            data-students="{{ batch_stat.students_search | lower }}">
+            data-students="{{ batch_stat.students_search | lower }}"
+            {% if batch_stat.not_marked == 0 and batch_stat.total_students > 0 %}class="fully-marked"{% endif %}>  
           <td>
             <span class="fw-semibold">{{ batch_stat.batch.batch_name }}</span>
             <span class="live-badge-dash d-none">● LIVE</span>
+            {% if batch_stat.not_marked == 0 and batch_stat.total_students > 0 %}<span class="done-badge">✓ Done</span>{% endif %}
             {% if batch_stat.batch.course_name %}
             <div class="text-muted" style="font-size:0.8rem;">{{ batch_stat.batch.course_name }}</div>
             {% endif %}
@@ -762,9 +789,9 @@
           <td class="text-center"><span class="stat-pill" style="background:#f8d7da;color:#721c24;">{{ batch_stat.absent }}</span></td>
           <td class="d-none d-md-table-cell">
             <div class="prog-mini">
-              <div class="prog-mini-bar" style="width:{{ batch_stat.percentage_marked }}%;"></div>
+              <div class="prog-mini-bar{% if batch_stat.not_marked == 0 and batch_stat.total_students > 0 %} done{% endif %}" style="width:{{ batch_stat.percentage_marked }}%;"></div>
             </div>
-            <div style="font-size:0.78rem;color:#6c757d;margin-top:2px;">{{ "%.0f"|format(batch_stat.percentage_marked) }}%</div>
+            <div style="font-size:0.78rem;color:{% if batch_stat.not_marked == 0 and batch_stat.total_students > 0 %}#198754{% else %}#6c757d{% endif %};margin-top:2px;">{{ "%.0f"|format(batch_stat.percentage_marked) }}%</div>
           </td>
           <td class="batch-actions-td" style="white-space:nowrap;">
             <a href="{{ url_for('attendance.mark_attendance', branch_id=batch_stat.batch.branch_id, batch_id=batch_stat.batch.id) }}" class="btn btn-sm btn-primary mb-1">✏️ Mark</a>
