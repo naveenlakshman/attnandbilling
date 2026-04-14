@@ -549,6 +549,7 @@ def view_batch(batch_id):
             SELECT tw.id, tw.attendance_date, tw.actual_time,
                    tw.batch_start_time, tw.batch_end_time,
                    tw.warning_type, tw.attendance_status, tw.marked_at,
+                   tw.reason,
                    s.full_name AS student_name, s.student_code,
                    u.full_name AS marked_by_name
             FROM attendance_time_warnings tw
@@ -1122,6 +1123,8 @@ def mark_attendance():
                 elif actual_time > batch_end_time:
                     warning_type = 'after_end'
 
+            time_warn_reason = request.form.get('time_warn_reason', '').strip()
+
             def _maybe_warn(student_id, att_status):
                 """Insert an out-of-time warning row (ignored if one already exists for the day)."""
                 if not warning_type:
@@ -1130,11 +1133,12 @@ def mark_attendance():
                     INSERT OR IGNORE INTO attendance_time_warnings (
                         batch_id, branch_id, student_id, attendance_date,
                         attendance_status, marked_at, actual_time,
-                        batch_start_time, batch_end_time, warning_type, marked_by
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        batch_start_time, batch_end_time, warning_type, reason, marked_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (batch_id, branch_id, student_id, attendance_date,
                       att_status, marked_at, actual_time,
-                      batch_start_time, batch_end_time, warning_type, user_id))
+                      batch_start_time, batch_end_time, warning_type,
+                      time_warn_reason or None, user_id))
 
             if action == 'mark-all-present':
                 # Mark all students as present

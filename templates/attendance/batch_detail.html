@@ -542,6 +542,7 @@
                 <th>Scheduled</th>
                 <th>Warning</th>
                 <th>Status Marked</th>
+                <th>Reason</th>
                 <th>Marked By</th>
               </tr>
             </thead>
@@ -572,6 +573,9 @@
                   {% else %}
                     <span class="badge bg-secondary">{{ w.attendance_status | capitalize }}</span>
                   {% endif %}
+                </td>
+                <td style="color:#6b7280; max-width:200px; white-space:pre-wrap; word-break:break-word;">
+                  {{ w.reason or '—' }}
                 </td>
                 <td style="color:#6b7280;">{{ w.marked_by_name }}</td>
               </tr>

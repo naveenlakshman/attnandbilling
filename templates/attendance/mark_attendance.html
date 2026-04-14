@@ -659,18 +659,20 @@
         </div>
       </div>
       <div class="quick-actions">
-        <form method="POST" style="display: inline;">
+        <form method="POST" style="display: inline;" class="attendance-form">
           <input type="hidden" name="action" value="mark-all-present">
           <input type="hidden" name="batch_id" value="{{ batch_id }}">
           <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
           <input type="hidden" name="branch_id" value="{{ branch_id }}">
+          <input type="hidden" name="time_warn_reason" class="time-warn-reason-input">
           <button type="submit" class="quick-action-btn btn-present-all">✓ All Present</button>
         </form>
-        <form method="POST" style="display: inline;">
+        <form method="POST" style="display: inline;" class="attendance-form">
           <input type="hidden" name="action" value="mark-all-absent">
           <input type="hidden" name="batch_id" value="{{ batch_id }}">
           <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
           <input type="hidden" name="branch_id" value="{{ branch_id }}">
+          <input type="hidden" name="time_warn_reason" class="time-warn-reason-input">
           <button type="submit" class="quick-action-btn btn-absent-all">✗ All Absent</button>
         </form>
       </div>
@@ -691,11 +693,12 @@
       <span class="hist-legend-item"><span class="hist-legend-dot hist-none"></span> No record</span>
     </div>
     {% endif %}
-    <form method="POST">
+    <form method="POST" class="attendance-form">
       <input type="hidden" name="action" value="save">
       <input type="hidden" name="batch_id" value="{{ batch_id }}">
       <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
       <input type="hidden" name="branch_id" value="{{ branch_id }}">
+      <input type="hidden" name="time_warn_reason" class="time-warn-reason-input">
 
       <div style="overflow-x: auto;">
         <table class="students-table">
@@ -921,9 +924,13 @@ If you have any issue, feel free to contact us.
 
   // ── Out-of-time attendance warning ──
   (function() {
-    const batchStart = "{{ batch_start_time or '' }}";
-    const batchEnd   = "{{ batch_end_time or '' }}";
+    const batchStart    = "{{ batch_start_time or '' }}";
+    const batchEnd      = "{{ batch_end_time or '' }}";
     const batchSelected = {{ 'true' if batch_id else 'false' }};
+    const batchId       = "{{ batch_id or '' }}";
+    const attendanceDate = "{{ attendance_date or '' }}";
+    // Key scoped to batch + date so switching batch/date triggers fresh popup
+    const storageKey    = 'timeWarnReason_' + batchId + '_' + attendanceDate;
 
     function getCurrentHHMM() {
       const now = new Date();
@@ -938,6 +945,12 @@ If you have any issue, feel free to contact us.
       const suffix = h >= 12 ? 'PM' : 'AM';
       const h12 = h % 12 || 12;
       return h12 + ':' + String(m).padStart(2, '0') + ' ' + suffix;
+    }
+
+    function applyReason(reason) {
+      document.querySelectorAll('.time-warn-reason-input').forEach(function(inp) {
+        inp.value = reason;
+      });
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -966,25 +979,56 @@ If you have any issue, feel free to contact us.
         else if (nowHHMM > batchEnd) warningType = 'after_end';
 
         if (warningType) {
-          const nowDisplay   = formatTime12(nowHHMM);
-          const startDisplay = formatTime12(batchStart);
-          const endDisplay   = formatTime12(batchEnd);
-          const typeLabel = warningType === 'before_start'
-            ? 'before the batch start time'
-            : 'after the batch end time';
-          const msgEl = document.getElementById('timeWarnMsg');
-          if (msgEl) {
-            msgEl.innerHTML =
-              '<strong>Current time: ' + nowDisplay + '</strong><br>' +
-              'This batch is scheduled <strong>' + startDisplay + ' – ' + endDisplay + '</strong>.<br>' +
-              'You are marking attendance <strong>' + typeLabel + '</strong>.<br>' +
-              'Attendance will still be saved, but this will be flagged for admin review.';
-          }
-          const modal = document.getElementById('timeWarnModal');
-          if (modal && typeof bootstrap !== 'undefined') {
-            new bootstrap.Modal(modal).show();
+          // If user already provided a reason for this batch+date in this session, skip the popup
+          let savedReason = null;
+          try { savedReason = sessionStorage.getItem(storageKey); } catch(e) {}
+          if (savedReason) {
+            applyReason(savedReason);
+          } else {
+            // Show the modal
+            const nowDisplay   = formatTime12(nowHHMM);
+            const startDisplay = formatTime12(batchStart);
+            const endDisplay   = formatTime12(batchEnd);
+            const typeLabel = warningType === 'before_start'
+              ? 'before the batch start time'
+              : 'after the batch end time';
+            const msgEl = document.getElementById('timeWarnMsg');
+            if (msgEl) {
+              msgEl.innerHTML =
+                '<strong>Current time: ' + nowDisplay + '</strong><br>' +
+                'This batch is scheduled <strong>' + startDisplay + ' – ' + endDisplay + '</strong>.<br>' +
+                'You are marking attendance <strong>' + typeLabel + '</strong>.<br>' +
+                'Attendance will still be saved, but this will be flagged for admin review.';
+            }
+            const modal = document.getElementById('timeWarnModal');
+            if (modal && typeof bootstrap !== 'undefined') {
+              new bootstrap.Modal(modal, { backdrop: 'static', keyboard: false }).show();
+            }
           }
         }
+      }
+
+      // OK button handler
+      const okBtn = document.getElementById('timeWarnOkBtn');
+      if (okBtn) {
+        okBtn.addEventListener('click', function() {
+          const textarea = document.getElementById('timeWarnReasonInput');
+          const reason = textarea ? textarea.value.trim() : '';
+          const errEl = document.getElementById('timeWarnReasonError');
+          if (!reason) {
+            if (errEl) errEl.style.display = 'block';
+            if (textarea) textarea.focus();
+            return;
+          }
+          if (errEl) errEl.style.display = 'none';
+          // Remember reason for this batch+date so returning skips the popup
+          try { sessionStorage.setItem(storageKey, reason); } catch(e) {}
+          applyReason(reason);
+          const modalEl = document.getElementById('timeWarnModal');
+          if (modalEl && typeof bootstrap !== 'undefined') {
+            bootstrap.Modal.getInstance(modalEl).hide();
+          }
+        });
       }
     });
   })();
@@ -999,10 +1043,20 @@ If you have any issue, feel free to contact us.
           ⚠️ Outside Batch Schedule
         </h5>
       </div>
-      <div class="modal-body" id="timeWarnMsg">
+      <div class="modal-body">
+        <div id="timeWarnMsg" style="margin-bottom: 16px;"></div>
+        <label for="timeWarnReasonInput" class="form-label fw-semibold">
+          Reason for marking outside scheduled hours <span class="text-danger">*</span>
+        </label>
+        <textarea id="timeWarnReasonInput" class="form-control" rows="3"
+          placeholder="e.g. Trainer was available early, system was down during class time, makeup session..."
+          maxlength="500" style="resize: vertical;"></textarea>
+        <div id="timeWarnReasonError" class="text-danger small mt-1" style="display:none;">
+          Please provide a reason before continuing.
+        </div>
       </div>
       <div class="modal-footer border-warning">
-        <button type="button" class="btn btn-warning" data-bs-dismiss="modal">OK, Continue</button>
+        <button type="button" class="btn btn-warning" id="timeWarnOkBtn">OK, Continue</button>
       </div>
     </div>
   </div>

@@ -319,6 +319,7 @@ def init_db():
             batch_end_time TEXT,
             warning_type TEXT NOT NULL
                 CHECK(warning_type IN ('before_start', 'after_end')),
+            reason TEXT,
             marked_by INTEGER,
             UNIQUE(batch_id, student_id, attendance_date),
             FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
