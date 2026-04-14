@@ -3028,7 +3028,7 @@ def receipt_new():
                 if remaining_payment <= 0:
                     cur.execute("""
                         UPDATE installment_plans
-                        SET status = 'pending', updated_at = ?
+                        SET amount_paid = 0, status = 'pending', updated_at = ?
                         WHERE id = ?
                     """, (now, inst_id))
 
@@ -3237,6 +3237,44 @@ def receipt_edit(receipt_id):
                     SET status = ?, updated_at = ?
                     WHERE id = ?
                 """, (new_status, now, receipt["invoice_id"]))
+
+            # Reallocate installment payments based on updated receipt total
+            cur.execute("""
+                SELECT id, installment_no, amount_due
+                FROM installment_plans
+                WHERE invoice_id = ?
+                ORDER BY installment_no ASC
+            """, (receipt["invoice_id"],))
+            installments_to_update = cur.fetchall()
+
+            remaining_payment = total_received
+
+            for inst in installments_to_update:
+                inst_id = inst["id"]
+                inst_due = float(inst["amount_due"] or 0)
+
+                if remaining_payment <= 0:
+                    cur.execute("""
+                        UPDATE installment_plans
+                        SET amount_paid = 0, status = 'pending', updated_at = ?
+                        WHERE id = ?
+                    """, (now, inst_id))
+                elif remaining_payment >= inst_due:
+                    cur.execute("""
+                        UPDATE installment_plans
+                        SET amount_paid = ?, status = 'paid',
+                            remarks = 'Fully paid', updated_at = ?
+                        WHERE id = ?
+                    """, (inst_due, now, inst_id))
+                    remaining_payment -= inst_due
+                else:
+                    cur.execute("""
+                        UPDATE installment_plans
+                        SET amount_paid = ?, status = 'partially_paid',
+                            remarks = ?, updated_at = ?
+                        WHERE id = ?
+                    """, (remaining_payment, f"Partial payment of {remaining_payment}", now, inst_id))
+                    remaining_payment = 0
 
             conn.commit()
             conn.close()
