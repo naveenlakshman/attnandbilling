@@ -1,4 +1,4 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
 {% block content %}
 <style>
@@ -226,7 +226,7 @@
       margin: 0 !important;
     }
 
-    /* Hide browser header bar (Logged in: admin, Global IT ERP - Billing) */
+    /* Hide browser header bar (Logged in: admin, {{ company.company_short_name }} - Billing) */
     body::before {
       display: none !important;
     }

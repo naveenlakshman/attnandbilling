@@ -1,7 +1,7 @@
 from flask import Flask
 from extensions import csrf, limiter
 from config import Config
-from db import init_db
+from db import init_db, get_company_profile
 from modules.leads.routes import leads_bp
 from modules.billing.routes import billing_bp
 from modules.assets.routes import assets_bp
@@ -63,6 +63,10 @@ def create_app():
     # Register Jinja2 filters
     app.jinja_env.filters['format_datetime'] = format_datetime
     app.jinja_env.filters['to_ist_time'] = to_ist_time
+
+    @app.context_processor
+    def inject_company():
+        return {"company": get_company_profile()}
 
     return app
 

@@ -1,6 +1,6 @@
-{% extends "attendance/base.html" %}
+﻿{% extends "attendance/base.html" %}
 
-{% block title %}{% if edit %}Edit Batch{% else %}Create Batch{% endif %} - Global IT ERP{% endblock %}
+{% block title %}{% if edit %}Edit Batch{% else %}Create Batch{% endif %} - {{ company.company_short_name }}{% endblock %}
 
 {% block extra_css %}
 <style>

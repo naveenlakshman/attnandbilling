@@ -140,10 +140,15 @@
 </style>
 
 <div class="invoice-header">
-  <h1>Global IT Education <sup>®</sup></h1>
-  <h2 style="margin: 0 0 2px 0; color: #007bff; font-size: 16px;">J C Galaxy Building, 2nd Floor, College Road, Near Ayyapaswamy Temple Hoskote - 562114</h2>
-  <p style="margin: 0; color: #000000; font-size: 13px;">Phone: 9071717161 Email: help@globaliteducation.com</p>
-  <p style="margin: 4px 0 0 0; font-size: 12px; color: #333;"><strong>GSTIN:</strong> 29AMEPL6934C2ZZ &nbsp;|&nbsp; <em>Composition Dealer — Tax not applicable</em></p>
+  {% if company.logo_filename %}
+    <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+         alt="{{ company.company_name }}" style="max-height:60px; margin-bottom:6px;">
+    <br>
+  {% endif %}
+  <h1>{{ company.company_name }}</h1>
+  <h2 style="margin: 0 0 2px 0; color: #007bff; font-size: 16px;">{{ company.address or '' }}</h2>
+  <p style="margin: 0; color: #000000; font-size: 13px;">{% if company.phone %}Phone: {{ company.phone }}{% endif %}{% if company.email %} Email: {{ company.email }}{% endif %}</p>
+  {% if company.reg_number %}<p style="margin: 4px 0 0 0; font-size: 12px; color: #333;"><strong>GSTIN:</strong> {{ company.reg_number }} &nbsp;|&nbsp; <em>Composition Dealer — Tax not applicable</em></p>{% endif %}
 </div>
 
 <div style="text-align: center; margin: 4mm 0 3mm 0;">

@@ -1,7 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime
-from db import get_conn
+import os
+from db import get_conn, get_company_profile
 from .utils import login_required, admin_required
 from extensions import limiter
 
@@ -595,3 +596,108 @@ def branch_toggle_status(branch_id):
         flash("Branch deactivated successfully.", "warning")
 
     return redirect(url_for("core.branches"))
+
+
+# ============== COMPANY PROFILE ==============
+
+COMPANY_LOGO_DIR = os.path.join('static', 'images', 'company_logo')
+ALLOWED_LOGO_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.svg', '.webp'}
+MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+@core_bp.route("/company-profile", methods=["GET", "POST"])
+@login_required
+@admin_required
+def company_profile():
+    """View and edit company profile (global white-label settings)."""
+    profile = get_company_profile()
+
+    if request.method == "POST":
+        company_name = request.form.get("company_name", "").strip()
+        company_short_name = request.form.get("company_short_name", "").strip()
+        tagline = request.form.get("tagline", "").strip()
+        address = request.form.get("address", "").strip()
+        phone = request.form.get("phone", "").strip()
+        email = request.form.get("email", "").strip()
+        website = request.form.get("website", "").strip()
+        reg_number = request.form.get("reg_number", "").strip()
+
+        if not company_name or not company_short_name:
+            flash("Company name and short name are required.", "danger")
+            return redirect(url_for("core.company_profile"))
+
+        # Handle logo upload
+        logo_filename = profile.get("logo_filename")
+        logo_file = request.files.get("logo_file")
+        if logo_file and logo_file.filename:
+            ext = os.path.splitext(logo_file.filename)[1].lower()
+            if ext not in ALLOWED_LOGO_EXTENSIONS:
+                flash("Invalid logo format. Allowed: PNG, JPG, SVG, WEBP.", "danger")
+                return redirect(url_for("core.company_profile"))
+            logo_bytes = logo_file.read()
+            if len(logo_bytes) > MAX_LOGO_SIZE_BYTES:
+                flash("Logo file too large. Maximum size is 2 MB.", "danger")
+                return redirect(url_for("core.company_profile"))
+            os.makedirs(COMPANY_LOGO_DIR, exist_ok=True)
+            safe_filename = f"company_logo{ext}"
+            save_path = os.path.join(COMPANY_LOGO_DIR, safe_filename)
+            with open(save_path, 'wb') as f:
+                f.write(logo_bytes)
+            logo_filename = safe_filename
+
+        now = datetime.now().isoformat(timespec="seconds")
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO company_profile
+                (id, company_name, company_short_name, tagline, address, phone,
+                 email, website, logo_filename, reg_number, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                company_name = excluded.company_name,
+                company_short_name = excluded.company_short_name,
+                tagline = excluded.tagline,
+                address = excluded.address,
+                phone = excluded.phone,
+                email = excluded.email,
+                website = excluded.website,
+                logo_filename = excluded.logo_filename,
+                reg_number = excluded.reg_number,
+                updated_at = excluded.updated_at
+        """, (
+            company_name, company_short_name, tagline, address,
+            phone, email, website, logo_filename, reg_number, now
+        ))
+        conn.commit()
+        conn.close()
+
+        flash("Company profile updated successfully.", "success")
+        return redirect(url_for("core.company_profile"))
+
+    return render_template("core/company_profile.html", profile=profile)
+
+
+@core_bp.route("/company-profile/remove-logo", methods=["POST"])
+@login_required
+@admin_required
+def company_profile_remove_logo():
+    """Remove the current company logo."""
+    profile = get_company_profile()
+    old_logo = profile.get("logo_filename")
+    if old_logo:
+        path = os.path.join(COMPANY_LOGO_DIR, old_logo)
+        if os.path.isfile(path):
+            os.remove(path)
+
+    now = datetime.now().isoformat(timespec="seconds")
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE company_profile SET logo_filename = NULL, updated_at = ? WHERE id = 1",
+        (now,)
+    )
+    conn.commit()
+    conn.close()
+
+    flash("Logo removed.", "success")
+    return redirect(url_for("core.company_profile"))

@@ -1,6 +1,6 @@
-{% extends "attendance/base.html" %}
+﻿{% extends "attendance/base.html" %}
 
-{% block title %}Mark Attendance - Global IT ERP{% endblock %}
+{% block title %}Mark Attendance - {{ company.company_short_name }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -876,15 +876,15 @@
 <script>
   const ABSENT_MSG_TEMPLATE = (name) =>
 `Hi ${name},
-Today you were absent for your class at Global IT Education.
+Today you were absent for your class at {{ company.company_name }}.
 
 Regular practice is important to gain real skills.
 
 If you have any issue, feel free to contact us.
 
-- Naveen
-Global IT Education
-📞 9071717161`;
+- {{ session.get('full_name', 'Team') }}
+{{ company.company_name }}
+{% if company.phone %}📞 {{ company.phone }}{% endif %}`;
 
   function onStatusChange(select, studentId) {
     // Update dropdown colour class

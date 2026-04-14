@@ -33,6 +33,32 @@ def get_conn():
     return conn
 
 
+def get_company_profile():
+    """Return the single company profile row as a plain dict with fallback defaults."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM company_profile WHERE id = 1")
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+        return {
+            "id": 1,
+            "company_name": "My Company",
+            "company_short_name": "My Company ERP",
+            "tagline": "ERP System",
+            "address": "",
+            "phone": "",
+            "email": "",
+            "website": "",
+            "logo_filename": None,
+            "reg_number": "",
+            "updated_at": None,
+        }
+    finally:
+        conn.close()
+
+
 def log_activity(user_id, branch_id, action_type, module_name, record_id, description):
     conn = get_conn()
     try:
@@ -78,6 +104,23 @@ def init_db():
     conn = get_conn()
     cur = conn.cursor()
     now = datetime.now().isoformat(timespec="seconds")
+
+    # ---------- COMPANY PROFILE ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS company_profile (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            company_name TEXT NOT NULL DEFAULT 'My Company',
+            company_short_name TEXT NOT NULL DEFAULT 'My Company ERP',
+            tagline TEXT DEFAULT 'ERP System',
+            address TEXT,
+            phone TEXT,
+            email TEXT,
+            website TEXT,
+            logo_filename TEXT,
+            reg_number TEXT,
+            updated_at TEXT
+        )
+    """)
 
     # ---------- BRANCHES ----------
     cur.execute("""
@@ -601,6 +644,27 @@ def init_db():
                     """, (row["id"], row["asset_id"], row["action"], row["description"], row["done_by"], row["created_at"]))
     except:
         pass
+
+    # ---------- DEFAULT COMPANY PROFILE ----------
+    cur.execute("SELECT id FROM company_profile WHERE id = 1")
+    if not cur.fetchone():
+        cur.execute("""
+            INSERT INTO company_profile (
+                id, company_name, company_short_name, tagline,
+                address, phone, email, website, logo_filename, reg_number, updated_at
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            "Global IT Education",
+            "Global IT ERP",
+            "ERP System",
+            "J C Galaxy Building, 2nd Floor, College Road, Near Ayyapaswamy Temple, Hoskote - 562114",
+            "9071717161",
+            "help@globaliteducation.com",
+            "https://globaliteducation.com",
+            None,
+            "29AMEPL6934C2ZZ",
+            now
+        ))
 
     # ---------- DEFAULT BRANCHES ----------
     cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HO",))

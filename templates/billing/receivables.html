@@ -1,6 +1,6 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
-{% block title %}Global IT ERP - Receivables{% endblock %}
+{% block title %}{{ company.company_short_name }} - Receivables{% endblock %}
 
 {% block content %}
 <style>
@@ -348,7 +348,8 @@
 
 <script>
 /* ── Config ── */
-const CONTACT_NUMBER = '9071717161';
+const CONTACT_NUMBER = '{{ company.phone or "" }}';
+const COMPANY_NAME = {{ company.company_name | tojson }};
 let currentReminder = {};
 let reminderModalInstance = null;
 
@@ -395,11 +396,11 @@ function generateMessage(type, name, balance, invoiceNo, dueDate) {
   const dateStr = formatDateDisplay(dueDate);
 
   if (type === 'overdue') {
-    return `Dear ${firstName}, this is a reminder from Global IT Education that your pending fee amount of ${amt} for Invoice ${invoiceNo} was due on ${dateStr}. Kindly make the payment at the earliest. For any clarification, contact ${CONTACT_NUMBER}.`;
+    return `Dear ${firstName}, this is a reminder from ${COMPANY_NAME} that your pending fee amount of ${amt} for Invoice ${invoiceNo} was due on ${dateStr}. Kindly make the payment at the earliest. For any clarification, contact ${CONTACT_NUMBER}.`;
   } else if (type === 'due_today') {
-    return `Dear ${firstName}, this is a reminder from Global IT Education that your fee amount of ${amt} for Invoice ${invoiceNo} is due today. Kindly make the payment on time. For any clarification, contact ${CONTACT_NUMBER}.`;
+    return `Dear ${firstName}, this is a reminder from ${COMPANY_NAME} that your fee amount of ${amt} for Invoice ${invoiceNo} is due today. Kindly make the payment on time. For any clarification, contact ${CONTACT_NUMBER}.`;
   } else {
-    return `Dear ${firstName}, this is a friendly reminder from Global IT Education that your upcoming installment of ${amt} is due on ${dateStr}. Kindly be prepared to make the payment on or before the due date. For any clarification, contact ${CONTACT_NUMBER}.`;
+    return `Dear ${firstName}, this is a friendly reminder from ${COMPANY_NAME} that your upcoming installment of ${amt} is due on ${dateStr}. Kindly be prepared to make the payment on or before the due date. For any clarification, contact ${CONTACT_NUMBER}.`;
   }
 }
 

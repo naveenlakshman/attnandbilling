@@ -375,7 +375,7 @@
 function saveLeadContact() {
   var name  = {{ lead.name | tojson }};
   var phone = {{ (lead.phone or '') | tojson }};
-  var org   = "Global IT ERP";
+  var org   = {{ company.company_short_name | tojson }};
   var note  = "Lead Source: " + {{ (lead.lead_source or '') | tojson }};
 
   var vcard = [

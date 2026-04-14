@@ -1,7 +1,7 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
 {% block title %}
-  {% if course %}Edit Course{% else %}Add Course{% endif %} - Global IT ERP
+  {% if course %}Edit Course{% else %}Add Course{% endif %} - {{ company.company_short_name }}
 {% endblock %}
 
 {% block content %}

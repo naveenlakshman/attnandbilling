@@ -1,6 +1,6 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
-{% block title %}Student Profile - Global IT ERP{% endblock %}
+{% block title %}Student Profile - {{ company.company_short_name }}{% endblock %}
 
 {% block content %}
 
@@ -1236,7 +1236,7 @@
     var phone   = {{ (student.phone or '') | tojson }};
     var email   = {{ (student.email or '') | tojson }};
     var address = {{ (student.address or '') | tojson }};
-    var org     = "Global IT ERP";
+    var org     = {{ company.company_short_name | tojson }};
     var note    = "Student Code: " + {{ student.student_code | tojson }};
 
     var vcard = [

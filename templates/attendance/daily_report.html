@@ -1,6 +1,6 @@
-{% extends "attendance/base.html" %}
+﻿{% extends "attendance/base.html" %}
 
-{% block title %}Daily Attendance Report - Global IT ERP{% endblock %}
+{% block title %}Daily Attendance Report - {{ company.company_short_name }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -548,7 +548,7 @@
 
     <!-- Print-only header (hidden on screen) -->
     <div class="print-title" style="display:none;">
-      <strong>Global IT Education – Daily Attendance Report</strong><br>
+      <strong>{{ company.company_name }} – Daily Attendance Report</strong><br>
       Date: {{ reported_date }} &nbsp;|&nbsp; {{ batch_info.batch_name }}
     </div>
   </div>

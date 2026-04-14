@@ -116,9 +116,14 @@
 
 <!-- Header -->
 <div class="receipt-header">
-  <h1>Global IT Education <sup>®</sup></h1>
-  <p>Phone: 9071717161 Email: help@globaliteducation.com</p>
-  <div class="org-branch">J C Galaxy Building, 2nd Floor, College Road, Near Ayyapaswamy Temple Hoskote - 562114</div>
+  {% if company.logo_filename %}
+    <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+         alt="{{ company.company_name }}" style="max-height:55px; margin-bottom:4px;">
+    <br>
+  {% endif %}
+  <h1>{{ company.company_name }}</h1>
+  <p>{% if company.phone %}Phone: {{ company.phone }}{% endif %}{% if company.email %} Email: {{ company.email }}{% endif %}</p>
+  <div class="org-branch">{{ company.address or '' }}</div>
 </div>
 
 <div class="receipt-title">RECEIPT</div>

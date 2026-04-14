@@ -1,6 +1,6 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
-{% block title %}Receipt View - Global IT ERP{% endblock %}
+{% block title %}Receipt View - {{ company.company_short_name }}{% endblock %}
 
 {% block content %}
 <div class="receipt-page-wrap">
@@ -30,9 +30,14 @@
     <div class="receipt-header">
 <!-- Organization Info -->
     <div class="receipt-org-info">
-<h1>Global IT Education <sup>®</sup></h1>
-  <p style="margin: 0; color: #000000; font-size: 13px;">Phone: 9071717161 Email: help@globaliteducation.com</p>
-      <div class="org-branch">J C Galaxy Building, 2nd Floor, College Road, Near Ayyapaswamy Temple Hoskote - 562114</div>
+      {% if company.logo_filename %}
+        <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+             alt="{{ company.company_name }}" style="max-height:55px; margin-bottom:4px;">
+        <br>
+      {% endif %}
+      <h1>{{ company.company_name }}</h1>
+  <p style="margin: 0; color: #000000; font-size: 13px;">{% if company.phone %}Phone: {{ company.phone }}{% endif %}{% if company.email %} Email: {{ company.email }}{% endif %}</p>
+      <div class="org-branch">{{ company.address or '' }}</div>
     </div>
       <div class="receipt-title">RECEIPT</div>
       <div class="receipt-info">

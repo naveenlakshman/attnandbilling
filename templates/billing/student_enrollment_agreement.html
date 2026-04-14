@@ -830,9 +830,9 @@
 <div class="document-wrapper">
   <!-- Header -->
   <div class="header">
-    <h1>Global IT Education®</h1>
-    <p>J C Galaxy Building, 2nd Floor, College Road, Near Ayyapaswamy Temple Hoskote - 562114</p>
-    <p>Phone: 9071717161 | Email: help@globaliteducation.com</p>
+    <h1>{{ company.company_name }}{% if company.reg_number %}®{% endif %}</h1>
+    <p>{{ company.address or '' }}</p>
+    <p>{% if company.phone %}Phone: {{ company.phone }}{% endif %}{% if company.email %} | Email: {{ company.email }}{% endif %}</p>
   </div>
 
   <div class="document-title">
@@ -995,9 +995,9 @@
       
       <li><strong>CODE OF CONDUCT:</strong> Students agree to follow the institution's code of conduct and maintain professional behavior. Any violation may result in disciplinary action up to and including expulsion.</li>
       
-      <li><strong>INTELLECTUAL PROPERTY:</strong> All course materials, documents, and content provided are the intellectual property of Global IT Education and are for educational use only.</li>
+      <li><strong>INTELLECTUAL PROPERTY:</strong> All course materials, documents, and content provided are the intellectual property of {{ company.company_name }} and are for educational use only.</li>
       
-      <li><strong>LIABILITY:</strong> Global IT Education is not responsible for any loss or damage to personal belongings on the premises.</li>
+      <li><strong>LIABILITY:</strong> {{ company.company_name }} is not responsible for any loss or damage to personal belongings on the premises.</li>
       
       <li><strong>CERTIFICATE:</strong> Certificate of completion will be issued only upon successful completion of the course and full payment of fees.</li>
       
@@ -1015,7 +1015,7 @@
 
     <p style="font-size: 12px; line-height: 1.8; margin: 0 0 20px 0;">
       I/We hereby acknowledge that I/We have read and understood all the terms and conditions mentioned above and agree to abide by them. 
-      I/We confirm that the information provided above is true and complete. I/We also authorize Global IT Education to contact me/us 
+      I/We confirm that the information provided above is true and complete. I/We also authorize {{ company.company_name }} to contact me/us 
       for any course-related communications and follow-ups.
     </p>
 
