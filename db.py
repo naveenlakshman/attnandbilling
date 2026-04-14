@@ -850,6 +850,9 @@ def init_db():
         
         # Add remarks to attendance_followups if missing
         add_column_if_not_exists(cur, 'attendance_followups', 'remarks', 'TEXT')
+
+        # Add reason to attendance_time_warnings if missing (added Apr 2026)
+        add_column_if_not_exists(cur, 'attendance_time_warnings', 'reason', 'TEXT')
     except:
         pass
 
