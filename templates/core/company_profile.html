@@ -104,11 +104,10 @@
 
     {% if profile.logo_filename %}
     <div class="mb-3">
-      <form method="POST" action="{{ url_for('core.company_profile_remove_logo') }}" style="display:inline;">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-sm btn-outline-danger"
-                onclick="return confirm('Remove the current logo?')">🗑 Remove Current Logo</button>
-      </form>
+      <button type="button" class="btn btn-sm btn-outline-danger"
+              onclick="if(confirm('Remove the current logo?')) document.getElementById('removeLogoForm').submit()">
+        🗑 Remove Current Logo
+      </button>
     </div>
     {% endif %}
 
@@ -158,5 +157,13 @@
       <a href="{{ url_for('core.dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
     </div>
   </form>
+
+  {% if profile.logo_filename %}
+  <form id="removeLogoForm" method="POST"
+        action="{{ url_for('core.company_profile_remove_logo') }}"
+        style="display:none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  </form>
+  {% endif %}
 </div>
 {% endblock %}
