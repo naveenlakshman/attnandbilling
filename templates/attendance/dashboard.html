@@ -306,7 +306,8 @@
   }
   .today-card-stats {
     display: flex;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 5px;
     margin: 8px 0;
   }
   .today-card-stat {
@@ -315,7 +316,8 @@
     align-items: center;
     border-radius: 8px;
     padding: 6px 4px;
-    flex: 1;
+    flex: 1 1 calc(33% - 5px);
+    min-width: 0;
   }
   .today-card-stat .val {
     font-size: 1.1rem;
@@ -688,7 +690,15 @@
           <span class="lbl">Absent</span>
         </div>
         <div class="today-card-stat" style="background:#fff3cd;">
-          <span class="val" style="color:#856404;">{{ batch_stat.not_marked }}</span>
+          <span class="val" style="color:#856404;">{{ batch_stat.late }}</span>
+          <span class="lbl">Late</span>
+        </div>
+        <div class="today-card-stat" style="background:#e8f4f8;">
+          <span class="val" style="color:#0878a0;">{{ batch_stat.leave }}</span>
+          <span class="lbl">Leave</span>
+        </div>
+        <div class="today-card-stat" style="background:#f3e8ff;">
+          <span class="val" style="color:#6f42c1;">{{ batch_stat.not_marked }}</span>
           <span class="lbl">Pending</span>
         </div>
         <div class="today-card-stat" style="background:#e7f3ff;">
