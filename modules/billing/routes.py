@@ -1517,6 +1517,43 @@ def course_edit(id):
     conn.close()
     return render_template("billing/course_form.html", course=course)
 
+
+@billing_bp.route("/course/<int:id>/toggle_active", methods=["POST"])
+@login_required
+@admin_required
+def course_toggle_active(id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, course_name, is_active FROM courses WHERE id = ?", (id,))
+    course = cur.fetchone()
+
+    if not course:
+        conn.close()
+        flash("Course not found.", "danger")
+        return redirect(url_for("billing.courses"))
+
+    new_status = 0 if course["is_active"] else 1
+    label = "activated" if new_status else "deactivated"
+
+    now = datetime.now().isoformat(timespec="seconds")
+    cur.execute("UPDATE courses SET is_active = ?, updated_at = ? WHERE id = ?", (new_status, now, id))
+    conn.commit()
+    conn.close()
+
+    log_activity(
+        user_id=session["user_id"],
+        branch_id=session.get("branch_id"),
+        action_type="update",
+        module_name="courses",
+        record_id=id,
+        description=f"Course '{course['course_name']}' {label}"
+    )
+
+    flash(f"Course '{course['course_name']}' has been {label}.", "success")
+    return redirect(url_for("billing.courses"))
+
+
 @billing_bp.route("/invoices")
 @login_required
 def invoices():
