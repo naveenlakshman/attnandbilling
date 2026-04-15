@@ -1,0 +1,548 @@
+{% extends "lms_admin/base.html" %}
+
+{% block content %}
+<style>
+    .breadcrumb {
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+    }
+    
+    .breadcrumb-item {
+        display: inline;
+    }
+    
+    .breadcrumb-item + .breadcrumb-item::before {
+        content: " → ";
+        color: #999;
+    }
+    
+    .breadcrumb-item a {
+        color: #007bff;
+        text-decoration: none;
+    }
+    
+    .breadcrumb-item a:hover {
+        text-decoration: underline;
+    }
+    
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 1rem;
+    }
+    
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #333;
+        margin: 0;
+    }
+    
+    .header-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .btn-add {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.5rem 1.25rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-add:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+        background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+        text-decoration: none;
+        color: white;
+    }
+    
+    .main-layout {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .sidebar-card {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1.25rem;
+        height: fit-content;
+        position: sticky;
+        top: 1rem;
+    }
+    
+    .card-title {
+        font-size: 0.875rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #666;
+        margin-bottom: 0.75rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 0.5rem;
+    }
+    
+    .card-content {
+        font-size: 0.875rem;
+        color: #333;
+        line-height: 1.6;
+    }
+    
+    .card-content p {
+        margin: 0.5rem 0;
+    }
+    
+    .card-content strong {
+        font-weight: 600;
+        color: #222;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.625rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .badge-success {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .badge-info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+    
+    .badge-warning {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .content-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 0.375rem;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .content-table thead {
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .content-table th {
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        color: #333;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .content-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #dee2e6;
+        font-size: 0.9rem;
+    }
+    
+    .content-table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .content-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+    
+    .type-icon {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .type-badge {
+        padding: 0.375rem 0.625rem;
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    
+    .type-badge-ebook {
+        background-color: #e6f2ff;
+        color: #1565c0;
+    }
+    
+    .type-badge-workbook {
+        background-color: #e6f5e6;
+        color: #2e7d32;
+    }
+    
+    .type-badge-ppt {
+        background-color: #ffe6e6;
+        color: #d32f2f;
+    }
+    
+    .type-badge-reference {
+        background-color: #f3e5f5;
+        color: #6a1b9a;
+    }
+    
+    .type-badge-other {
+        background-color: #f5f5f5;
+        color: #666;
+    }
+    
+    .required-badge {
+        background-color: #fff3cd;
+        color: #856404;
+        padding: 0.25rem 0.625rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .action-buttons {
+        display: inline-flex;
+        gap: 0.5rem;
+    }
+    
+    .btn-sm {
+        padding: 0.375rem 0.75rem;
+        border: none;
+        border-radius: 0.25rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-edit {
+        background-color: #007bff;
+        color: white;
+    }
+    
+    .btn-edit:hover {
+        background-color: #0056b3;
+        transform: translateY(-1px);
+    }
+    
+    .btn-delete {
+        background-color: #dc3545;
+        color: white;
+    }
+    
+    .btn-delete:hover {
+        background-color: #c82333;
+        transform: translateY(-1px);
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        background: white;
+        border-radius: 0.375rem;
+        border: 2px dashed #dee2e6;
+    }
+    
+    .empty-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+    
+    .empty-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 0.5rem;
+    }
+    
+    .empty-text {
+        color: #666;
+        margin-bottom: 1.5rem;
+        font-size: 0.95rem;
+    }
+    
+    .btn-primary {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.625rem 1.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+        background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+        text-decoration: none;
+        color: white;
+    }
+    
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .stat-card {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        text-align: center;
+    }
+    
+    .stat-number {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #007bff;
+        margin-bottom: 0.25rem;
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: #666;
+        font-weight: 500;
+    }
+    
+    @media (max-width: 768px) {
+        .main-layout {
+            grid-template-columns: 1fr;
+        }
+        
+        .sidebar-card {
+            position: static;
+        }
+        
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        
+        .content-table {
+            font-size: 0.85rem;
+        }
+        
+        .content-table th,
+        .content-table td {
+            padding: 0.75rem;
+        }
+        
+        .action-buttons {
+            flex-direction: column;
+        }
+        
+        .btn-sm {
+            width: 100%;
+            text-align: center;
+        }
+    }
+</style>
+
+<!-- Breadcrumb Navigation -->
+<nav class="breadcrumb">
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_programs') }}">📚 Programs</a>
+    </span>
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}">{{ data.program.program_name }}</a>
+    </span>
+    <span class="breadcrumb-item">📚 Resources</span>
+</nav>
+
+<!-- Page Header -->
+<div class="page-header">
+    <h1 class="page-title">📚 Program Resources</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('lms_admin.add_program_resource', program_id=data.program.id) }}" class="btn-add">
+            + Add Resource
+        </a>
+        <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}" class="btn-add" style="background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);">
+            ← Back to Program
+        </a>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-number">{{ data.total_resources }}</div>
+        <div class="stat-label">Total Resources</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ data.total_size }}</div>
+        <div class="stat-label">Total Size</div>
+    </div>
+</div>
+
+<!-- Main Content Layout -->
+<div class="main-layout">
+    <!-- Resources Table -->
+    <div>
+        {% if data.resources|length > 0 %}
+            <table class="content-table">
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">Type</th>
+                        <th style="width: 240px;">Title</th>
+                        <th style="width: 100px;">Status</th>
+                        <th style="width: 120px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for resource in data.resources %}
+                        {% set type_icons = {
+                            'ebook': '📖',
+                            'workbook': '📓',
+                            'pdf': '📄',
+                            'ppt': '📊',
+                            'other': '📋'
+                        } %}
+                        
+                        <tr>
+                            <!-- Type Badge -->
+                            <td>
+                                <span class="type-badge type-badge-{{ resource.resource_type }}">
+                                    {{ type_icons.get(resource.resource_type, '📋') }} 
+                                    {{ resource.resource_type|upper }}
+                                </span>
+                            </td>
+                            
+                            <!-- Resource Title -->
+                            <td>
+                                <strong>{{ resource.resource_title }}</strong>
+                            </td>
+                            
+                            <!-- Status -->
+                            <td>
+                                {% if resource.is_active %}
+                                    <span class="badge badge-success">✓ Active</span>
+                                {% else %}
+                                    <span class="badge badge-warning">⊝ Inactive</span>
+                                {% endif %}
+                            </td>
+                            
+                            <!-- Actions -->
+                            <td>
+                                <div class="action-buttons">
+                                    <a href="{{ url_for('lms_admin.edit_program_resource', resource_id=resource.id) }}" 
+                                       class="btn-sm btn-edit">✏️ Edit</a>
+                                    <form method="POST" 
+                                          action="{{ url_for('lms_admin.delete_program_resource', resource_id=resource.id) }}" 
+                                          style="display: inline;"
+                                          onsubmit="return confirm('Delete this resource?');">
+                                        <button type="submit" class="btn-sm btn-delete">🗑️ Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <!-- Empty State -->
+            <div class="empty-state">
+                <div class="empty-icon">📚</div>
+                <div class="empty-title">No Resources Yet</div>
+                <div class="empty-text">
+                    Add program-level resources like eBooks, workbooks, presentations, or reference materials for your entire course.
+                </div>
+                <a href="{{ url_for('lms_admin.add_program_resource', program_id=data.program.id) }}" 
+                   class="btn-primary">
+                    + Add Your First Resource
+                </a>
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Right Sidebar -->
+    <div>
+        <!-- Program Context Card -->
+        <div class="sidebar-card">
+            <div class="card-title">📚 Program Info</div>
+            <div class="card-content">
+                <p>
+                    <strong>Program:</strong><br>
+                    {{ data.program.program_name }}
+                </p>
+                <p style="font-size: 0.8rem; color: #999; margin-top: 1rem;">
+                    These resources apply to the entire program.
+                </p>
+            </div>
+        </div>
+        
+        <!-- Add Resource Card -->
+        <div class="sidebar-card">
+            <div class="card-title">➕ Add Files</div>
+            <div class="card-content">
+                <p style="margin-bottom: 0.75rem;">
+                    Share program-level materials with all students.
+                </p>
+                <a href="{{ url_for('lms_admin.add_program_resource', program_id=data.program.id) }}" 
+                   class="btn-primary" style="width: 100%; text-align: center; display: block; text-decoration: none;">
+                    + Add Resource
+                </a>
+            </div>
+        </div>
+        
+        <!-- Resource Types Guide Card -->
+        <div class="sidebar-card">
+            <div class="card-title">📋 Resource Types</div>
+            <div class="card-content">
+                <p><strong>📖 eBook</strong><br><span style="font-size: 0.8rem; color: #999;">Full course ebook</span></p>
+                <p><strong>📓 Workbook</strong><br><span style="font-size: 0.8rem; color: #999;">Practice exercises</span></p>
+                <p><strong>📊 PowerPoint</strong><br><span style="font-size: 0.8rem; color: #999;">Presentations</span></p>
+                <p><strong>📄 Reference</strong><br><span style="font-size: 0.8rem; color: #999;">Reference guides</span></p>
+                <p><strong>📋 Other</strong><br><span style="font-size: 0.8rem; color: #999;">Other materials</span></p>
+            </div>
+        </div>
+        
+        <!-- Tips Card -->
+        <div class="sidebar-card">
+            <div class="card-title">💡 Tips</div>
+            <div class="card-content">
+                <ul style="margin: 0; padding-left: 1rem; font-size: 0.8rem;">
+                    <li>✓ Add core materials first</li>
+                    <li>✓ Mark essential resources</li>
+                    <li>✓ Use clear file names</li>
+                    <li>✓ Keep files updated</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

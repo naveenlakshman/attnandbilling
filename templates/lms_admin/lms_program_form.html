@@ -1,0 +1,471 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}
+  {% if program %}Edit Program{% else %}Add Program{% endif %} - Global IT ERP
+{% endblock %}
+{% block page_title %}{% if program %}Edit Program{% else %}Add New Program{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .program-form-wrap {
+    max-width: 800px;
+    margin-right: auto;
+  }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .page-header h2 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    color: #212529;
+  }
+
+  .form-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 28px;
+  }
+
+  .form-section {
+    margin-bottom: 28px;
+  }
+
+  .form-section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e9ecef;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 18px;
+  }
+
+  .form-group label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #333;
+    font-size: 14px;
+  }
+
+  .form-group label .required {
+    color: #dc3545;
+    margin-left: 2px;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+    color: #333;
+  }
+
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+  }
+
+  .form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+  }
+
+  .form-text {
+    font-size: 12px;
+    color: #6c757d;
+    margin-top: 4px;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .checkbox-group input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+  }
+
+  .checkbox-group label {
+    margin: 0;
+    margin-bottom: 0 !important;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid #e9ecef;
+    flex-wrap: wrap;
+  }
+
+  .form-actions .btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .btn-primary {
+    background: #0d6efd;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .btn-primary:hover {
+    background: #0a58ca;
+  }
+
+  .btn-secondary {
+    background: #e9ecef;
+    color: #333;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-secondary:hover {
+    background: #dee2e6;
+  }
+
+  .slug-helper {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 8px;
+    font-size: 13px;
+  }
+
+  .slug-helper-label {
+    font-weight: 600;
+    color: #6c757d;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .slug-preview {
+    background: #fff;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+    font-family: monospace;
+    font-size: 12px;
+    color: #333;
+    word-break: break-all;
+  }
+
+  .slug-preview.empty {
+    color: #999;
+  }
+
+  .info-box {
+    background: #e7f3ff;
+    border-left: 4px solid #0066cc;
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: #004085;
+  }
+
+  .error-message {
+    color: #dc3545;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .thumbnail-preview {
+    margin-top: 8px;
+    max-width: 150px;
+  }
+
+  .thumbnail-preview img {
+    max-width: 100%;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+  }
+
+  @media (max-width: 768px) {
+    .page-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .page-header h2 {
+      width: 100%;
+    }
+
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+
+    .form-actions {
+      flex-direction: column;
+    }
+
+    .form-actions .btn {
+      width: 100%;
+      text-align: center;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Header -->
+<div class="page-header">
+  <h2>{% if program %}✏️ Edit Program{% else %}📖 Add New Program{% endif %}</h2>
+  <a href="{{ url_for('lms_admin.list_programs') }}" class="btn btn-secondary">
+    ← Back to Programs
+  </a>
+</div>
+
+<!-- Form Card -->
+<div class="program-form-wrap">
+  <div class="form-card">
+    
+    {% if program %}
+      <div class="info-box">
+        💡 You are editing an existing program. Changes will be saved immediately.
+      </div>
+    {% else %}
+      <div class="info-box">
+        💡 Create a new learning program. You can add chapters and topics after creation.
+      </div>
+    {% endif %}
+
+    <form method="post" id="programForm">
+      
+      <!-- Basic Information Section -->
+      <div class="form-section">
+        <div class="form-section-title">📝 Basic Information</div>
+
+        <!-- Program Name -->
+        <div class="form-group">
+          <label>Program Name <span class="required">*</span></label>
+          <input 
+            type="text" 
+            name="program_name" 
+            id="programName"
+            required 
+            value="{{ program.program_name if program else '' }}"
+            placeholder="e.g., Office Automation, Tally Prime, Advanced Excel"
+            onchange="generateSlug()"
+            oninput="generateSlug()"
+          >
+          <div class="form-text">The main name of your learning program.</div>
+        </div>
+
+        <!-- Course Selection -->
+        <div class="form-group">
+          <label>Linked Course</label>
+          <select name="course_id" id="courseId">
+            <option value="">— No Course —</option>
+            {% for course in courses %}
+            <option value="{{ course.id }}" 
+              {% if program and program.course_id == course.id %}selected{% endif %}>
+              {{ course.course_name }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Link this program to an existing course (optional).</div>
+        </div>
+      </div>
+
+      <!-- Slug Section -->
+      <div class="form-section">
+        <div class="form-section-title">🔗 URL Slug</div>
+
+        <!-- Slug Input -->
+        <div class="form-group">
+          <label>Slug</label>
+          <input 
+            type="text" 
+            name="slug" 
+            id="slug"
+            value="{{ program.slug if program else '' }}"
+            placeholder="auto-generated-from-program-name"
+          >
+          <div class="form-text">URL-friendly version of the program name. Leave blank to auto-generate.</div>
+          
+          <!-- Slug Preview -->
+          <div class="slug-helper">
+            <span class="slug-helper-label">📍 URL Preview:</span>
+            <div class="slug-preview" id="slugPreview">
+              {% if program and program.slug %}
+                /lms/program/{{ program.slug }}
+              {% else %}
+                <span class="empty">Slug will appear here...</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Content Section -->
+      <div class="form-section">
+        <div class="form-section-title">📋 Content Details</div>
+
+        <!-- Description -->
+        <div class="form-group">
+          <label>Description</label>
+          <textarea 
+            name="description" 
+            id="description"
+            placeholder="Describe what students will learn in this program..."
+          >{{ program.description if program else '' }}</textarea>
+          <div class="form-text">Brief description of the program content and learning outcomes.</div>
+        </div>
+
+        <!-- Thumbnail Path -->
+        <div class="form-group">
+          <label>Thumbnail Path</label>
+          <input 
+            type="text" 
+            name="thumbnail_path" 
+            id="thumbnailPath"
+            value="{{ program.thumbnail_path if program else '' }}"
+            placeholder="e.g., /static/images/programs/office-automation.jpg"
+          >
+          <div class="form-text">Path to the program thumbnail image.</div>
+          {% if program and program.thumbnail_path %}
+          <div class="thumbnail-preview">
+            <img src="{{ program.thumbnail_path }}" alt="Thumbnail" onerror="this.style.display='none'">
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Publishing Section -->
+      <div class="form-section">
+        <div class="form-section-title">📊 Publishing</div>
+
+        <!-- Publish Status -->
+        <div class="checkbox-group">
+          <input 
+            type="checkbox" 
+            name="is_published" 
+            id="isPublished"
+            value="1"
+            {% if program and program.is_published %}checked{% endif %}
+          >
+          <label for="isPublished">Publish this program (visible to students)</label>
+        </div>
+        <div class="form-text" style="margin-left: 28px; margin-top: -8px;">
+          Uncheck to keep as draft until you've added all chapters and topics.
+        </div>
+      </div>
+
+      <!-- Form Actions -->
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">
+          {% if program %}💾 Save Changes{% else %}✅ Create Program{% endif %}
+        </button>
+        <a href="{{ url_for('lms_admin.list_programs') }}" class="btn btn-secondary">
+          Cancel
+        </a>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+  function generateSlug() {
+    const programName = document.getElementById('programName').value.trim();
+    const slugInput = document.getElementById('slug');
+    
+    // Only auto-generate if slug field is empty or user hasn't manually edited it
+    if (!slugInput.value || slugInput.value === '') {
+      if (programName) {
+        // Convert to lowercase
+        let slug = programName.toLowerCase();
+        
+        // Remove special characters and extra spaces
+        slug = slug.replace(/[^\w\s-]/g, '');
+        
+        // Replace spaces and underscores with dashes
+        slug = slug.replace(/[\s_]+/g, '-');
+        
+        // Remove duplicate dashes
+        slug = slug.replace(/-+/g, '-');
+        
+        // Remove leading/trailing dashes
+        slug = slug.trim('-');
+        
+        slugInput.value = slug;
+        updateSlugPreview(slug);
+      }
+    }
+  }
+
+  function updateSlugPreview(slug) {
+    const preview = document.getElementById('slugPreview');
+    if (slug) {
+      preview.textContent = '/lms/program/' + slug;
+      preview.classList.remove('empty');
+    } else {
+      preview.innerHTML = '<span class="empty">Slug will appear here...</span>';
+      preview.classList.add('empty');
+    }
+  }
+
+  // Update preview when slug changes manually
+  document.getElementById('slug').addEventListener('input', function() {
+    updateSlugPreview(this.value);
+  });
+
+  // Initialize slug preview on page load
+  document.addEventListener('DOMContentLoaded', function() {
+    const slug = document.getElementById('slug').value;
+    if (slug) {
+      updateSlugPreview(slug);
+    }
+  });
+</script>
+
+{% endblock %}

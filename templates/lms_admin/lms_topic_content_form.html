@@ -1,0 +1,694 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}
+    {% if content %}
+        Edit Content - {{ content.content_title }}
+    {% else %}
+        Add Content to Topic
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Breadcrumb Navigation -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_programs') }}" class="text-decoration-none">Programs</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.program_view', program_id=program.id) }}" class="text-decoration-none">{{ program.program_name }}</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_chapters', program_id=program.id) }}" class="text-decoration-none">Chapters</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_topics', chapter_id=chapter.id) }}" class="text-decoration-none">{{ chapter.chapter_title }}</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_topics', chapter_id=chapter.id) }}" class="text-decoration-none">Topics</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" class="text-decoration-none">{{ topic.topic_title }}</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" class="text-decoration-none">Contents</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">
+                {% if content %}
+                    Edit Content
+                {% else %}
+                    New Content
+                {% endif %}
+            </li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <h1 class="h2 mb-1">
+                        {% if content %}
+                            ✏️ Edit Content
+                        {% else %}
+                            ➕ Add Content Block
+                        {% endif %}
+                    </h1>
+                    <p class="text-muted mb-0">Topic: <strong>{{ topic.topic_title }}</strong> → Chapter: <strong>{{ chapter.chapter_title }}</strong></p>
+                </div>
+                <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" class="btn btn-outline-secondary">
+                    ← Back to Contents
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form Container -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <form method="POST" id="contentForm" enctype="multipart/form-data">
+                        <!-- Basic Information Section -->
+                        <div class="form-section mb-4">
+                            <h5 class="text-primary mb-3">
+                                <i class="bi bi-pencil-square"></i> Basic Information
+                            </h5>
+                            
+                            <!-- Content Title -->
+                            <div class="mb-3">
+                                <label for="title" class="form-label">
+                                    Content Title <span class="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    class="form-control form-control-lg" 
+                                    id="title" 
+                                    name="title"
+                                    placeholder="e.g., Introduction to Computer Basics"
+                                    value="{{ content.content_title if content else '' }}"
+                                    required
+                                    maxlength="255"
+                                >
+                                <small class="form-text text-muted">
+                                    Enter a descriptive title for this content block.
+                                </small>
+                            </div>
+
+                            <!-- Content Type -->
+                            <div class="mb-3">
+                                <label for="content_mode" class="form-label">
+                                    Content Type <span class="text-danger">*</span>
+                                </label>
+                                <select 
+                                    class="form-select" 
+                                    id="content_mode" 
+                                    name="content_mode"
+                                    required
+                                >
+                                    <option value="">-- Select Content Type --</option>
+                                    <option value="text" {% if content and content.content_mode == 'text' %}selected{% endif %}>📄 Text & Description</option>
+                                    <option value="html" {% if not content or content.content_mode == 'html' %}selected{% endif %}>🌐 HTML Content</option>
+                                    <option value="youtube" {% if content and content.content_mode == 'youtube' %}selected{% endif %}>▶️ YouTube Video</option>
+                                    <option value="video_file" {% if content and content.content_mode == 'video_file' %}selected{% endif %}>🎥 Video File</option>
+                                    <option value="pdf" {% if content and content.content_mode == 'pdf' %}selected{% endif %}>📕 PDF Document</option>
+                                    <option value="image" {% if content and content.content_mode == 'image' %}selected{% endif %}>🖼️ Image</option>
+                                    <option value="download" {% if content and content.content_mode == 'download' %}selected{% endif %}>⬇️ Downloadable</option>
+                                </select>
+                                <small class="form-text text-muted">
+                                    Select the type of content you're adding.
+                                </small>
+                            </div>
+
+                            <!-- Description -->
+                            <div class="mb-3">
+                                <label for="content_body" class="form-label">
+                                    Description
+                                </label>
+                                <textarea 
+                                    class="form-control" 
+                                    id="content_body" 
+                                    name="content_body"
+                                    rows="3"
+                                    placeholder="Optional: Brief description of this content block"
+                                    maxlength="500"
+                                >{{ content.content_body if content else '' }}</textarea>
+                                <small class="form-text text-muted" id="descCharCount">
+                                    0 / 500 characters
+                                </small>
+                            </div>
+
+                            <!-- Display Order -->
+                            <div class="mb-3">
+                                <label for="display_order" class="form-label">
+                                    Display Order <span class="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="number" 
+                                    class="form-control" 
+                                    id="display_order" 
+                                    name="display_order"
+                                    min="1"
+                                    max="999"
+                                    value="{% if content %}{{ content.display_order }}{% else %}{{ next_order }}{% endif %}"
+                                    required
+                                >
+                                <small class="form-text text-muted">
+                                    Lower numbers appear first. This determines the sequence students will see.
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Content Type Specific Section -->
+                        <div class="form-section mb-4">
+                            <h5 class="text-primary mb-3">
+                                <i class="bi bi-file-earmark-play"></i> Content Details
+                            </h5>
+                            
+                            <!-- Text Content -->
+                            <div id="text-content-section" class="content-type-section" style="display: none;">
+                                <label for="text_content" class="form-label">
+                                    Content <span class="text-danger">*</span>
+                                </label>
+                                <textarea 
+                                    class="form-control" 
+                                    id="text_content" 
+                                    name="content_body"
+                                    rows="8"
+                                    placeholder="Enter your text content here..."
+                                >{{ content.content_body if content and content.content_mode == 'text' else '' }}</textarea>
+                                <small class="form-text text-muted">
+                                    Plain text content. Will be displayed as-is to students.
+                                </small>
+                            </div>
+
+                            <!-- HTML Content -->
+                            <div id="html-content-section" class="content-type-section" style="display: none;">
+                                <label for="html_content" class="form-label">
+                                    HTML Content
+                                </label>
+                                <textarea 
+                                    class="form-control" 
+                                    id="html_content" 
+                                    name="content_body"
+                                    rows="10"
+                                    placeholder="Enter HTML content (supports formatting, links, styling)..."
+                                >{{ content.content_body if content and content.content_mode == 'html' else '' }}</textarea>
+                                <small class="form-text text-muted">
+                                    HTML formatted content. Use &lt;p&gt;, &lt;strong&gt;, &lt;em&gt;, &lt;a&gt;, etc. Or upload an HTML file below (or both).
+                                </small>
+                            </div>
+
+                            <!-- YouTube URL -->
+                            <div id="youtube-content-section" class="content-type-section" style="display: none;">
+                                <label for="youtube_url" class="form-label">
+                                    YouTube URL <span class="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="url" 
+                                    class="form-control" 
+                                    id="youtube_url" 
+                                    name="external_url"
+                                    placeholder="https://www.youtube.com/watch?v=..."
+                                    value="{{ content.external_url if content and content.content_mode == 'youtube' else '' }}"
+                                >
+                                <small class="form-text text-muted">
+                                    Paste the full YouTube URL (e.g., https://www.youtube.com/watch?v=dQw4w9WgXcQ)
+                                </small>
+                            </div>
+
+                            <!-- Video File -->
+                            <div id="video-content-section" class="content-type-section" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="video_file" class="form-label">
+                                        Video File <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="card bg-light">
+                                        <div class="card-body p-3">
+                                            <input 
+                                                type="file" 
+                                                class="form-control" 
+                                                id="video_file" 
+                                                name="video_file"
+                                                accept=".mp4,.webm,.ogv,.avi,.mov,.mkv"
+                                                data-content-type="video_file"
+                                            >
+                                            <small class="form-text text-muted d-block mt-2">
+                                                ✓ Supported: MP4, WebM, OGV, AVI, MOV, MKV<br>
+                                                ✓ Max size: 50 MB<br>
+                                                {% if content and content.content_mode == 'video_file' and content.file_path %}
+                                                    <span class="text-success">📁 Current file: {{ content.file_path.split('/')[-1] }}</span>
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- PDF File -->
+                            <div id="pdf-content-section" class="content-type-section" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="pdf_file" class="form-label">
+                                        PDF Document <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="card bg-light">
+                                        <div class="card-body p-3">
+                                            <input 
+                                                type="file" 
+                                                class="form-control" 
+                                                id="pdf_file" 
+                                                name="pdf_file"
+                                                accept=".pdf"
+                                                data-content-type="pdf"
+                                            >
+                                            <small class="form-text text-muted d-block mt-2">
+                                                ✓ Format: PDF only<br>
+                                                ✓ Max size: 20 MB<br>
+                                                {% if content and content.content_mode == 'pdf' and content.file_path %}
+                                                    <span class="text-success">📁 Current file: {{ content.file_path.split('/')[-1] }}</span>
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Image File -->
+                            <div id="image-content-section" class="content-type-section" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="image_file" class="form-label">
+                                        Image File <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="card bg-light">
+                                        <div class="card-body p-3">
+                                            <input 
+                                                type="file" 
+                                                class="form-control" 
+                                                id="image_file" 
+                                                name="image_file"
+                                                accept=".jpg,.jpeg,.png,.gif,.webp,.bmp"
+                                                data-content-type="image"
+                                            >
+                                            <small class="form-text text-muted d-block mt-2">
+                                                ✓ Supported: JPG, PNG, GIF, WebP, BMP<br>
+                                                ✓ Max size: 10 MB<br>
+                                                {% if content and content.content_mode == 'image' and content.file_path %}
+                                                    <span class="text-success">📁 Current file: {{ content.file_path.split('/')[-1] }}</span>
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Download Resource -->
+                            <div id="download-content-section" class="content-type-section" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="download_file" class="form-label">
+                                        Download File <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="card bg-light">
+                                        <div class="card-body p-3">
+                                            <input 
+                                                type="file" 
+                                                class="form-control" 
+                                                id="download_file" 
+                                                name="download_file"
+                                                accept=".zip,.rar,.7z,.xls,.xlsx,.doc,.docx,.ppt,.pptx,.txt,.csv"
+                                                data-content-type="download"
+                                            >
+                                            <small class="form-text text-muted d-block mt-2">
+                                                ✓ Supported: ZIP, RAR, 7Z, XLS, XLSX, DOC, DOCX, PPT, PPTX, TXT, CSV<br>
+                                                ✓ Max size: 30 MB<br>
+                                                {% if content and content.content_mode == 'download' and content.file_path %}
+                                                    <span class="text-success">📁 Current file: {{ content.file_path.split('/')[-1] }}</span>
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- HTML File Upload -->
+                            <div id="html-file-upload-section" class="content-type-section" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="html_file" class="form-label">
+                                        HTML File (Optional)
+                                    </label>
+                                    <div class="card bg-light">
+                                        <div class="card-body p-3">
+                                            <input 
+                                                type="file" 
+                                                class="form-control" 
+                                                id="html_file" 
+                                                name="html_file"
+                                                accept=".html,.htm"
+                                                data-content-type="html"
+                                            >
+                                            <small class="form-text text-muted d-block mt-2">
+                                                ✓ Format: HTML or HTM files only<br>
+                                                ✓ Max size: 5 MB<br>
+                                                ℹ️ Upload an HTML file OR enter HTML content in the textarea above (or both)<br>
+                                                {% if content and content.content_mode == 'html' and content.file_path %}
+                                                    <span class="text-success">📁 Current file: {{ content.file_path.split('/')[-1] }}</span>
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Form Actions -->
+                        <div class="form-section pt-2 border-top">
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    {% if content %}
+                                        💾 Save Changes
+                                    {% else %}
+                                        ✅ Add Content
+                                    {% endif %}
+                                </button>
+                                <a 
+                                    href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" 
+                                    class="btn btn-outline-secondary btn-lg"
+                                >
+                                    Cancel
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Help Section -->
+            <div class="alert alert-info mt-4" role="alert">
+                <h6 class="alert-heading">
+                    <i class="bi bi-lightbulb"></i> Content Tips
+                </h6>
+                <ul class="mb-0">
+                    <li><strong>Text:</strong> Use for simple, plain text lessons</li>
+                    <li><strong>HTML:</strong> For formatted content with styling, links, and rich media</li>
+                    <li><strong>YouTube:</strong> Embed video lessons directly from YouTube</li>
+                    <li><strong>Video File:</strong> Host uploaded video content</li>
+                    <li><strong>PDF:</strong> Share downloadable documents and workbooks</li>
+                    <li><strong>Image:</strong> Display infographics and visual materials</li>
+                    <li><strong>Download:</strong> Provide templates, datasets, or resources</li>
+                    <li>Mark content as "Required" to ensure students complete essential material</li>
+                    <li>Set display order to control the sequence students see your content</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Right Sidebar - Content Info -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm bg-light">
+                <div class="card-body">
+                    <h6 class="card-title mb-3">
+                        <i class="bi bi-info-circle"></i> Content Details
+                    </h6>
+                    
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1"><strong>Topic</strong></small>
+                        <span class="badge bg-primary">{{ topic.topic_title }}</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1"><strong>Chapter</strong></small>
+                        <span class="badge bg-secondary">{{ chapter.chapter_title }}</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1"><strong>Type</strong></small>
+                        <span class="badge bg-info" id="typeDisplay">
+                            {% if content %}
+                                {{ content.content_mode }}
+                            {% else %}
+                                html
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1"><strong>Sequence</strong></small>
+                        <span id="sequenceDisplay">{% if content %}{{ content.display_order }}{% else %}{{ next_order }}{% endif %}</span>
+                    </div>
+
+                    {% if content %}
+                        <hr>
+                        
+                        <div class="mb-3">
+                            <small class="text-muted d-block mb-1"><strong>Created</strong></small>
+                            <span>{{ content.created_at[:10] }}</span>
+                        </div>
+
+                        <div class="mb-3">
+                            <small class="text-muted d-block mb-1"><strong>Updated</strong></small>
+                            <span>{{ content.updated_at[:10] }}</span>
+                        </div>
+                    {% else %}
+                        <hr>
+                        
+                        <div class="alert alert-light" role="alert">
+                            <small><strong>New Content:</strong><br> This content block will be added to the "<strong>{{ topic.topic_title }}</strong>" topic.</small>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Content Type Guide -->
+            <div class="card shadow-sm mt-3">
+                <div class="card-body">
+                    <h6 class="card-title mb-2">
+                        <i class="bi bi-question-circle"></i> Content Types
+                    </h6>
+                    <small class="text-muted">
+                        <div class="mb-2"><strong>📄 Text:</strong> Plain text lessons</div>
+                        <div class="mb-2"><strong>🌐 HTML:</strong> Formatted content</div>
+                        <div class="mb-2"><strong>▶️ YouTube:</strong> Embedded videos</div>
+                        <div class="mb-2"><strong>🎥 Video:</strong> Uploaded videos</div>
+                        <div class="mb-2"><strong>📕 PDF:</strong> Documents</div>
+                        <div class="mb-2"><strong>🖼️ Image:</strong> Pictures</div>
+                        <div><strong>⬇️ Download:</strong> Resources</div>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Styles -->
+<style>
+    .form-section {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background-color: #f8f9fa;
+    }
+
+    .form-section h5 {
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid #007bff;
+    }
+
+    .form-control:focus,
+    .form-control-lg:focus,
+    .form-select:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+
+    .form-check-input:checked {
+        background-color: #28a745;
+        border-color: #28a745;
+    }
+
+    .form-check-input:focus {
+        border-color: #28a745;
+        box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+    }
+
+    .btn-lg {
+        padding: 0.75rem 1.5rem;
+        font-weight: 500;
+    }
+
+    .badge {
+        padding: 0.35rem 0.65rem;
+        font-size: 0.85rem;
+    }
+
+    .breadcrumb {
+        background-color: transparent;
+        padding: 0;
+    }
+
+    .breadcrumb-item a {
+        color: #007bff;
+    }
+
+    .breadcrumb-item a:hover {
+        color: #0056b3;
+    }
+
+    .input-group-text {
+        background-color: #e9ecef;
+        color: #495057;
+    }
+
+    .content-type-section {
+        animation: fadeIn 0.3s ease-in;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    @media (max-width: 992px) {
+        .col-lg-4 {
+            margin-top: 2rem;
+        }
+    }
+</style>
+
+<!-- Scripts -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const contentModeSelect = document.getElementById('content_mode');
+        const contentBodyInput = document.getElementById('content_body');
+        const orderInput = document.getElementById('display_order');
+        const sequenceDisplay = document.getElementById('sequenceDisplay');
+        const typeDisplay = document.getElementById('typeDisplay');
+
+        // Content type icons
+        const typeIcons = {
+            'text': '📄 Text',
+            'html': '🌐 HTML',
+            'youtube': '▶️ YouTube',
+            'video_file': '🎥 Video',
+            'pdf': '📕 PDF',
+            'image': '🖼️ Image',
+            'download': '⬇️ Download'
+        };
+
+        // Handle content type change
+        function updateContentSection() {
+            const selectedType = contentModeSelect.value;
+            
+            // Hide all sections
+            document.querySelectorAll('.content-type-section').forEach(section => {
+                section.style.display = 'none';
+            });
+            
+            // Show selected section
+            const sectionId = selectedType + '-content-section';
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.style.display = 'block';
+            }
+            
+            // For HTML, also show file upload section
+            if (selectedType === 'html') {
+                const htmlFileSection = document.getElementById('html-file-upload-section');
+                if (htmlFileSection) {
+                    htmlFileSection.style.display = 'block';
+                }
+            }
+            
+            // Update badge
+            typeDisplay.textContent = typeIcons[selectedType] || selectedType;
+        }
+
+        contentModeSelect.addEventListener('change', updateContentSection);
+        
+        // Initialize on load
+        updateContentSection();
+
+        // Update sequence display as order changes
+        orderInput.addEventListener('change', function() {
+            sequenceDisplay.textContent = this.value;
+        });
+
+        // Form validation
+        document.getElementById('contentForm').addEventListener('submit', function(e) {
+            const title = document.getElementById('title').value.trim();
+            if (!title) {
+                e.preventDefault();
+                alert('Please enter a content title.');
+                document.getElementById('title').focus();
+                return false;
+            }
+            
+            // Validate file-based content types have a file selected
+            const contentType = contentModeSelect.value;
+            const fileFieldMap = {
+                'video_file': 'video_file',
+                'pdf': 'pdf_file',
+                'image': 'image_file',
+                'download': 'download_file'
+            };
+            
+            if (fileFieldMap[contentType]) {
+                const fileFieldId = fileFieldMap[contentType];
+                const fileInput = document.getElementById(fileFieldId);
+                const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+                
+                // If editing and no new file selected, that's OK (keep existing file)
+                // If creating new content, file is required
+                const isNewContent = !document.querySelector('input[name="content_id"]');
+                
+                if (isNewContent && !hasFile) {
+                    e.preventDefault();
+                    alert(`Please select a file for ${contentType.replace('_', ' ')} content.`);
+                    fileInput.focus();
+                    return false;
+                }
+            }
+            
+            // Validate content is provided for text/html (either textarea or file)
+            if (contentType === 'text') {
+                const contentField = document.getElementById('text_content');
+                if (contentField && !contentField.value.trim()) {
+                    e.preventDefault();
+                    alert(`Please enter text content.`);
+                    contentField.focus();
+                    return false;
+                }
+            } else if (contentType === 'html') {
+                // For HTML, allow EITHER textarea content OR uploaded file
+                const htmlTextarea = document.getElementById('html_content');
+                const htmlFile = document.getElementById('html_file');
+                const hasHTMLText = htmlTextarea && htmlTextarea.value.trim();
+                const hasHTMLFile = htmlFile && htmlFile.files && htmlFile.files.length > 0;
+                
+                // Allow if either textarea has content OR file is being uploaded
+                if (!hasHTMLText && !hasHTMLFile) {
+                    e.preventDefault();
+                    alert('Please enter HTML content in the textarea or upload an HTML file.');
+                    htmlTextarea.focus();
+                    return false;
+                }
+            }
+            
+            // Validate YouTube URL
+            if (contentType === 'youtube') {
+                const urlField = document.getElementById('youtube_url');
+                if (urlField && !urlField.value.trim()) {
+                    e.preventDefault();
+                    alert('Please enter a YouTube URL.');
+                    urlField.focus();
+                    return false;
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

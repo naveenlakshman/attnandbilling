@@ -1,0 +1,471 @@
+{% extends 'lms_admin/base.html' %}
+
+{% block title %}Student Progress - {{ data.student.first_name }} {{ data.student.last_name }}{% endblock %}
+
+{% block content %}
+<div class="content-wrapper">
+    <!-- Breadcrumb Navigation -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.dashboard') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.progress_dashboard') }}">Progress Monitoring</a></li>
+            <li class="breadcrumb-item active">👤 Student Details</li>
+        </ol>
+    </nav>
+
+    <!-- Student Header Card -->
+    <div class="card shadow-sm mb-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h2 class="mb-1" style="font-weight: 700; font-size: 1.8rem;">
+                        👤 {{ data.student.first_name }} {{ data.student.last_name }}
+                    </h2>
+                    <p class="mb-0" style="font-size: 0.95rem; opacity: 0.95;">
+                        Roll: {{ data.student.roll_number or 'N/A' }} | Email: {{ data.student.email or 'N/A' }} | ID: {{ data.student.id }}
+                    </p>
+                </div>
+                <div class="col-md-4 text-md-end">
+                    <div style="font-size: 3rem; opacity: 0.8;">📊</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overall Stats Section -->
+    <div class="row mb-5">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted mb-3" style="font-weight: 600; font-size: 0.9rem;">📈 Overall Completion</h6>
+                    <div class="d-flex align-items-center">
+                        <div style="flex: 1;">
+                            <h2 style="color: #667eea; font-weight: 700; font-size: 2.5rem;">
+                                {{ data.overall_completion }}%
+                            </h2>
+                            <small class="text-muted">
+                                {{ data.total_completed }} of {{ data.total_topics }} topics completed
+                            </small>
+                        </div>
+                        <div>
+                            <svg width="80" height="80" style="transform: rotate(-90deg);">
+                                <circle cx="40" cy="40" r="35" fill="none" stroke="#e9ecef" stroke-width="6"/>
+                                <circle cx="40" cy="40" r="35" fill="none" stroke="#667eea" stroke-width="6"
+                                        stroke-dasharray="{{ (data.overall_completion / 100 * 219.8) }} 219.8"
+                                        style="transition: stroke-dasharray 0.3s ease;"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="progress mt-3" style="height: 8px;">
+                        <div class="progress-bar" role="progressbar" 
+                             style="width: {{ data.overall_completion }}%; background: linear-gradient(90deg, #667eea, #764ba2);"
+                             aria-valuenow="{{ data.overall_completion }}" aria-valuemin="0" aria-valuemax="100">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted mb-3" style="font-weight: 600; font-size: 0.9rem;">📚 Enrollment Summary</h6>
+                    <div class="row text-center">
+                        <div class="col-6 border-end pb-3 pb-md-0">
+                            <h3 style="color: #28a745; font-weight: 700;">{{ data.programs|length }}</h3>
+                            <small class="text-muted">Programs Assigned</small>
+                        </div>
+                        <div class="col-6">
+                            <h3 style="color: #ffc107; font-weight: 700;">{{ data.programs|selectattr('is_active', '1')|list|length }}</h3>
+                            <small class="text-muted">Currently Active</small>
+                        </div>
+                    </div>
+                    {% if data.test_results|length > 0 %}
+                    <hr class="my-3">
+                    <small class="text-muted">Tests Taken: <strong>{{ data.test_results|length }}</strong></small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Programs & Hierarchy Section -->
+    <div class="mb-5">
+        <h4 style="font-weight: 600; margin-bottom: 1.5rem;">📖 Programs & Progress Breakdown</h4>
+
+        {% if data.programs|length > 0 %}
+            {% for program in data.programs %}
+            <div class="card shadow-sm mb-4" style="border-left: 5px solid {% if program.completion_percentage == 100 %}#28a745{% elif program.completion_percentage >= 50 %}#ffc107{% else %}#dc3545{% endif %};">
+                <div class="card-header bg-light" style="border-bottom: 1px solid #dee2e6; padding: 1rem;">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h5 class="mb-1" style="font-weight: 600;">{{ program.program_title }}</h5>
+                            <small class="text-muted d-block mb-2">Code: {{ program.program_code or 'N/A' }} | {{ program.total_chapters }} chapters, {{ program.total_topics }} topics</small>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <span class="badge {% if program.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                                    {% if program.is_active %}✓ Active{% else %}Inactive{% endif %}
+                                </span>
+                                <small class="text-muted">
+                                    Start: {{ program.access_start_date|slice(0, 10)|join('') }}
+                                    {% if program.access_end_date %} | End: {{ program.access_end_date|slice(0, 10)|join('') }}{% endif %}
+                                </small>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-md-end">
+                            <h3 style="color: {% if program.completion_percentage == 100 %}#28a745{% elif program.completion_percentage >= 50 %}#ffc107{% else %}#dc3545{% endif %}; font-weight: 700; margin: 0;">
+                                {{ program.completion_percentage }}%
+                            </h3>
+                            <small class="text-muted">{{ program.total_completed }}/{{ program.total_topics }} completed</small>
+                        </div>
+                    </div>
+                    <div class="progress mt-2" style="height: 6px;">
+                        {% set color = '#28a745' if program.completion_percentage == 100 else '#ffc107' if program.completion_percentage >= 50 else '#dc3545' %}
+                        <div class="progress-bar" role="progressbar" 
+                             style="width: {{ program.completion_percentage }}%; background-color: {{ color }};"
+                             aria-valuenow="{{ program.completion_percentage }}" aria-valuemin="0" aria-valuemax="100">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chapters Accordion -->
+                <div class="card-body p-0">
+                    <div class="accordion" id="program_{{ program.program_id }}">
+                        {% for chapter in program.chapters %}
+                        <div class="accordion-item border-0" style="border-bottom: 1px solid #dee2e6;">
+                            <h2 class="accordion-header" id="chapter_heading_{{ chapter.id }}">
+                                <button class="accordion-button {% if loop.index0 == 0 %}{% else %}collapsed{% endif %}" type="button" 
+                                        data-bs-toggle="collapse" 
+                                        data-bs-target="#chapter_collapse_{{ chapter.id }}" 
+                                        aria-expanded="{% if loop.index0 == 0 %}true{% else %}false{% endif %}" 
+                                        aria-controls="chapter_collapse_{{ chapter.id }}"
+                                        style="padding: 1rem; background-color: #f8f9fa;">
+                                    <div class="w-100">
+                                        <div class="d-flex align-items-center justify-content-between gap-3">
+                                            <div>
+                                                <strong>📑 Ch {{ chapter.chapter_number }}: {{ chapter.chapter_title }}</strong>
+                                                <br>
+                                                <small class="text-muted">{{ chapter.completed_topics }}/{{ chapter.total_topics }} topics completed</small>
+                                            </div>
+                                            <div class="ms-auto" style="min-width: 150px; text-align: right;">
+                                                <div style="font-weight: 600; color: {% if chapter.total_topics > 0 and chapter.completed_topics == chapter.total_topics %}#28a745{% elif chapter.total_topics > 0 and chapter.completed_topics > 0 %}#ffc107{% else %}#6c757d{% endif %};">
+                                                    {{ chapter.total_topics > 0 and (chapter.completed_topics / chapter.total_topics * 100)|int or 0 }}%
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </button>
+                            </h2>
+                            <div id="chapter_collapse_{{ chapter.id }}" class="accordion-collapse collapse {% if loop.index0 == 0 %}show{% endif %}" 
+                                 aria-labelledby="chapter_heading_{{ chapter.id }}" 
+                                 data-bs-parent="#program_{{ program.program_id }}">
+                                <div class="accordion-body p-0">
+                                    <table class="table table-sm mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 10%;">No.</th>
+                                                <th style="width: 35%;">Topic</th>
+                                                <th style="width: 15%;">Type</th>
+                                                <th style="width: 15%;">Progress</th>
+                                                <th style="width: 25%;">Last Accessed</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for topic in chapter.topics %}
+                                            <tr>
+                                                <td>
+                                                    <span class="badge bg-secondary">{{ topic.topic_number }}</span>
+                                                </td>
+                                                <td>
+                                                    <strong>{{ topic.topic_title }}</strong><br>
+                                                    {% if topic.is_required == 1 %}
+                                                    <span class="badge bg-danger" style="font-size: 0.7rem;">Required</span>
+                                                    {% else %}
+                                                    <span class="badge bg-warning text-dark" style="font-size: 0.7rem;">Optional</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if topic.completion_percentage == 0 %}
+                                                    <span class="badge bg-secondary">Not Started</span>
+                                                    {% elif topic.completion_percentage == 100 %}
+                                                    <span class="badge bg-success">✓ Complete</span>
+                                                    {% else %}
+                                                    <span class="badge bg-warning text-dark">⏳ In Progress</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <div class="progress" style="height: 20px; min-width: 100px;">
+                                                        {% set comp = topic.completion_percentage %}
+                                                        {% set color = '#28a745' if comp == 100 else '#ffc107' if comp > 0 else '#e9ecef' %}
+                                                        <div class="progress-bar" role="progressbar" 
+                                                             style="width: {{ comp }}%; background-color: {{ color }};"
+                                                             aria-valuenow="{{ comp }}" aria-valuemin="0" aria-valuemax="100">
+                                                            <small style="color: {% if comp > 50 %}white{% else %}#333{% endif %}; font-weight: 500;">{{ comp }}%</small>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    {% if topic.last_accessed == 'Not started' %}
+                                                    <small class="text-muted">Not started</small>
+                                                    {% else %}
+                                                    <small class="text-muted">{{ data.format_date(topic.last_accessed) }}</small>
+                                                    {% if topic.time_spent_minutes > 0 %}
+                                                    <br>
+                                                    <small class="text-muted">⏱️ {{ topic.time_spent_minutes }} min</small>
+                                                    {% endif %}
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="alert alert-info" role="alert">
+                <strong>📚 No Programs Assigned</strong><br>
+                This student has not been assigned to any programs yet. Use the Batch Assignment feature to enroll the student in a program.
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Test Results Section -->
+    {% if data.test_results|length > 0 %}
+    <div class="mb-5">
+        <h4 style="font-weight: 600; margin-bottom: 1.5rem;">✍️ Test Results</h4>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Test Name</th>
+                                <th style="width: 15%;">Marks</th>
+                                <th style="width: 15%;">Score %</th>
+                                <th style="width: 20%;">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for result in data.test_results %}
+                            <tr>
+                                <td>
+                                    <strong>{{ result.test_name or 'Test ' + result.test_id|string }}</strong>
+                                </td>
+                                <td>
+                                    <strong>{{ result.score or 0 }}/{{ result.total_marks or 0 }}</strong>
+                                </td>
+                                <td>
+                                    <div class="progress" style="height: 20px; min-width: 80px;">
+                                        {% set score_pct = result.obtained_percentage or 0 %}
+                                        {% set score_color = '#28a745' if score_pct >= 75 else '#ffc107' if score_pct >= 50 else '#dc3545' %}
+                                        <div class="progress-bar" role="progressbar" 
+                                             style="width: {{ score_pct }}%; background-color: {{ score_color }};"
+                                             aria-valuenow="{{ score_pct }}" aria-valuemin="0" aria-valuemax="100">
+                                            <small style="color: white; font-weight: 500;">{{ score_pct }}%</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ data.format_date(result.test_date) }}</small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Activity Section -->
+    {% if data.recent_activities|length > 0 %}
+    <div class="mb-5">
+        <h4 style="font-weight: 600; margin-bottom: 1.5rem;">🔔 Recent Activity</h4>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="activity-timeline">
+                    {% for activity in data.recent_activities %}
+                    <div class="activity-item d-flex gap-3 pb-3 {% if not loop.last %}border-bottom{% endif %}">
+                        <div style="min-width: 40px;">
+                            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem;">
+                                📚
+                            </div>
+                        </div>
+                        <div style="flex: 1;">
+                            <p class="mb-1">
+                                Working on <strong>{{ activity.topic_title or 'Topic' }}</strong>
+                            </p>
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <div class="progress" style="height: 18px; min-width: 120px;">
+                                    {% set comp = activity.completion_percentage or 0 %}
+                                    {% set comp_color = '#28a745' if comp == 100 else '#ffc107' if comp > 0 else '#e9ecef' %}
+                                    <div class="progress-bar" role="progressbar" 
+                                         style="width: {{ comp }}%; background-color: {{ comp_color }};"
+                                         aria-valuenow="{{ comp }}" aria-valuemin="0" aria-valuemax="100">
+                                        <small style="color: {% if comp > 50 %}white{% else %}#333{% endif %}; font-weight: 500;">{{ comp }}%</small>
+                                    </div>
+                                </div>
+                                <small class="text-muted">{{ data.format_date(activity.last_accessed) }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Counselling Tips Section -->
+    <div class="card shadow-sm" style="background: #f0f7ff; border-left: 4px solid #0066cc;">
+        <div class="card-body">
+            <h6 style="font-weight: 600; color: #0066cc; margin-bottom: 1rem;">💡 Counselling & Follow-up Notes</h6>
+            
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="d-flex gap-2">
+                        <span style="font-size: 1.2rem;">📊</span>
+                        <div>
+                            <strong>Overall Status</strong>
+                            {% if data.overall_completion == 100 %}
+                            <p class="mb-0 text-success">✓ Student has completed all assigned topics</p>
+                            {% elif data.overall_completion >= 75 %}
+                            <p class="mb-0 text-success">✓ Student is doing well, nearly complete</p>
+                            {% elif data.overall_completion >= 50 %}
+                            <p class="mb-0 text-warning">⚠ Student is on track, keep monitoring</p>
+                            {% elif data.overall_completion > 0 %}
+                            <p class="mb-0 text-danger">⚠ Student needs attention, only {{ data.overall_completion }}% complete</p>
+                            {% else %}
+                            <p class="mb-0 text-danger">❌ Student has not started, needs immediate follow-up</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <div class="d-flex gap-2">
+                        <span style="font-size: 1.2rem;">⏱️</span>
+                        <div>
+                            <strong>Activity Level</strong>
+                            {% if data.recent_activities|length >= 5 %}
+                            <p class="mb-0 text-success">✓ Student is actively engaging with content</p>
+                            {% elif data.recent_activities|length >= 3 %}
+                            <p class="mb-0 text-warning">⚠ Moderate engagement, encourage more participation</p>
+                            {% else %}
+                            <p class="mb-0 text-danger">❌ Low engagement detected, immediate intervention needed</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="d-flex gap-2">
+                        <span style="font-size: 1.2rem;">📚</span>
+                        <div>
+                            <strong>Program Tracking</strong>
+                            <p class="mb-0 text-muted">{{ data.programs|length }} program(s) assigned | {{ data.programs|selectattr('is_active', '1')|list|length }} active</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="d-flex gap-2">
+                        <span style="font-size: 1.2rem;">✍️</span>
+                        <div>
+                            <strong>Assessment</strong>
+                            {% if data.test_results|length > 0 %}
+                            <p class="mb-0 text-muted">{{ data.test_results|length }} test(s) taken</p>
+                            {% else %}
+                            <p class="mb-0 text-muted">No assessments taken yet</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Back Button -->
+    <div class="mt-4">
+        <a href="{{ url_for('lms_admin.progress_dashboard') }}" class="btn btn-outline-secondary">
+            ← Back to Progress Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- CSS Styling -->
+<style>
+    .content-wrapper {
+        padding: 2rem;
+    }
+
+    .card {
+        border: none;
+        border-radius: 10px;
+    }
+
+    .card-header {
+        background-color: #f8f9fa;
+        border-radius: 10px 10px 0 0 !important;
+    }
+
+    .accordion-button {
+        padding: 1rem;
+        font-weight: 500;
+    }
+
+    .accordion-button:not(.collapsed) {
+        background-color: #f0f7ff;
+        color: #0066cc;
+    }
+
+    .accordion-button:focus {
+        border-color: #80bdff;
+        box-shadow: none;
+    }
+
+    .table-hover tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    .badge {
+        padding: 0.35rem 0.65rem;
+        font-weight: 500;
+        font-size: 0.75rem;
+    }
+
+    .activity-timeline {
+        margin: 0;
+    }
+
+    .activity-item {
+        padding-bottom: 1.5rem;
+    }
+
+    .activity-item:last-child {
+        border-bottom: none !important;
+    }
+
+    @media (max-width: 768px) {
+        .content-wrapper {
+            padding: 1rem;
+        }
+
+        .table {
+            font-size: 0.85rem;
+        }
+
+        .btn {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}

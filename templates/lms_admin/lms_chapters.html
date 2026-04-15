@@ -1,0 +1,420 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}Chapters - {{ data.program.program_name }} - Global IT ERP{% endblock %}
+{% block page_title %}{{ data.program.program_name }} → Chapters{% endblock %}
+
+{% block extra_css %}
+<style>
+  .breadcrumb-nav {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 24px;
+    font-size: 14px;
+    flex-wrap: wrap;
+  }
+
+  .breadcrumb-nav a {
+    color: #0d6efd;
+    text-decoration: none;
+  }
+
+  .breadcrumb-nav a:hover {
+    text-decoration: underline;
+  }
+
+  .breadcrumb-separator {
+    color: #6c757d;
+  }
+
+  .chapter-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .chapter-list-header h2 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    color: #212529;
+  }
+
+  .chapter-list-header .badge {
+    background: #667eea;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn-add {
+    background: #0d6efd;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-add:hover {
+    background: #0a58ca;
+  }
+
+  .btn-back {
+    background: #e9ecef;
+    color: #333;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-back:hover {
+    background: #dee2e6;
+  }
+
+  .chapters-table-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .chapters-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 0;
+  }
+
+  .chapters-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .chapters-table thead th {
+    padding: 14px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .chapters-table tbody td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #dee2e6;
+    vertical-align: middle;
+    font-size: 14px;
+  }
+
+  .chapters-table tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+
+  .chapter-order-input {
+    width: 60px;
+    padding: 6px 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .chapter-title {
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .chapter-description {
+    color: #6c757d;
+    font-size: 12px;
+    margin-top: 2px;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topics-badge {
+    display: inline-block;
+    background: #e2e3e5;
+    color: #383d41;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .status-active {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .status-inactive {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  .chapter-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .btn-action {
+    padding: 6px 10px;
+    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .btn-edit {
+    background: #cfe2ff;
+    color: #084298;
+  }
+
+  .btn-edit:hover {
+    background: #aec5fb;
+  }
+
+  .btn-topics {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .btn-topics:hover {
+    background: #c3e6cb;
+  }
+
+  .btn-delete {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .btn-delete:hover {
+    background: #f5c6cb;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon {
+    font-size: 48px;
+    opacity: 0.6;
+    margin-bottom: 16px;
+  }
+
+  .empty-state-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 8px;
+  }
+
+  .empty-state-text {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  .empty-state .btn-add {
+    margin-top: 16px;
+  }
+
+  .info-box {
+    background: #e7f3ff;
+    border-left: 4px solid #0066cc;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: #004085;
+  }
+
+  @media (max-width: 768px) {
+    .chapter-list-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .header-actions {
+      width: 100%;
+    }
+
+    .btn-add,
+    .btn-back {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .chapter-actions {
+      flex-direction: column;
+    }
+
+    .btn-action {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .chapters-table {
+      font-size: 12px;
+    }
+
+    .chapters-table thead th,
+    .chapters-table tbody td {
+      padding: 10px 8px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb Navigation -->
+<div class="breadcrumb-nav">
+  <a href="{{ url_for('lms_admin.list_programs') }}">📖 Programs</a>
+  <span class="breadcrumb-separator">/</span>
+  <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}">{{ data.program.program_name }}</a>
+  <span class="breadcrumb-separator">/</span>
+  <span>📑 Chapters</span>
+</div>
+
+<!-- Page Header -->
+<div class="chapter-list-header">
+  <div>
+    <h2>📑 Chapters</h2>
+  </div>
+  <div class="header-actions">
+    <a href="{{ url_for('lms_admin.chapter_new', program_id=data.program.id) }}" class="btn-add">
+      + Add Chapter
+    </a>
+    <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}" class="btn-back">
+      ← Back to Program
+    </a>
+  </div>
+</div>
+
+<!-- Info Box -->
+<div class="info-box">
+  📚 Managing chapters for <strong>{{ data.program.program_name }}</strong>. Total chapters: <strong>{{ data.total_chapters }}</strong>
+</div>
+
+<!-- Chapters Table -->
+<div class="chapters-table-card">
+  {% if data.chapters %}
+    <table class="chapters-table">
+      <thead>
+        <tr>
+          <th style="width: 70px;">Order</th>
+          <th>Chapter Title</th>
+          <th style="width: 100px;">Topics</th>
+          <th style="width: 100px;">Status</th>
+          <th style="width: 250px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for chapter in data.chapters %}
+        <tr class="chapter-row" data-chapter-id="{{ chapter.id }}">
+          <td style="text-align: center;">
+            <input type="number" class="chapter-order-input" value="{{ chapter.chapter_order }}" min="1" readonly>
+          </td>
+          <td>
+            <div class="chapter-title">{{ chapter.chapter_order }}. {{ chapter.chapter_title }}</div>
+            {% if chapter.description %}
+            <div class="chapter-description" title="{{ chapter.description }}">{{ chapter.description }}</div>
+            {% endif %}
+          </td>
+          <td>
+            <span class="topics-badge">📝 {{ chapter.topic_count }} {{ 'Topic' if chapter.topic_count == 1 else 'Topics' }}</span>
+          </td>
+          <td>
+            <span class="status-badge {% if chapter.is_active %}status-active{% else %}status-inactive{% endif %}">
+              {{ '✓ Active' if chapter.is_active else '✗ Inactive' }}
+            </span>
+          </td>
+          <td>
+            <div class="chapter-actions">
+              <a class="btn-action btn-edit" href="{{ url_for('lms_admin.chapter_edit', chapter_id=chapter.id) }}" title="Edit Chapter">
+                ✏️ Edit
+              </a>
+              <a class="btn-action btn-topics" href="#" onclick="manageTopics(event, {{ chapter.id }});" title="Manage Topics">
+                📝 Topics
+              </a>
+              <button class="btn-action btn-delete" onclick="deleteChapter(event, {{ chapter.id }})" title="Delete Chapter">
+                🗑️ Delete
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">📑</div>
+      <div class="empty-state-title">No Chapters Yet</div>
+      <div class="empty-state-text">Start building your learning program by creating your first chapter.</div>
+      <a href="{{ url_for('lms_admin.chapter_new', program_id=data.program.id) }}" class="btn-add">+ Add Your First Chapter</a>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  function deleteChapter(event, chapterId) {
+    event.preventDefault();
+    if (confirm('Are you sure you want to delete this chapter and all its topics? This action cannot be undone.')) {
+      // Create a hidden form and submit it
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/lms_admin/chapter/' + chapterId + '/delete';
+      document.body.appendChild(form);
+      form.submit();
+    }
+  }
+
+  function manageTopics(event, chapterId) {
+    event.preventDefault();
+    window.location.href = '/lms_admin/chapter/' + chapterId + '/topics';
+  }
+</script>
+
+{% endblock %}

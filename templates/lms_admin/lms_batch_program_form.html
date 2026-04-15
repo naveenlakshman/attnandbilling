@@ -1,0 +1,616 @@
+{% extends "lms_admin/base.html" %}
+
+{% block content %}
+<style>
+    .breadcrumb {
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+    }
+    
+    .breadcrumb-item {
+        display: inline;
+    }
+    
+    .breadcrumb-item + .breadcrumb-item::before {
+        content: " → ";
+        color: #999;
+    }
+    
+    .breadcrumb-item a {
+        color: #007bff;
+        text-decoration: none;
+    }
+    
+    .breadcrumb-item a:hover {
+        text-decoration: underline;
+    }
+    
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 1rem;
+    }
+    
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #333;
+        margin: 0;
+    }
+    
+    .header-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .btn-cancel {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.5rem 1.25rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-cancel:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        background-color: #5a6268;
+        text-decoration: none;
+        color: white;
+    }
+    
+    .main-layout {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .form-wrapper {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .form-section {
+        margin-bottom: 1.75rem;
+        padding-bottom: 1.75rem;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .form-section:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+    
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #333;
+        font-size: 0.9rem;
+    }
+    
+    .form-group .required {
+        color: #dc3545;
+    }
+    
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group input[type="date"],
+    .form-group input[type="email"],
+    .form-group textarea,
+    .form-group select {
+        width: 100%;
+        padding: 0.625rem 0.875rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        font-size: 0.9rem;
+        font-family: inherit;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    }
+    
+    .form-group input[type="text"]:focus,
+    .form-group input[type="number"]:focus,
+    .form-group input[type="date"]:focus,
+    .form-group input[type="email"]:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+        border-color: #80bdff;
+        outline: 0;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    .form-group input:disabled,
+    .form-group select:disabled {
+        background-color: #e9ecef;
+        opacity: 0.65;
+        cursor: not-allowed;
+    }
+    
+    .form-group select {
+        appearance: none;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 1.25rem;
+        padding-right: 2.5rem;
+    }
+    
+    .help-text {
+        font-size: 0.8rem;
+        color: #666;
+        margin-top: 0.375rem;
+        display: block;
+    }
+    
+    .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .checkbox-group input[type="checkbox"] {
+        width: auto;
+        margin: 0;
+        cursor: pointer;
+    }
+    
+    .checkbox-group label {
+        margin: 0;
+        font-weight: 500;
+        color: #333;
+        cursor: pointer;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .btn-submit {
+        background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.625rem 1.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+    }
+    
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        background: linear-gradient(135deg, #218838 0%, #1e7e34 100%);
+    }
+    
+    .btn-reset {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.625rem 1.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+    }
+    
+    .btn-reset:hover {
+        background-color: #5a6268;
+        transform: translateY(-2px);
+    }
+    
+    .sidebar-card {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1.25rem;
+        height: fit-content;
+        position: sticky;
+        top: 1rem;
+    }
+    
+    .card-title {
+        font-size: 0.875rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #666;
+        margin-bottom: 0.75rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 0.5rem;
+    }
+    
+    .card-content {
+        font-size: 0.875rem;
+        color: #333;
+        line-height: 1.6;
+    }
+    
+    .card-content p {
+        margin: 0.5rem 0;
+    }
+    
+    .card-content strong {
+        font-weight: 600;
+        color: #222;
+    }
+    
+    .selection-display {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 0.75rem;
+        margin-top: 0.5rem;
+        font-weight: 500;
+        color: #333;
+    }
+    
+    .date-range-helper {
+        background-color: #e7f3ff;
+        border-left: 3px solid #007bff;
+        padding: 0.75rem;
+        border-radius: 0.25rem;
+        margin-bottom: 1rem;
+        font-size: 0.85rem;
+        color: #004085;
+    }
+    
+    .tips-list {
+        margin: 0;
+        padding-left: 1rem;
+        font-size: 0.8rem;
+    }
+    
+    .tips-list li {
+        margin-bottom: 0.4rem;
+        color: #666;
+    }
+    
+    .section-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+    
+    @media (max-width: 768px) {
+        .main-layout {
+            grid-template-columns: 1fr;
+        }
+        
+        .sidebar-card {
+            position: static;
+        }
+        
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        
+        .form-actions {
+            flex-direction: column;
+        }
+        
+        .btn-submit,
+        .btn-reset {
+            width: 100%;
+            text-align: center;
+        }
+        
+        .section-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<!-- Breadcrumb Navigation -->
+<nav class="breadcrumb">
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_programs') }}">📚 Programs</a>
+    </span>
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_batch_programs') }}">🎓 Batch Assignments</a>
+    </span>
+    <span class="breadcrumb-item">
+        {% if data.assignment %}Edit{% else %}Add{% endif %} Assignment
+    </span>
+</nav>
+
+<!-- Page Header -->
+<div class="page-header">
+    <h1 class="page-title">
+        {% if data.assignment %}
+            ✏️ Edit Batch-Program Assignment
+        {% else %}
+            🔗 Assign Program to Batch
+        {% endif %}
+    </h1>
+    <div class="header-actions">
+        <a href="{{ url_for('lms_admin.list_batch_programs') }}" class="btn-cancel">
+            ← Cancel
+        </a>
+    </div>
+</div>
+
+<!-- Main Content Layout -->
+<div class="main-layout">
+    <!-- Form -->
+    <div class="form-wrapper">
+        <form method="POST" id="assignmentForm">
+            <!-- Bridge Information Section -->
+            <div class="form-section">
+                <div class="section-title">🔗 Assignment Linkage</div>
+                <p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">
+                    This connects a student batch from the ERP system to an LMS program, determining which students can access which learning content.
+                </p>
+                
+                <!-- Batch Selection -->
+                <div class="form-group">
+                    <label for="batch_id">
+                        Student Batch
+                        <span class="required">*</span>
+                    </label>
+                    {% if data.assignment %}
+                        <input type="hidden" name="batch_id" value="{{ data.assignment.batch_id }}">
+                        <div class="selection-display">
+                            <strong>Batch #{{ data.assignment.batch_id }}</strong> - {{ data.assignment.batch_title }}
+                        </div>
+                        <span class="help-text">Cannot be changed after creation</span>
+                    {% else %}
+                        <select id="batch_id" name="batch_id" required>
+                            <option value="">-- Select a Student Batch --</option>
+                            {% for batch in data.batches %}
+                                <option value="{{ batch.id }}">
+                                    Batch #{{ batch.id }} - {{ batch.batch_title }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <span class="help-text">Choose which student batch gets access to the program</span>
+                    {% endif %}
+                </div>
+                
+                <!-- Program Selection -->
+                <div class="form-group">
+                    <label for="program_id">
+                        LMS Program
+                        <span class="required">*</span>
+                    </label>
+                    {% if data.assignment %}
+                        <input type="hidden" name="program_id" value="{{ data.assignment.program_id }}">
+                        <div class="selection-display">
+                            📚 {{ data.assignment.program_name }}
+                        </div>
+                        <span class="help-text">Cannot be changed after creation</span>
+                    {% else %}
+                        <select id="program_id" name="program_id" required>
+                            <option value="">-- Select a Program --</option>
+                            {% for program in data.programs %}
+                                <option value="{{ program.id }}">
+                                    📚 {{ program.program_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <span class="help-text">Choose which LMS program this batch can access</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Access Period Section -->
+            <div class="form-section">
+                <div class="section-title">📅 Access Period</div>
+                
+                <div class="date-range-helper">
+                    💡 <strong>Tip:</strong> Set the date range when this batch can access the program. Students cannot access the program outside this period.
+                </div>
+                
+                <div class="section-grid">
+                    <!-- Start Date -->
+                    <div class="form-group">
+                        <label for="access_start_date">
+                            Access Starts On
+                            <span class="required">*</span>
+                        </label>
+                        <input type="date" id="access_start_date" name="access_start_date" required
+                               value="{{ data.assignment.access_start_date if data.assignment else '' }}">
+                        <span class="help-text">When students get access to this program</span>
+                    </div>
+                    
+                    <!-- End Date -->
+                    <div class="form-group">
+                        <label for="access_end_date">
+                            Access Ends On (Optional)
+                        </label>
+                        <input type="date" id="access_end_date" name="access_end_date"
+                               value="{{ data.assignment.access_end_date if data.assignment else '' }}">
+                        <span class="help-text">Leave empty for permanent access</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Status Section -->
+            <div class="form-section">
+                <div class="section-title">⚙️ Status</div>
+                
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="is_active" name="is_active"
+                               {% if data.assignment and data.assignment.is_active %}checked{% else %}checked{% endif %}>
+                        <label for="is_active">Activate This Assignment</label>
+                    </div>
+                    <span class="help-text">Uncheck to temporarily disable this batch's access to the program</span>
+                </div>
+            </div>
+            
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <button type="submit" class="btn-submit">
+                    {% if data.assignment %}
+                        ✓ Update Assignment
+                    {% else %}
+                        ✓ Create Assignment
+                    {% endif %}
+                </button>
+                <button type="reset" class="btn-reset">↻ Reset</button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Right Sidebar -->
+    <div>
+        <!-- Assignment Purpose Card -->
+        <div class="sidebar-card">
+            <div class="card-title">🔗 The Bridge</div>
+            <div class="card-content">
+                <p>
+                    This assignment links your ERP system (which manages student batches) with your LMS (which manages learning programs).
+                </p>
+                <p style="font-size: 0.75rem; color: #999; margin-bottom: 0;">
+                    It's the critical connection that determines student access.
+                </p>
+            </div>
+        </div>
+        
+        <!-- How It Works Card -->
+        <div class="sidebar-card">
+            <div class="card-title">📚 How It Works</div>
+            <div class="card-content">
+                <ol style="margin: 0; padding-left: 1.25rem; font-size: 0.8rem;">
+                    <li>Select a batch (e.g., "CCOM Morning Batch")</li>
+                    <li>Select a program (e.g., "Office Automation")</li>
+                    <li>Set access dates</li>
+                    <li>Activate the assignment</li>
+                    <li>All students in that batch can now access that program</li>
+                </ol>
+            </div>
+        </div>
+        
+        <!-- Access Control Card -->
+        <div class="sidebar-card">
+            <div class="card-title">🎯 Access Control</div>
+            <div class="card-content">
+                <p>
+                    <strong>Active:</strong><br>
+                    <span style="font-size: 0.8rem; color: #666;">Students can access the program</span>
+                </p>
+                <p>
+                    <strong>Inactive:</strong><br>
+                    <span style="font-size: 0.8rem; color: #666;">Access is blocked temporarily</span>
+                </p>
+                <p>
+                    <strong>Expired:</strong><br>
+                    <span style="font-size: 0.8rem; color: #666;">Access ends on specified date</span>
+                </p>
+            </div>
+        </div>
+        
+        <!-- Tips Card -->
+        <div class="sidebar-card">
+            <div class="card-title">💡 Tips</div>
+            <div class="card-content">
+                <ul class="tips-list">
+                    <li>✓ One batch can access multiple programs</li>
+                    <li>✓ One program can be assigned to many batches</li>
+                    <li>✓ Use dates to control access windows</li>
+                    <li>✓ Can be changed/deactivated anytime</li>
+                    <li>✓ Check student enrollment before assigning</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Example Card -->
+        <div class="sidebar-card">
+            <div class="card-title">📝 Example</div>
+            <div class="card-content">
+                <p style="margin-bottom: 0.5rem;">
+                    <strong>Batch:</strong> CCOM Morning Batch
+                </p>
+                <p style="margin-bottom: 0.5rem;">
+                    <strong>Program:</strong> Office Automation
+                </p>
+                <p style="margin-bottom: 0.5rem;">
+                    <strong>Start:</strong> Jan 15, 2026
+                </p>
+                <p style="margin-bottom: 0;">
+                    <strong>End:</strong> Apr 30, 2026
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Form validation
+    document.getElementById('assignmentForm').addEventListener('submit', function(e) {
+        const batchId = document.getElementById('batch_id')?.value?.trim();
+        const programId = document.getElementById('program_id')?.value?.trim();
+        const startDate = document.getElementById('access_start_date').value.trim();
+        const endDate = document.getElementById('access_end_date').value.trim();
+        
+        if (batchId === undefined || batchId === '') {
+            // If batch_id is hidden (editing), skip validation
+        } else if (!batchId) {
+            e.preventDefault();
+            alert('Please select a batch.');
+            return false;
+        }
+        
+        if (programId === undefined || programId === '') {
+            // If program_id is hidden (editing), skip validation
+        } else if (!programId) {
+            e.preventDefault();
+            alert('Please select a program.');
+            return false;
+        }
+        
+        if (!startDate) {
+            e.preventDefault();
+            alert('Please select an access start date.');
+            return false;
+        }
+        
+        if (startDate && endDate && endDate < startDate) {
+            e.preventDefault();
+            alert('End date cannot be before start date.');
+            return false;
+        }
+        
+        return true;
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,688 @@
+{% extends "lms_admin/base.html" %}
+
+{% block content %}
+<style>
+    .breadcrumb {
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+    }
+    
+    .breadcrumb-item {
+        display: inline;
+    }
+    
+    .breadcrumb-item + .breadcrumb-item::before {
+        content: " → ";
+        color: #999;
+    }
+    
+    .breadcrumb-item a {
+        color: #007bff;
+        text-decoration: none;
+    }
+    
+    .breadcrumb-item a:hover {
+        text-decoration: underline;
+    }
+    
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 1rem;
+    }
+    
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #333;
+        margin: 0;
+    }
+    
+    .header-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .btn-cancel {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.5rem 1.25rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-cancel:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        background-color: #5a6268;
+        text-decoration: none;
+        color: white;
+    }
+    
+    .main-layout {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .form-wrapper {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .form-section {
+        margin-bottom: 1.75rem;
+        padding-bottom: 1.75rem;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .form-section:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+    
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #333;
+        font-size: 0.9rem;
+    }
+    
+    .form-group .required {
+        color: #dc3545;
+    }
+    
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group input[type="email"],
+    .form-group textarea,
+    .form-group select {
+        width: 100%;
+        padding: 0.625rem 0.875rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        font-size: 0.9rem;
+        font-family: inherit;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    }
+    
+    .form-group input[type="text"]:focus,
+    .form-group input[type="number"]:focus,
+    .form-group input[type="email"]:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+        border-color: #80bdff;
+        outline: 0;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    .form-group textarea {
+        resize: vertical;
+        min-height: 100px;
+    }
+    
+    .form-group select {
+        appearance: none;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 1.25rem;
+        padding-right: 2.5rem;
+    }
+    
+    .help-text {
+        font-size: 0.8rem;
+        color: #666;
+        margin-top: 0.375rem;
+        display: block;
+    }
+    
+    .char-counter {
+        font-size: 0.8rem;
+        color: #999;
+        margin-top: 0.375rem;
+        text-align: right;
+    }
+    
+    .char-counter.warning {
+        color: #ff9800;
+    }
+    
+    .char-counter.danger {
+        color: #dc3545;
+    }
+    
+    .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .checkbox-group input[type="checkbox"] {
+        width: auto;
+        margin: 0;
+        cursor: pointer;
+    }
+    
+    .checkbox-group label {
+        margin: 0;
+        font-weight: 500;
+        color: #333;
+        cursor: pointer;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .btn-submit {
+        background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.625rem 1.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+    }
+    
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        background: linear-gradient(135deg, #218838 0%, #1e7e34 100%);
+    }
+    
+    .btn-reset {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.625rem 1.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+    }
+    
+    .btn-reset:hover {
+        background-color: #5a6268;
+        transform: translateY(-2px);
+    }
+    
+    .sidebar-card {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1.25rem;
+        height: fit-content;
+        position: sticky;
+        top: 1rem;
+    }
+    
+    .card-title {
+        font-size: 0.875rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #666;
+        margin-bottom: 0.75rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 0.5rem;
+    }
+    
+    .card-content {
+        font-size: 0.875rem;
+        color: #333;
+        line-height: 1.6;
+    }
+    
+    .card-content p {
+        margin: 0.5rem 0;
+    }
+    
+    .card-content strong {
+        font-weight: 600;
+        color: #222;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.625rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .badge-info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+    
+    .type-preview {
+        display: inline-block;
+        padding: 0.5rem 0.75rem;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        font-weight: 600;
+        margin-top: 0.5rem;
+    }
+    
+    .type-preview.pdf { background-color: #ffe6e6; color: #d32f2f; }
+    .type-preview.excel { background-color: #e6f5e6; color: #2e7d32; }
+    .type-preview.word { background-color: #e6f2ff; color: #1565c0; }
+    .type-preview.image { background-color: #f3e5f5; color: #6a1b9a; }
+    .type-preview.zip { background-color: #fff3e0; color: #e65100; }
+    .type-preview.other { background-color: #f5f5f5; color: #666; }
+    
+    .tips-list {
+        margin: 0;
+        padding-left: 1rem;
+        font-size: 0.8rem;
+    }
+    
+    .tips-list li {
+        margin-bottom: 0.4rem;
+        color: #666;
+    }
+    
+    .type-guide {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .type-guide-item {
+        margin-bottom: 0.75rem;
+        font-size: 0.8rem;
+    }
+    
+    .type-guide-item strong {
+        font-weight: 600;
+        display: block;
+        color: #222;
+    }
+    
+    .type-guide-item small {
+        color: #999;
+        display: block;
+    }
+    
+    @media (max-width: 768px) {
+        .main-layout {
+            grid-template-columns: 1fr;
+        }
+        
+        .sidebar-card {
+            position: static;
+        }
+        
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        
+        .form-actions {
+            flex-direction: column;
+        }
+        
+        .btn-submit,
+        .btn-reset {
+            width: 100%;
+            text-align: center;
+        }
+    }
+</style>
+
+<!-- Breadcrumb Navigation -->
+<nav class="breadcrumb">
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_programs') }}">📚 Programs</a>
+    </span>
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_programs') }}#program-{{ data.program.id }}">{{ data.program.program_name }}</a>
+    </span>
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_chapters', program_id=data.program.id) }}">📖 Chapters</a>
+    </span>
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_chapters', program_id=data.program.id) }}#chapter-{{ data.chapter.id }}">{{ data.chapter.chapter_title }}</a>
+    </span>
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_topics', chapter_id=data.chapter.id) }}">📝 Topics</a>
+    </span>
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.topic_view', topic_id=data.topic.id) }}">{{ data.topic.topic_title }}</a>
+    </span>
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_topic_attachments', topic_id=data.topic.id) }}">📎 Attachments</a>
+    </span>
+    <span class="breadcrumb-item">
+        {% if data.attachment %}Edit{% else %}Add{% endif %} Attachment
+    </span>
+</nav>
+
+<!-- Page Header -->
+<div class="page-header">
+    <h1 class="page-title">
+        {% if data.attachment %}
+            ✏️ Edit Attachment
+        {% else %}
+            ➕ Add Attachment
+        {% endif %}
+    </h1>
+    <div class="header-actions">
+        <a href="{{ url_for('lms_admin.list_topic_attachments', topic_id=data.topic.id) }}" class="btn-cancel">
+            ← Cancel
+        </a>
+    </div>
+</div>
+
+<!-- Main Content Layout -->
+<div class="main-layout">
+    <!-- Form -->
+    <div class="form-wrapper">
+        <form method="POST" id="attachmentForm">
+            <!-- Basic Information Section -->
+            <div class="form-section">
+                <div class="section-title">📄 File Information</div>
+                
+                <div class="form-group">
+                    <label for="file_name">
+                        File Name
+                        <span class="required">*</span>
+                    </label>
+                    <input type="text" id="file_name" name="file_name" required
+                           value="{{ data.attachment.file_name if data.attachment else '' }}"
+                           placeholder="e.g., Lecture Notes - Chapter 1.pdf"
+                           maxlength="255">
+                    <span class="help-text">The display name for this file</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="attachment_type">
+                        File Type
+                        <span class="required">*</span>
+                    </label>
+                    <select id="attachment_type" name="attachment_type" required onchange="updateTypePreview()">
+                        <option value="" disabled>-- Select file type --</option>
+                        <option value="pdf" {% if data.attachment and data.attachment.attachment_type == 'pdf' %}selected{% endif %}>
+                            📄 PDF Document
+                        </option>
+                        <option value="excel" {% if data.attachment and data.attachment.attachment_type == 'excel' %}selected{% endif %}>
+                            📊 Excel Spreadsheet
+                        </option>
+                        <option value="word" {% if data.attachment and data.attachment.attachment_type == 'word' %}selected{% endif %}>
+                            📃 Word Document
+                        </option>
+                        <option value="image" {% if data.attachment and data.attachment.attachment_type == 'image' %}selected{% endif %}>
+                            🖼️ Image File
+                        </option>
+                        <option value="zip" {% if data.attachment and data.attachment.attachment_type == 'zip' %}selected{% endif %}>
+                            📦 ZIP Archive
+                        </option>
+                        <option value="other" {% if data.attachment and data.attachment.attachment_type == 'other' %}selected{% endif %}>
+                            📋 Other File
+                        </option>
+                    </select>
+                    <span class="help-text">Choose the type that best describes your file</span>
+                    <div id="typePreview" class="type-preview" style="display: none;"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="file_path">
+                        File Path
+                        <span class="required">*</span>
+                    </label>
+                    <input type="text" id="file_path" name="file_path" required
+                           value="{{ data.attachment.file_path if data.attachment else '' }}"
+                           placeholder="e.g., /uploads/lms/notes/lecture_1.pdf"
+                           maxlength="500">
+                    <span class="help-text">Storage path or URL where the file is located</span>
+                </div>
+            </div>
+            
+            <!-- Description Section -->
+            <div class="form-section">
+                <div class="section-title">💬 Description</div>
+                
+                <div class="form-group">
+                    <label for="description">
+                        Description (Optional)
+                    </label>
+                    <textarea id="description" name="description" maxlength="500"
+                              placeholder="Brief description of what this file contains. Include any relevant details for students.">{{ data.attachment.description if data.attachment else '' }}</textarea>
+                    <div class="char-counter">
+                        <span id="charCount">0</span> / 500
+                    </div>
+                    <span class="help-text">Help students understand what this file is for</span>
+                </div>
+            </div>
+            
+            <!-- Additional Options Section -->
+            <div class="form-section">
+                <div class="section-title">⚙️ Options</div>
+                
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="is_required" name="is_required"
+                               {% if data.attachment and data.attachment.is_required %}checked{% endif %}>
+                        <label for="is_required">Mark as Required</label>
+                    </div>
+                    <span class="help-text">Required files must be reviewed by students</span>
+                </div>
+            </div>
+            
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <button type="submit" class="btn-submit">
+                    {% if data.attachment %}
+                        ✓ Update Attachment
+                    {% else %}
+                        ✓ Add Attachment
+                    {% endif %}
+                </button>
+                <button type="reset" class="btn-reset">↻ Clear</button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Right Sidebar -->
+    <div>
+        <!-- Topic Context Card -->
+        <div class="sidebar-card">
+            <div class="card-title">📚 Topic Info</div>
+            <div class="card-content">
+                <p>
+                    <strong>Topic:</strong><br>
+                    {{ data.topic.topic_title }}
+                </p>
+                <p>
+                    <strong>Chapter:</strong><br>
+                    {{ data.chapter.chapter_title }}
+                </p>
+                <p>
+                    <strong>Program:</strong><br>
+                    {{ data.program.program_name }}
+                </p>
+            </div>
+        </div>
+        
+        <!-- File Type Guide Card -->
+        <div class="sidebar-card">
+            <div class="card-title">🎯 File Types</div>
+            <div class="card-content">
+                <div class="type-guide">
+                    <div class="type-guide-item">
+                        <strong>📄 PDF</strong>
+                        <small>Lecture notes, study guides</small>
+                    </div>
+                    <div class="type-guide-item">
+                        <strong>📊 Excel</strong>
+                        <small>Spreadsheets, data files</small>
+                    </div>
+                    <div class="type-guide-item">
+                        <strong>📃 Word</strong>
+                        <small>Documents, templates</small>
+                    </div>
+                    <div class="type-guide-item">
+                        <strong>🖼️ Image</strong>
+                        <small>Screenshots, diagrams</small>
+                    </div>
+                    <div class="type-guide-item">
+                        <strong>📦 ZIP</strong>
+                        <small>Multi-file archives</small>
+                    </div>
+                    <div class="type-guide-item">
+                        <strong>📋 Other</strong>
+                        <small>Any other file type</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tips Card -->
+        <div class="sidebar-card">
+            <div class="card-title">💡 Tips</div>
+            <div class="card-content">
+                <ul class="tips-list">
+                    <li>✓ Use descriptive file names</li>
+                    <li>✓ Add helpful descriptions</li>
+                    <li>✓ Mark important files as required</li>
+                    <li>✓ Check file paths are correct</li>
+                    <li>✓ Organize by topic</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Info Card -->
+        <div class="sidebar-card">
+            <div class="card-title">ℹ️ About Attachments</div>
+            <div class="card-content">
+                <p>
+                    Attachments provide supplementary materials for your course topics. They help students access important resources like lecture notes, practice exercises, and reference documents.
+                </p>
+                <p style="margin-bottom: 0; font-size: 0.75rem; color: #999;">
+                    Tip: Keep files organized and accessible for your students.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Update character counter
+    const descriptionField = document.getElementById('description');
+    const charCount = document.getElementById('charCount');
+    
+    if (descriptionField) {
+        descriptionField.addEventListener('input', function() {
+            charCount.textContent = this.value.length;
+            const counter = charCount.parentElement;
+            if (this.value.length > 400) {
+                counter.classList.add('warning');
+            } else if (this.value.length > 450) {
+                counter.classList.add('danger');
+            } else {
+                counter.classList.remove('warning', 'danger');
+            }
+        });
+        
+        // Initialize on page load
+        charCount.textContent = descriptionField.value.length;
+    }
+    
+    // Update type preview badge
+    function updateTypePreview() {
+        const typeSelect = document.getElementById('attachment_type');
+        const typePreview = document.getElementById('typePreview');
+        
+        const typeIcons = {
+            'pdf': '📄 PDF',
+            'excel': '📊 Excel',
+            'word': '📃 Word',
+            'image': '🖼️ Image',
+            'zip': '📦 ZIP',
+            'other': '📋 Other'
+        };
+        
+        if (typeSelect.value) {
+            typePreview.textContent = typeIcons[typeSelect.value];
+            typePreview.className = 'type-preview ' + typeSelect.value;
+            typePreview.style.display = 'inline-block';
+        } else {
+            typePreview.style.display = 'none';
+        }
+    }
+    
+    // Initialize on page load
+    updateTypePreview();
+    
+    // Form validation
+    document.getElementById('attachmentForm').addEventListener('submit', function(e) {
+        const fileName = document.getElementById('file_name').value.trim();
+        const fileType = document.getElementById('attachment_type').value;
+        const filePath = document.getElementById('file_path').value.trim();
+        
+        if (!fileName) {
+            e.preventDefault();
+            alert('Please enter a file name.');
+            return false;
+        }
+        
+        if (!fileType) {
+            e.preventDefault();
+            alert('Please select a file type.');
+            return false;
+        }
+        
+        if (!filePath) {
+            e.preventDefault();
+            alert('Please enter the file path.');
+            return false;
+        }
+        
+        return true;
+    });
+</script>
+{% endblock %}

@@ -59,6 +59,18 @@ def create_app():
     app.register_blueprint(import_export_bp, url_prefix="/import-export")
     app.register_blueprint(baddebt_bp, url_prefix="/baddebt")
     app.register_blueprint(attendance_bp, url_prefix="/attendance")
+    app.register_blueprint(lms_admin_bp)
+
+    # File serving route for uploaded content
+    @app.route('/uploads/content/<path:filename>')
+    def serve_content(filename):
+        """Serve uploaded content files"""
+        try:
+            # Security: only serve from the uploads/content directory
+            upload_path = os.path.join(Config.UPLOAD_FOLDER)
+            return send_from_directory(upload_path, filename)
+        except Exception as e:
+            return f"File not found: {str(e)}", 404
 
     # Register Jinja2 filters
     app.jinja_env.filters['format_datetime'] = format_datetime

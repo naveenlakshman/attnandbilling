@@ -4,8 +4,14 @@ from dotenv import load_dotenv
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
+UPLOAD_DIR = os.path.join(INSTANCE_DIR, "uploads", "content")
 
 os.makedirs(INSTANCE_DIR, exist_ok=True)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Create subdirectories for each content type
+for content_type in ['videos', 'pdfs', 'images', 'downloads', 'html']:
+    os.makedirs(os.path.join(UPLOAD_DIR, content_type), exist_ok=True)
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 

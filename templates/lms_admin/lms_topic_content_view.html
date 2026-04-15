@@ -1,0 +1,276 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}Preview - {{ content.content_title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Breadcrumb Navigation -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_programs') }}" class="text-decoration-none">Programs</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.program_view', program_id=content.program_id) }}" class="text-decoration-none">{{ content.program_name }}</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_chapters', program_id=content.program_id) }}" class="text-decoration-none">Chapters</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_topics', chapter_id=content.chapter_id) }}" class="text-decoration-none">{{ content.chapter_title }}</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=content.topic_id) }}" class="text-decoration-none">Contents</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">Preview</li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <h1 class="h2 mb-1">👁️ Content Preview</h1>
+                    <p class="text-muted mb-0">Topic: <strong>{{ content.topic_title }}</strong> → Type: <strong>{{ content.content_mode }}</strong></p>
+                </div>
+                <div class="btn-group" role="group">
+                    <a href="{{ url_for('lms_admin.content_edit', content_id=content.id) }}" class="btn btn-primary">
+                        ✏️ Edit
+                    </a>
+                    <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=content.topic_id) }}" class="btn btn-outline-secondary">
+                        ← Back
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Display -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light border-bottom">
+                    <h5 class="mb-0">{{ content.content_title }}</h5>
+                </div>
+                <div class="card-body p-4">
+                    <!-- Content Type Badge -->
+                    <div class="mb-4">
+                        <span class="badge bg-info text-dark">
+                            {% if content.content_mode == 'text' %}
+                                📄 Text Content
+                            {% elif content.content_mode == 'html' %}
+                                🌐 HTML Content
+                            {% elif content.content_mode == 'youtube' %}
+                                ▶️ YouTube Video
+                            {% elif content.content_mode == 'video_file' %}
+                                🎥 Video File
+                            {% elif content.content_mode == 'pdf' %}
+                                📕 PDF Document
+                            {% elif content.content_mode == 'image' %}
+                                🖼️ Image
+                            {% elif content.content_mode == 'download' %}
+                                ⬇️ Downloadable File
+                            {% else %}
+                                📦 {{ content.content_mode }}
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <!-- Content Display Based on Type -->
+                    {% if content.content_mode == 'text' %}
+                        <!-- Plain Text Content -->
+                        <div class="content-display">
+                            <p style="white-space: pre-wrap; word-wrap: break-word;">{{ content.content_body }}</p>
+                        </div>
+
+                    {% elif content.content_mode == 'html' %}
+                        <!-- HTML Content -->
+                        {% if content.file_path %}
+                            <!-- Display HTML file in iframe -->
+                            <div class="mb-3">
+                                <div class="alert alert-info mb-3">
+                                    <i class="bi bi-file-earmark-code"></i> Displaying HTML file content
+                                </div>
+                                <iframe src="{{ content.file_path }}" style="width:100%; height:600px; border: 1px solid #ddd; border-radius: 4px;"></iframe>
+                            </div>
+                            <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
+                        {% else %}
+                            <!-- Display textarea HTML content -->
+                            <div class="content-display border rounded p-3 bg-light">
+                                {{ content.content_body | safe }}
+                            </div>
+                        {% endif %}
+
+                    {% elif content.content_mode == 'youtube' %}
+                        <!-- YouTube Video -->
+                        {% if content.external_url %}
+                            <div class="ratio ratio-16x9 mb-3">
+                                <iframe src="{{ content.external_url }}" allowfullscreen></iframe>
+                            </div>
+                            <p class="text-muted"><small>URL: {{ content.external_url }}</small></p>
+                        {% else %}
+                            <div class="alert alert-warning">No YouTube URL configured</div>
+                        {% endif %}
+
+                    {% elif content.content_mode == 'video_file' %}
+                        <!-- Video File -->
+                        {% if content.file_path %}
+                            <div class="ratio ratio-16x9 mb-3">
+                                <video controls>
+                                    <source src="{{ content.file_path }}" type="video/mp4">
+                                    Your browser does not support the video tag.
+                                </video>
+                            </div>
+                            <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
+                        {% else %}
+                            <div class="alert alert-warning">No video file configured</div>
+                        {% endif %}
+
+                    {% elif content.content_mode == 'pdf' %}
+                        <!-- PDF Document -->
+                        {% if content.file_path %}
+                            <div class="mb-3">
+                                <iframe src="{{ content.file_path }}" style="width:100%; height:600px; border: 1px solid #ddd;"></iframe>
+                            </div>
+                            <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
+                        {% else %}
+                            <div class="alert alert-warning">No PDF file configured</div>
+                        {% endif %}
+
+                    {% elif content.content_mode == 'image' %}
+                        <!-- Image -->
+                        {% if content.file_path %}
+                            <div class="mb-3">
+                                <img src="{{ content.file_path }}" class="img-fluid rounded" style="max-width: 100%; max-height: 500px;" alt="{{ content.content_title }}">
+                            </div>
+                            <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
+                        {% else %}
+                            <div class="alert alert-warning">No image file configured</div>
+                        {% endif %}
+
+                    {% elif content.content_mode == 'download' %}
+                        <!-- Downloadable File -->
+                        {% if content.file_path %}
+                            <div class="alert alert-info">
+                                <i class="bi bi-download"></i>
+                                <a href="{{ content.file_path }}" class="btn btn-sm btn-primary ms-2">
+                                    ⬇️ Download File
+                                </a>
+                            </div>
+                            <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
+                        {% else %}
+                            <div class="alert alert-warning">No file configured for download</div>
+                        {% endif %}
+
+                    {% else %}
+                        <div class="alert alert-info">Unknown content type: {{ content.content_mode }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Metadata Card -->
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-light border-bottom">
+                    <h5 class="mb-0">📋 Details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-sm-3">
+                            <strong>Order:</strong>
+                        </div>
+                        <div class="col-sm-9">
+                            {{ content.display_order }}
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-sm-3">
+                            <strong>Created:</strong>
+                        </div>
+                        <div class="col-sm-9">
+                            {{ content.created_at }}
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-sm-3">
+                            <strong>Last Updated:</strong>
+                        </div>
+                        <div class="col-sm-9">
+                            {{ content.updated_at }}
+                        </div>
+                    </div>
+                    {% if content.external_url %}
+                    <div class="row mb-3">
+                        <div class="col-sm-3">
+                            <strong>External URL:</strong>
+                        </div>
+                        <div class="col-sm-9">
+                            <small class="text-break">{{ content.external_url }}</small>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if content.file_path %}
+                    <div class="row mb-3">
+                        <div class="col-sm-3">
+                            <strong>File Path:</strong>
+                        </div>
+                        <div class="col-sm-9">
+                            <small class="text-break">{{ content.file_path }}</small>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-light border-bottom">
+                    <h5 class="mb-0">🔗 Navigation</h5>
+                </div>
+                <div class="card-body">
+                    <a href="{{ url_for('lms_admin.topic_view', topic_id=content.topic_id) }}" class="btn btn-outline-primary btn-sm w-100 mb-2">
+                        ← Go to Topic
+                    </a>
+                    <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=content.topic_id) }}" class="btn btn-outline-secondary btn-sm w-100 mb-2">
+                        📑 All Contents
+                    </a>
+                    <a href="{{ url_for('lms_admin.content_edit', content_id=content.id) }}" class="btn btn-primary btn-sm w-100">
+                        ✏️ Edit Content
+                    </a>
+                </div>
+            </div>
+
+            <!-- Info Card -->
+            <div class="card shadow-sm mt-3">
+                <div class="card-body">
+                    <p class="text-muted mb-0">
+                        <small>
+                            💡 This is a preview of how your content will appear to students. 
+                            Use the <strong>Edit</strong> button to make changes.
+                        </small>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .content-display {
+        line-height: 1.6;
+        font-size: 15px;
+    }
+    
+    .content-display img {
+        max-width: 100%;
+        height: auto;
+    }
+    
+    .content-display video {
+        max-width: 100%;
+        height: auto;
+    }
+</style>
+{% endblock %}

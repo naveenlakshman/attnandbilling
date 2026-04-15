@@ -1,0 +1,406 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}LMS Programs - Global IT ERP{% endblock %}
+{% block page_title %}LMS Programs{% endblock %}
+
+{% block extra_css %}
+<style>
+  .programs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .programs-header h2 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    color: #212529;
+  }
+
+  .programs-header .btn {
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .filter-bar {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .filter-bar select {
+    padding: 8px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 13px;
+    background: #fff;
+  }
+
+  .filter-bar select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.1);
+  }
+
+  .programs-table-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+  }
+
+  .programs-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 0;
+  }
+
+  .programs-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  .programs-table thead th {
+    padding: 14px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .programs-table tbody td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #dee2e6;
+    vertical-align: middle;
+    font-size: 14px;
+  }
+
+  .programs-table tbody tr:hover {
+    background-color: #f8f9fa;
+  }
+
+  .program-name {
+    font-weight: 600;
+    color: #212529;
+  }
+
+  .course-badge {
+    display: inline-block;
+    background: #e7f3ff;
+    color: #0066cc;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .chapter-badge {
+    display: inline-block;
+    background: #f0f0f0;
+    color: #333;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .status-active {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .status-inactive {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  .status-published {
+    background: #d4edda;
+    color: #155724;
+  }
+
+  .status-draft {
+    background: #fff3cd;
+    color: #856404;
+  }
+
+  .actions-cell {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .btn-sm-action {
+    padding: 6px 10px;
+    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .btn-edit {
+    background: #cfe2ff;
+    color: #084298;
+  }
+
+  .btn-edit:hover {
+    background: #aec5fb;
+  }
+
+  .btn-chapters {
+    background: #e2e3e5;
+    color: #383d41;
+  }
+
+  .btn-chapters:hover {
+    background: #d3d4d5;
+  }
+
+  .btn-resources {
+    background: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .btn-resources:hover {
+    background: #b6e4e8;
+  }
+
+  .btn-delete {
+    background: #f8d7da;
+    color: #721c24;
+  }
+
+  .btn-delete:hover {
+    background: #f5c6cb;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+  }
+
+  .empty-state-icon {
+    font-size: 48px;
+    opacity: 0.6;
+    margin-bottom: 16px;
+  }
+
+  .empty-state-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 8px;
+  }
+
+  .empty-state-text {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+
+  .empty-state .btn {
+    margin-top: 16px;
+  }
+
+  .description-preview {
+    color: #6c757d;
+    font-size: 13px;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 768px) {
+    .programs-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .programs-header h2 {
+      width: 100%;
+    }
+
+    .programs-header .btn {
+      width: 100%;
+      text-align: center;
+    }
+
+    .actions-cell {
+      flex-direction: column;
+    }
+
+    .btn-sm-action {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Page Header -->
+<div class="programs-header">
+  <h2>📖 LMS Programs</h2>
+  <a class="btn btn-primary" href="{{ url_for('lms_admin.program_new') }}">
+    + Add Program
+  </a>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+  <select id="statusFilter" onchange="filterPrograms()">
+    <option value="">All Programs</option>
+    <option value="active">Active</option>
+    <option value="inactive">Inactive</option>
+  </select>
+  <select id="publishFilter" onchange="filterPrograms()">
+    <option value="">All Status</option>
+    <option value="published">Published</option>
+    <option value="draft">Draft</option>
+  </select>
+</div>
+
+<!-- Programs Table -->
+<div class="programs-table-card">
+  {% if programs %}
+    <table class="programs-table">
+      <thead>
+        <tr>
+          <th style="width: 50px;">SL</th>
+          <th>Program Name</th>
+          <th>Course</th>
+          <th style="width: 80px;">Chapters</th>
+          <th style="width: 100px;">Status</th>
+          <th style="width: 100px;">Published</th>
+          <th style="width: 280px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for program in programs %}
+        <tr class="program-row" data-active="{{ 1 if program.is_active else 0 }}" data-published="{{ 1 if program.is_published else 0 }}">
+          <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
+          <td>
+            <a href="{{ url_for('lms_admin.program_view', program_id=program.id) }}" style="text-decoration: none; color: inherit;">
+              <div class="program-name">{{ program.program_name }}</div>
+              {% if program.description %}
+              <div class="description-preview" title="{{ program.description }}">{{ program.description }}</div>
+              {% endif %}
+            </a>
+          </td>
+          <td>
+            {% if program.course_name %}
+              <span class="course-badge">{{ program.course_name }}</span>
+            {% else %}
+              <span style="color: #999; font-size: 12px;">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="chapter-badge">
+              📑 {{ program.chapter_count }} {{'Chapter' if program.chapter_count == 1 else 'Chapters'}}
+            </span>
+          </td>
+          <td>
+            <span class="status-badge {{ 'status-active' if program.is_active else 'status-inactive' }}">
+              {{ 'Active' if program.is_active else 'Inactive' }}
+            </span>
+          </td>
+          <td>
+            <span class="status-badge {{ 'status-published' if program.is_published else 'status-draft' }}">
+              {{ 'Published' if program.is_published else 'Draft' }}
+            </span>
+          </td>
+          <td>
+            <div class="actions-cell">
+              <a class="btn-sm-action btn-edit" href="{{ url_for('lms_admin.program_edit', program_id=program.id) }}" title="Edit Program">
+                ✏️ Edit
+              </a>
+              <a class="btn-sm-action btn-chapters" href="{{ url_for('lms_admin.program_view', program_id=program.id) }}" title="View Program">
+                👁️ View
+              </a>
+              <a class="btn-sm-action btn-resources" href="#" title="View Resources">
+                📦 Resources
+              </a>
+              <button class="btn-sm-action btn-delete" onclick="deleteProgram(event, {{ program.id }})" title="Delete Program">
+                🗑️ Delete
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">📚</div>
+      <div class="empty-state-title">No Programs Yet</div>
+      <div class="empty-state-text">Create your first learning program to get started with the LMS.</div>
+      <a class="btn btn-primary" href="{{ url_for('lms_admin.program_new') }}">+ Add Your First Program</a>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  function filterPrograms() {
+    const statusFilter = document.getElementById('statusFilter').value;
+    const publishFilter = document.getElementById('publishFilter').value;
+    const rows = document.querySelectorAll('.program-row');
+
+    rows.forEach(row => {
+      let show = true;
+
+      if (statusFilter) {
+        const isActive = row.dataset.active === '1';
+        if (statusFilter === 'active' && !isActive) show = false;
+        if (statusFilter === 'inactive' && isActive) show = false;
+      }
+
+      if (publishFilter) {
+        const isPublished = row.dataset.published === '1';
+        if (publishFilter === 'published' && !isPublished) show = false;
+        if (publishFilter === 'draft' && isPublished) show = false;
+      }
+
+      row.style.display = show ? '' : 'none';
+    });
+  }
+
+  function deleteProgram(event, programId) {
+    event.preventDefault();
+    if (confirm('Are you sure you want to delete this program? This action cannot be undone.')) {
+      // Delete implementation will come in Phase 2
+      console.log('Delete program:', programId);
+      alert('Delete functionality coming soon!');
+    }
+  }
+</script>
+
+{% endblock %}

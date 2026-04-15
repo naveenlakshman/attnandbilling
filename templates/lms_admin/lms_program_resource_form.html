@@ -1,0 +1,677 @@
+{% extends "lms_admin/base.html" %}
+
+{% block content %}
+<style>
+    .breadcrumb {
+        background-color: #f8f9fa;
+        border-radius: 0.25rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+    }
+    
+    .breadcrumb-item {
+        display: inline;
+    }
+    
+    .breadcrumb-item + .breadcrumb-item::before {
+        content: " → ";
+        color: #999;
+    }
+    
+    .breadcrumb-item a {
+        color: #007bff;
+        text-decoration: none;
+    }
+    
+    .breadcrumb-item a:hover {
+        text-decoration: underline;
+    }
+    
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 1rem;
+    }
+    
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #333;
+        margin: 0;
+    }
+    
+    .header-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .btn-cancel {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.5rem 1.25rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-cancel:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        background-color: #5a6268;
+        text-decoration: none;
+        color: white;
+    }
+    
+    .main-layout {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .form-wrapper {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .form-section {
+        margin-bottom: 1.75rem;
+        padding-bottom: 1.75rem;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .form-section:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+    
+    .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #333;
+        font-size: 0.9rem;
+    }
+    
+    .form-group .required {
+        color: #dc3545;
+    }
+    
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group input[type="email"],
+    .form-group input[type="file"],
+    .form-group textarea,
+    .form-group select {
+        width: 100%;
+        padding: 0.625rem 0.875rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        font-size: 0.9rem;
+        font-family: inherit;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    }
+    
+    .form-group input[type="text"]:focus,
+    .form-group input[type="number"]:focus,
+    .form-group input[type="email"]:focus,
+    .form-group input[type="file"]:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+        border-color: #80bdff;
+        outline: 0;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    .form-group input[type="file"]::file-selector-button {
+        padding: 0.375rem 0.75rem;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 0.25rem;
+        cursor: pointer;
+        font-weight: 600;
+        margin-right: 0.75rem;
+        transition: background-color 0.15s ease-in-out;
+    }
+    
+    .form-group input[type="file"]::file-selector-button:hover {
+        background-color: #0056b3;
+    }
+    
+    .form-group textarea {
+        resize: vertical;
+        min-height: 100px;
+    }
+    
+    .form-group select {
+        appearance: none;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 1.25rem;
+        padding-right: 2.5rem;
+    }
+    
+    .help-text {
+        font-size: 0.8rem;
+        color: #666;
+        margin-top: 0.375rem;
+        display: block;
+    }
+    
+    .char-counter {
+        font-size: 0.8rem;
+        color: #999;
+        margin-top: 0.375rem;
+        text-align: right;
+    }
+    
+    .char-counter.warning {
+        color: #ff9800;
+    }
+    
+    .char-counter.danger {
+        color: #dc3545;
+    }
+    
+    .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .checkbox-group input[type="checkbox"] {
+        width: auto;
+        margin: 0;
+        cursor: pointer;
+    }
+    
+    .checkbox-group label {
+        margin: 0;
+        font-weight: 500;
+        color: #333;
+        cursor: pointer;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .btn-submit {
+        background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.625rem 1.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+    }
+    
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        background: linear-gradient(135deg, #218838 0%, #1e7e34 100%);
+    }
+    
+    .btn-reset {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.625rem 1.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+    }
+    
+    .btn-reset:hover {
+        background-color: #5a6268;
+        transform: translateY(-2px);
+    }
+    
+    .sidebar-card {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1.25rem;
+        height: fit-content;
+        position: sticky;
+        top: 1rem;
+    }
+    
+    .card-title {
+        font-size: 0.875rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #666;
+        margin-bottom: 0.75rem;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 0.5rem;
+    }
+    
+    .card-content {
+        font-size: 0.875rem;
+        color: #333;
+        line-height: 1.6;
+    }
+    
+    .card-content p {
+        margin: 0.5rem 0;
+    }
+    
+    .card-content strong {
+        font-weight: 600;
+        color: #222;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 0.25rem 0.625rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .badge-info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+    }
+    
+    .type-preview {
+        display: inline-block;
+        padding: 0.5rem 0.75rem;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        font-weight: 600;
+        margin-top: 0.5rem;
+    }
+    
+    .type-preview.ebook { background-color: #e6f2ff; color: #1565c0; }
+    .type-preview.workbook { background-color: #e6f5e6; color: #2e7d32; }
+    .type-preview.ppt { background-color: #ffe6e6; color: #d32f2f; }
+    .type-preview.reference { background-color: #f3e5f5; color: #6a1b9a; }
+    .type-preview.other { background-color: #f5f5f5; color: #666; }
+    
+    .tips-list {
+        margin: 0;
+        padding-left: 1rem;
+        font-size: 0.8rem;
+    }
+    
+    .tips-list li {
+        margin-bottom: 0.4rem;
+        color: #666;
+    }
+    
+    .type-guide {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid #e9ecef;
+    }
+    
+    .type-guide-item {
+        margin-bottom: 0.75rem;
+        font-size: 0.8rem;
+    }
+    
+    .type-guide-item strong {
+        font-weight: 600;
+        display: block;
+        color: #222;
+    }
+    
+    .type-guide-item small {
+        color: #999;
+        display: block;
+    }
+    
+    @media (max-width: 768px) {
+        .main-layout {
+            grid-template-columns: 1fr;
+        }
+        
+        .sidebar-card {
+            position: static;
+        }
+        
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        
+        .form-actions {
+            flex-direction: column;
+        }
+        
+        .btn-submit,
+        .btn-reset {
+            width: 100%;
+            text-align: center;
+        }
+    }
+</style>
+
+<!-- Breadcrumb Navigation -->
+<nav class="breadcrumb">
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_programs') }}">📚 Programs</a>
+    </span>
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}">{{ data.program.program_name }}</a>
+    </span>
+    <span class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.list_program_resources', program_id=data.program.id) }}">📚 Resources</a>
+    </span>
+    <span class="breadcrumb-item">
+        {% if data.resource %}Edit{% else %}Add{% endif %} Resource
+    </span>
+</nav>
+
+<!-- Page Header -->
+<div class="page-header">
+    <h1 class="page-title">
+        {% if data.resource %}
+            ✏️ Edit Resource
+        {% else %}
+            ➕ Add Resource
+        {% endif %}
+    </h1>
+    <div class="header-actions">
+        <a href="{{ url_for('lms_admin.list_program_resources', program_id=data.program.id) }}" class="btn-cancel">
+            ← Cancel
+        </a>
+    </div>
+</div>
+
+<!-- Main Content Layout -->
+<div class="main-layout">
+    <!-- Form -->
+    <div class="form-wrapper">
+        <form method="POST" id="resourceForm" enctype="multipart/form-data">
+            <!-- Basic Information Section -->
+            <div class="form-section">
+                <div class="section-title">📄 File Information</div>
+                
+                <div class="form-group">
+                    <label for="resource_title">
+                        Resource Title
+                        <span class="required">*</span>
+                    </label>
+                    <input type="text" id="resource_title" name="resource_title" required
+                           value="{{ data.resource.resource_title if data.resource else '' }}"
+                           placeholder="e.g., Full eBook on Office Automation"
+                           maxlength="255">
+                    <span class="help-text">The display name for this resource</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="resource_type">
+                        Resource Type
+                        <span class="required">*</span>
+                    </label>
+                    <select id="resource_type" name="resource_type" required onchange="updateTypePreview()">
+                        <option value="" disabled>-- Select resource type --</option>
+                        <option value="ebook" {% if data.resource and data.resource.resource_type == 'ebook' %}selected{% endif %}>
+                            📖 eBook/Full Course Material
+                        </option>
+                        <option value="workbook" {% if data.resource and data.resource.resource_type == 'workbook' %}selected{% endif %}>
+                            📓 Workbook/Practice Exercises
+                        </option>
+                        <option value="pdf" {% if data.resource and data.resource.resource_type == 'pdf' %}selected{% endif %}>
+                            📄 PDF Document
+                        </option>
+                        <option value="ppt" {% if data.resource and data.resource.resource_type == 'ppt' %}selected{% endif %}>
+                            📊 PowerPoint Presentation
+                        </option>
+                        <option value="other" {% if data.resource and data.resource.resource_type == 'other' %}selected{% endif %}>
+                            📋 Other Resource
+                        </option>
+                    </select>
+                    <span class="help-text">Choose the type that best describes this resource</span>
+                    <div id="typePreview" class="type-preview" style="display: none;"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="pdf_file">
+                        Upload PDF File
+                        <span class="required">*</span>
+                    </label>
+                    <input type="file" id="pdf_file" name="pdf_file" accept=".pdf" required>
+                    <span class="help-text">Upload a PDF file (max 20MB). The file will be securely stored and a unique path auto-generated.</span>
+                </div>
+            </div>
+            
+            <!-- Additional Options Section -->
+            <div class="form-section">
+                <div class="section-title">⚙️ Options</div>
+                
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="is_active" name="is_active"
+                               {% if not data.resource or data.resource.is_active %}checked{% endif %}>
+                        <label for="is_active">Active (Make this resource available)</label>
+                    </div>
+                    <span class="help-text">Inactive resources are hidden from students</span>
+                </div>
+            </div>
+            
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <button type="submit" class="btn-submit">
+                    {% if data.resource %}
+                        ✓ Update Resource
+                    {% else %}
+                        ✓ Add Resource
+                    {% endif %}
+                </button>
+                <button type="reset" class="btn-reset">↻ Clear</button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Right Sidebar -->
+    <div>
+        <!-- Program Context Card -->
+        <div class="sidebar-card">
+            <div class="card-title">📚 Program Info</div>
+            <div class="card-content">
+                <p>
+                    <strong>Program:</strong><br>
+                    {{ data.program.program_name }}
+                </p>
+                <p style="font-size: 0.8rem; color: #999; margin-top: 1rem;">
+                    This resource will be available to all students in the program.
+                </p>
+            </div>
+        </div>
+        
+        <!-- Resource Type Guide Card -->
+        <div class="sidebar-card">
+            <div class="card-title">🎯 Resource Types</div>
+            <div class="card-content">
+                <div class="type-guide">
+                    <div class="type-guide-item">
+                        <strong>📖 eBook</strong>
+                        <small>Full course material</small>
+                    </div>
+                    <div class="type-guide-item">
+                        <strong>📓 Workbook</strong>
+                        <small>Practice & exercises</small>
+                    </div>
+                    <div class="type-guide-item">
+                        <strong>� PDF Document</strong>
+                        <small>PDF files</small>
+                    </div>
+                    <div class="type-guide-item">
+                        <strong>📊 PowerPoint</strong>
+                        <small>Presentations</small>
+                    </div>
+                    <div class="type-guide-item">
+                        <strong>📋 Other</strong>
+                        <small>Other materials</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tips Card -->
+        <div class="sidebar-card">
+            <div class="card-title">💡 Tips</div>
+            <div class="card-content">
+                <ul class="tips-list">
+                    <li>✓ Use descriptive names</li>
+                    <li>✓ Mark core materials required</li>
+                    <li>✓ Add helpful descriptions</li>
+                    <li>✓ Check file accessibility</li>
+                    <li>✓ Update regularly</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Info Card -->
+        <div class="sidebar-card">
+            <div class="card-title">ℹ️ About Program Resources</div>
+            <div class="card-content">
+                <p>
+                    Program resources are materials that apply to all topics and students in a program. Use this for course-wide materials like eBooks, workbooks, and presentations.
+                </p>
+                <p style="margin-bottom: 0; font-size: 0.75rem; color: #999;">
+                    For topic-specific attachments, use the Topic Attachments section instead.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Update character counter
+    const descriptionField = document.getElementById('description');
+    const charCount = document.getElementById('charCount');
+    
+    if (descriptionField) {
+        descriptionField.addEventListener('input', function() {
+            charCount.textContent = this.value.length;
+            const counter = charCount.parentElement;
+            if (this.value.length > 400) {
+                counter.classList.add('warning');
+            } else if (this.value.length > 450) {
+                counter.classList.add('danger');
+            } else {
+                counter.classList.remove('warning', 'danger');
+            }
+        });
+        
+        // Initialize on page load
+        charCount.textContent = descriptionField.value.length;
+    }
+    
+    // Update type preview badge
+    function updateTypePreview() {
+        const typeSelect = document.getElementById('resource_type');
+        const typePreview = document.getElementById('typePreview');
+        
+        const typeIcons = {
+            'ebook': '📖 eBook',
+            'workbook': '📓 Workbook',
+            'pdf': '📄 PDF Document',
+            'ppt': '📊 PowerPoint',
+            'other': '📋 Other'
+        };
+        
+        if (typeSelect.value) {
+            typePreview.textContent = typeIcons[typeSelect.value];
+            typePreview.className = 'type-preview ' + typeSelect.value;
+            typePreview.style.display = 'inline-block';
+        } else {
+            typePreview.style.display = 'none';
+        }
+    }
+    
+    // Initialize on page load
+    updateTypePreview();
+    
+    // Form validation
+    document.getElementById('resourceForm').addEventListener('submit', function(e) {
+        const resourceTitle = document.getElementById('resource_title').value.trim();
+        const resourceType = document.getElementById('resource_type').value;
+        const pdfFile = document.getElementById('pdf_file').files.length > 0;
+        
+        if (!resourceTitle) {
+            e.preventDefault();
+            alert('Please enter a resource title.');
+            return false;
+        }
+        
+        if (!resourceType) {
+            e.preventDefault();
+            alert('Please select a resource type.');
+            return false;
+        }
+        
+        // Check that PDF file is provided
+        if (!pdfFile) {
+            e.preventDefault();
+            alert('Please upload a PDF file.');
+            return false;
+        }
+        
+        // Validate PDF file
+        const file = document.getElementById('pdf_file').files[0];
+        const maxSize = 20 * 1024 * 1024; // 20MB
+        
+        if (file.size > maxSize) {
+            e.preventDefault();
+            alert('PDF file is too large. Maximum size is 20MB.');
+            return false;
+        }
+        
+        if (!file.type.match('application/pdf')) {
+            e.preventDefault();
+            alert('Please select a valid PDF file.');
+            return false;
+        }
+        
+        return true;
+    });
+</script>
+{% endblock %}
