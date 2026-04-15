@@ -182,10 +182,11 @@
   <table class="billing-table">
     <thead>
       <tr>
-        <th style="width: 60%;">Description</th>
+        <th style="width: 55%;">Description</th>
         <th style="width: 10%;">Qty</th>
-        <th style="width: 15%;">Unit Price</th>
-        <th style="width: 15%;">Line Total</th>
+        <th style="width: 13%;">Unit Price</th>
+        <th style="width: 10%;">Discount</th>
+        <th style="width: 12%;">Line Total</th>
       </tr>
     </thead>
     <tbody>
@@ -194,6 +195,7 @@
         <td>{{ item.description }}</td>
         <td style="text-align: center;">{{ item.quantity }}</td>
         <td style="text-align: right;">₹ {{ "%.2f"|format(item.unit_price or 0) }}</td>
+        <td style="text-align: right;">₹ {{ "%.2f"|format(item.discount or 0) }}</td>
         <td style="text-align: right;">₹ {{ "%.2f"|format(item.line_total or 0) }}</td>
       </tr>
       {% endfor %}

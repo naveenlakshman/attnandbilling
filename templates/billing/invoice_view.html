@@ -404,6 +404,7 @@
       <th>Description</th>
       <th>Qty</th>
       <th>Unit Price</th>
+      <th>Discount</th>
       <th>Line Total</th>
     </tr>
 
@@ -412,6 +413,7 @@
       <td>{{ item.course_name or item.description }}</td>
       <td>{{ item.quantity }}</td>
       <td>₹ {{ "%.2f"|format(item.unit_price or 0) }}</td>
+      <td>₹ {{ "%.2f"|format(item.discount or 0) }}</td>
       <td>₹ {{ "%.2f"|format(item.line_total or 0) }}</td>
     </tr>
     {% endfor %}

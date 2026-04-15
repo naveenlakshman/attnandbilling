@@ -1717,6 +1717,7 @@ def invoice_view(invoice_id):
             description,
             quantity,
             unit_price,
+            discount,
             line_total
         FROM invoice_items
         WHERE invoice_id = ?
@@ -1859,6 +1860,7 @@ def invoice_print(invoice_id):
             description,
             quantity,
             unit_price,
+            discount,
             line_total
         FROM invoice_items
         WHERE invoice_id = ?
@@ -2117,6 +2119,7 @@ def invoice_new():
                     "description": description,
                     "quantity": qty,
                     "unit_price": rate,
+                    "discount": row_discount,
                     "line_total": line_total
                 })
 
@@ -2203,16 +2206,18 @@ def invoice_new():
                         description,
                         quantity,
                         unit_price,
+                        discount,
                         line_total,
                         created_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     invoice_id,
                     item["course_id"],
                     item["description"],
                     item["quantity"],
                     item["unit_price"],
+                    item["discount"],
                     item["line_total"],
                     now
                 ))
@@ -2528,6 +2533,7 @@ def invoice_edit(invoice_id):
                     "description": description,
                     "quantity": qty,
                     "unit_price": rate,
+                    "discount": row_discount,
                     "line_total": line_total
                 })
 
@@ -2577,16 +2583,18 @@ def invoice_edit(invoice_id):
                         description,
                         quantity,
                         unit_price,
+                        discount,
                         line_total,
                         created_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     invoice_id,
                     item["course_id"],
                     item["description"],
                     item["quantity"],
                     item["unit_price"],
+                    item["discount"],
                     item["line_total"],
                     now
                 ))
