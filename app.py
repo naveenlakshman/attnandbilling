@@ -9,6 +9,7 @@ from modules.reports.routes import reports_bp
 from modules.import_export.routes import import_export_bp
 from modules.baddebt.routes import baddebt_bp
 from modules.attendance.routes import attendance_bp
+from modules.lms_admin import lms_admin_bp
 from datetime import datetime, timedelta
 
 def format_datetime(value):
