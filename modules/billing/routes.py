@@ -727,6 +727,42 @@ def students():
         student_batches_map=student_batches_map
     )
 
+@billing_bp.route("/student/check-duplicate", methods=["POST"])
+@login_required
+def student_check_duplicate():
+    """AJAX endpoint: check if a phone number already belongs to a student."""
+    data = request.get_json(silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    exclude_id = data.get("exclude_id")  # student id to exclude (for edit page)
+
+    if not phone:
+        return jsonify({"duplicate": False})
+
+    conn = get_conn()
+    cur = conn.cursor()
+    if exclude_id:
+        cur.execute(
+            "SELECT id, student_code, full_name, phone FROM students WHERE phone = ? AND id != ?",
+            (phone, exclude_id)
+        )
+    else:
+        cur.execute(
+            "SELECT id, student_code, full_name, phone FROM students WHERE phone = ?",
+            (phone,)
+        )
+    existing = cur.fetchone()
+    conn.close()
+
+    if existing:
+        return jsonify({
+            "duplicate": True,
+            "student_id": existing["id"],
+            "student_code": existing["student_code"],
+            "full_name": existing["full_name"],
+        })
+    return jsonify({"duplicate": False})
+
+
 @billing_bp.route("/student/new", methods=["GET", "POST"])
 @login_required
 def student_new():
@@ -766,6 +802,34 @@ def student_new():
                 error="Student photo is required.",
                 form_data=request.form
             )
+
+        # Duplicate phone check
+        force_save = request.form.get("force_save") == "1"
+        if not force_save:
+            cur.execute(
+                "SELECT id, student_code, full_name FROM students WHERE phone = ?",
+                (phone,)
+            )
+            dup = cur.fetchone()
+            if dup:
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                branches = cur.fetchall()
+                conn.close()
+                return render_template(
+                    "billing/student_form.html",
+                    student=None,
+                    branches=branches,
+                    education_levels=QUALIFICATION_LEVELS.keys(),
+                    qualification_levels=QUALIFICATION_LEVELS,
+                    duplicate_warning={
+                        "student_id": dup["id"],
+                        "student_code": dup["student_code"],
+                        "full_name": dup["full_name"],
+                        "phone": phone,
+                    },
+                    form_data=request.form
+                )
+
         cur.execute("""
             SELECT student_code
             FROM students
@@ -915,6 +979,33 @@ def student_edit(student_id):
         
         if photo_data:
             photo_filename = save_student_photo(photo_data, student["student_code"])
+
+        # Duplicate phone check (exclude current student)
+        force_save = request.form.get("force_save") == "1"
+        if not force_save:
+            cur.execute(
+                "SELECT id, student_code, full_name FROM students WHERE phone = ? AND id != ?",
+                (phone, student_id)
+            )
+            dup = cur.fetchone()
+            if dup:
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                branches = cur.fetchall()
+                conn.close()
+                return render_template(
+                    "billing/student_form.html",
+                    student=student,
+                    branches=branches,
+                    education_levels=QUALIFICATION_LEVELS.keys(),
+                    qualification_levels=QUALIFICATION_LEVELS,
+                    duplicate_warning={
+                        "student_id": dup["id"],
+                        "student_code": dup["student_code"],
+                        "full_name": dup["full_name"],
+                        "phone": phone,
+                    },
+                    form_data=request.form
+                )
 
         now = datetime.now().isoformat(timespec="seconds")
 

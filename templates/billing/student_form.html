@@ -354,7 +354,17 @@
       ⚠️ {{ error }}
     </div>
     {% endif %}
+    {% if duplicate_warning %}
+    <div id="duplicateWarningBanner" style="background:#fff7ed; border:1px solid #fdba74; color:#9a3412; border-radius:7px; padding:14px 16px; margin-bottom:18px; font-size:13px;">
+      <div style="font-weight:700; margin-bottom:6px;">⚠️ Duplicate Phone Number Detected</div>
+      A student with phone <strong>{{ duplicate_warning.phone }}</strong> already exists:<br>
+      <strong>{{ duplicate_warning.full_name }}</strong> &nbsp;(Reg&nbsp;#{{ duplicate_warning.student_code }}) &mdash;
+      <a href="{{ url_for('billing.student_profile', student_id=duplicate_warning.student_id) }}" target="_blank" style="color:#9a3412; text-decoration:underline;">View Profile &rarr;</a><br><br>
+      If this is a different student sharing the same number, click <strong>Save Anyway</strong> below.
+    </div>
+    {% endif %}
     <form method="post" id="studentForm">
+      <input type="hidden" name="force_save" id="force_save" value="{{ '1' if duplicate_warning else '0' }}">
       <div class="student-form-grid">
         <div class="form-group">
           <label>Branch</label>
@@ -362,7 +372,8 @@
             <option value="">-- Select Branch --</option>
             {% for b in branches %}
               <option value="{{ b.id }}"
-                {% if student and student.branch_id == b.id %}selected{% endif %}>
+                {% if student and student.branch_id == b.id %}selected
+                {% elif form_data and form_data.get('branch_id') == b.id|string %}selected{% endif %}>
                 {{ b.branch_name }}
               </option>
             {% endfor %}
@@ -385,40 +396,43 @@
 
         <div class="form-group">
           <label>Full Name</label>
-          <input type="text" name="full_name" required {% if student %}value="{{ student.full_name }}"{% endif %}>
+          <input type="text" name="full_name" required value="{% if student %}{{ student.full_name }}{% elif form_data %}{{ form_data.get('full_name', '') }}{% endif %}">
         </div>
 
         <div class="form-group">
           <label>Phone</label>
-          <input type="text" name="phone" required {% if student %}value="{{ student.phone }}"{% endif %}>
+          <input type="text" id="phoneInput" name="phone" required value="{% if student %}{{ student.phone }}{% elif form_data %}{{ form_data.get('phone', '') }}{% endif %}">
+          <div id="phoneDupWarning" style="display:none; color:#9a3412; font-size:12px; margin-top:4px;"></div>
         </div>
 
         <div class="form-group">
           <label>Date of Birth</label>
           <input type="text" id="date_of_birth" name="date_of_birth"
                  placeholder="Select date of birth"
-                 {% if student %}value="{{ student.date_of_birth }}"{% endif %}
-                 autocomplete="off" readonly>
+                 {% if student %}value="{{ student.date_of_birth }}"
+                 {% elif form_data and form_data.get('date_of_birth') %}value="{{ form_data.get('date_of_birth') }}"
+                 {% endif %}autocomplete="off" readonly>
         </div>
 
         <div class="form-group">
           <label>Gender</label>
           <select name="gender">
             <option value="">-- Select --</option>
-            <option value="Male" {% if student and student.gender == 'Male' %}selected{% endif %}>Male</option>
-            <option value="Female" {% if student and student.gender == 'Female' %}selected{% endif %}>Female</option>
-            <option value="Other" {% if student and student.gender == 'Other' %}selected{% endif %}>Other</option>
+            {% set _gender = (student.gender if student else form_data.get('gender', '') if form_data else '') %}
+            <option value="Male" {% if _gender == 'Male' %}selected{% endif %}>Male</option>
+            <option value="Female" {% if _gender == 'Female' %}selected{% endif %}>Female</option>
+            <option value="Other" {% if _gender == 'Other' %}selected{% endif %}>Other</option>
           </select>
         </div>
 
         <div class="form-group">
           <label>Email</label>
-          <input type="email" name="email" {% if student %}value="{{ student.email }}"{% endif %}>
+          <input type="email" name="email" value="{% if student %}{{ student.email }}{% elif form_data %}{{ form_data.get('email', '') }}{% endif %}">
         </div>
 
         <div class="form-group full-width">
           <label>Address</label>
-          <textarea name="address">{% if student %}{{ student.address }}{% endif %}</textarea>
+          <textarea name="address">{% if student %}{{ student.address }}{% elif form_data %}{{ form_data.get('address', '') }}{% endif %}</textarea>
         </div>
 
         <div class="form-group full-width">
@@ -428,39 +442,42 @@
               <div class="form-photo-display" id="formPhotoDisplay">
                 {% if student and student.photo_filename %}
                   <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;">
+                {% elif form_data and form_data.get('photo_data') %}
+                  <img src="{{ form_data.get('photo_data') }}" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;" id="restoredPhotoPreview">
                 {% else %}
                   <span class="form-photo-placeholder">👤</span>
                 {% endif %}
               </div>
               <button type="button" class="form-photo-btn" onclick="openPhotoModal()">
-                📷 {% if student and student.photo_filename %}Change Photo{% else %}Add Photo{% endif %}
+                📷 {% if (student and student.photo_filename) or (form_data and form_data.get('photo_data')) %}Change Photo{% else %}Add Photo{% endif %}
               </button>
             </div>
-            {% if not student %}<div class="photo-error-msg" id="photoErrorMsg">📷 Please upload a student photo before saving.</div>{% endif %}
-            <input type="hidden" id="photo_data" name="photo_data">
+            {% if not student %}<div class="photo-error-msg" id="photoErrorMsg" {% if form_data and form_data.get('photo_data') %}style="display:none;"{% endif %}>📷 Please upload a student photo before saving.</div>{% endif %}
+            <input type="hidden" id="photo_data" name="photo_data" value="{{ form_data.get('photo_data', '') if form_data else '' }}">
           </div>
         </div>
 
         <div class="form-group">
           <label>Parent/Guardian Name</label>
-          <input type="text" name="parent_name" {% if student %}value="{{ student.parent_name }}"{% endif %}>
+          <input type="text" name="parent_name" value="{% if student %}{{ student.parent_name }}{% elif form_data %}{{ form_data.get('parent_name', '') }}{% endif %}">
         </div>
 
         <div class="form-group">
           <label>Parent/Guardian Contact Number</label>
-          <input type="text" name="parent_contact" {% if student %}value="{{ student.parent_contact }}"{% endif %}>
+          <input type="text" name="parent_contact" value="{% if student %}{{ student.parent_contact }}{% elif form_data %}{{ form_data.get('parent_contact', '') }}{% endif %}">
         </div>
 
         <div class="form-group">
           <label>Education Level</label>
+          {% set _edlevel = (student.education_level if student else form_data.get('education_level', '') if form_data else '') %}
           <select name="education_level">
             <option value="">-- Select --</option>
-            <option value="Pre-University" {% if student and student.education_level == 'Pre-University' %}selected{% endif %}>Pre-University</option>
-            <option value="Undergraduate" {% if student and student.education_level == 'Undergraduate' %}selected{% endif %}>Undergraduate</option>
-            <option value="School" {% if student and student.education_level == 'School' %}selected{% endif %}>School</option>
-            <option value="Diploma" {% if student and student.education_level == 'Diploma' %}selected{% endif %}>Diploma</option>
-            <option value="Technical" {% if student and student.education_level == 'Technical' %}selected{% endif %}>Technical</option>
-            <option value="Postgraduate" {% if student and student.education_level == 'Postgraduate' %}selected{% endif %}>Postgraduate</option>
+            <option value="Pre-University" {% if _edlevel == 'Pre-University' %}selected{% endif %}>Pre-University</option>
+            <option value="Undergraduate" {% if _edlevel == 'Undergraduate' %}selected{% endif %}>Undergraduate</option>
+            <option value="School" {% if _edlevel == 'School' %}selected{% endif %}>School</option>
+            <option value="Diploma" {% if _edlevel == 'Diploma' %}selected{% endif %}>Diploma</option>
+            <option value="Technical" {% if _edlevel == 'Technical' %}selected{% endif %}>Technical</option>
+            <option value="Postgraduate" {% if _edlevel == 'Postgraduate' %}selected{% endif %}>Postgraduate</option>
           </select>
         </div>
 
@@ -474,7 +491,7 @@
                  id="qualification_custom"
                  name="qualification"
                  placeholder="Enter custom qualification or select from dropdown"
-                 {% if student %}value="{{ student.qualification }}"{% endif %}>
+                 value="{% if student %}{{ student.qualification }}{% elif form_data %}{{ form_data.get('qualification', '') }}{% endif %}">
           <small class="field-help">
             Select from the dropdown list above or enter a custom qualification directly in the text field.
           </small>
@@ -482,36 +499,40 @@
 
         <div class="form-group">
           <label>Student From</label>
+          {% set _sloc = (student.student_location if student else form_data.get('student_location', '') if form_data else '') %}
           <select name="student_location">
             <option value="">-- Select --</option>
-          <option value="rural" {% if student and student.student_location == 'rural' %}selected{% endif %}>Rural</option>
-          <option value="urban" {% if student and student.student_location == 'urban' %}selected{% endif %}>Urban</option>
+            <option value="rural" {% if _sloc == 'rural' %}selected{% endif %}>Rural</option>
+            <option value="urban" {% if _sloc == 'urban' %}selected{% endif %}>Urban</option>
           </select>
         </div>
 
         <div class="form-group">
           <label>Employment Status</label>
+          {% set _empstatus = (student.employment_status if student else form_data.get('employment_status', '') if form_data else '') %}
           <select name="employment_status">
             <option value="">-- Select --</option>
-            <option value="unemployed" {% if student and student.employment_status == 'unemployed' %}selected{% endif %}>Unemployed</option>
-            <option value="employed" {% if student and student.employment_status == 'employed' %}selected{% endif %}>Employed</option>
-            <option value="self_employed" {% if student and student.employment_status == 'self_employed' %}selected{% endif %}>Self-Employed</option>
-            <option value="student" {% if student and student.employment_status == 'student' %}selected{% endif %}>Student</option>
+            <option value="unemployed" {% if _empstatus == 'unemployed' %}selected{% endif %}>Unemployed</option>
+            <option value="employed" {% if _empstatus == 'employed' %}selected{% endif %}>Employed</option>
+            <option value="self_employed" {% if _empstatus == 'self_employed' %}selected{% endif %}>Self-Employed</option>
+            <option value="student" {% if _empstatus == 'student' %}selected{% endif %}>Student</option>
           </select>
         </div>
 
         <div class="form-group">
           <label>Student Status</label>
+          {% set _status = (student.status if student else form_data.get('status', 'active') if form_data else 'active') %}
           <select name="status">
-            <option value="active" {% if student and student.status == 'active' %}selected{% elif not student %}selected{% endif %}>Active</option>
-            <option value="completed" {% if student and student.status == 'completed' %}selected{% endif %}>Completed</option>
-            <option value="dropped" {% if student and student.status == 'dropped' %}selected{% endif %}>Dropped</option>
+            <option value="active" {% if _status == 'active' %}selected{% endif %}>Active</option>
+            <option value="completed" {% if _status == 'completed' %}selected{% endif %}>Completed</option>
+            <option value="dropped" {% if _status == 'dropped' %}selected{% endif %}>Dropped</option>
           </select>
         </div>
       </div>
 
       <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Save Student</button>
+        <button type="submit" class="btn btn-primary" id="saveBtnPrimary" {% if duplicate_warning %}style="display:none;"{% endif %}>Save Student</button>
+        <button type="button" class="btn btn-warning" id="saveAnywayBtn" {% if not duplicate_warning %}style="display:none;"{% endif %} onclick="forceSaveStudent()">Save Anyway</button>
         <a href="{{ url_for('billing.students') }}" class="btn btn-secondary">Cancel</a>
       </div>
     </form>
@@ -568,7 +589,7 @@ document.addEventListener('DOMContentLoaded', function() {
     altInput: true,
     altFormat: 'd M Y',
     maxDate: 'today',
-    defaultDate: {% if student and student.date_of_birth %}"{{ student.date_of_birth }}"{% else %}null{% endif %},
+    defaultDate: {% if student and student.date_of_birth %}"{{ student.date_of_birth }}"{% elif form_data and form_data.get('date_of_birth') %}"{{ form_data.get('date_of_birth') }}"{% else %}null{% endif %},
     yearRange: [1950, new Date().getFullYear() - 5],
     disableMobile: false,
     allowInput: false,
@@ -605,10 +626,60 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // Real-time duplicate phone check via AJAX
+  (function() {
+    const phoneInput = document.getElementById('phoneInput');
+    const phoneDupWarning = document.getElementById('phoneDupWarning');
+    const saveAnywayBtn = document.getElementById('saveAnywayBtn');
+    const saveBtnPrimary = document.getElementById('saveBtnPrimary');
+    const forceSaveInput = document.getElementById('force_save');
+    const currentStudentId = {{ student.id if student else 'null' }};
+    // If page loaded with a server-side duplicate warning, don't run AJAX on initial blur
+    let serverDupShown = {{ 'true' if duplicate_warning else 'false' }};
+
+    if (!phoneInput) return;
+
+    phoneInput.addEventListener('blur', function() {
+      const phone = this.value.trim();
+      if (!phone) { phoneDupWarning.style.display = 'none'; return; }
+
+      fetch('{{ url_for("billing.student_check_duplicate") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ phone: phone, exclude_id: currentStudentId })
+      })
+      .then(r => r.json())
+      .then(data => {
+        serverDupShown = false; // user changed phone, server banner no longer applies
+        if (data.duplicate) {
+          phoneDupWarning.innerHTML =
+            '\u26a0\ufe0f Phone already used by <strong>' + data.full_name +
+            '</strong> (Reg&nbsp;#' + data.student_code + '). ' +
+            '<a href="/billing/student/' + data.student_id + '/profile" target="_blank" style="color:#9a3412;">View &rarr;</a>';
+          phoneDupWarning.style.display = 'block';
+          if (saveAnywayBtn) saveAnywayBtn.style.display = 'inline-block';
+          if (saveBtnPrimary) saveBtnPrimary.style.display = 'none';
+          if (forceSaveInput) forceSaveInput.value = '0';
+        } else {
+          phoneDupWarning.style.display = 'none';
+          if (saveAnywayBtn) saveAnywayBtn.style.display = 'none';
+          if (saveBtnPrimary) saveBtnPrimary.style.display = 'inline-block';
+          if (forceSaveInput) forceSaveInput.value = '0';
+        }
+      })
+      .catch(() => {});
+    });
+  })();
+
   {% if student and student.qualification %}
     const existingQualification = {{ student.qualification | tojson }};
+  {% elif form_data and form_data.get('qualification') %}
+    const existingQualification = {{ form_data.get('qualification') | tojson }};
+  {% else %}
+    const existingQualification = null;
+  {% endif %}
+  if (existingQualification) {
     let found = false;
-
     for (let i = 0; i < qualificationSelect.options.length; i++) {
       if (qualificationSelect.options[i].value === existingQualification) {
         qualificationSelect.value = existingQualification;
@@ -616,12 +687,16 @@ document.addEventListener('DOMContentLoaded', function() {
         break;
       }
     }
-
-    if (!found && existingQualification) {
+    if (!found) {
       qualificationSelect.value = "custom";
     }
-  {% endif %}
+  }
 });
+
+function forceSaveStudent() {
+  document.getElementById('force_save').value = '1';
+  document.getElementById('studentForm').submit();
+}
 </script>
 
 <!-- ── Photo Upload Modal ─────────────────────────────────── -->
