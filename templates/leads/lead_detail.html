@@ -104,6 +104,34 @@
     padding: 14px; margin-bottom: 10px;
   }
   .followup-form-card .ff-title { font-weight: 600; font-size: 13px; margin-bottom: 10px; }
+
+  /* AI Assist panel */
+  .ai-assist-card {
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 1px 5px rgba(0,0,0,.07);
+    padding: 14px; margin-bottom: 10px;
+    border-top: 3px solid #7c3aed;
+  }
+  .ai-assist-card .ai-title { font-weight: 600; font-size: 13px; margin-bottom: 10px; color: #7c3aed; }
+  .ai-btn-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .ai-btn-bar .btn { font-size: 12px; padding: 5px 10px; }
+  .ai-result-box {
+    background: #f8f5ff; border-radius: 8px;
+    border: 1px solid #ddd6fe; padding: 12px;
+    font-size: 13px; line-height: 1.6; color: #1f2937;
+    white-space: pre-wrap; word-break: break-word;
+    display: none;
+  }
+  .ai-result-box.show { display: block; }
+  .ai-copy-btn {
+    font-size: 11px; margin-top: 8px;
+    border: 1px solid #7c3aed; color: #7c3aed;
+    background: transparent; border-radius: 6px;
+    padding: 3px 10px; cursor: pointer;
+  }
+  .ai-copy-btn:hover { background: #7c3aed; color: #fff; }
+  .ai-spinner { display: none; color: #7c3aed; font-size: 13px; margin-top: 6px; }
+  .ai-spinner.show { display: block; }
 </style>
 {% endblock %}
 
@@ -368,6 +396,20 @@
       </div>
     </div>
 
+    <!-- AI Assist -->
+    <div class="ai-assist-card" id="aiAssistCard">
+      <div class="ai-title">✨ AI Assist</div>
+      <div class="ai-btn-bar">
+        <button class="btn btn-outline-secondary" onclick="aiRequest('script')">📞 Call Script</button>
+        <button class="btn btn-outline-secondary" onclick="aiRequest('next_action')">🎯 Next Action</button>
+        <button class="btn btn-outline-secondary" onclick="aiRequest('whatsapp')">💬 WhatsApp</button>
+        <button class="btn btn-outline-secondary" onclick="aiRequest('email')">✉ Email Draft</button>
+      </div>
+      <div class="ai-spinner" id="aiSpinner">⏳ Generating…</div>
+      <div class="ai-result-box" id="aiResultBox"></div>
+      <button class="ai-copy-btn" id="aiCopyBtn" onclick="copyAiResult()" style="display:none;">📋 Copy</button>
+    </div>
+
   </div>
 </div>
 
@@ -399,6 +441,67 @@ function saveLeadContact() {
   document.body.removeChild(a);
   setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
 }
+
+var _aiLeadId = {{ lead.id }};
+var _csrfToken = document.querySelector('meta[name="csrf-token"]') ?
+  document.querySelector('meta[name="csrf-token"]').getAttribute('content') : '';
+
+function aiRequest(action) {
+  var spinner  = document.getElementById('aiSpinner');
+  var resultBox = document.getElementById('aiResultBox');
+  var copyBtn  = document.getElementById('aiCopyBtn');
+
+  spinner.classList.add('show');
+  resultBox.classList.remove('show');
+  resultBox.textContent = '';
+  copyBtn.style.display = 'none';
+
+  fetch('/leads/' + _aiLeadId + '/ai-assist', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': _csrfToken
+    },
+    body: JSON.stringify({ action: action })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(data) {
+    spinner.classList.remove('show');
+    if (data.error) {
+      resultBox.textContent = '⚠ ' + data.error;
+    } else {
+      resultBox.textContent = data.result;
+      copyBtn.style.display = 'inline-block';
+    }
+    resultBox.classList.add('show');
+  })
+  .catch(function() {
+    spinner.classList.remove('show');
+    resultBox.textContent = '⚠ Network error. Please try again.';
+    resultBox.classList.add('show');
+  });
+}
+
+function copyAiResult() {
+  var text = document.getElementById('aiResultBox').textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function() {
+      var btn = document.getElementById('aiCopyBtn');
+      btn.textContent = '✓ Copied!';
+      setTimeout(function() { btn.textContent = '📋 Copy'; }, 2000);
+    });
+  }
+}
+
+// Auto-open AI panel if follow-up is due or overdue today
+(function() {
+  var nextDate = {{ (lead.next_followup_date or '') | tojson }};
+  var today = new Date().toISOString().slice(0, 10);
+  if (nextDate && nextDate <= today) {
+    var card = document.getElementById('aiAssistCard');
+    if (card) card.style.borderColor = '#dc3545';
+  }
+})();
 </script>
 
 {% endblock %}

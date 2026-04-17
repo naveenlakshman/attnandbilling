@@ -40,3 +40,6 @@ class Config:
     # CSRF protection (Flask-WTF)
     WTF_CSRF_ENABLED = True
     WTF_CSRF_TIME_LIMIT = None  # Tokens live for the full session (needed for 7-day sessions)
+
+    # Google AI (Gemini)
+    GOOGLE_AI_API_KEY = os.environ.get("GOOGLE_AI_API_KEY")

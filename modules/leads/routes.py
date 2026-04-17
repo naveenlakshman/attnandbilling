@@ -1,7 +1,8 @@
 from datetime import date, datetime
-from flask import Blueprint, render_template, session, flash, redirect, url_for, request
+from flask import Blueprint, render_template, session, flash, redirect, url_for, request, jsonify
 from db import get_conn, log_activity
 from modules.core.utils import login_required
+from modules.leads import ai_helper
 
 leads_bp = Blueprint("leads", __name__)
 
@@ -1706,4 +1707,60 @@ def lead_mark_lost(lead_id):
 
     flash("Lead marked as lost.", "warning")
     return redirect(url_for("leads.lead_detail", lead_id=lead_id))
+
+
+@leads_bp.route("/<int:lead_id>/ai-assist", methods=["POST"])
+@login_required
+def ai_assist(lead_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM leads
+        WHERE id = ? AND is_deleted = 0
+    """, (lead_id,))
+    lead = cur.fetchone()
+
+    if not lead:
+        conn.close()
+        return jsonify({"error": "Lead not found."}), 404
+
+    cur.execute("""
+        SELECT f.*, u.full_name AS user_full_name
+        FROM followups f
+        LEFT JOIN users u ON f.user_id = u.id
+        WHERE f.lead_id = ?
+        ORDER BY f.created_at DESC
+        LIMIT 10
+    """, (lead_id,))
+    followups = cur.fetchall()
+    conn.close()
+
+    data = request.get_json(silent=True) or {}
+    action = data.get("action", "script")
+
+    lead_dict = dict(lead)
+    followups_list = [dict(f) for f in followups]
+
+    try:
+        if action == "script":
+            result = ai_helper.generate_followup_script(lead_dict, followups_list)
+        elif action == "next_action":
+            result = ai_helper.suggest_next_action(lead_dict, followups_list)
+        elif action == "whatsapp":
+            result = ai_helper.draft_message_template(lead_dict, method="WhatsApp")
+        elif action == "email":
+            result = ai_helper.draft_message_template(lead_dict, method="Email")
+        else:
+            return jsonify({"error": "Unknown action."}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 503
+    except Exception as e:
+        err_msg = str(e)
+        if "429" in err_msg or "quota" in err_msg.lower() or "ResourceExhausted" in err_msg:
+            return jsonify({"error": "Google AI quota exceeded. Please check your plan at https://ai.dev/rate-limit or try again later."}), 503
+        return jsonify({"error": f"AI error: {err_msg[:200]}"}), 503
+
+    return jsonify({"result": result})
 
