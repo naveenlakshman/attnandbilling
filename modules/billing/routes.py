@@ -773,6 +773,24 @@ def student_new():
         branch_id = request.form["branch_id"]
         full_name = request.form["full_name"].strip()
         phone = request.form["phone"].strip()
+
+        # Validate phone number
+        import re as _re
+        _phone_digits = _re.sub(r'[\s\-\+]', '', phone)
+        if not _phone_digits.isdigit() or len(_phone_digits) != 10:
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            branches = cur.fetchall()
+            conn.close()
+            return render_template(
+                "billing/student_form.html",
+                student=None,
+                branches=branches,
+                education_levels=QUALIFICATION_LEVELS.keys(),
+                qualification_levels=QUALIFICATION_LEVELS,
+                error="Invalid phone number. Please enter a valid 10-digit mobile number.",
+                form_data=request.form
+            )
+
         gender = request.form.get("gender", "").strip()
         email = request.form.get("email", "").strip()
         address = request.form.get("address", "").strip()
@@ -975,6 +993,24 @@ def student_edit(student_id):
         branch_id = request.form["branch_id"]
         full_name = request.form["full_name"].strip()
         phone = request.form["phone"].strip()
+
+        # Validate phone number
+        import re as _re
+        _phone_digits = _re.sub(r'[\s\-\+]', '', phone)
+        if not _phone_digits.isdigit() or len(_phone_digits) != 10:
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            branches = cur.fetchall()
+            conn.close()
+            return render_template(
+                "billing/student_form.html",
+                student=student,
+                branches=branches,
+                education_levels=QUALIFICATION_LEVELS.keys(),
+                qualification_levels=QUALIFICATION_LEVELS,
+                error="Invalid phone number. Please enter a valid 10-digit mobile number.",
+                form_data=request.form
+            )
+
         gender = request.form.get("gender", "").strip()
         email = request.form.get("email", "").strip()
         address = request.form.get("address", "").strip()

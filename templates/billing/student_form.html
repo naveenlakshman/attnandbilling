@@ -385,7 +385,11 @@
 
         <div class="form-group">
           <label>Phone</label>
-          <input type="text" id="phoneInput" name="phone" required value="{% if student %}{{ student.phone }}{% elif form_data %}{{ form_data.get('phone', '') }}{% endif %}">
+          <input type="text" id="phoneInput" name="phone" required
+                 placeholder="10-digit mobile number"
+                 maxlength="10"
+                 value="{% if student %}{{ student.phone }}{% elif form_data %}{{ form_data.get('phone', '') }}{% endif %}">
+          <div id="phoneFormatError" style="display:none; color:#dc3545; font-size:12px; margin-top:4px;"></div>
           <div id="phoneDupWarning" style="display:none; color:#9a3412; font-size:12px; margin-top:4px;"></div>
         </div>
 
@@ -646,6 +650,16 @@ document.addEventListener('DOMContentLoaded', function() {
   const isNewStudent = !{{ 'true' if student else 'false' }};
   if (studentForm) {
     studentForm.addEventListener('submit', function(e) {
+      // Phone validation on submit
+      const phoneVal = document.getElementById('phoneInput').value.trim();
+      const phoneErr = validatePhone(phoneVal);
+      if (phoneErr) {
+        e.preventDefault();
+        phoneFormatError.textContent = phoneErr;
+        phoneFormatError.style.display = 'block';
+        document.getElementById('phoneInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+      }
       // DOB validation on submit
       validateAndSetDob();
       if (dobError.style.display === 'block') {
@@ -669,6 +683,20 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
+
+  // Phone number validation
+  const phoneFormatError = document.getElementById('phoneFormatError');
+  function validatePhone(value) {
+    const digits = value.replace(/[\s\-\+]/g, '');
+    if (!/^\d+$/.test(digits)) return 'Phone number must contain digits only.';
+    if (digits.length !== 10) return 'Please enter a valid 10-digit mobile number.';
+    return '';
+  }
+  document.getElementById('phoneInput').addEventListener('input', function() {
+    const err = this.value.trim() ? validatePhone(this.value.trim()) : '';
+    phoneFormatError.textContent = err;
+    phoneFormatError.style.display = err ? 'block' : 'none';
+  });
 
   // Real-time duplicate phone check via AJAX
   (function() {
