@@ -786,6 +786,24 @@ def student_new():
         parent_contact = request.form.get("parent_contact", "").strip() or None
         photo_data = request.form.get("photo_data", "").strip()
 
+        # Validate date_of_birth is a real calendar date
+        if date_of_birth:
+            try:
+                datetime.strptime(date_of_birth, "%Y-%m-%d")
+            except ValueError:
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                branches = cur.fetchall()
+                conn.close()
+                return render_template(
+                    "billing/student_form.html",
+                    student=None,
+                    branches=branches,
+                    education_levels=QUALIFICATION_LEVELS.keys(),
+                    qualification_levels=QUALIFICATION_LEVELS,
+                    error="Invalid date of birth. Please enter a valid calendar date.",
+                    form_data=request.form
+                )
+
         # Photo is required for new students
         if not photo_data:
             cur.execute("""
@@ -969,6 +987,24 @@ def student_edit(student_id):
         parent_name = request.form.get("parent_name", "").strip() or None
         parent_contact = request.form.get("parent_contact", "").strip() or None
         photo_data = request.form.get("photo_data", "").strip()
+
+        # Validate date_of_birth is a real calendar date
+        if date_of_birth:
+            try:
+                datetime.strptime(date_of_birth, "%Y-%m-%d")
+            except ValueError:
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                branches = cur.fetchall()
+                conn.close()
+                return render_template(
+                    "billing/student_form.html",
+                    student=student,
+                    branches=branches,
+                    education_levels=QUALIFICATION_LEVELS.keys(),
+                    qualification_levels=QUALIFICATION_LEVELS,
+                    error="Invalid date of birth. Please enter a valid calendar date.",
+                    form_data=request.form
+                )
 
         # Save photo if provided
         # Row objects don't have .get() method, use bracket notation instead
