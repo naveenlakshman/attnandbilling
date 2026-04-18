@@ -92,7 +92,7 @@
                                 <div class="alert alert-info mb-3">
                                     <i class="bi bi-file-earmark-code"></i> Displaying HTML file content
                                 </div>
-                                <iframe src="{{ content.file_path }}" style="width:100%; height:600px; border: 1px solid #ddd; border-radius: 4px;"></iframe>
+                                <iframe src="{{ '/' + content.file_path }}" style="width:100%; height:600px; border: 1px solid #ddd; border-radius: 4px;"></iframe>
                             </div>
                             <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
                         {% else %}
@@ -104,11 +104,26 @@
 
                     {% elif content.content_mode == 'youtube' %}
                         <!-- YouTube Video -->
-                        {% if content.external_url %}
-                            <div class="ratio ratio-16x9 mb-3">
-                                <iframe src="{{ content.external_url }}" allowfullscreen></iframe>
+                        {% if embed_url %}
+                            <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden;" class="mb-3">
+                                <iframe src="{{ embed_url }}"
+                                    style="position:absolute; top:0; left:0; width:100%; height:100%; border:0;"
+                                    allowfullscreen
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture">
+                                </iframe>
+                                <!-- Overlay: top bar — blocks video title + channel name link -->
+                                <div style="position:absolute; top:0; left:0; width:100%; height:13%; z-index:10;
+                                            background:transparent; cursor:default;"
+                                     oncontextmenu="return false;"></div>
+                                <!-- Overlay: bottom-right — blocks YouTube logo link -->
+                                <div style="position:absolute; bottom:0; right:0; width:22%; height:12%; z-index:10;
+                                            background:transparent; cursor:default;"
+                                     oncontextmenu="return false;"></div>
+                                <!-- Overlay: bottom-left share button area -->
+                                <div style="position:absolute; bottom:0; left:0; width:8%; height:12%; z-index:10;
+                                            background:transparent; cursor:default;"
+                                     oncontextmenu="return false;"></div>
                             </div>
-                            <p class="text-muted"><small>URL: {{ content.external_url }}</small></p>
                         {% else %}
                             <div class="alert alert-warning">No YouTube URL configured</div>
                         {% endif %}
@@ -118,7 +133,7 @@
                         {% if content.file_path %}
                             <div class="ratio ratio-16x9 mb-3">
                                 <video controls>
-                                    <source src="{{ content.file_path }}" type="video/mp4">
+                                    <source src="{{ '/' + content.file_path }}" type="video/mp4">
                                     Your browser does not support the video tag.
                                 </video>
                             </div>
@@ -128,12 +143,50 @@
                         {% endif %}
 
                     {% elif content.content_mode == 'pdf' %}
-                        <!-- PDF Document -->
+                        <!-- PDF rendered via PDF.js (no native viewer = no toolbar/right-click) -->
                         {% if content.file_path %}
-                            <div class="mb-3">
-                                <iframe src="{{ content.file_path }}" style="width:100%; height:600px; border: 1px solid #ddd;"></iframe>
+                            <div class="alert alert-warning py-2 mb-2" style="font-size:12px;">
+                                🔒 This content is protected. Saving and printing are disabled.
                             </div>
-                            <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
+                            <div id="pdf-loading" class="text-center py-4 text-muted">Loading PDF…</div>
+                            <div id="pdf-viewer" class="protected-content-wrapper"
+                                 style="background:#525659; padding:12px; border-radius:4px; max-height:650px; overflow-y:auto;">
+                            </div>
+                            <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+                            <script>
+                                pdfjsLib.GlobalWorkerOptions.workerSrc =
+                                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+                                const pdfUrl = '{{ url_for("lms_admin.serve_pdf", content_id=content.id) }}';
+
+                                pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
+                                    document.getElementById('pdf-loading').style.display = 'none';
+                                    const viewer = document.getElementById('pdf-viewer');
+
+                                    // Render pages sequentially
+                                    function renderPage(num) {
+                                        pdf.getPage(num).then(function(page) {
+                                            const scale = 1.4;
+                                            const viewport = page.getViewport({ scale });
+                                            const canvas = document.createElement('canvas');
+                                            canvas.height = viewport.height;
+                                            canvas.width = viewport.width;
+                                            canvas.style.display = 'block';
+                                            canvas.style.margin = '0 auto 8px';
+                                            canvas.style.maxWidth = '100%';
+                                            canvas.style.boxShadow = '0 2px 6px rgba(0,0,0,0.4)';
+                                            // Block right-click on each canvas
+                                            canvas.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+                                            viewer.appendChild(canvas);
+                                            page.render({ canvasContext: canvas.getContext('2d'), viewport });
+                                            if (num < pdf.numPages) renderPage(num + 1);
+                                        });
+                                    }
+                                    renderPage(1);
+                                }).catch(function(err) {
+                                    document.getElementById('pdf-loading').textContent = 'Failed to load PDF.';
+                                });
+                            </script>
                         {% else %}
                             <div class="alert alert-warning">No PDF file configured</div>
                         {% endif %}
@@ -142,7 +195,7 @@
                         <!-- Image -->
                         {% if content.file_path %}
                             <div class="mb-3">
-                                <img src="{{ content.file_path }}" class="img-fluid rounded" style="max-width: 100%; max-height: 500px;" alt="{{ content.content_title }}">
+                                <img src="{{ '/' + content.file_path }}" class="img-fluid rounded" style="max-width: 100%; max-height: 500px;" alt="{{ content.content_title }}">
                             </div>
                             <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
                         {% else %}
@@ -154,11 +207,11 @@
                         {% if content.file_path %}
                             <div class="alert alert-info">
                                 <i class="bi bi-download"></i>
-                                <a href="{{ content.file_path }}" class="btn btn-sm btn-primary ms-2">
+                                <strong>{{ content.content_title }}</strong> — available for download.
+                                <a href="{{ url_for('lms_admin.serve_protected_file', content_id=content.id) }}" class="btn btn-sm btn-primary ms-2">
                                     ⬇️ Download File
                                 </a>
                             </div>
-                            <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
                         {% else %}
                             <div class="alert alert-warning">No file configured for download</div>
                         {% endif %}
@@ -212,10 +265,10 @@
                     {% if content.file_path %}
                     <div class="row mb-3">
                         <div class="col-sm-3">
-                            <strong>File Path:</strong>
+                            <strong>File:</strong>
                         </div>
                         <div class="col-sm-9">
-                            <small class="text-break">{{ content.file_path }}</small>
+                            <small class="text-muted">📎 File uploaded</small>
                         </div>
                     </div>
                     {% endif %}
@@ -258,19 +311,44 @@
 </div>
 
 <style>
-    .content-display {
-        line-height: 1.6;
-        font-size: 15px;
+    .content-display { line-height: 1.6; font-size: 15px; }
+    .content-display img { max-width: 100%; height: auto; }
+    .content-display video { max-width: 100%; height: auto; }
+
+    /* IP Protection */
+    .protected-content-wrapper {
+        position: relative;
+        user-select: none;
+        -webkit-user-select: none;
     }
-    
-    .content-display img {
-        max-width: 100%;
-        height: auto;
+    .card-body {
+        user-select: none;
+        -webkit-user-select: none;
     }
-    
-    .content-display video {
-        max-width: 100%;
-        height: auto;
+
+    /* Block printing entirely */
+    @media print {
+        body * { visibility: hidden !important; }
+        body::after {
+            visibility: visible !important;
+            content: "Printing this content is not permitted.";
+            position: fixed;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #333;
+        }
     }
 </style>
+<script>
+    /* Disable right-click on the whole page */
+    document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    /* Disable Ctrl+S / Ctrl+P */
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'p' || e.key === 'u')) {
+            e.preventDefault();
+        }
+    });
+</script>
 {% endblock %}

@@ -509,6 +509,7 @@
                                           action="{{ url_for('lms_admin.delete_batch_program', assignment_id=assignment.id) }}" 
                                           style="display: inline;"
                                           onsubmit="return confirm('Remove this assignment?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn-sm btn-delete">🗑️ Delete</button>
                                     </form>
                                 </div>

@@ -43,3 +43,22 @@ class Config:
 
     # Google AI (Gemini)
     GOOGLE_AI_API_KEY = os.environ.get("GOOGLE_AI_API_KEY")
+
+    # LMS File Uploads
+    UPLOAD_FOLDER = UPLOAD_DIR
+
+    ALLOWED_EXTENSIONS = {
+        'video_file': {'mp4', 'avi', 'mov', 'wmv', 'mkv', 'webm'},
+        'pdf':        {'pdf'},
+        'image':      {'jpg', 'jpeg', 'png', 'gif', 'webp'},
+        'download':   {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'txt', 'ppt', 'pptx'},
+        'html':       {'html', 'htm'},
+    }
+
+    FILE_LIMITS = {
+        'video_file': 500 * 1024 * 1024,   # 500 MB
+        'pdf':         50 * 1024 * 1024,   #  50 MB
+        'image':       10 * 1024 * 1024,   #  10 MB
+        'download':   100 * 1024 * 1024,   # 100 MB
+        'html':        10 * 1024 * 1024,   #  10 MB
+    }

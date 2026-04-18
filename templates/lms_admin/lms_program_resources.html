@@ -465,6 +465,7 @@
                                           action="{{ url_for('lms_admin.delete_program_resource', resource_id=resource.id) }}" 
                                           style="display: inline;"
                                           onsubmit="return confirm('Delete this resource?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn-sm btn-delete">🗑️ Delete</button>
                                     </form>
                                 </div>

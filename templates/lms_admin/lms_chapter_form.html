@@ -59,6 +59,7 @@
             <div class="card shadow-sm">
                 <div class="card-body p-4">
                     <form method="POST" id="chapterForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <!-- Basic Information Section -->
                         <div class="form-section mb-4">
                             <h5 class="text-primary mb-3">

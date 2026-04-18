@@ -85,6 +85,8 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
             now
         ))
         conn.commit()
+    except Exception as e:
+        print(f"Activity log error: {e}")
     finally:
         conn.close()
 
@@ -572,6 +574,185 @@ def init_db():
             FOREIGN KEY(invoice_id) REFERENCES invoices(id),
             FOREIGN KEY(installment_id) REFERENCES installment_plans(id),
             FOREIGN KEY(sent_by) REFERENCES users(id)
+        )
+    """)
+
+    # ---------- LMS TABLES ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_programs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            course_id INTEGER,
+            program_name TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            description TEXT,
+            thumbnail_path TEXT,
+            is_published INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_by INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (course_id) REFERENCES courses(id),
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_chapters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            program_id INTEGER NOT NULL,
+            chapter_title TEXT NOT NULL,
+            chapter_order INTEGER NOT NULL DEFAULT 1,
+            description TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_topics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chapter_id INTEGER NOT NULL,
+            topic_title TEXT NOT NULL,
+            topic_order INTEGER NOT NULL DEFAULT 1,
+            short_description TEXT,
+            estimated_minutes INTEGER,
+            content_type TEXT NOT NULL DEFAULT 'lesson',
+            is_preview INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            is_required INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (chapter_id) REFERENCES lms_chapters(id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_topic_contents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic_id INTEGER NOT NULL,
+            content_mode TEXT NOT NULL DEFAULT 'text',
+            content_title TEXT NOT NULL,
+            external_url TEXT,
+            file_path TEXT,
+            content_body TEXT,
+            display_order INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (topic_id) REFERENCES lms_topics(id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_topic_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic_id INTEGER NOT NULL,
+            attachment_type TEXT NOT NULL DEFAULT 'other',
+            file_name TEXT NOT NULL,
+            file_size INTEGER NOT NULL DEFAULT 0,
+            file_path TEXT NOT NULL,
+            description TEXT,
+            uploaded_by INTEGER,
+            is_required INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (topic_id) REFERENCES lms_topics(id) ON DELETE CASCADE,
+            FOREIGN KEY (uploaded_by) REFERENCES users(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_program_resources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            program_id INTEGER NOT NULL,
+            resource_title TEXT NOT NULL,
+            resource_type TEXT NOT NULL DEFAULT 'other',
+            file_path TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_mock_tests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            program_id INTEGER,
+            chapter_id INTEGER,
+            topic_id INTEGER,
+            test_title TEXT NOT NULL,
+            description TEXT,
+            total_marks REAL NOT NULL DEFAULT 0,
+            pass_marks REAL NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id),
+            FOREIGN KEY (chapter_id) REFERENCES lms_chapters(id),
+            FOREIGN KEY (topic_id) REFERENCES lms_topics(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_student_program_access (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            program_id INTEGER NOT NULL,
+            batch_id INTEGER,
+            access_start_date TEXT,
+            access_end_date TEXT,
+            access_status TEXT NOT NULL DEFAULT 'active',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id),
+            FOREIGN KEY (batch_id) REFERENCES batches(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_batch_program_access (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            program_id INTEGER NOT NULL,
+            access_start_date TEXT,
+            access_end_date TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE(batch_id, program_id),
+            FOREIGN KEY (batch_id) REFERENCES batches(id),
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_student_topic_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            topic_id INTEGER NOT NULL,
+            completion_percentage REAL NOT NULL DEFAULT 0,
+            last_accessed TEXT,
+            time_spent_minutes INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(student_id, topic_id),
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (topic_id) REFERENCES lms_topics(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_student_test_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            test_id INTEGER NOT NULL,
+            score REAL,
+            total_marks REAL,
+            obtained_percentage REAL,
+            test_date TEXT,
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (test_id) REFERENCES lms_mock_tests(id)
         )
     """)
 

@@ -496,6 +496,7 @@
                                           action="{{ url_for('lms_admin.delete_topic_attachment', attachment_id=attachment.id) }}" 
                                           style="display: inline;"
                                           onsubmit="return confirm('Delete this attachment?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn-sm btn-delete">🗑️ Delete</button>
                                     </form>
                                 </div>

@@ -442,6 +442,11 @@
       const form = document.createElement('form');
       form.method = 'POST';
       form.action = '/lms_admin/topic/' + topicId + '/delete';
+      const csrf = document.createElement('input');
+      csrf.type = 'hidden';
+      csrf.name = 'csrf_token';
+      csrf.value = '{{ csrf_token() }}';
+      form.appendChild(csrf);
       document.body.appendChild(form);
       form.submit();
     }
@@ -449,7 +454,7 @@
 
   function manageContent(event, topicId) {
     event.preventDefault();
-    window.location.href = '/lms_admin/topic/' + topicId + '/content';
+    window.location.href = '/lms_admin/topic/' + topicId + '/contents';
   }
 </script>
 

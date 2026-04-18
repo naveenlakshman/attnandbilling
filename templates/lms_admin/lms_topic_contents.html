@@ -166,12 +166,8 @@
     text-align: center;
   }
 
-  .content-type-text { background: #e7f3ff; color: #004085; }
-  .content-type-html { background: #d4edda; color: #155724; }
   .content-type-youtube { background: #fff3cd; color: #856404; }
-  .content-type-video_file { background: #f8d7da; color: #721c24; }
   .content-type-pdf { background: #cfe2ff; color: #084298; }
-  .content-type-image { background: #d1ecf1; color: #0c5460; }
   .content-type-download { background: #e7d4f5; color: #663399; }
 
   .content-title {
@@ -376,7 +372,7 @@
 
 <!-- Content Type Guide -->
 <div class="content-type-guide">
-  <strong>Content Types:</strong> 📄 Text | 🌐 HTML | ▶️ YouTube | 🎥 Video | 📕 PDF | 🖼️ Image | ⬇️ Download
+  <strong>Content Types:</strong> ▶️ YouTube Video | 📕 PDF Document | ⬇️ Downloadable Assignment
 </div>
 
 <!-- Contents Table -->
@@ -388,8 +384,6 @@
           <th style="width: 70px;">Order</th>
           <th style="width: 100px;">Type</th>
           <th>Title</th>
-          <th style="width: 100px;">Duration</th>
-          <th style="width: 80px;">Required</th>
           <th style="width: 280px;">Actions</th>
         </tr>
       </thead>
@@ -400,44 +394,22 @@
             <input type="number" class="content-order-input" value="{{ content.display_order }}" min="1" readonly>
           </td>
           <td>
-            <span class="content-type-badge content-type-{{ content.content_type }}">
-              {% if content.content_type == 'text' %}
-                📄 Text
-              {% elif content.content_type == 'html' %}
-                🌐 HTML
-              {% elif content.content_type == 'youtube' %}
+            <span class="content-type-badge content-type-{{ content.content_mode }}">
+              {% if content.content_mode == 'youtube' %}
                 ▶️ YouTube
-              {% elif content.content_type == 'video_file' %}
-                🎥 Video
-              {% elif content.content_type == 'pdf' %}
+              {% elif content.content_mode == 'pdf' %}
                 📕 PDF
-              {% elif content.content_type == 'image' %}
-                🖼️ Image
-              {% elif content.content_type == 'download' %}
+              {% elif content.content_mode == 'download' %}
                 ⬇️ Download
               {% else %}
-                📦 {{ content.content_type }}
+                📦 {{ content.content_mode }}
               {% endif %}
             </span>
           </td>
           <td>
-            <div class="content-title">{{ content.title }}</div>
-            {% if content.description %}
-            <div class="content-description" title="{{ content.description }}">{{ content.description }}</div>
-            {% endif %}
-          </td>
-          <td>
-            {% if content.duration_minutes %}
-              <span class="duration-badge">⏱️ {{ content.duration_minutes }}m</span>
-            {% else %}
-              <span style="color: #999;">-</span>
-            {% endif %}
-          </td>
-          <td style="text-align: center;">
-            {% if content.is_required %}
-              <span class="required-badge">Required</span>
-            {% else %}
-              <span style="color: #999; font-size: 12px;">Optional</span>
+            <div class="content-title">{{ content.content_title }}</div>
+            {% if content.content_body %}
+            <div class="content-description" title="{{ content.content_body }}">{{ content.content_body }}</div>
             {% endif %}
           </td>
           <td>
@@ -475,6 +447,11 @@
       const form = document.createElement('form');
       form.method = 'POST';
       form.action = '/lms_admin/content/' + contentId + '/delete';
+      const csrf = document.createElement('input');
+      csrf.type = 'hidden';
+      csrf.name = 'csrf_token';
+      csrf.value = '{{ csrf_token() }}';
+      form.appendChild(csrf);
       document.body.appendChild(form);
       form.submit();
     }
