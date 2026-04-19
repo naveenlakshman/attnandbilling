@@ -4,10 +4,31 @@ import calendar
 import uuid
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
+from werkzeug.security import generate_password_hash
 import io
 import csv
 import os
 import base64
+
+
+def _auto_enable_portal(student_id):
+    """Set portal_enabled=1 and default password (=student_code) if not already set."""
+    try:
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT student_code, portal_enabled, password_hash FROM students WHERE id = ?",
+            (student_id,)
+        ).fetchone()
+        if row and not row['portal_enabled']:
+            ph = generate_password_hash(row['student_code'])
+            conn.execute(
+                "UPDATE students SET portal_enabled = 1, password_hash = ? WHERE id = ?",
+                (ph, student_id)
+            )
+            conn.commit()
+        conn.close()
+    except Exception:
+        pass  # Never block the main flow
 
 
 QUALIFICATION_LEVELS = {
@@ -59,6 +80,44 @@ QUALIFICATION_LEVELS = {
 }
 
 billing_bp = Blueprint("billing", __name__)
+
+
+@billing_bp.route('/student/<int:student_id>/toggle-portal', methods=['POST'])
+@login_required
+def toggle_portal(student_id):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT full_name, student_code, portal_enabled, password_hash FROM students WHERE id = ?",
+        (student_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        flash("Student not found.", "danger")
+        return redirect(url_for('billing.students'))
+
+    if row['portal_enabled']:
+        # Disable
+        conn.execute("UPDATE students SET portal_enabled = 0 WHERE id = ?", (student_id,))
+        conn.commit()
+        conn.close()
+        log_activity(session['user_id'], None, 'update', 'students', student_id,
+                     f"Disabled portal access for {row['full_name']} ({row['student_code']})")
+        flash(f"Portal access disabled for {row['full_name']}. They can no longer log in.", "warning")
+    else:
+        # Enable — set password to student_code if not set
+        ph = row['password_hash'] or generate_password_hash(row['student_code'])
+        conn.execute(
+            "UPDATE students SET portal_enabled = 1, password_hash = ? WHERE id = ?",
+            (ph, student_id)
+        )
+        conn.commit()
+        conn.close()
+        log_activity(session['user_id'], None, 'update', 'students', student_id,
+                     f"Enabled portal access for {row['full_name']} ({row['student_code']})")
+        flash(f"Portal access enabled for {row['full_name']}. Password: {row['student_code']}", "success")
+
+    return redirect(url_for('billing.student_profile', student_id=student_id))
+
 
 def save_student_photo(photo_data, student_code):
     """Save student photo from base64 data"""
@@ -940,6 +999,8 @@ def student_new():
         student_id = cur.lastrowid
         conn.commit()
         conn.close()
+
+        _auto_enable_portal(student_id)
 
         log_activity(
             user_id=session["user_id"],
@@ -2480,6 +2541,8 @@ def invoice_new():
 
             # Extract student name before closing connection to avoid Row access after close
             student_full_name = str(student['full_name'])
+
+            _auto_enable_portal(student_id)
 
             log_activity(
                 user_id=session["user_id"],

@@ -852,6 +852,20 @@
   {% if invoices %}
   <button class="btn btn-secondary" onclick="showAgreementModal()">📄 Generate Enrollment Agreement</button>
   {% endif %}
+  <!-- Portal Access Toggle -->
+  <form method="POST" action="{{ url_for('billing.toggle_portal', student_id=student.id) }}" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if student.portal_enabled %}
+      <button type="submit" class="btn" style="background:#dc3545;color:#fff;" title="Student can currently log in. Click to disable."
+              onclick="return confirm('Disable portal access for {{ student.full_name }}? They will not be able to log in.')">
+        🔒 Disable Student Login
+      </button>
+    {% else %}
+      <button type="submit" class="btn" style="background:#198754;color:#fff;" title="Student cannot log in. Click to enable.">
+        🔓 Enable Student Login
+      </button>
+    {% endif %}
+  </form>
 </div>
 
 <!-- Profile Header -->

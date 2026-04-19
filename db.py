@@ -776,6 +776,9 @@ def init_db():
     add_column_if_not_exists(cur, "students", "student_signature_date", "TEXT")
     add_column_if_not_exists(cur, "students", "parent_signature_filename", "TEXT")
     add_column_if_not_exists(cur, "students", "parent_signature_date", "TEXT")
+    # Student portal login
+    add_column_if_not_exists(cur, "students", "password_hash", "TEXT")
+    add_column_if_not_exists(cur, "students", "portal_enabled", "INTEGER NOT NULL DEFAULT 0")
     add_column_if_not_exists(cur, "leads", "lead_location", "TEXT")
 
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")
@@ -792,6 +795,18 @@ def init_db():
     add_column_if_not_exists(cur, "branches", "closing_time", "TEXT")
 
     add_column_if_not_exists(cur, "student_batches", "uses_own_laptop", "INTEGER NOT NULL DEFAULT 0")
+
+    # LMS topic progress tracking
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_topic_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            topic_id INTEGER NOT NULL,
+            is_completed INTEGER NOT NULL DEFAULT 0,
+            completed_at TEXT,
+            UNIQUE(student_id, topic_id)
+        )
+    """)
 
     # ---------- MIGRATE asset_logs CONSTRAINT ----------
     # Update asset_logs table to allow 'Updated' action

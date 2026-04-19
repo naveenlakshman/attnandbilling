@@ -10,6 +10,7 @@ from modules.import_export.routes import import_export_bp
 from modules.baddebt.routes import baddebt_bp
 from modules.attendance.routes import attendance_bp
 from modules.lms_admin import lms_admin_bp
+from modules.students import students_bp
 from datetime import datetime, timedelta
 
 def format_datetime(value):
@@ -61,6 +62,7 @@ def create_app():
     app.register_blueprint(baddebt_bp, url_prefix="/baddebt")
     app.register_blueprint(attendance_bp, url_prefix="/attendance")
     app.register_blueprint(lms_admin_bp)
+    app.register_blueprint(students_bp)
 
     # File serving route for uploaded content
     @app.route('/uploads/content/<path:filename>')
