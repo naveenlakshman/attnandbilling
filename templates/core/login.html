@@ -31,5 +31,12 @@
 
         <button type="submit" class="btn btn-primary w-100">Login</button>
     </form>
+    <hr class="my-3">
+    <div class="text-center">
+        <p class="text-muted mb-2" style="font-size: 0.9rem;">Are you a student?</p>
+        <a href="{{ url_for('students.login') }}" class="btn btn-outline-success w-100">
+            🎓 Student Login
+        </a>
+    </div>
 </div>
 {% endblock %}
