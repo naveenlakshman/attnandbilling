@@ -2845,45 +2845,43 @@ def progress_dashboard():
         # Total completed topics
         cur.execute("""
             SELECT COUNT(*) as count
-            FROM lms_student_topic_progress
-            WHERE completion_percentage = 100
+            FROM lms_topic_progress
+            WHERE is_completed = 1
         """)
         completed_topics = cur.fetchone()['count']
         
-        # Total incomplete topics
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_student_topic_progress
-            WHERE completion_percentage < 100 AND completion_percentage > 0
-        """)
-        in_progress_topics = cur.fetchone()['count']
+        # In progress (binary state — no partial completion)
+        in_progress_topics = 0
         
-        # Total not started
+        # Total not started (records exist but not completed)
         cur.execute("""
             SELECT COUNT(*) as count
-            FROM lms_student_topic_progress
-            WHERE completion_percentage = 0
+            FROM lms_topic_progress
+            WHERE is_completed = 0
         """)
         not_started_topics = cur.fetchone()['count']
         
         # Overall completion percentage
         cur.execute("""
-            SELECT AVG(completion_percentage) as avg_completion
-            FROM lms_student_topic_progress
+            SELECT
+                CASE WHEN COUNT(*) = 0 THEN 0
+                ELSE ROUND(100.0 * SUM(is_completed) / COUNT(*), 1)
+                END as avg_completion
+            FROM lms_topic_progress
         """)
         result = cur.fetchone()
         overall_completion = result['avg_completion'] if result['avg_completion'] else 0
         
-        # Top 5 progressing students (by average completion)
+        # Top 5 progressing students (by completion)
         cur.execute("""
             SELECT 
                 stp.student_id,
                 ast.full_name as first_name,
                 '' as last_name,
                 COUNT(stp.topic_id) as topics_count,
-                AVG(stp.completion_percentage) as avg_completion,
-                MAX(stp.last_accessed) as last_accessed
-            FROM lms_student_topic_progress stp
+                ROUND(100.0 * SUM(stp.is_completed) / COUNT(*), 1) as avg_completion,
+                MAX(stp.completed_at) as last_accessed
+            FROM lms_topic_progress stp
             LEFT JOIN students ast ON stp.student_id = ast.id
             GROUP BY stp.student_id
             ORDER BY avg_completion DESC
@@ -2891,64 +2889,52 @@ def progress_dashboard():
         """)
         top_students = cur.fetchall()
         
-        # Bottom 5 low engagement students (lowest completion)
+        # Bottom 5 low engagement students: have program access but least/no progress
         cur.execute("""
             SELECT 
-                stp.student_id,
+                spa.student_id,
                 ast.full_name as first_name,
                 '' as last_name,
-                COUNT(stp.topic_id) as topics_count,
-                AVG(stp.completion_percentage) as avg_completion,
-                MAX(stp.last_accessed) as last_accessed
-            FROM lms_student_topic_progress stp
-            LEFT JOIN students ast ON stp.student_id = ast.id
-            GROUP BY stp.student_id
-            HAVING AVG(stp.completion_percentage) > 0
-            ORDER BY avg_completion ASC
+                COUNT(DISTINCT stp.topic_id) as topics_count,
+                COALESCE(ROUND(100.0 * SUM(CASE WHEN stp.is_completed = 1 THEN 1 ELSE 0 END) / 
+                    NULLIF(COUNT(DISTINCT stp.topic_id), 0), 1), 0) as avg_completion,
+                MAX(stp.completed_at) as last_accessed
+            FROM lms_student_program_access spa
+            JOIN students ast ON spa.student_id = ast.id
+            LEFT JOIN lms_topic_progress stp ON spa.student_id = stp.student_id
+            WHERE spa.is_active = 1
+            GROUP BY spa.student_id
+            ORDER BY avg_completion ASC, topics_count ASC
             LIMIT 5
         """)
         low_engagement_students = cur.fetchall()
         
-        # Recent activity - last 10 progress updates
+        # Recent activity - last 10 completions
         cur.execute("""
             SELECT 
                 stp.student_id,
                 ast.full_name as first_name,
                 '' as last_name,
                 lt.topic_title,
-                stp.completion_percentage,
-                stp.last_accessed
-            FROM lms_student_topic_progress stp
+                CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END as completion_percentage,
+                stp.completed_at as last_accessed
+            FROM lms_topic_progress stp
             LEFT JOIN students ast ON stp.student_id = ast.id
             LEFT JOIN lms_topics lt ON stp.topic_id = lt.id
-            ORDER BY stp.last_accessed DESC
+            WHERE stp.is_completed = 1
+            ORDER BY stp.completed_at DESC
             LIMIT 10
         """)
         recent_activity = cur.fetchall()
         
-        # Completion distribution
+        # Completion distribution (binary: completed or not started)
         cur.execute("""
             SELECT 
-                CASE 
-                    WHEN completion_percentage = 0 THEN 'Not Started'
-                    WHEN completion_percentage BETWEEN 1 AND 25 THEN '1-25%'
-                    WHEN completion_percentage BETWEEN 26 AND 50 THEN '26-50%'
-                    WHEN completion_percentage BETWEEN 51 AND 75 THEN '51-75%'
-                    WHEN completion_percentage BETWEEN 76 AND 99 THEN '76-99%'
-                    WHEN completion_percentage = 100 THEN '100%'
-                END as completion_range,
+                CASE WHEN is_completed = 1 THEN '100%' ELSE 'Not Started' END as completion_range,
                 COUNT(*) as count
-            FROM lms_student_topic_progress
-            GROUP BY completion_range
-            ORDER BY 
-                CASE 
-                    WHEN completion_range = 'Not Started' THEN 0
-                    WHEN completion_range = '1-25%' THEN 1
-                    WHEN completion_range = '26-50%' THEN 2
-                    WHEN completion_range = '51-75%' THEN 3
-                    WHEN completion_range = '76-99%' THEN 4
-                    WHEN completion_range = '100%' THEN 5
-                END
+            FROM lms_topic_progress
+            GROUP BY is_completed
+            ORDER BY is_completed
         """)
         completion_distribution = cur.fetchall()
         
@@ -2957,15 +2943,17 @@ def progress_dashboard():
             SELECT 
                 ab.id,
                 ab.batch_name,
-                ab.batch_code,
                 COUNT(DISTINCT lbpa.program_id) as programs_count,
                 COUNT(DISTINCT CASE WHEN lbpa.is_active = 1 THEN lbpa.program_id END) as active_programs,
                 COUNT(DISTINCT sb.student_id) as students_count,
-                ROUND(AVG(stp.completion_percentage), 1) as avg_completion
+                ROUND(
+                    CASE WHEN COUNT(stp.id) = 0 THEN 0
+                    ELSE 100.0 * SUM(CASE WHEN stp.is_completed = 1 THEN 1 ELSE 0 END) / COUNT(stp.id)
+                    END, 1) as avg_completion
             FROM batches ab
             LEFT JOIN lms_batch_program_access lbpa ON ab.id = lbpa.batch_id
             LEFT JOIN student_batches sb ON ab.id = sb.batch_id AND sb.status = 'active'
-            LEFT JOIN lms_student_topic_progress stp ON sb.student_id = stp.student_id
+            LEFT JOIN lms_topic_progress stp ON sb.student_id = stp.student_id
             WHERE lbpa.program_id IS NOT NULL
             GROUP BY ab.id
             ORDER BY ab.batch_name
@@ -3055,10 +3043,10 @@ def view_student_progress(student_id):
                     lc.chapter_order,
                     lc.description,
                     (SELECT COUNT(*) FROM lms_topics WHERE chapter_id = lc.id) as total_topics,
-                    (SELECT COUNT(*) FROM lms_student_topic_progress 
+                    (SELECT COUNT(*) FROM lms_topic_progress 
                      WHERE student_id = ? AND topic_id IN 
                      (SELECT id FROM lms_topics WHERE chapter_id = lc.id) 
-                     AND completion_percentage = 100) as completed_topics
+                     AND is_completed = 1) as completed_topics
                 FROM lms_chapters lc
                 WHERE lc.program_id = ?
                 ORDER BY lc.chapter_order
@@ -3077,11 +3065,11 @@ def view_student_progress(student_id):
                         lt.topic_title,
                         lt.topic_order,
                         lt.is_required,
-                        COALESCE(stp.completion_percentage, 0) as completion_percentage,
-                        COALESCE(stp.last_accessed, 'Not started') as last_accessed,
-                        COALESCE(stp.time_spent_minutes, 0) as time_spent_minutes
+                        COALESCE(CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END, 0) as completion_percentage,
+                        COALESCE(stp.completed_at, 'Not started') as last_accessed,
+                        0 as time_spent_minutes
                     FROM lms_topics lt
-                    LEFT JOIN lms_student_topic_progress stp ON lt.id = stp.topic_id AND stp.student_id = ?
+                    LEFT JOIN lms_topic_progress stp ON lt.id = stp.topic_id AND stp.student_id = ?
                     WHERE lt.chapter_id = ?
                     ORDER BY lt.topic_order
                 """, (student_id, chapter_id))
@@ -3144,12 +3132,12 @@ def view_student_progress(student_id):
             SELECT 
                 stp.student_id,
                 lt.topic_title,
-                stp.completion_percentage,
-                stp.last_accessed
-            FROM lms_student_topic_progress stp
+                CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END as completion_percentage,
+                stp.completed_at as last_accessed
+            FROM lms_topic_progress stp
             LEFT JOIN lms_topics lt ON stp.topic_id = lt.id
             WHERE stp.student_id = ?
-            ORDER BY stp.last_accessed DESC
+            ORDER BY stp.completed_at DESC
             LIMIT 5
         """, (student_id,))
         recent_activities = cur.fetchall()
@@ -3194,7 +3182,7 @@ def view_batch_progress(batch_id):
         
         # Get batch info
         cur.execute("""
-            SELECT id, batch_name, batch_code
+            SELECT id, batch_name
             FROM batches
             WHERE id = ?
         """, (batch_id,))
@@ -3214,13 +3202,16 @@ def view_batch_progress(batch_id):
                 COUNT(DISTINCT spa.program_id) as programs_assigned,
                 COUNT(DISTINCT CASE WHEN spa.is_active = 1 THEN spa.program_id END) as programs_active,
                 COUNT(DISTINCT stp.topic_id) as topics_accessed,
-                AVG(stp.completion_percentage) as avg_completion,
-                MAX(stp.last_accessed) as last_activity,
-                COUNT(DISTINCT CASE WHEN stp.completion_percentage = 100 THEN stp.topic_id END) as topics_completed
+                ROUND(
+                    CASE WHEN COUNT(stp.id) = 0 THEN 0
+                    ELSE 100.0 * SUM(CASE WHEN stp.is_completed = 1 THEN 1 ELSE 0 END) / COUNT(stp.id)
+                    END, 1) as avg_completion,
+                MAX(stp.completed_at) as last_activity,
+                COUNT(DISTINCT CASE WHEN stp.is_completed = 1 THEN stp.topic_id END) as topics_completed
             FROM students ast
             JOIN student_batches sb ON ast.id = sb.student_id AND sb.batch_id = ? AND sb.status = 'active'
             LEFT JOIN lms_student_program_access spa ON ast.id = spa.student_id
-            LEFT JOIN lms_student_topic_progress stp ON ast.id = stp.student_id
+            LEFT JOIN lms_topic_progress stp ON ast.id = stp.student_id
             GROUP BY ast.id
             ORDER BY ast.student_code
         """, (batch_id,))
@@ -3256,10 +3247,10 @@ def view_batch_progress(batch_id):
                         lc.chapter_title,
                         lc.chapter_order,
                         COUNT(lt.id) as total_topics,
-                        COUNT(CASE WHEN stp.completion_percentage = 100 THEN lt.id END) as completed_topics
+                        COUNT(CASE WHEN stp.is_completed = 1 THEN lt.id END) as completed_topics
                     FROM lms_chapters lc
                     LEFT JOIN lms_topics lt ON lc.id = lt.chapter_id
-                    LEFT JOIN lms_student_topic_progress stp ON lt.id = stp.topic_id AND stp.student_id = ?
+                    LEFT JOIN lms_topic_progress stp ON lt.id = stp.topic_id AND stp.student_id = ?
                     WHERE lc.program_id = ?
                     GROUP BY lc.id
                     ORDER BY lc.chapter_order
@@ -3305,13 +3296,14 @@ def view_batch_progress(batch_id):
                 ast.full_name as first_name,
                 '' as last_name,
                 lt.topic_title,
-                stp.completion_percentage,
-                stp.last_accessed
-            FROM lms_student_topic_progress stp
+                CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END as completion_percentage,
+                stp.completed_at as last_accessed
+            FROM lms_topic_progress stp
             JOIN students ast ON stp.student_id = ast.id
             JOIN student_batches sb ON ast.id = sb.student_id AND sb.batch_id = ?
             LEFT JOIN lms_topics lt ON stp.topic_id = lt.id
-            ORDER BY stp.last_accessed DESC
+            WHERE stp.is_completed = 1
+            ORDER BY stp.completed_at DESC
             LIMIT 10
         """, (batch_id,))
         batch_activity = cur.fetchall()
@@ -3328,14 +3320,14 @@ def view_batch_progress(batch_id):
                         lc.chapter_title,
                         lc.chapter_order,
                         COUNT(DISTINCT ast.id) as total_students,
-                        COUNT(DISTINCT CASE 
-                            WHEN stp.completion_percentage = 100 
-                            THEN ast.id 
-                        END) as students_completed,
-                        ROUND(AVG(stp.completion_percentage), 1) as avg_completion
+                        COUNT(DISTINCT CASE WHEN stp.is_completed = 1 THEN ast.id END) as students_completed,
+                        ROUND(
+                            CASE WHEN COUNT(stp.id) = 0 THEN 0
+                            ELSE 100.0 * SUM(CASE WHEN stp.is_completed = 1 THEN 1 ELSE 0 END) / COUNT(stp.id)
+                            END, 1) as avg_completion
                     FROM lms_chapters lc
                     LEFT JOIN lms_topics lt ON lc.id = lt.chapter_id
-                    LEFT JOIN lms_student_topic_progress stp ON lt.id = stp.topic_id
+                    LEFT JOIN lms_topic_progress stp ON lt.id = stp.topic_id
                     LEFT JOIN students ast ON stp.student_id = ast.id
                     LEFT JOIN student_batches astb ON ast.id = astb.student_id AND astb.batch_id = ?
                     WHERE lc.program_id = ?
