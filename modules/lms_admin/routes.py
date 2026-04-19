@@ -231,6 +231,7 @@ def program_new():
             
             program_id = cur.lastrowid
             
+            conn.commit()
             log_activity(
                 user_id=session['user_id'],
                 branch_id=session.get('branch_id'),
@@ -239,7 +240,6 @@ def program_new():
                 record_id=program_id,
                 description=f'Created LMS program: {program_name}'
             )
-            conn.commit()
             
             flash('Program created successfully.', 'success')
             return redirect(url_for('lms_admin.list_programs'))
@@ -328,6 +328,7 @@ def program_edit(program_id):
                 program_id
             ))
             
+            conn.commit()
             log_activity(
                 user_id=session['user_id'],
                 branch_id=session.get('branch_id'),
@@ -336,7 +337,6 @@ def program_edit(program_id):
                 record_id=program_id,
                 description=f'Updated LMS program: {program_name}'
             )
-            conn.commit()
             
             flash('Program updated successfully.', 'success')
             return redirect(url_for('lms_admin.list_programs'))
@@ -597,6 +597,7 @@ def chapter_new(program_id):
             ))
             
             chapter_id = cur.lastrowid
+            conn.commit()
             
             log_activity(
                 user_id=session['user_id'],
@@ -606,7 +607,6 @@ def chapter_new(program_id):
                 record_id=chapter_id,
                 description=f'Created chapter: {chapter_title} for program {program["program_name"]}'
             )
-            conn.commit()
             
             flash('Chapter created successfully.', 'success')
             return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
@@ -699,6 +699,7 @@ def chapter_edit(chapter_id):
                 chapter_id
             ))
             
+            conn.commit()
             log_activity(
                 user_id=session['user_id'],
                 branch_id=session.get('branch_id'),
@@ -707,7 +708,6 @@ def chapter_edit(chapter_id):
                 record_id=chapter_id,
                 description=f'Updated chapter: {chapter_title} in program {chapter["program_name"]}'
             )
-            conn.commit()
             
             flash('Chapter updated successfully.', 'success')
             return redirect(url_for('lms_admin.list_chapters', program_id=chapter['program_id']))
@@ -744,6 +744,7 @@ def delete_chapter(chapter_id):
             DELETE FROM lms_chapters
             WHERE id = ?
         """, (chapter_id,))
+        conn.commit()
         log_activity(
             user_id=session['user_id'],
             branch_id=session.get('branch_id'),
@@ -752,7 +753,6 @@ def delete_chapter(chapter_id):
             record_id=chapter_id,
             description=f'Deleted chapter: {chapter["chapter_title"]} from program {chapter["program_name"]}'
         )
-        conn.commit()
         
         flash('Chapter deleted successfully.', 'success')
         return redirect(url_for('lms_admin.list_chapters', program_id=chapter['program_id']))
@@ -928,6 +928,7 @@ def topic_new(chapter_id):
                 raise
             
             topic_id = cur.lastrowid
+            conn.commit()
             
             log_activity(
                 user_id=session['user_id'],
@@ -937,7 +938,6 @@ def topic_new(chapter_id):
                 record_id=topic_id,
                 description=f'Created topic: {topic_title} in chapter {chapter["chapter_title"]}'
             )
-            conn.commit()
             
             flash('Topic created successfully.', 'success')
             return redirect(url_for('lms_admin.list_topics', chapter_id=chapter_id))
@@ -1065,6 +1065,7 @@ def topic_edit(topic_id):
                 topic_id
             ))
             
+            conn.commit()
             log_activity(
                 user_id=session['user_id'],
                 branch_id=session.get('branch_id'),
@@ -1073,7 +1074,6 @@ def topic_edit(topic_id):
                 record_id=topic_id,
                 description=f'Updated topic: {topic_title} in chapter {topic["chapter_title"]}'
             )
-            conn.commit()
             
             flash('Topic updated successfully.', 'success')
             return redirect(url_for('lms_admin.list_topics', chapter_id=topic['chapter_id']))
@@ -1109,6 +1109,7 @@ def delete_topic(topic_id):
             DELETE FROM lms_topics
             WHERE id = ?
         """, (topic_id,))
+        conn.commit()
         log_activity(
             user_id=session['user_id'],
             branch_id=session.get('branch_id'),
@@ -1117,7 +1118,6 @@ def delete_topic(topic_id):
             record_id=topic_id,
             description=f'Deleted topic: {topic["topic_title"]} from chapter {topic["chapter_title"]}'
         )
-        conn.commit()
         
         flash('Topic deleted successfully.', 'success')
         return redirect(url_for('lms_admin.list_topics', chapter_id=topic['chapter_id']))
@@ -1497,6 +1497,7 @@ def content_new(topic_id):
 
                 content_id = cur.lastrowid
 
+                conn.commit()
                 log_activity(
                     user_id=session['user_id'],
                     branch_id=session.get('branch_id'),
@@ -1505,7 +1506,6 @@ def content_new(topic_id):
                     record_id=content_id,
                     description=f'Created content: {title} in topic {topic["topic_title"]}'
                 )
-                conn.commit()
 
                 flash('Content added successfully.', 'success')
                 return redirect(url_for('lms_admin.list_topic_contents', topic_id=topic_id))
@@ -1763,6 +1763,7 @@ def content_edit(content_id):
                     WHERE id = ?
                 """, (content_mode, title, external_url, file_path, description, display_order, now, content_id))
 
+                conn.commit()
                 log_activity(
                     user_id=session['user_id'],
                     branch_id=session.get('branch_id'),
@@ -1771,7 +1772,6 @@ def content_edit(content_id):
                     record_id=content_id,
                     description=f'Updated content: {title} in topic {topic["topic_title"]}'
                 )
-                conn.commit()
 
                 flash('Content updated successfully.', 'success')
                 return redirect(url_for('lms_admin.list_topic_contents', topic_id=content['topic_id']))
@@ -1811,6 +1811,7 @@ def delete_content(content_id):
             DELETE FROM lms_topic_contents
             WHERE id = ?
         """, (content_id,))
+        conn.commit()
         log_activity(
             user_id=session['user_id'],
             branch_id=session.get('branch_id'),
@@ -1819,7 +1820,6 @@ def delete_content(content_id):
             record_id=content_id,
             description=f'Deleted content: {content["content_title"]} from topic {content["topic_title"]}'
         )
-        conn.commit()
         
         flash('Content deleted successfully.', 'success')
         return redirect(url_for('lms_admin.list_topic_contents', topic_id=content['topic_id']))
@@ -1990,6 +1990,7 @@ def add_topic_attachment(topic_id):
                 """, (topic_id, attachment_type, file_name, file_size, file_path, description, session['user_id'], is_required))
                 
                 # Log activity
+                conn.commit()
                 log_activity(
                     user_id=session['user_id'],
                     branch_id=session.get('branch_id'),
@@ -1998,7 +1999,6 @@ def add_topic_attachment(topic_id):
                     record_id=topic_id,
                     description=f"Added attachment: {file_name}"
                 )
-                conn.commit()
                 
                 flash(f'Attachment "{file_name}" added successfully!', 'success')
                 return redirect(url_for('lms_admin.list_topic_attachments', topic_id=topic_id))
@@ -2103,6 +2103,7 @@ def edit_topic_attachment(attachment_id):
                 """, (attachment_type, file_name, file_path, description, is_required, attachment_id))
                 
                 # Log activity
+                conn.commit()
                 log_activity(
                     user_id=session['user_id'],
                     branch_id=session.get('branch_id'),
@@ -2111,7 +2112,6 @@ def edit_topic_attachment(attachment_id):
                     record_id=attachment['topic_id'],
                     description=f"Updated attachment: {file_name}"
                 )
-                conn.commit()
                 
                 flash(f'Attachment "{file_name}" updated successfully!', 'success')
                 return redirect(url_for('lms_admin.list_topic_attachments', topic_id=attachment['topic_id']))
@@ -2168,6 +2168,7 @@ def delete_topic_attachment(attachment_id):
         """, (attachment_id,))
         
         # Log activity
+        conn.commit()
         log_activity(
             user_id=session['user_id'],
             branch_id=session.get('branch_id'),
@@ -2176,7 +2177,6 @@ def delete_topic_attachment(attachment_id):
             record_id=topic_id,
             description=f"Deleted attachment: {file_name}"
         )
-        conn.commit()
         
         flash(f'Attachment "{file_name}" deleted successfully!', 'success')
         return redirect(url_for('lms_admin.list_topic_attachments', topic_id=topic_id))
@@ -2311,6 +2311,7 @@ def add_program_resource(program_id):
                 """, (program_id, resource_title, resource_type, file_path, 1 if is_active else 0))
                 
                 # Log activity
+                conn.commit()
                 log_activity(
                     user_id=session['user_id'],
                     branch_id=session.get('branch_id'),
@@ -2319,7 +2320,6 @@ def add_program_resource(program_id):
                     record_id=program_id,
                     description=f"Added resource: {resource_title}"
                 )
-                conn.commit()
                 
                 flash(f'Resource "{resource_title}" added successfully!', 'success')
                 return redirect(url_for('lms_admin.list_program_resources', program_id=program_id))
@@ -2408,6 +2408,7 @@ def edit_program_resource(resource_id):
                 """, (resource_type, resource_title, file_path, 1 if is_active else 0, resource_id))
                 
                 # Log activity
+                conn.commit()
                 log_activity(
                     user_id=session['user_id'],
                     branch_id=session.get('branch_id'),
@@ -2416,7 +2417,6 @@ def edit_program_resource(resource_id):
                     record_id=resource['program_id'],
                     description=f"Updated resource: {resource_title}"
                 )
-                conn.commit()
                 
                 flash(f'Resource "{resource_title}" updated successfully!', 'success')
                 return redirect(url_for('lms_admin.list_program_resources', program_id=resource['program_id']))
@@ -2464,6 +2464,7 @@ def delete_program_resource(resource_id):
         """, (resource_id,))
         
         # Log activity
+        conn.commit()
         log_activity(
             user_id=session['user_id'],
             branch_id=session.get('branch_id'),
@@ -2472,7 +2473,6 @@ def delete_program_resource(resource_id):
             record_id=program_id,
             description=f"Deleted resource: {resource_title}"
         )
-        conn.commit()
         
         flash(f'Resource "{resource_title}" deleted successfully!', 'success')
         return redirect(url_for('lms_admin.list_program_resources', program_id=program_id))
@@ -2636,6 +2636,7 @@ def add_batch_program():
                 """, (batch_id, program_id, access_start_date, access_end_date if access_end_date else None, is_active))
                 
                 # Log activity
+                conn.commit()
                 log_activity(
                     user_id=session['user_id'],
                     branch_id=session.get('branch_id'),
@@ -2644,7 +2645,6 @@ def add_batch_program():
                     record_id=batch_id,
                     description=f"Assigned program {program_id} to batch {batch_id}"
                 )
-                conn.commit()
                 
                 flash('Batch-program assignment created successfully!', 'success')
                 return redirect(url_for('lms_admin.list_batch_programs'))
@@ -2739,6 +2739,7 @@ def edit_batch_program(assignment_id):
                 """, (access_start_date, access_end_date if access_end_date else None, is_active, assignment_id))
                 
                 # Log activity
+                conn.commit()
                 log_activity(
                     user_id=session['user_id'],
                     branch_id=session.get('branch_id'),
@@ -2747,7 +2748,6 @@ def edit_batch_program(assignment_id):
                     record_id=assignment['batch_id'],
                     description=f"Updated access for program {assignment['program_id']} in batch {assignment['batch_id']}"
                 )
-                conn.commit()
                 
                 flash('Assignment updated successfully!', 'success')
                 return redirect(url_for('lms_admin.list_batch_programs'))
@@ -2802,6 +2802,7 @@ def delete_batch_program(assignment_id):
         """, (assignment_id,))
         
         # Log activity
+        conn.commit()
         log_activity(
             user_id=session['user_id'],
             branch_id=session.get('branch_id'),
@@ -2810,7 +2811,6 @@ def delete_batch_program(assignment_id):
             record_id=assignment['batch_id'],
             description=f"Removed program {assignment['program_id']} from batch {assignment['batch_id']}"
         )
-        conn.commit()
         
         flash('Assignment deleted successfully!', 'success')
         return redirect(url_for('lms_admin.list_batch_programs'))

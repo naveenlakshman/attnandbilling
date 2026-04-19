@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime
 import os
-from db import get_conn, get_company_profile
+from db import get_conn, get_company_profile, clear_company_cache
 from .utils import login_required, admin_required
 from extensions import limiter
 
@@ -670,7 +670,7 @@ def company_profile():
         ))
         conn.commit()
         conn.close()
-
+        clear_company_cache()
         flash("Company profile updated successfully.", "success")
         return redirect(url_for("core.company_profile"))
 
@@ -698,6 +698,6 @@ def company_profile_remove_logo():
     )
     conn.commit()
     conn.close()
-
+    clear_company_cache()
     flash("Logo removed.", "success")
     return redirect(url_for("core.company_profile"))

@@ -1,16 +1,15 @@
 import sqlite3
+import time
 from datetime import datetime
 from werkzeug.security import generate_password_hash
 from config import DB_PATH
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, timeout=10.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
-    conn.execute("PRAGMA journal_mode = WAL;")
-    conn.execute("PRAGMA busy_timeout = 30000;")
-    conn.execute("PRAGMA synchronous = NORMAL;")
+    conn.execute("PRAGMA busy_timeout = 5000;")
 
     def parse_ddmmyyyy(date_str):
         if not date_str:
@@ -33,34 +32,59 @@ def get_conn():
     return conn
 
 
+_company_cache = {"data": None, "ts": 0}
+
+
 def get_company_profile():
-    """Return the single company profile row as a plain dict with fallback defaults."""
+    """Return company profile, cached for 5 minutes to avoid a DB hit on every request."""
+    global _company_cache
+    if _company_cache["data"] is not None and (time.time() - _company_cache["ts"]) < 300:
+        return _company_cache["data"]
     conn = get_conn()
     try:
         cur = conn.cursor()
         cur.execute("SELECT * FROM company_profile WHERE id = 1")
         row = cur.fetchone()
         if row:
-            return dict(row)
-        return {
-            "id": 1,
-            "company_name": "My Company",
-            "company_short_name": "My Company ERP",
-            "tagline": "ERP System",
-            "address": "",
-            "phone": "",
-            "email": "",
-            "website": "",
-            "logo_filename": None,
-            "reg_number": "",
-            "updated_at": None,
-        }
+            result = dict(row)
+        else:
+            result = {
+                "id": 1,
+                "company_name": "My Company",
+                "company_short_name": "My Company ERP",
+                "tagline": "ERP System",
+                "address": "",
+                "phone": "",
+                "email": "",
+                "website": "",
+                "logo_filename": None,
+                "reg_number": "",
+                "updated_at": None,
+            }
+        _company_cache["data"] = result
+        _company_cache["ts"] = time.time()
+        return result
     finally:
         conn.close()
 
 
-def log_activity(user_id, branch_id, action_type, module_name, record_id, description):
-    conn = get_conn()
+def clear_company_cache():
+    """Call this after saving company profile so the cache refreshes immediately."""
+    global _company_cache
+    _company_cache["data"] = None
+    _company_cache["ts"] = 0
+
+
+
+def log_activity(user_id, branch_id, action_type, module_name, record_id, description, conn=None):
+    """
+    Insert an activity log entry.
+    Pass an existing `conn` to reuse it (caller must commit).
+    Without `conn`, opens its own connection and auto-commits.
+    """
+    _own_conn = conn is None
+    if _own_conn:
+        conn = get_conn()
     try:
         cur = conn.cursor()
         now = datetime.now().isoformat(timespec="seconds")
@@ -84,11 +108,13 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
             description,
             now
         ))
-        conn.commit()
+        if _own_conn:
+            conn.commit()
     except Exception as e:
         print(f"Activity log error: {e}")
     finally:
-        conn.close()
+        if _own_conn:
+            conn.close()
 
 
 def add_column_if_not_exists(cur, table_name, column_name, column_def):
@@ -104,6 +130,9 @@ def add_column_if_not_exists(cur, table_name, column_name, column_def):
 
 def init_db():
     conn = get_conn()
+    # One-time DB configuration (WAL mode + performance settings)
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
     cur = conn.cursor()
     now = datetime.now().isoformat(timespec="seconds")
 
