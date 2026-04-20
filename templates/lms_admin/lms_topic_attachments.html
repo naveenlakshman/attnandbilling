@@ -490,6 +490,7 @@
                             <!-- Actions -->
                             <td>
                                 <div class="action-buttons">
+                                    {% if session.get('role') == 'admin' %}
                                     <a href="{{ url_for('lms_admin.edit_topic_attachment', attachment_id=attachment.id) }}" 
                                        class="btn-sm btn-edit">✏️ Edit</a>
                                     <form method="POST" 
@@ -499,6 +500,7 @@
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn-sm btn-delete">🗑️ Delete</button>
                                     </form>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -513,10 +515,12 @@
                 <div class="empty-text">
                     Add supporting files like PDFs, Excel files, Word documents, or images to help students learn.
                 </div>
+                {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('lms_admin.add_topic_attachment', topic_id=data.topic.id) }}" 
                    class="btn-primary" style="text-decoration: none;">
                     + Add Your First Attachment
                 </a>
+                {% endif %}
             </div>
         {% endif %}
     </div>
@@ -549,10 +553,12 @@
                 <p style="margin-bottom: 0.75rem;">
                     Upload supporting materials for this topic.
                 </p>
+                {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('lms_admin.add_topic_attachment', topic_id=data.topic.id) }}" 
                    class="btn-primary" style="width: 100%; text-align: center; display: block; text-decoration: none;">
                     + Add Attachment
                 </a>
+                {% endif %}
             </div>
         </div>
         

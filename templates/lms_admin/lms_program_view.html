@@ -412,9 +412,11 @@
     {% endif %}
 
     <div class="program-actions">
+      {% if session.get('role') == 'admin' %}
       <a href="{{ url_for('lms_admin.program_edit', program_id=summary.program.id) }}" class="btn-header btn-edit">
         ✏️ Edit Program
       </a>
+      {% endif %}
       <a href="{{ url_for('lms_admin.list_program_resources', program_id=summary.program.id) }}" class="btn-header btn-edit">
         📚 Resources
       </a>

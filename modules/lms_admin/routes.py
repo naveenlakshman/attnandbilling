@@ -1,22 +1,13 @@
 from flask import render_template, request, jsonify, send_from_directory
 from . import lms_admin_bp
 from db import get_conn, log_activity
-from functools import wraps
 from flask import session, redirect, url_for, flash
 from datetime import datetime
 import re
 import os
 from werkzeug.utils import secure_filename
 from config import Config
-
-# Authentication decorator
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('core.login'))
-        return f(*args, **kwargs)
-    return decorated_function
+from modules.core.utils import login_required, admin_required
 
 
 # File Upload Handler
@@ -165,7 +156,7 @@ def generate_slug(title):
 
 
 @lms_admin_bp.route('/program/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def program_new():
     """Add new LMS program"""
     conn = get_conn()
@@ -259,7 +250,7 @@ def program_new():
 
 
 @lms_admin_bp.route('/program/<int:program_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def program_edit(program_id):
     """Edit existing LMS program"""
     conn = get_conn()
@@ -536,7 +527,7 @@ def list_chapters(program_id):
 
 
 @lms_admin_bp.route('/program/<int:program_id>/chapter/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def chapter_new(program_id):
     """Add new chapter to a program"""
     conn = get_conn()
@@ -626,7 +617,7 @@ def chapter_new(program_id):
 
 
 @lms_admin_bp.route('/chapter/<int:chapter_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def chapter_edit(chapter_id):
     """Edit existing chapter"""
     conn = get_conn()
@@ -718,7 +709,7 @@ def chapter_edit(chapter_id):
 
 
 @lms_admin_bp.route('/chapter/<int:chapter_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_chapter(chapter_id):
     """Delete a chapter (soft delete pattern - set is_deleted flag)"""
     conn = get_conn()
@@ -835,7 +826,7 @@ def list_topics(chapter_id):
 
 
 @lms_admin_bp.route('/chapter/<int:chapter_id>/topic/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def topic_new(chapter_id):
     """Add new topic to a chapter"""
     conn = get_conn()
@@ -962,7 +953,7 @@ def topic_new(chapter_id):
 
 
 @lms_admin_bp.route('/topic/<int:topic_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def topic_edit(topic_id):
     """Edit existing topic"""
     conn = get_conn()
@@ -1084,7 +1075,7 @@ def topic_edit(topic_id):
 
 
 @lms_admin_bp.route('/topic/<int:topic_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_topic(topic_id):
     """Delete a topic"""
     conn = get_conn()
@@ -1786,7 +1777,7 @@ def content_edit(content_id):
 
 
 @lms_admin_bp.route('/content/<int:content_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_content(content_id):
     """Delete content from a topic"""
     conn = get_conn()
@@ -1925,7 +1916,7 @@ def list_topic_attachments(topic_id):
 
 
 @lms_admin_bp.route('/topic/<int:topic_id>/attachment/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def add_topic_attachment(topic_id):
     """Add a new attachment to a topic"""
     conn = get_conn()
@@ -2025,7 +2016,7 @@ def add_topic_attachment(topic_id):
 
 
 @lms_admin_bp.route('/attachment/<int:attachment_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def edit_topic_attachment(attachment_id):
     """Edit an existing attachment"""
     conn = get_conn()
@@ -2142,7 +2133,7 @@ def edit_topic_attachment(attachment_id):
 
 
 @lms_admin_bp.route('/attachment/<int:attachment_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_topic_attachment(attachment_id):
     """Delete an attachment"""
     conn = get_conn()
@@ -2257,7 +2248,7 @@ def list_program_resources(program_id):
 
 
 @lms_admin_bp.route('/program/<int:program_id>/resource/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def add_program_resource(program_id):
     """Add a new resource to a program"""
     conn = get_conn()
@@ -2338,7 +2329,7 @@ def add_program_resource(program_id):
 
 
 @lms_admin_bp.route('/resource/<int:resource_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def edit_program_resource(resource_id):
     """Edit an existing resource"""
     conn = get_conn()
@@ -2438,7 +2429,7 @@ def edit_program_resource(resource_id):
 
 
 @lms_admin_bp.route('/resource/<int:resource_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_program_resource(resource_id):
     """Delete a resource"""
     conn = get_conn()
@@ -2558,7 +2549,7 @@ def list_batch_programs():
 
 
 @lms_admin_bp.route('/batch-program/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def add_batch_program():
     """Assign a program to a batch"""
     conn = get_conn()
@@ -2676,7 +2667,7 @@ def add_batch_program():
 
 
 @lms_admin_bp.route('/batch-program/<int:assignment_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def edit_batch_program(assignment_id):
     """Edit a batch-program assignment"""
     conn = get_conn()
@@ -2779,7 +2770,7 @@ def edit_batch_program(assignment_id):
 
 
 @lms_admin_bp.route('/batch-program/<int:assignment_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_batch_program(assignment_id):
     """Delete a batch-program assignment"""
     conn = get_conn()

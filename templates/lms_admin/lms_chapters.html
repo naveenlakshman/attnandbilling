@@ -324,9 +324,11 @@
     <h2>📑 Chapters</h2>
   </div>
   <div class="header-actions">
+    {% if session.get('role') == 'admin' %}
     <a href="{{ url_for('lms_admin.chapter_new', program_id=data.program.id) }}" class="btn-add">
       + Add Chapter
     </a>
+    {% endif %}
     <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}" class="btn-back">
       ← Back to Program
     </a>
@@ -373,15 +375,19 @@
           </td>
           <td>
             <div class="chapter-actions">
+              {% if session.get('role') == 'admin' %}
               <a class="btn-action btn-edit" href="{{ url_for('lms_admin.chapter_edit', chapter_id=chapter.id) }}" title="Edit Chapter">
                 ✏️ Edit
               </a>
+              {% endif %}
               <a class="btn-action btn-topics" href="#" onclick="manageTopics(event, {{ chapter.id }});" title="Manage Topics">
                 📝 Topics
               </a>
+              {% if session.get('role') == 'admin' %}
               <button class="btn-action btn-delete" onclick="deleteChapter(event, {{ chapter.id }})" title="Delete Chapter">
                 🗑️ Delete
               </button>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -393,7 +399,9 @@
       <div class="empty-state-icon">📑</div>
       <div class="empty-state-title">No Chapters Yet</div>
       <div class="empty-state-text">Start building your learning program by creating your first chapter.</div>
+      {% if session.get('role') == 'admin' %}
       <a href="{{ url_for('lms_admin.chapter_new', program_id=data.program.id) }}" class="btn-add">+ Add Your First Chapter</a>
+      {% endif %}
     </div>
   {% endif %}
 </div>

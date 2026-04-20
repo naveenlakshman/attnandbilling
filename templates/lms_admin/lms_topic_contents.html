@@ -420,9 +420,11 @@
               <a class="btn-action btn-edit" href="{{ url_for('lms_admin.content_edit', content_id=content.id) }}" title="Edit Content">
                 ✏️ Edit
               </a>
+              {% if session.get('role') == 'admin' %}
               <button class="btn-action btn-delete" onclick="deleteContent(event, {{ content.id }})" title="Delete Content">
                 🗑️ Delete
               </button>
+              {% endif %}
             </div>
           </td>
         </tr>
