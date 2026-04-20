@@ -544,6 +544,20 @@ def view_batch(batch_id):
         
         students = cur.fetchall()
 
+        # Get active/future batches (same branch) for move-student dropdown, excluding current batch
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        cur.execute("""
+            SELECT b.id, b.batch_name, c.course_name, b.start_time, b.end_time, b.start_date
+            FROM batches b
+            LEFT JOIN courses c ON b.course_id = c.id
+            WHERE b.branch_id = ?
+              AND b.id != ?
+              AND b.status = 'active'
+              AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
+            ORDER BY b.start_time ASC, b.batch_name ASC
+        """, (batch['branch_id'], batch_id, today_str))
+        available_batches = cur.fetchall()
+
         # Get out-of-time warnings for this batch
         cur.execute("""
             SELECT tw.id, tw.attendance_date, tw.actual_time,
@@ -562,8 +576,98 @@ def view_batch(batch_id):
 
         return render_template('attendance/batch_detail.html',
                              batch=batch, students=students,
+                             available_batches=available_batches,
                              time_warnings=time_warnings, user=user)
     
+    finally:
+        conn.close()
+
+
+@attendance_bp.route('/batches/<int:batch_id>/move-student', methods=['POST'])
+@login_required
+def move_student(batch_id):
+    """Move a student from the current batch to another active/future batch"""
+    user_id = session.get('user_id')
+    conn = get_conn()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+
+        # Validate current batch belongs to user's branch
+        cur.execute("SELECT id, branch_id, batch_name FROM batches WHERE id = ?", (batch_id,))
+        batch = cur.fetchone()
+        if not batch:
+            return redirect(url_for('attendance.list_batches'))
+        if not user['can_view_all_branches'] and batch['branch_id'] != user['branch_id']:
+            return redirect(url_for('attendance.list_batches'))
+
+        student_batch_id = request.form.get('student_batch_id', type=int)
+        target_batch_id = request.form.get('target_batch_id', type=int)
+
+        if not student_batch_id or not target_batch_id:
+            return redirect(url_for('attendance.view_batch', batch_id=batch_id))
+
+        # Get the source student_batches record
+        cur.execute("""
+            SELECT sb.id, sb.student_id, s.full_name
+            FROM student_batches sb
+            JOIN students s ON sb.student_id = s.id
+            WHERE sb.id = ? AND sb.batch_id = ?
+        """, (student_batch_id, batch_id))
+        src = cur.fetchone()
+        if not src:
+            return redirect(url_for('attendance.view_batch', batch_id=batch_id))
+
+        # Validate target batch: must be active, same branch, not ended
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        cur.execute("""
+            SELECT id, batch_name FROM batches
+            WHERE id = ? AND branch_id = ? AND status = 'active'
+              AND (end_date IS NULL OR date(end_date) >= date(?))
+        """, (target_batch_id, batch['branch_id'], today_str))
+        target = cur.fetchone()
+        if not target:
+            return redirect(url_for('attendance.view_batch', batch_id=batch_id))
+
+        now = datetime.now().isoformat(timespec="seconds")
+        student_id = src['student_id']
+
+        # Mark current enrollment as dropped
+        cur.execute("""
+            UPDATE student_batches SET status = 'dropped', updated_at = ?
+            WHERE id = ?
+        """, (now, student_batch_id))
+
+        # Insert or reactivate enrollment in target batch
+        cur.execute("""
+            SELECT id, status FROM student_batches
+            WHERE student_id = ? AND batch_id = ?
+        """, (student_id, target_batch_id))
+        existing = cur.fetchone()
+
+        if existing:
+            # Reactivate if previously dropped/completed
+            cur.execute("""
+                UPDATE student_batches SET status = 'active', joined_on = ?, updated_at = ?
+                WHERE id = ?
+            """, (now[:10], now, existing['id']))
+        else:
+            cur.execute("""
+                INSERT INTO student_batches (student_id, batch_id, joined_on, status, created_at, updated_at)
+                VALUES (?, ?, ?, 'active', ?, ?)
+            """, (student_id, target_batch_id, now[:10], now, now))
+
+        conn.commit()
+        log_activity(user_id, batch['branch_id'], 'UPDATE', 'attendance', batch_id,
+                     f"Moved student {src['full_name']} from batch '{batch['batch_name']}' to '{target['batch_name']}'")
+
+        return redirect(url_for('attendance.view_batch', batch_id=batch_id))
+
+    except Exception as e:
+        conn.rollback()
+        return redirect(url_for('attendance.view_batch', batch_id=batch_id))
     finally:
         conn.close()
 

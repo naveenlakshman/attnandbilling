@@ -473,7 +473,18 @@
                 {% else %}✗ Dropped{% endif %}
               </span>
             </td>
-            <td><a href="{{ url_for('attendance.student_attendance_history', student_id=student.student_id) }}" class="btn btn-sm btn-outline-primary">History</a></td>
+            <td>
+              <div class="d-flex gap-1 flex-wrap">
+                <a href="{{ url_for('attendance.student_attendance_history', student_id=student.student_id) }}" class="btn btn-sm btn-outline-primary">History</a>
+                {% if student.status == 'active' and available_batches %}
+                <button type="button" class="btn btn-sm btn-outline-warning"
+                        onclick="openMoveModal({{ student.id }}, '{{ student.full_name | e }}', '{{ student.student_code }}')"
+                        title="Move to another batch">
+                  ↗ Move
+                </button>
+                {% endif %}
+              </div>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -594,5 +605,65 @@
     </div>
 
   </div><!-- /tab-content -->
+
+<!-- ── Move Student Modal ── -->
+{% if available_batches %}
+<div class="modal fade" id="moveStudentModal" tabindex="-1" aria-labelledby="moveStudentModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#fff7ed; border-bottom:2px solid #fed7aa;">
+        <h5 class="modal-title" id="moveStudentModalLabel" style="color:#c2410c;">↗ Move Student to Another Batch</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('attendance.move_student', batch_id=batch.id) }}">
+        <div class="modal-body">
+          <input type="hidden" name="student_batch_id" id="move_student_batch_id">
+
+          <div class="mb-3 p-3" style="background:#f8fafc; border-radius:8px; border:1px solid #e5e7eb;">
+            <div style="font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:4px;">Moving Student</div>
+            <div style="font-weight:700; font-size:15px; color:#1a1f36;" id="move_student_name">—</div>
+            <div style="font-size:12px; color:#6b7280;" id="move_student_code">—</div>
+          </div>
+
+          <div class="mb-2" style="font-size:12px; color:#6b7280;">
+            <strong>From:</strong> {{ batch.batch_name }}
+          </div>
+
+          <div class="mb-3">
+            <label for="target_batch_id" class="form-label" style="font-weight:600;">Move To Batch <span class="text-danger">*</span></label>
+            <select class="form-select" name="target_batch_id" id="target_batch_id" required>
+              <option value="">— Select target batch —</option>
+              {% for b in available_batches %}
+              <option value="{{ b.id }}">
+                {{ b.batch_name }}{% if b.course_name %} · {{ b.course_name }}{% endif %}{% if b.start_time %} ({{ b.start_time }}–{{ b.end_time }}){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="alert alert-warning py-2 px-3 mb-0" style="font-size:12px;">
+            ⚠️ The student will be marked as <strong>Dropped</strong> in the current batch and set as <strong>Active</strong> in the selected batch. Attendance history is preserved.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-warning" style="color:#fff;">↗ Confirm Move</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function openMoveModal(studentBatchId, studentName, studentCode) {
+  document.getElementById('move_student_batch_id').value = studentBatchId;
+  document.getElementById('move_student_name').textContent = studentName;
+  document.getElementById('move_student_code').textContent = studentCode;
+  document.getElementById('target_batch_id').value = '';
+  var modal = new bootstrap.Modal(document.getElementById('moveStudentModal'));
+  modal.show();
+}
+</script>
+{% endif %}
 
 {% endblock %}
