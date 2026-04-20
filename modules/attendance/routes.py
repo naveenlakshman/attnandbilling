@@ -2259,8 +2259,10 @@ def batch_planner():
 
         selected_branch = None
         existing_batches = []
+        future_batches = []
         capacity_info = {}
         suggested_slots = []
+        upcoming_opportunities = []
         opening_time = None
         closing_time = None
         batch_duration_mins = request.args.get('batch_duration_mins', 120, type=int)
@@ -2273,6 +2275,7 @@ def batch_planner():
 
             cur.execute("""
                 SELECT b.id, b.batch_name, b.start_time, b.end_time, b.status,
+                       b.start_date, b.end_date,
                        c.course_name,
                        COUNT(sb.id) as student_count,
                        COUNT(CASE WHEN sb.uses_own_laptop = 0 THEN 1 END) as computer_count
@@ -2288,12 +2291,50 @@ def batch_planner():
             no_of_computers = selected_branch['no_of_computers'] if selected_branch['no_of_computers'] else 0
 
             batch_list = [dict(row) for row in raw_batches]
-            for batch in batch_list:
+
+            # Split into currently-running vs future-planned based on start_date
+            IST = timezone(timedelta(hours=5, minutes=30))
+            today_str = datetime.now(IST).strftime('%Y-%m-%d')
+            today_date = datetime.now(IST).date()
+
+            running_batches = [
+                b for b in batch_list
+                if not b.get('start_date') or b['start_date'] <= today_str
+            ]
+            future_batches = [
+                b for b in batch_list
+                if b.get('start_date') and b['start_date'] > today_str
+            ]
+
+            def _duration_str(batch):
+                if batch['start_time'] and batch['end_time']:
+                    try:
+                        sh, sm = map(int, batch['start_time'].split(':'))
+                        eh, em = map(int, batch['end_time'].split(':'))
+                        diff_mins = (eh * 60 + em) - (sh * 60 + sm)
+                        if diff_mins > 0:
+                            h, m = divmod(diff_mins, 60)
+                            return f"{h}h {m}m" if m else f"{h}h"
+                    except Exception:
+                        pass
+                return '—'
+
+            def _date_display(date_str):
+                if not date_str:
+                    return None, None
+                try:
+                    d = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    return d.strftime('%d-%m-%Y'), (d - today_date).days
+                except Exception:
+                    return date_str, None
+
+            # Capacity calculations — only running batches count
+            for batch in running_batches:
                 s1 = batch['start_time'] or '00:00'
                 e1 = batch['end_time'] or '23:59'
                 concurrent_students = 0
                 concurrent_computers = 0
-                for other in batch_list:
+                for other in running_batches:
                     s2 = other['start_time'] or '00:00'
                     e2 = other['end_time'] or '23:59'
                     if s1 < e2 and s2 < e1:
@@ -2302,24 +2343,88 @@ def batch_planner():
                 batch['concurrent_students'] = concurrent_students
                 batch['concurrent_computers'] = concurrent_computers
                 batch['computers_free'] = max(0, no_of_computers - concurrent_computers)
+                batch['duration_str'] = _duration_str(batch)
+                batch['end_date_display'], batch['days_remaining'] = _date_display(batch.get('end_date'))
 
-                # Calculate duration
-                if batch['start_time'] and batch['end_time']:
-                    try:
-                        sh, sm = map(int, batch['start_time'].split(':'))
-                        eh, em = map(int, batch['end_time'].split(':'))
-                        diff_mins = (eh * 60 + em) - (sh * 60 + sm)
-                        if diff_mins > 0:
-                            h, m = divmod(diff_mins, 60)
-                            batch['duration_str'] = f"{h}h {m}m" if m else f"{h}h"
-                        else:
-                            batch['duration_str'] = '—'
-                    except Exception:
-                        batch['duration_str'] = '—'
-                else:
-                    batch['duration_str'] = '—'
+            # Future batches — no capacity math, just display fields
+            for batch in future_batches:
+                batch['duration_str'] = _duration_str(batch)
+                batch['start_date_display'], batch['days_until_start'] = _date_display(batch.get('start_date'))
+                batch['end_date_display'], batch['days_remaining'] = _date_display(batch.get('end_date'))
 
-            existing_batches = batch_list
+            existing_batches = running_batches
+
+            # --- Build Upcoming Batch Opportunities ---
+            # Only based on currently-running batches — future planned batches excluded
+
+            # Collect running batches that have a future end_date
+            batches_with_end = [
+                b for b in running_batches
+                if b.get('end_date') and b['end_date'] >= today_str
+            ]
+
+            # Get unique end_dates sorted ascending
+            unique_end_dates = sorted(set(b['end_date'] for b in batches_with_end))
+
+            upcoming_opportunities = []
+            for pivot_date in unique_end_dates:
+                pivot_dt = datetime.strptime(pivot_date, '%Y-%m-%d').date()
+                days_away = (pivot_dt - today_date).days
+
+                # Running batches ending ON this pivot date
+                ending_batches = [b for b in running_batches if b.get('end_date') == pivot_date]
+
+                # Running batches that remain active AFTER this pivot date
+                remaining_batches = [
+                    b for b in running_batches
+                    if not b.get('end_date') or b['end_date'] > pivot_date
+                ]
+
+                # For each time slot affected (batches ending on this date),
+                # compute how many computers free up per slot group
+                slot_seen = set()
+                slot_opportunities = []
+                for eb in ending_batches:
+                    slot_key = (eb['start_time'], eb['end_time'])
+                    if slot_key in slot_seen:
+                        continue
+                    slot_seen.add(slot_key)
+
+                    s1 = eb['start_time'] or '00:00'
+                    e1 = eb['end_time'] or '23:59'
+
+                    # Computers freed = sum of computer_count of all batches ending on this date
+                    # that overlap with this slot
+                    computers_freed = sum(
+                        b['computer_count'] for b in ending_batches
+                        if (b['start_time'] or '00:00') == s1 and (b['end_time'] or '23:59') == e1
+                    )
+
+                    # Concurrent computers still in use after this date in this slot
+                    remaining_concurrent = 0
+                    for rb in remaining_batches:
+                        rs = rb['start_time'] or '00:00'
+                        re_ = rb['end_time'] or '23:59'
+                        if s1 < re_ and rs < e1:
+                            remaining_concurrent += rb['computer_count']
+
+                    new_free = max(0, no_of_computers - remaining_concurrent)
+
+                    slot_opportunities.append({
+                        'start_time': s1,
+                        'end_time': e1,
+                        'computers_freed': computers_freed,
+                        'new_free_total': new_free,
+                        'remaining_concurrent': remaining_concurrent,
+                    })
+
+                upcoming_opportunities.append({
+                    'end_date': pivot_date,
+                    'end_date_display': pivot_dt.strftime('%d-%m-%Y'),
+                    'days_away': days_away,
+                    'batches_ending': ending_batches,
+                    'slot_opportunities': slot_opportunities,
+                })
 
             proposed_start = request.args.get('proposed_start', '')
             proposed_end = request.args.get('proposed_end', '')
@@ -2398,11 +2503,13 @@ def batch_planner():
                                selected_branch=selected_branch,
                                selected_branch_id=selected_branch_id,
                                existing_batches=existing_batches,
+                               future_batches=future_batches if selected_branch_id else [],
                                capacity_info=capacity_info,
                                suggested_slots=suggested_slots,
                                opening_time=opening_time,
                                closing_time=closing_time,
-                               batch_duration_mins=batch_duration_mins)
+                               batch_duration_mins=batch_duration_mins,
+                               upcoming_opportunities=upcoming_opportunities if selected_branch_id else [])
     finally:
         conn.close()
 

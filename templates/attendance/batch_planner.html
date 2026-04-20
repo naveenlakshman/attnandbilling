@@ -81,6 +81,10 @@
     font-size: 0.78rem;
     font-weight: 600;
   }
+  th[title] {
+    cursor: help;
+    text-decoration: underline dotted #6c757d;
+  }
 </style>
 {% endblock %}
 
@@ -132,7 +136,7 @@
       <div class="col-6 col-md-3">
         <div class="stat-box" style="border-color: #fca5a5;">
           <div class="stat-val text-danger">{{ peak_used }}</div>
-          <div class="stat-lbl">Peak Computers Used</div>
+          <div class="stat-lbl">Peak Used (Today)</div>
         </div>
       </div>
       <div class="col-6 col-md-3">
@@ -140,15 +144,23 @@
           <div class="stat-val {% if total_computers > 0 and peak_used <= total_computers %}text-success{% else %}text-danger{% endif %}">
             {{ [total_computers - peak_used, 0] | max }}
           </div>
-          <div class="stat-lbl">Min Free at Peak</div>
+          <div class="stat-lbl">Min Free (Today)</div>
         </div>
       </div>
       <div class="col-6 col-md-3">
         <div class="stat-box" style="border-color: #d1d5db;">
           <div class="stat-val text-secondary">{{ existing_batches | length }}</div>
-          <div class="stat-lbl">Active Batches</div>
+          <div class="stat-lbl">Running Now</div>
         </div>
       </div>
+      {% if future_batches %}
+      <div class="col-6 col-md-3">
+        <div class="stat-box" style="border-color: #c4b5fd;">
+          <div class="stat-val" style="color:#7c3aed;">{{ future_batches | length }}</div>
+          <div class="stat-lbl">Planned (Future)</div>
+        </div>
+      </div>
+      {% endif %}
     </div>
 
     {% if total_computers > 0 and peak_used > 0 %}
@@ -166,10 +178,11 @@
     {% endif %}
   </div>
 
-  <!-- Existing batches table -->
+  <!-- Currently running batches table -->
   {% if existing_batches %}
   <div class="planner-card">
-    <h6 class="fw-bold mb-3">📚 Active Batches &amp; Usage</h6>
+    <h6 class="fw-bold mb-3">📚 Currently Running Batches <span class="badge bg-success ms-1" style="font-size:0.75rem;">Today</span></h6>
+    <p class="text-muted small mb-3">Only batches whose start date is today or earlier. Capacity calculations are based on these batches only.</p>
     <div class="table-responsive">
       <table class="table table-sm table-hover align-middle mb-0">
         <thead class="table-light">
@@ -179,8 +192,9 @@
             <th>Time Slot</th>
             <th>Hours</th>
             <th>Total Students</th>
-            <th>On Computers</th>
+            <th title="Total computers in use across ALL concurrent batches during this time slot (excludes students using own laptops)">This Slot Used ⓘ</th>
             <th>Computers Free</th>
+            <th>End Date</th>
           </tr>
         </thead>
         <tbody>
@@ -195,7 +209,7 @@
             <td>
               {% if batch.student_count != batch.computer_count %}
                 <strong>{{ batch.student_count }}</strong>
-                <span class="text-muted small ms-1">({{ batch.student_count - batch.computer_count }} 💻)</span>
+                <span class="badge bg-info text-dark ms-1" title="Students using own laptop">{{ batch.student_count - batch.computer_count }} 💻</span>
               {% else %}
                 <strong>{{ batch.student_count }}</strong>
               {% endif %}
@@ -214,6 +228,25 @@
                 <span class="text-muted small">—</span>
               {% endif %}
             </td>
+            <td>
+              {% if batch.end_date_display %}
+                {% if batch.days_remaining is not none %}
+                  {% if batch.days_remaining < 0 %}
+                    <span class="badge bg-secondary">{{ batch.end_date_display }}</span>
+                  {% elif batch.days_remaining <= 10 %}
+                    <span class="badge bg-danger" title="{{ batch.days_remaining }} days left">{{ batch.end_date_display }}</span>
+                  {% elif batch.days_remaining <= 30 %}
+                    <span class="badge bg-warning text-dark" title="{{ batch.days_remaining }} days left">{{ batch.end_date_display }}</span>
+                  {% else %}
+                    <span class="badge bg-success" title="{{ batch.days_remaining }} days left">{{ batch.end_date_display }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted small">{{ batch.end_date_display }}</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted small">Not set</span>
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -222,9 +255,171 @@
   </div>
   {% else %}
   <div class="planner-card">
-    <p class="text-muted mb-0">No active batches found for this branch.</p>
+    <p class="text-muted mb-0">No batches currently running for this branch.</p>
   </div>
   {% endif %}
+
+  <!-- Planned Future Batches -->
+  {% if future_batches %}
+  <div class="planner-card">
+    <h6 class="fw-bold mb-3">🗂️ Planned Future Batches <span class="badge ms-1" style="background:#7c3aed;font-size:0.75rem;">Not Started Yet</span></h6>
+    <p class="text-muted small mb-3">
+      These batches are created in the system but their start date is in the future.
+      They are <strong>not counted</strong> in today's capacity or computer usage — they will appear in "Currently Running" once their start date arrives.
+    </p>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Batch</th>
+            <th>Course</th>
+            <th>Time Slot</th>
+            <th>Hours</th>
+            <th>Starts In</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Students</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for batch in future_batches %}
+          <tr>
+            <td><a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}">{{ batch.batch_name }}</a></td>
+            <td class="text-muted small">{{ batch.course_name or '—' }}</td>
+            <td><span class="time-chip">{{ batch.start_time or '?' }} – {{ batch.end_time or '?' }}</span></td>
+            <td class="text-muted small">{{ batch.duration_str }}</td>
+            <td>
+              {% if batch.days_until_start is not none %}
+                {% if batch.days_until_start <= 7 %}
+                  <span class="badge bg-warning text-dark">{{ batch.days_until_start }}d</span>
+                {% elif batch.days_until_start <= 30 %}
+                  <span class="badge bg-info text-dark">{{ batch.days_until_start }}d</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ batch.days_until_start }}d</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td class="fw-semibold">{{ batch.start_date_display or '—' }}</td>
+            <td>{{ batch.end_date_display or '<span class="text-muted small">Not set</span>' }}</td>
+            <td>
+              {% if batch.student_count != batch.computer_count %}
+                <strong>{{ batch.student_count }}</strong>
+                <span class="badge bg-info text-dark ms-1" title="Using own laptop">{{ batch.student_count - batch.computer_count }} 💻</span>
+              {% else %}
+                <strong>{{ batch.student_count }}</strong>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Upcoming Batch Endings & New Opportunities -->
+  <div class="planner-card">
+    <h6 class="fw-bold mb-3">📅 Upcoming Batch Endings &amp; New Opportunities</h6>
+    {% if not upcoming_opportunities %}
+      <div class="alert alert-info py-2 mb-0" style="font-size:0.9rem;">
+        <strong>No upcoming end dates found.</strong>
+        To use this feature, set an <strong>End Date</strong> on each batch when creating or editing it.
+        Once set, this section will show when computers become free and which time slots open up for new batches.
+      </div>
+    {% else %}
+      <p class="text-muted small mb-3">
+        As existing batches end, computers free up. The table below shows each upcoming batch end date and
+        how many computers will be available in that time slot — so you can plan your next batch start date.
+      </p>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>End Date</th>
+              <th>Days Away</th>
+              <th>Batches Ending</th>
+              <th>Time Slot</th>
+              <th>Computers Freed</th>
+              <th>Total Free After</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for opp in upcoming_opportunities %}
+              {% for slot in opp.slot_opportunities %}
+              <tr>
+                {% if loop.index == 1 %}
+                <td rowspan="{{ opp.slot_opportunities|length }}" class="align-middle fw-semibold">
+                  {{ opp.end_date_display }}
+                </td>
+                <td rowspan="{{ opp.slot_opportunities|length }}" class="align-middle">
+                  {% if opp.days_away < 0 %}
+                    <span class="badge bg-secondary">Ended</span>
+                  {% elif opp.days_away == 0 %}
+                    <span class="badge bg-danger">Today</span>
+                  {% elif opp.days_away <= 10 %}
+                    <span class="badge bg-danger">{{ opp.days_away }}d</span>
+                  {% elif opp.days_away <= 30 %}
+                    <span class="badge bg-warning text-dark">{{ opp.days_away }}d</span>
+                  {% else %}
+                    <span class="badge bg-success">{{ opp.days_away }}d</span>
+                  {% endif %}
+                </td>
+                <td rowspan="{{ opp.slot_opportunities|length }}" class="align-middle" style="max-width:220px;">
+                  {% for eb in opp.batches_ending %}
+                    <div class="small">
+                      <a href="{{ url_for('attendance.view_batch', batch_id=eb.id) }}" class="text-decoration-none">{{ eb.batch_name }}</a>
+                      {% if eb.computer_count > 0 %}
+                        <span class="text-muted">({{ eb.computer_count }} 🖥)</span>
+                      {% endif %}
+                      {% if eb.student_count != eb.computer_count %}
+                        <span class="badge bg-info text-dark" title="Using own laptop">{{ eb.student_count - eb.computer_count }} 💻</span>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                </td>
+                {% endif %}
+                <td>
+                  <span class="time-chip">{{ slot.start_time }} – {{ slot.end_time }}</span>
+                </td>
+                <td>
+                  {% if slot.computers_freed > 0 %}
+                    <span class="badge bg-primary">+{{ slot.computers_freed }} freed</span>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if capacity_info.no_of_computers > 0 %}
+                    {% if slot.new_free_total == 0 %}
+                      <span class="badge bg-danger">Full</span>
+                    {% elif slot.new_free_total <= 3 %}
+                      <span class="badge bg-warning text-dark">{{ slot.new_free_total }} free</span>
+                    {% else %}
+                      <span class="badge bg-success">{{ slot.new_free_total }} free</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if slot.new_free_total > 0 %}
+                    <a href="{{ url_for('attendance.create_batch') }}?branch_id={{ selected_branch_id }}&start_time={{ slot.start_time }}&end_time={{ slot.end_time }}"
+                       class="btn btn-sm btn-outline-success">
+                      ➕ Create Batch
+                    </a>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
 
   <!-- Propose new batch form -->
   <div class="planner-card">
