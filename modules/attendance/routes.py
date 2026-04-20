@@ -1101,7 +1101,7 @@ def mark_attendance():
                 except Exception:
                     payment_dues[sid]['upcoming_days'] = None
 
-        # Get last 7 days attendance history for each student
+        # Get last 7 days attendance history for each student (across ALL batches)
         history_7days = {}
         history_dates = []
         if students and batch_id:
@@ -1116,9 +1116,9 @@ def mark_attendance():
             cur.execute(f"""
                 SELECT student_id, attendance_date, status
                 FROM attendance_records
-                WHERE batch_id = ? AND attendance_date IN ({ph_d})
+                WHERE attendance_date IN ({ph_d})
                 AND student_id IN ({ph_s})
-            """, [batch_id] + history_dates + student_ids_h)
+            """, history_dates + student_ids_h)
             for row in cur.fetchall():
                 sid = row['student_id']
                 if sid not in history_7days:

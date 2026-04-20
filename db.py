@@ -837,6 +837,55 @@ def init_db():
         )
     """)
 
+    # ---------- MIGRATE attendance_records FK (batch_id: CASCADE -> SET NULL) ----------
+    # Makes batch_id nullable so deleting a batch does not wipe attendance history
+    try:
+        cur.execute("PRAGMA table_info(attendance_records)")
+        cols = {row['name']: row for row in cur.fetchall()}
+        if cols.get('batch_id') and cols['batch_id']['notnull'] == 1:
+            # batch_id is still NOT NULL - recreate table with nullable + SET NULL
+            cur.execute("PRAGMA foreign_keys = OFF")
+            conn.commit()
+            cur.execute("SELECT * FROM attendance_records")
+            att_backup = cur.fetchall()
+            cur.execute("DROP TABLE IF EXISTS attendance_records")
+            cur.execute("""
+                CREATE TABLE attendance_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    attendance_date TEXT NOT NULL,
+                    student_id INTEGER NOT NULL,
+                    batch_id INTEGER,
+                    branch_id INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'absent'
+                        CHECK(status IN ('present', 'absent', 'late', 'leave')),
+                    remarks TEXT,
+                    marked_by INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT,
+                    UNIQUE(attendance_date, student_id, batch_id),
+                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                    FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL,
+                    FOREIGN KEY (branch_id) REFERENCES branches(id),
+                    FOREIGN KEY (marked_by) REFERENCES users(id)
+                )
+            """)
+            if att_backup:
+                for row in att_backup:
+                    cur.execute("""
+                        INSERT INTO attendance_records
+                            (id, attendance_date, student_id, batch_id, branch_id,
+                             status, remarks, marked_by, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row['id'], row['attendance_date'], row['student_id'],
+                        row['batch_id'], row['branch_id'], row['status'],
+                        row['remarks'], row['marked_by'], row['created_at'], row['updated_at']
+                    ))
+            conn.commit()
+            cur.execute("PRAGMA foreign_keys = ON")
+    except Exception as e:
+        print(f"Warning: attendance_records FK migration failed: {e}")
+
     # ---------- MIGRATE asset_logs CONSTRAINT ----------
     # Update asset_logs table to allow 'Updated' action
     try:
