@@ -2479,10 +2479,11 @@ def batch_planner():
                 ending_batches = [b for b in running_batches if b.get('end_date') == pivot_date]
 
                 # Running batches that remain active AFTER this pivot date
+                # + ALL future planned batches (already committed computers, must be counted)
                 remaining_batches = [
                     b for b in running_batches
                     if not b.get('end_date') or b['end_date'] > pivot_date
-                ]
+                ] + future_batches
 
                 # For each time slot affected (batches ending on this date),
                 # compute how many computers free up per slot group
