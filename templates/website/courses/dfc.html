@@ -1,10 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Basic Computer Skills + AI Productivity</title>
-  <style>
+{% extends "website/course_base.html" %}
+
+{% block title %}Basic Computer Skills + AI Productivity — Global IT Education{% endblock %}
+
+{% block head %}
+<style>
     :root {
       --primary: #0f172a;
       --secondary: #1d4ed8;
@@ -312,8 +311,9 @@
       .stat strong { font-size: 22px; }
     }
   </style>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
   <section class="hero">
     <div class="container">
       <div class="hero-card">
@@ -533,5 +533,4 @@
       </div>
     </div>
   </section>
-</body>
-</html>
+{% endblock %}

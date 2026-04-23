@@ -109,7 +109,13 @@
                 {% if course['fee'] and course['fee'] > 0 %}
                   <div class="course-fee">₹{{ '{:,.0f}'.format(course['fee']) }}</div>
                 {% endif %}
-                <a href="#enquire" class="btn btn-outline-primary btn-sm mt-3 w-100">Enquire Now</a>
+                {% if course['course_slug'] and course['course_slug'] in valid_slugs %}
+                  <a href="{{ url_for('website.course_page', slug=course['course_slug']) }}"
+                     class="btn btn-primary btn-sm mt-3 w-100">View Course Details →</a>
+                  <a href="#enquire" class="btn btn-outline-secondary btn-sm w-100">Enquire Now</a>
+                {% else %}
+                  <a href="#enquire" class="btn btn-outline-primary btn-sm mt-3 w-100">Enquire Now</a>
+                {% endif %}
               </div>
             </div>
           {% endfor %}

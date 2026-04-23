@@ -816,6 +816,7 @@ def init_db():
     add_column_if_not_exists(cur, "courses", "course_category", "TEXT")
     add_column_if_not_exists(cur, "courses", "show_on_website", "INTEGER NOT NULL DEFAULT 0")
     add_column_if_not_exists(cur, "courses", "duration_hours", "INTEGER")
+    add_column_if_not_exists(cur, "courses", "course_slug", "TEXT")
 
     add_column_if_not_exists(cur, "invoices", "branch_id", "INTEGER")
 

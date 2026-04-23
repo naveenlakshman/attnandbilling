@@ -11,13 +11,27 @@ def home():
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("""
-        SELECT course_name, duration, fee, course_domain, course_category
+        SELECT course_name, duration, fee, course_domain, course_category,
+               duration_hours, course_slug
         FROM courses
         WHERE is_active = 1 AND show_on_website = 1
-        ORDER BY course_domain, course_category, course_name
+        ORDER BY
+            CASE WHEN course_domain IS NULL OR course_domain = '' THEN 1 ELSE 0 END,
+            course_domain,
+            CASE WHEN duration_hours IS NULL THEN 9999 ELSE duration_hours END,
+            course_name
     """)
     courses = cur.fetchall()
     conn.close()
+
+    # Build set of slugs that have an actual detail page file
+    from flask import current_app
+    courses_dir = os.path.join(current_app.template_folder, "website", "courses")
+    valid_slugs = set()
+    if os.path.isdir(courses_dir):
+        for fname in os.listdir(courses_dir):
+            if fname.endswith(".html"):
+                valid_slugs.add(fname[:-5])
 
     # Group by domain for template
     from collections import OrderedDict
@@ -32,7 +46,8 @@ def home():
     if ungrouped:
         grouped["Other"] = ungrouped
 
-    return render_template("website/home.html", courses=courses, grouped_courses=grouped)
+    return render_template("website/home.html", courses=courses,
+                           grouped_courses=grouped, valid_slugs=valid_slugs)
 
 
 @website_bp.route("/enquire", methods=["POST"])

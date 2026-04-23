@@ -1676,6 +1676,9 @@ def course_new():
         show_on_website = 1 if request.form.get("show_on_website") else 0
         duration_hours_raw = request.form.get("duration_hours", "").strip()
         duration_hours = int(duration_hours_raw) if duration_hours_raw.isdigit() else None
+        course_slug_raw = request.form.get("course_slug", "").strip().lower()
+        import re as _re
+        course_slug = _re.sub(r"[^a-z0-9_-]", "", course_slug_raw) or None
 
         conn = get_conn()
         cur = conn.cursor()
@@ -1691,10 +1694,11 @@ def course_new():
                 course_category,
                 show_on_website,
                 duration_hours,
+                course_slug,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             course_name,
             duration,
@@ -1703,6 +1707,7 @@ def course_new():
             course_category,
             show_on_website,
             duration_hours,
+            course_slug,
             now,
             now
         ))
@@ -1754,6 +1759,9 @@ def course_edit(id):
         show_on_website = 1 if request.form.get("show_on_website") else 0
         duration_hours_raw = request.form.get("duration_hours", "").strip()
         duration_hours = int(duration_hours_raw) if duration_hours_raw.isdigit() else None
+        course_slug_raw = request.form.get("course_slug", "").strip().lower()
+        import re as _re
+        course_slug = _re.sub(r"[^a-z0-9_-]", "", course_slug_raw) or None
 
         now = datetime.now().isoformat(timespec="seconds")
 
@@ -1766,6 +1774,7 @@ def course_edit(id):
                 course_category = ?,
                 show_on_website = ?,
                 duration_hours = ?,
+                course_slug = ?,
                 updated_at = ?
             WHERE id = ?
         """, (
@@ -1776,6 +1785,7 @@ def course_edit(id):
             course_category,
             show_on_website,
             duration_hours,
+            course_slug,
             now,
             id
         ))
