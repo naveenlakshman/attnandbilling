@@ -11,6 +11,7 @@ from modules.baddebt.routes import baddebt_bp
 from modules.attendance.routes import attendance_bp
 from modules.lms_admin import lms_admin_bp
 from modules.students import students_bp
+from modules.website import website_bp
 from datetime import datetime, timedelta
 
 def format_datetime(value):
@@ -54,6 +55,7 @@ def create_app():
 
     from modules.core.routes import core_bp
     app.register_blueprint(core_bp)
+    app.register_blueprint(website_bp)
     app.register_blueprint(leads_bp, url_prefix="/leads")
     app.register_blueprint(billing_bp, url_prefix="/billing")
     app.register_blueprint(assets_bp, url_prefix="/assets")

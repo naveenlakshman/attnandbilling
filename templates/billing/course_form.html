@@ -85,13 +85,49 @@
       </div>
 
       <div class="form-group">
-        <label>Duration</label>
+        <label>Duration (text label)</label>
         <input type="text" name="duration" value="{{ course.duration if course else '' }}" placeholder="Example: 45 Days or 60 Hours">
+      </div>
+
+      <div class="form-group">
+        <label>Duration in Hours <span style="font-weight:400; color:#666;">(number — used for sorting)</span></label>
+        <input type="number" name="duration_hours" min="1" max="9999"
+               value="{{ course.duration_hours if course and course.duration_hours else '' }}"
+               placeholder="e.g. 30">
       </div>
 
       <div class="form-group">
         <label>Course Fee</label>
         <input type="number" step="0.01" name="fee" required value="{{ course.fee if course else '' }}">
+      </div>
+
+      <div class="form-group">
+        <label>Domain / Subject Area</label>
+        <select name="course_domain" class="form-control" style="padding:10px 12px; border:1px solid #ced4da; border-radius:6px; font-size:14px;">
+          <option value="">— Select domain —</option>
+          {% for d in course_domains %}
+            <option value="{{ d }}" {% if course and course.course_domain == d %}selected{% endif %}>{{ d }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Course Category</label>
+        <select name="course_category" class="form-control" style="padding:10px 12px; border:1px solid #ced4da; border-radius:6px; font-size:14px;">
+          <option value="">— Select category —</option>
+          {% for cat in course_categories %}
+            <option value="{{ cat }}" {% if course and course.course_category == cat %}selected{% endif %}>{{ cat }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group" style="flex-direction: row; align-items: center; gap: 12px;">
+        <input type="checkbox" name="show_on_website" id="show_on_website" value="1"
+               {% if course and course.show_on_website %}checked{% endif %}
+               style="width:18px; height:18px; cursor:pointer; accent-color:#0d6efd;">
+        <label for="show_on_website" style="margin:0; cursor:pointer; font-weight:600;">
+          Show on public website
+        </label>
       </div>
 
       <div class="form-actions">

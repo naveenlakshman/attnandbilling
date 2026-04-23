@@ -8,7 +8,7 @@ from extensions import limiter
 
 core_bp = Blueprint("core", __name__)
 
-@core_bp.route("/")
+@core_bp.route("/erp")
 def home():
     if "user_id" in session:
         return redirect(url_for("core.dashboard"))

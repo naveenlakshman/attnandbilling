@@ -191,6 +191,160 @@
   }
   .courses-empty p { margin: 4px 0; }
 
+  /* ── Domain group heading ───────────────────────────── */
+  .domain-group { margin-bottom: 32px; }
+  .domain-heading {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1e293b;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    padding: 8px 14px;
+    background: #f1f5f9;
+    border-left: 4px solid #0d6efd;
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 14px;
+  }
+
+  /* ── Card grid ───────────────────────────────────────── */
+  .courses-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 16px;
+  }
+
+  /* ── Individual card ─────────────────────────────────── */
+  .course-card {
+    background: #fff;
+    border: 1px solid #e8ecf0;
+    border-radius: 12px;
+    padding: 18px 18px 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: box-shadow .15s, transform .15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .course-card:hover {
+    box-shadow: 0 4px 14px rgba(0,0,0,.10);
+    transform: translateY(-2px);
+  }
+  .course-card.inactive {
+    background: #fafafa;
+    border-color: #e0e0e0;
+  }
+  .course-card.inactive .course-name { color: #888; }
+
+  /* accent strip on left edge */
+  .course-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 12px 0 0 12px;
+    background: #0d6efd;
+  }
+  .course-card.inactive::before { background: #ccc; }
+  .course-card.on-website::before { background: #16a34a; }
+
+  .course-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .course-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a1a2e;
+    line-height: 1.35;
+    flex: 1;
+  }
+
+  /* ── Badges ──────────────────────────────────────────── */
+  .badge-active {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #d4edda;
+    color: #155724;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .badge-inactive {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #f8d7da;
+    color: #721c24;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .badge-website {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #dcfce7;
+    color: #15803d;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ── Meta row ────────────────────────────────────────── */
+  .course-meta {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .course-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .meta-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #999;
+    font-weight: 600;
+  }
+  .meta-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+  }
+  .meta-value.fee-value { color: #0d6efd; }
+
+  /* ── Card actions ────────────────────────────────────── */
+  .course-card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f0f0;
+    flex-wrap: wrap;
+  }
+  .course-card-actions .btn { font-size: 12px; padding: 6px 10px; }
+
+  /* ── Empty state ─────────────────────────────────────── */
+  .courses-empty {
+    padding: 60px 20px;
+    text-align: center;
+    color: #999;
+    background: #fff;
+    border-radius: 12px;
+    border: 1px dashed #ddd;
+  }
+  .courses-empty p { margin: 4px 0; }
+
   /* ── Mobile tweaks ───────────────────────────────────── */
   @media (max-width: 480px) {
     .courses-header h2 { font-size: 20px; }
@@ -217,54 +371,96 @@
     <option value="active">Active only</option>
     <option value="inactive">Inactive only</option>
   </select>
+  <select class="filter-select" id="websiteFilter" onchange="filterCourses()">
+    <option value="all">All</option>
+    <option value="1">🌐 On Website</option>
+    <option value="0">🔒 Hidden</option>
+  </select>
 </div>
 
 <div class="results-count" id="resultsCount"></div>
 
 {% if courses %}
-<div class="courses-grid" id="coursesGrid">
-  {% for c in courses %}
-  <div class="course-card {% if not c.is_active %}inactive{% endif %}"
-       data-name="{{ c.course_name | lower }}"
-       data-status="{{ 'active' if c.is_active else 'inactive' }}">
 
-    <div class="course-card-top">
-      <div class="course-name">{{ c.course_name }}</div>
-      {% if c.is_active %}
-        <span class="badge-active">Active</span>
-      {% else %}
-        <span class="badge-inactive">Inactive</span>
+{# ── Grouped by Domain ── #}
+{% for domain, domain_courses in grouped.items() %}
+<div class="domain-group" data-domain="{{ domain }}">
+  <div class="domain-heading">{{ domain }}</div>
+  <div class="courses-grid">
+    {% for c in domain_courses %}
+    <div class="course-card {% if not c.is_active %}inactive{% elif c.show_on_website %}on-website{% endif %}"
+         data-name="{{ c.course_name | lower }}"
+         data-status="{{ 'active' if c.is_active else 'inactive' }}"
+         data-website="{{ '1' if c.show_on_website else '0' }}">
+
+      <div class="course-card-top">
+        <div class="course-name">{{ c.course_name }}</div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+          {% if c.is_active %}
+            <span class="badge-active">Active</span>
+          {% else %}
+            <span class="badge-inactive">Inactive</span>
+          {% endif %}
+          {% if c.show_on_website %}
+            <span class="badge-website">🌐 On Website</span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if c.course_category %}
+      <div>
+        <span style="font-size:11px; font-weight:600; padding:3px 9px; border-radius:20px; background:#f3e8ff; color:#7c3aed;">{{ c.course_category }}</span>
+      </div>
       {% endif %}
-    </div>
 
-    <div class="course-meta">
-      <div class="course-meta-item">
-        <span class="meta-label">Duration</span>
-        <span class="meta-value">{{ c.duration or "—" }}</span>
+      <div class="course-meta">
+        {% if c.duration %}
+        <div class="course-meta-item">
+          <span class="meta-label">Duration</span>
+          <span class="meta-value">{{ c.duration }}</span>
+        </div>
+        {% endif %}
+        {% if c.duration_hours %}
+        <div class="course-meta-item">
+          <span class="meta-label">Hours</span>
+          <span class="meta-value">{{ c.duration_hours }} hrs</span>
+        </div>
+        {% endif %}
+        <div class="course-meta-item">
+          <span class="meta-label">Fee</span>
+          <span class="meta-value fee-value">₹ {{ "%.2f"|format(c.fee or 0) }}</span>
+        </div>
       </div>
-      <div class="course-meta-item">
-        <span class="meta-label">Fee</span>
-        <span class="meta-value fee-value">₹ {{ "%.2f"|format(c.fee or 0) }}</span>
+
+      {% if session.get('role') == 'admin' %}
+      <div class="course-card-actions">
+        <a class="btn btn-secondary btn-sm" href="{{ url_for('billing.course_edit', id=c.id) }}">✏️ Edit</a>
+
+        <form method="POST" action="{{ url_for('billing.course_toggle_active', id=c.id) }}" style="display:contents;">
+          <button type="submit"
+            class="btn btn-sm {% if c.is_active %}btn-warning{% else %}btn-success{% endif %}"
+            onclick="return confirm('{{ 'Deactivate' if c.is_active else 'Activate' }} this course?')">
+            {% if c.is_active %}⏸{% else %}▶{% endif %}
+          </button>
+        </form>
+
+        {% if c.is_active %}
+        <form method="POST" action="{{ url_for('billing.course_toggle_website', id=c.id) }}" style="display:contents;">
+          <button type="submit"
+            class="btn btn-sm {% if c.show_on_website %}btn-outline-danger{% else %}btn-outline-success{% endif %}"
+            onclick="return confirm('{{ 'Remove from website?' if c.show_on_website else 'Add this course to the public website?' }}')">
+            {% if c.show_on_website %}🔒 Remove from Site{% else %}🌐 Add to Website{% endif %}
+          </button>
+        </form>
+        {% endif %}
       </div>
-    </div>
+      {% endif %}
 
-    {% if session.get('role') == 'admin' %}
-    <div class="course-card-actions">
-      <a class="btn btn-secondary btn-sm" href="{{ url_for('billing.course_edit', id=c.id) }}">&#9998; Edit</a>
-      <form method="POST" action="{{ url_for('billing.course_toggle_active', id=c.id) }}" style="flex:1; display:flex;">
-        <button type="submit"
-          class="btn btn-sm {% if c.is_active %}btn-warning{% else %}btn-success{% endif %}"
-          style="flex:1;"
-          onclick="return confirm('{{ 'Deactivate' if c.is_active else 'Activate' }} this course?')">
-          {% if c.is_active %}⏸ Deactivate{% else %}▶ Activate{% endif %}
-        </button>
-      </form>
     </div>
-    {% endif %}
-
+    {% endfor %}
   </div>
-  {% endfor %}
 </div>
+{% endfor %}
 
 {% else %}
 <div class="courses-empty">
@@ -278,15 +474,24 @@
   function filterCourses() {
     const q = document.getElementById('courseSearch').value.toLowerCase().trim();
     const status = document.getElementById('statusFilter').value;
-    const cards = document.querySelectorAll('#coursesGrid .course-card');
+    const website = document.getElementById('websiteFilter').value;
+    const cards = document.querySelectorAll('.course-card');
     let visible = 0;
 
     cards.forEach(card => {
       const nameMatch = card.dataset.name.includes(q);
       const statusMatch = status === 'all' || card.dataset.status === status;
-      const show = nameMatch && statusMatch;
+      const websiteMatch = website === 'all' || card.dataset.website === website;
+      const show = nameMatch && statusMatch && websiteMatch;
       card.style.display = show ? '' : 'none';
       if (show) visible++;
+    });
+
+    // Hide domain group headings when all cards in them are hidden
+    document.querySelectorAll('.domain-group').forEach(group => {
+      const anyVisible = [...group.querySelectorAll('.course-card')]
+        .some(c => c.style.display !== 'none');
+      group.style.display = anyVisible ? '' : 'none';
     });
 
     const total = cards.length;
@@ -296,7 +501,6 @@
       : `Showing ${visible} of ${total} course${total !== 1 ? 's' : ''}`;
   }
 
-  // Initialise count on load
   document.addEventListener('DOMContentLoaded', filterCourses);
 </script>
 

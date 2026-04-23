@@ -1625,13 +1625,43 @@ def courses():
     cur.execute("""
         SELECT *
         FROM courses
-        ORDER BY id DESC
+        ORDER BY
+            CASE WHEN course_domain IS NULL OR course_domain = '' THEN 1 ELSE 0 END,
+            course_domain,
+            CASE WHEN duration_hours IS NULL THEN 9999 ELSE duration_hours END,
+            course_name
     """)
     courses = cur.fetchall()
-
     conn.close()
 
-    return render_template("billing/courses.html", courses=courses)
+    # Group by domain for the grouped view
+    from collections import OrderedDict
+    grouped = OrderedDict()
+    for c in courses:
+        key = c["course_domain"] or "(No Domain)"
+        grouped.setdefault(key, []).append(c)
+
+    return render_template("billing/courses.html", courses=courses, grouped=grouped)
+
+
+COURSE_DOMAINS = [
+    "Accounting",
+    "Coding & Programming",
+    "Design & Multimedia",
+    "Digital Marketing",
+    "Hardware & Networking",
+    "Office Tools",
+    "Spoken English & Communication",
+    "Other",
+]
+
+COURSE_CATEGORIES = [
+    "Short Term",
+    "Certificate Course",
+    "Bootcamp",
+    "Diploma",
+    "Other",
+]
 
 
 @billing_bp.route("/course/new", methods=["GET", "POST"])
@@ -1641,6 +1671,11 @@ def course_new():
         course_name = request.form["course_name"].strip()
         duration = request.form["duration"].strip()
         fee = request.form["fee"].strip()
+        course_domain = request.form.get("course_domain", "").strip() or None
+        course_category = request.form.get("course_category", "").strip() or None
+        show_on_website = 1 if request.form.get("show_on_website") else 0
+        duration_hours_raw = request.form.get("duration_hours", "").strip()
+        duration_hours = int(duration_hours_raw) if duration_hours_raw.isdigit() else None
 
         conn = get_conn()
         cur = conn.cursor()
@@ -1652,14 +1687,22 @@ def course_new():
                 course_name,
                 duration,
                 fee,
+                course_domain,
+                course_category,
+                show_on_website,
+                duration_hours,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             course_name,
             duration,
             fee,
+            course_domain,
+            course_category,
+            show_on_website,
+            duration_hours,
             now,
             now
         ))
@@ -1680,7 +1723,8 @@ def course_new():
         flash("Course added successfully.", "success")
         return redirect(url_for("billing.courses"))
 
-    return render_template("billing/course_form.html", course=None)
+    return render_template("billing/course_form.html", course=None,
+                           course_domains=COURSE_DOMAINS, course_categories=COURSE_CATEGORIES)
 
 
 @billing_bp.route("/course/<int:id>/edit", methods=["GET", "POST"])
@@ -1705,6 +1749,11 @@ def course_edit(id):
         course_name = request.form["course_name"].strip()
         duration = request.form["duration"].strip()
         fee = request.form["fee"].strip()
+        course_domain = request.form.get("course_domain", "").strip() or None
+        course_category = request.form.get("course_category", "").strip() or None
+        show_on_website = 1 if request.form.get("show_on_website") else 0
+        duration_hours_raw = request.form.get("duration_hours", "").strip()
+        duration_hours = int(duration_hours_raw) if duration_hours_raw.isdigit() else None
 
         now = datetime.now().isoformat(timespec="seconds")
 
@@ -1713,12 +1762,20 @@ def course_edit(id):
             SET course_name = ?,
                 duration = ?,
                 fee = ?,
+                course_domain = ?,
+                course_category = ?,
+                show_on_website = ?,
+                duration_hours = ?,
                 updated_at = ?
             WHERE id = ?
         """, (
             course_name,
             duration,
             fee,
+            course_domain,
+            course_category,
+            show_on_website,
+            duration_hours,
             now,
             id
         ))
@@ -1739,7 +1796,8 @@ def course_edit(id):
         return redirect(url_for("billing.courses"))
 
     conn.close()
-    return render_template("billing/course_form.html", course=course)
+    return render_template("billing/course_form.html", course=course,
+                           course_domains=COURSE_DOMAINS, course_categories=COURSE_CATEGORIES)
 
 
 @billing_bp.route("/course/<int:id>/toggle_active", methods=["POST"])
@@ -1775,6 +1833,48 @@ def course_toggle_active(id):
     )
 
     flash(f"Course '{course['course_name']}' has been {label}.", "success")
+    return redirect(url_for("billing.courses"))
+
+
+@billing_bp.route("/course/<int:id>/toggle_website", methods=["POST"])
+@login_required
+@admin_required
+def course_toggle_website(id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, course_name, is_active, show_on_website FROM courses WHERE id = ?", (id,))
+    course = cur.fetchone()
+
+    if not course:
+        conn.close()
+        flash("Course not found.", "danger")
+        return redirect(url_for("billing.courses"))
+
+    if not course["is_active"]:
+        conn.close()
+        flash("Only active courses can be shown on the website.", "warning")
+        return redirect(url_for("billing.courses"))
+
+    new_val = 0 if course["show_on_website"] else 1
+    label = "added to" if new_val else "removed from"
+
+    now = datetime.now().isoformat(timespec="seconds")
+    cur.execute("UPDATE courses SET show_on_website = ?, updated_at = ? WHERE id = ?",
+                (new_val, now, id))
+    conn.commit()
+    conn.close()
+
+    log_activity(
+        user_id=session["user_id"],
+        branch_id=session.get("branch_id"),
+        action_type="update",
+        module_name="courses",
+        record_id=id,
+        description=f"Course '{course['course_name']}' {label} website"
+    )
+
+    flash(f"Course '{course['course_name']}' {label} the website.", "success")
     return redirect(url_for("billing.courses"))
 
 

@@ -809,8 +809,13 @@ def init_db():
     add_column_if_not_exists(cur, "students", "password_hash", "TEXT")
     add_column_if_not_exists(cur, "students", "portal_enabled", "INTEGER NOT NULL DEFAULT 0")
     add_column_if_not_exists(cur, "leads", "lead_location", "TEXT")
+    add_column_if_not_exists(cur, "leads", "email", "TEXT")
 
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")
+    add_column_if_not_exists(cur, "courses", "course_domain", "TEXT")
+    add_column_if_not_exists(cur, "courses", "course_category", "TEXT")
+    add_column_if_not_exists(cur, "courses", "show_on_website", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_not_exists(cur, "courses", "duration_hours", "INTEGER")
 
     add_column_if_not_exists(cur, "invoices", "branch_id", "INTEGER")
 

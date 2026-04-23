@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ company.company_name }}{% endblock %}</title>
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+      document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function (form) {
+        if (!form.querySelector('input[name="csrf_token"]')) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'csrf_token';
+          input.value = token;
+          form.appendChild(input);
+        }
+      });
+    });
+  </script>
+  <style>
+    body { background: #fff; }
+
+    /* ── Navbar ── */
+    .site-navbar {
+      background: #fff;
+      border-bottom: 1px solid #dee2e6;
+      padding: 14px 0;
+      position: sticky;
+      top: 0;
+      z-index: 1030;
+    }
+    .site-navbar .brand {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #0d6efd;
+      text-decoration: none;
+    }
+    .site-navbar .nav-link {
+      color: #495057;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 8px;
+      transition: background .15s;
+    }
+    .site-navbar .nav-link:hover { background: #f1f3f5; color: #0d6efd; }
+
+    /* ── Sections ── */
+    .section { padding: 72px 0; }
+    .section-alt { background: #f8f9fa; }
+    .section-title {
+      font-size: 1.9rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .section-subtitle {
+      color: #6c757d;
+      margin-bottom: 40px;
+      font-size: 1.05rem;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, #0d6efd 0%, #0a4bc0 100%);
+      color: #fff;
+      padding: 100px 0 80px;
+      text-align: center;
+    }
+    .hero h1 { font-size: 2.8rem; font-weight: 800; margin-bottom: 16px; }
+    .hero p  { font-size: 1.2rem; opacity: .88; margin-bottom: 36px; }
+
+    /* ── Course card ── */
+    .course-card {
+      border: 1px solid #dee2e6;
+      border-radius: 14px;
+      padding: 24px;
+      height: 100%;
+      transition: box-shadow .2s, border-color .2s;
+    }
+    .course-card:hover {
+      box-shadow: 0 6px 24px rgba(13,110,253,.12);
+      border-color: #0d6efd;
+    }
+    .course-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: #e7f0ff;
+      color: #0d6efd;
+      margin-bottom: 12px;
+    }
+    .course-card h5 { font-weight: 700; margin-bottom: 8px; }
+    .course-meta { color: #6c757d; font-size: 0.9rem; }
+    .course-fee { font-size: 1.15rem; font-weight: 700; color: #0d6efd; margin-top: 12px; }
+
+    /* ── Enquire form ── */
+    .enquire-card {
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid #dee2e6;
+      padding: 36px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.06);
+    }
+
+    /* ── Footer ── */
+    .site-footer {
+      background: #212529;
+      color: #adb5bd;
+      padding: 40px 0 24px;
+      font-size: 0.9rem;
+    }
+    .site-footer a { color: #adb5bd; text-decoration: none; }
+    .site-footer a:hover { color: #fff; }
+    .site-footer .footer-title { color: #fff; font-weight: 600; margin-bottom: 12px; }
+    .site-footer .footer-bottom {
+      border-top: 1px solid #343a40;
+      margin-top: 32px;
+      padding-top: 20px;
+      text-align: center;
+      font-size: 0.82rem;
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="site-navbar">
+  <div class="container d-flex align-items-center justify-content-between gap-3 flex-wrap">
+    <a href="{{ url_for('website.home') }}" class="brand">
+      {% if company.logo_filename %}
+        <img src="{{ url_for('static', filename='images/company_logo/' ~ company.logo_filename) }}"
+             alt="{{ company.company_short_name }}" height="36" class="me-2"
+             style="object-fit:contain; vertical-align:middle;">
+      {% endif %}
+      {{ company.company_short_name }}
+    </a>
+
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <a href="{{ url_for('website.home') }}#courses" class="nav-link">Courses</a>
+      <a href="{{ url_for('website.home') }}#enquire" class="nav-link">Contact</a>
+      <a href="{{ url_for('core.login') }}" class="btn btn-outline-primary btn-sm px-3">
+        Staff Login
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="container mt-3">
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+{% block content %}{% endblock %}
+
+<!-- Footer -->
+<footer class="site-footer">
+  <div class="container">
+    <div class="row g-4">
+      <div class="col-md-4">
+        <div class="footer-title">{{ company.company_name }}</div>
+        {% if company.tagline %}<p>{{ company.tagline }}</p>{% endif %}
+      </div>
+      <div class="col-md-4">
+        <div class="footer-title">Contact Us</div>
+        {% if company.phone %}<p>📞 {{ company.phone }}</p>{% endif %}
+        {% if company.email %}<p>✉️ <a href="mailto:{{ company.email }}">{{ company.email }}</a></p>{% endif %}
+        {% if company.address %}<p>📍 {{ company.address }}</p>{% endif %}
+      </div>
+      <div class="col-md-4">
+        <div class="footer-title">Quick Links</div>
+        <p><a href="{{ url_for('website.home') }}#courses">Our Courses</a></p>
+        <p><a href="{{ url_for('website.home') }}#enquire">Enquire Now</a></p>
+        <p><a href="{{ url_for('core.login') }}">Staff Login</a></p>
+        <p><a href="{{ url_for('students.login') }}">Student Portal</a></p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      &copy; {{ 2026 }} {{ company.company_name }}. All rights reserved.
+    </div>
+  </div>
+</footer>
+
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
