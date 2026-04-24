@@ -53,6 +53,11 @@ def login():
 @core_bp.route("/dashboard")
 @login_required
 def dashboard():
+    # Staff users get their own dedicated dashboard
+    if session.get("role") == "staff":
+        return _staff_dashboard()
+
+    # ── Admin dashboard below ────────────────────────────────────
     conn = get_conn()
     cur = conn.cursor()
 
@@ -261,6 +266,173 @@ def dashboard():
         past_due_leads=past_due_leads,
         today_due_leads=today_due_leads,
         # Activity
+        recent_activity=recent_activity,
+    )
+
+
+def _staff_dashboard():
+    """Build and render the staff dashboard for the logged-in staff user."""
+    user_id = session.get("user_id")
+    branch_id = session.get("branch_id")
+    can_view_all = session.get("can_view_all_branches", 0)
+
+    conn = get_conn()
+    cur = conn.cursor()
+    today = datetime.now().date().isoformat()
+    current_month = datetime.now().strftime("%Y-%m")
+
+    # ── My batches (trainer = me) ───────────────────────────────
+    cur.execute("""
+        SELECT b.id, b.batch_name, b.start_time, b.end_time, b.status,
+               c.course_name, br.branch_name,
+               COUNT(sb.id) AS student_count
+        FROM batches b
+        LEFT JOIN courses c ON b.course_id = c.id
+        LEFT JOIN branches br ON b.branch_id = br.id
+        LEFT JOIN student_batches sb ON sb.batch_id = b.id AND sb.status = 'active'
+        WHERE b.trainer_id = ? AND b.status = 'active'
+        GROUP BY b.id
+        ORDER BY b.batch_name ASC
+    """, [user_id])
+    my_batches = cur.fetchall()
+
+    # ── Today's attendance (my batches) ────────────────────────
+    batch_ids = [b["id"] for b in my_batches]
+    if batch_ids:
+        placeholders = ",".join("?" * len(batch_ids))
+        cur.execute(f"""
+            SELECT status, COUNT(*) AS cnt
+            FROM attendance_records
+            WHERE attendance_date = ? AND batch_id IN ({placeholders})
+            GROUP BY status
+        """, [today] + batch_ids)
+        att_rows = cur.fetchall()
+    else:
+        att_rows = []
+    att_summary = {r["status"]: r["cnt"] for r in att_rows}
+    att_present = att_summary.get("present", 0)
+    att_late = att_summary.get("late", 0)
+    att_absent = att_summary.get("absent", 0)
+    att_total = att_present + att_late + att_absent
+    attendance_rate = round(((att_present + att_late) / att_total * 100), 1) if att_total else None
+
+    # ── My assigned leads — followup overdue ───────────────────
+    cur.execute("""
+        SELECT id, name, phone, next_followup_date, lead_score, stage
+        FROM leads
+        WHERE assigned_to_id = ? AND status = 'active' AND is_deleted = 0
+          AND next_followup_date IS NOT NULL AND next_followup_date < ?
+        ORDER BY next_followup_date ASC
+    """, [user_id, today])
+    my_past_due_leads = cur.fetchall()
+
+    # ── My assigned leads — followup today ─────────────────────
+    cur.execute("""
+        SELECT id, name, phone, next_followup_date, lead_score, stage
+        FROM leads
+        WHERE assigned_to_id = ? AND status = 'active' AND is_deleted = 0
+          AND next_followup_date = ?
+        ORDER BY lead_score DESC
+    """, [user_id, today])
+    my_today_leads = cur.fetchall()
+
+    # ── Active students in my batches ───────────────────────────
+    if batch_ids:
+        placeholders = ",".join("?" * len(batch_ids))
+        cur.execute(f"""
+            SELECT COUNT(DISTINCT sb.student_id) AS cnt
+            FROM student_batches sb
+            WHERE sb.batch_id IN ({placeholders}) AND sb.status = 'active'
+        """, batch_ids)
+        my_active_students = cur.fetchone()["cnt"]
+    else:
+        my_active_students = 0
+
+    # ── New students this month in my branch ────────────────────
+    branch_filter = "" if can_view_all else "AND branch_id = ?"
+    branch_params = [current_month] if can_view_all else [current_month, branch_id]
+    cur.execute(f"""
+        SELECT COUNT(*) AS cnt FROM students
+        WHERE strftime('%Y-%m', joined_date) = ? {branch_filter}
+    """, branch_params)
+    new_students_this_month = cur.fetchone()["cnt"]
+
+    # ── Overdue payments for my branch ─────────────────────────
+    if can_view_all:
+        branch_clause = ""
+        branch_param = []
+    else:
+        branch_clause = "AND i.branch_id = ?"
+        branch_param = [branch_id]
+
+    cur.execute(f"""
+        SELECT
+            ip.id, ip.due_date, ip.amount_due, ip.amount_paid, ip.remarks,
+            i.invoice_no, i.id AS invoice_id,
+            s.full_name AS student_name, s.student_code, s.phone AS student_phone,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i ON ip.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) < ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
+          {branch_clause}
+        ORDER BY parse_date(ip.due_date) ASC
+        LIMIT 50
+    """, [today] + branch_param)
+    past_dues = cur.fetchall()
+    total_past_due = sum(float(r["balance_due"] or 0) for r in past_dues)
+
+    # ── Today's dues for my branch ──────────────────────────────
+    cur.execute(f"""
+        SELECT
+            ip.id, ip.due_date, ip.amount_due, ip.amount_paid, ip.remarks,
+            i.invoice_no, i.id AS invoice_id,
+            s.full_name AS student_name, s.student_code, s.phone AS student_phone,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i ON ip.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) = ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
+          {branch_clause}
+        ORDER BY s.full_name ASC
+    """, [today] + branch_param)
+    todays_dues = cur.fetchall()
+    total_today_due = sum(float(r["balance_due"] or 0) for r in todays_dues)
+
+    # ── Recent activity (mine) ──────────────────────────────────
+    cur.execute("""
+        SELECT al.action_type, al.module_name, al.description, al.created_at
+        FROM activity_logs al
+        WHERE al.user_id = ?
+        ORDER BY al.created_at DESC
+        LIMIT 8
+    """, [user_id])
+    recent_activity = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "core/dashboard_staff.html",
+        today=today,
+        current_month=current_month,
+        my_batches=my_batches,
+        att_present=att_present,
+        att_late=att_late,
+        att_absent=att_absent,
+        att_total=att_total,
+        attendance_rate=attendance_rate,
+        my_past_due_leads=my_past_due_leads,
+        my_today_leads=my_today_leads,
+        my_active_students=my_active_students,
+        new_students_this_month=new_students_this_month,
+        past_dues=past_dues,
+        todays_dues=todays_dues,
+        total_past_due=total_past_due,
+        total_today_due=total_today_due,
         recent_activity=recent_activity,
     )
 

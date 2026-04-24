@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ company.company_short_name }}{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<style>
+  .kpi-card {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,.08);
+    transition: transform .15s;
+  }
+  .kpi-card:hover { transform: translateY(-2px); }
+  .kpi-value { font-size: 1.9rem; font-weight: 700; }
+  .kpi-label { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; opacity: .75; }
+  .kpi-sub { font-size: .85rem; margin-top: 4px; }
+  .section-title {
+    font-size: 1rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; color: #6c757d;
+    border-left: 4px solid #0d6efd; padding-left: 10px;
+    margin-bottom: 1rem;
+  }
+  .action-table th { font-size: .82rem; font-weight: 600; }
+  .action-table td { font-size: .85rem; vertical-align: middle; }
+  .activity-item { border-left: 3px solid #dee2e6; padding: 6px 0 6px 12px; margin-bottom: 6px; }
+  .toggle-btn { cursor: pointer; border: none; background: none; color: inherit; font-size: .8rem; }
+  .batch-card {
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+    background: #f8f9ff; border: 1px solid #e0e7ff;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;
+  }
+</style>
+
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h3 class="mb-0 fw-bold">Good Morning, {{ session.get('full_name').split()[0] }}!</h3>
+    <small class="text-muted">{{ today }} &mdash; Here's your work summary for today.</small>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     ROW 1 — QUICK STATS
+     ════════════════════════════════════════════════════════ -->
+<p class="section-title">Today at a Glance</p>
+<div class="row g-3 mb-4">
+
+  <div class="col-6 col-md-3">
+    <div class="kpi-card card text-center py-3" style="border-top: 4px solid #0d6efd;">
+      <div class="kpi-value text-primary">{{ my_batches|length }}</div>
+      <div class="kpi-label">My Active Batches</div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="kpi-card card text-center py-3" style="border-top: 4px solid #198754;">
+      <div class="kpi-value text-success">{{ my_active_students }}</div>
+      <div class="kpi-label">Students in My Batches</div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="kpi-card card text-center py-3" style="border-top: 4px solid #20c997;">
+      <div class="kpi-value" style="color:#20c997;">{{ new_students_this_month }}</div>
+      <div class="kpi-label">New Students This Month</div>
+      <div class="kpi-sub text-muted">(branch)</div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="kpi-card card text-center py-3" style="border-top: 4px solid #fd7e14;">
+      <div class="kpi-value" style="color:#fd7e14;">{{ (my_past_due_leads|length) + (my_today_leads|length) }}</div>
+      <div class="kpi-label">My Pending Followups</div>
+      {% if my_past_due_leads %}
+      <div class="kpi-sub text-danger">{{ my_past_due_leads|length }} overdue</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     ROW 2 — TODAY'S ATTENDANCE
+     ════════════════════════════════════════════════════════ -->
+<p class="section-title">Today's Attendance — My Batches</p>
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="kpi-card card text-center py-3" style="border-top: 4px solid #198754; background:#f0fff5;">
+      {% if attendance_rate is not none %}
+        <div class="kpi-value text-success">{{ attendance_rate }}%</div>
+        <div class="kpi-label">Attendance Rate</div>
+        <div class="kpi-sub text-muted">{{ att_present + att_late }} / {{ att_total }} marked</div>
+      {% else %}
+        <div class="kpi-value text-muted">—</div>
+        <div class="kpi-label">Not Marked Yet</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card card text-center py-3" style="border-top: 4px solid #198754;">
+      <div class="kpi-value text-success">{{ att_present }}</div>
+      <div class="kpi-label">Present</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card card text-center py-3" style="border-top: 4px solid #ffc107;">
+      <div class="kpi-value" style="color:#e09000;">{{ att_late }}</div>
+      <div class="kpi-label">Late</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card card text-center py-3" style="border-top: 4px solid #dc3545; background:#fff5f5;">
+      <div class="kpi-value text-danger">{{ att_absent }}</div>
+      <div class="kpi-label">Absent</div>
+    </div>
+  </div>
+</div>
+
+<!-- My Batches list -->
+{% if my_batches %}
+<div class="card kpi-card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom">
+    <span class="fw-semibold">My Batches</span>
+    <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-sm btn-outline-info">Mark Attendance</a>
+  </div>
+  <div class="card-body p-3">
+    {% for batch in my_batches %}
+    <div class="batch-card">
+      <div>
+        <strong>{{ batch.batch_name }}</strong>
+        <small class="text-muted ms-2">{{ batch.course_name or '' }}</small>
+      </div>
+      <div class="d-flex align-items-center gap-3">
+        <small class="text-muted">🕐 {{ batch.start_time or '—' }} – {{ batch.end_time or '—' }}</small>
+        <span class="badge bg-primary">{{ batch.student_count }} students</span>
+        <a href="{{ url_for('attendance.batch_detail', batch_id=batch.id) }}" class="btn btn-xs btn-outline-secondary" style="font-size:.75rem; padding:2px 8px;">View</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="alert alert-info mb-4">No active batches assigned to you yet.</div>
+{% endif %}
+
+<!-- ════════════════════════════════════════════════════════
+     ROW 3 — OVERDUE PAYMENTS (branch)
+     ════════════════════════════════════════════════════════ -->
+{% if past_dues or todays_dues %}
+<p class="section-title">Overdue Payments — My Branch</p>
+<div class="card kpi-card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:#fff0f0; border-bottom:1px solid #f5c6cb;">
+    <div>
+      <span style="color:#dc3545; font-weight:600;">⚠️ Overdue Payments</span>
+      <span class="badge bg-danger ms-2">{{ past_dues|length }} past due</span>
+      {% if todays_dues %}<span class="badge bg-warning text-dark ms-1">{{ todays_dues|length }} due today</span>{% endif %}
+      <span class="ms-2 text-danger fw-bold small">₹{{ "{:,.0f}".format(total_past_due + total_today_due) }}</span>
+    </div>
+    <button class="toggle-btn text-muted small" onclick="toggleSection('overduePayments', this)">▶ Show</button>
+  </div>
+  <div id="overduePayments" style="display:none;">
+    <div class="table-responsive">
+      <table class="table table-sm action-table mb-0">
+        <thead class="table-light">
+          <tr><th>Student</th><th>Phone</th><th>Due Date</th><th>Balance</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          {% for item in past_dues %}
+          <tr style="background:#fff5f5;">
+            <td><strong>{{ item.student_code }}</strong> {{ item.student_name }}</td>
+            <td>{{ item.student_phone or '—' }}</td>
+            <td class="text-danger fw-bold">{{ item.due_date }}</td>
+            <td class="text-danger fw-bold">₹{{ "{:,.0f}".format(item.balance_due or 0) }}</td>
+            <td><a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}" class="btn btn-xs btn-primary" style="font-size:.75rem; padding:2px 8px;">Pay</a></td>
+          </tr>
+          {% endfor %}
+          {% for item in todays_dues %}
+          <tr style="background:#fffaf0;">
+            <td><strong>{{ item.student_code }}</strong> {{ item.student_name }}</td>
+            <td>{{ item.student_phone or '—' }}</td>
+            <td class="fw-bold" style="color:#fd7e14;">{{ item.due_date }} <span class="badge bg-warning text-dark" style="font-size:.65rem;">Today</span></td>
+            <td class="fw-bold" style="color:#fd7e14;">₹{{ "{:,.0f}".format(item.balance_due or 0) }}</td>
+            <td><a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}" class="btn btn-xs btn-primary" style="font-size:.75rem; padding:2px 8px;">Pay</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="p-2 text-end">
+      <a href="{{ url_for('billing.receivables') }}" class="btn btn-sm btn-danger">View All Receivables</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ════════════════════════════════════════════════════════
+     ROW 4 — MY LEAD FOLLOWUPS
+     ════════════════════════════════════════════════════════ -->
+{% if my_past_due_leads or my_today_leads %}
+<p class="section-title">My Lead Followups</p>
+<div class="card kpi-card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:#fff8f0; border-bottom:1px solid #fde8c8;">
+    <div>
+      <span style="color:#fd7e14; font-weight:600;">📞 Pending Followups</span>
+      {% if my_past_due_leads %}<span class="badge bg-danger ms-2">{{ my_past_due_leads|length }} overdue</span>{% endif %}
+      {% if my_today_leads %}<span class="badge bg-warning text-dark ms-1">{{ my_today_leads|length }} today</span>{% endif %}
+    </div>
+    <button class="toggle-btn text-muted small" onclick="toggleSection('myLeads', this)">▶ Show</button>
+  </div>
+  <div id="myLeads" style="display:none;">
+    <div class="table-responsive">
+      <table class="table table-sm action-table mb-0">
+        <thead class="table-light">
+          <tr><th>Lead</th><th>Phone</th><th>Due Date</th><th>Score</th><th>Stage</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          {% for lead in my_past_due_leads %}
+          <tr style="background:#ffebee;">
+            <td><strong>{{ lead.name }}</strong></td>
+            <td>{{ lead.phone or '—' }}</td>
+            <td class="text-danger fw-bold">{{ lead.next_followup_date }}</td>
+            <td>
+              <span style="background:{% if (lead.lead_score or 0) >= 60 %}#d4edda{% elif (lead.lead_score or 0) >= 40 %}#fff3cd{% else %}#e2e3e5{% endif %}; color:{% if (lead.lead_score or 0) >= 60 %}#155724{% elif (lead.lead_score or 0) >= 40 %}#856404{% else %}#383d41{% endif %}; padding:2px 7px; border-radius:10px; font-size:.75rem; font-weight:600;">
+                {{ lead.lead_score or 0 }}
+              </span>
+            </td>
+            <td><small>{{ lead.stage or '—' }}</small></td>
+            <td><a href="{{ url_for('leads.lead_detail', lead_id=lead.id) }}" class="btn btn-xs btn-outline-primary" style="font-size:.75rem; padding:2px 8px;">Followup</a></td>
+          </tr>
+          {% endfor %}
+          {% for lead in my_today_leads %}
+          <tr style="background:#fff8f0;">
+            <td><strong>{{ lead.name }}</strong></td>
+            <td>{{ lead.phone or '—' }}</td>
+            <td class="fw-bold" style="color:#fd7e14;">{{ lead.next_followup_date }} <span class="badge bg-warning text-dark" style="font-size:.65rem;">Today</span></td>
+            <td>
+              <span style="background:{% if (lead.lead_score or 0) >= 60 %}#d4edda{% elif (lead.lead_score or 0) >= 40 %}#fff3cd{% else %}#e2e3e5{% endif %}; color:{% if (lead.lead_score or 0) >= 60 %}#155724{% elif (lead.lead_score or 0) >= 40 %}#856404{% else %}#383d41{% endif %}; padding:2px 7px; border-radius:10px; font-size:.75rem; font-weight:600;">
+                {{ lead.lead_score or 0 }}
+              </span>
+            </td>
+            <td><small>{{ lead.stage or '—' }}</small></td>
+            <td><a href="{{ url_for('leads.lead_detail', lead_id=lead.id) }}" class="btn btn-xs btn-outline-primary" style="font-size:.75rem; padding:2px 8px;">Followup</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="p-2 text-end">
+      <a href="{{ url_for('leads.followups_today') }}" class="btn btn-sm btn-warning">View All My Leads</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ════════════════════════════════════════════════════════
+     ROW 5 — RECENT ACTIVITY + QUICK LINKS
+     ════════════════════════════════════════════════════════ -->
+<div class="row g-3 mb-4">
+
+  <!-- Recent Activity -->
+  <div class="col-md-7">
+    <p class="section-title">My Recent Activity</p>
+    <div class="card kpi-card">
+      <div class="card-body p-3">
+        {% if recent_activity %}
+          {% for act in recent_activity %}
+          <div class="activity-item"
+               style="border-left-color:
+                 {% if act.module_name == 'billing' %}#198754
+                 {% elif act.module_name == 'leads' %}#6f42c1
+                 {% elif act.module_name == 'attendance' %}#0d6efd
+                 {% elif act.module_name == 'students' %}#20c997
+                 {% else %}#dee2e6{% endif %};">
+            <div class="d-flex justify-content-between">
+              <span style="font-size:.84rem;">
+                <strong>{{ act.module_name|title if act.module_name else 'System' }}</strong>
+                &mdash; {{ act.description or act.action_type }}
+              </span>
+              <small class="text-muted ms-2 text-nowrap">{{ act.created_at[:16] if act.created_at else '' }}</small>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="text-muted small text-center py-3">No recent activity logged.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Links -->
+  <div class="col-md-5">
+    <p class="section-title">Quick Links</p>
+    <div class="card kpi-card">
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-6"><a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-info w-100 btn-sm">✅ Mark Attendance</a></div>
+          <div class="col-6"><a href="{{ url_for('leads.lead_create') }}" class="btn btn-outline-success w-100 btn-sm">➕ Add Lead</a></div>
+          <div class="col-6"><a href="{{ url_for('billing.student_new') }}" class="btn btn-outline-primary w-100 btn-sm">🎓 Add Student</a></div>
+          <div class="col-6"><a href="{{ url_for('billing.receipt_new') }}" class="btn btn-outline-success w-100 btn-sm">💵 New Receipt</a></div>
+          <div class="col-6"><a href="{{ url_for('billing.students') }}" class="btn btn-outline-secondary w-100 btn-sm">👥 All Students</a></div>
+          <div class="col-6"><a href="{{ url_for('leads.followups_today') }}" class="btn btn-outline-warning w-100 btn-sm">📞 My Followups</a></div>
+          <div class="col-6"><a href="{{ url_for('billing.receivables') }}" class="btn btn-outline-danger w-100 btn-sm">💰 Receivables</a></div>
+          <div class="col-6"><a href="{{ url_for('reports.daily_report') }}" class="btn btn-outline-dark w-100 btn-sm">📋 Daily Report</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleSection(id, btn) {
+  const el = document.getElementById(id);
+  const visible = el.style.display !== 'none';
+  el.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? '▶ Show' : '▼ Hide';
+}
+</script>
+{% endblock %}
