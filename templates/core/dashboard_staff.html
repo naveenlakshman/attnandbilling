@@ -133,7 +133,7 @@
       <div class="d-flex align-items-center gap-3">
         <small class="text-muted">🕐 {{ batch.start_time or '—' }} – {{ batch.end_time or '—' }}</small>
         <span class="badge bg-primary">{{ batch.student_count }} students</span>
-        <a href="{{ url_for('attendance.batch_detail', batch_id=batch.id) }}" class="btn btn-xs btn-outline-secondary" style="font-size:.75rem; padding:2px 8px;">View</a>
+        <a href="{{ url_for('attendance.batch_planner', batch_id=batch.id) }}" class="btn btn-xs btn-outline-secondary" style="font-size:.75rem; padding:2px 8px;">View</a>
       </div>
     </div>
     {% endfor %}
