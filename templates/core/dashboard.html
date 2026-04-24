@@ -6,11 +6,18 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="row">
-        <div class="col-md-12">
-            <h3 class="mb-4">Welcome, {{ session.get('full_name') }}!</h3>
+    <div class="row align-items-center mb-2">
+        <div class="col">
+            <h3 class="mb-0">Welcome, {{ session.get('full_name') }}!</h3>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('core.dashboard') }}"
+               style="display:inline-flex; align-items:center; gap:8px; background:#f0f4ff; border:1px solid #c7d4f5; border-radius:20px; padding:5px 14px; font-size:.82rem; text-decoration:none; color:#374495;">
+                ✨ New Dashboard
+            </a>
         </div>
     </div>
+    <div class="row mb-3"></div>
 
     <div class="row mb-4">
         <div class="col-md-8">

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import check_password_hash, generate_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from db import get_conn, get_company_profile, clear_company_cache
 from .utils import login_required, admin_required
@@ -57,108 +57,273 @@ def dashboard():
     cur = conn.cursor()
 
     today = datetime.now().date().isoformat()
+    current_month = datetime.now().strftime("%Y-%m")
+    seven_days_later = (datetime.now().date() + timedelta(days=7)).isoformat()
 
-    # Past dues
-    past_dues_query = """
+    # ── Revenue this month ──────────────────────────────────────
+    cur.execute("""
+        SELECT COALESCE(SUM(amount_received), 0) AS total
+        FROM receipts
+        WHERE strftime('%Y-%m', receipt_date) = ?
+    """, [current_month])
+    revenue_this_month = float(cur.fetchone()["total"] or 0)
+
+    # ── Expenses this month ─────────────────────────────────────
+    cur.execute("""
+        SELECT COALESCE(SUM(amount), 0) AS total
+        FROM expenses
+        WHERE strftime('%Y-%m', expense_date) = ?
+    """, [current_month])
+    expenses_this_month = float(cur.fetchone()["total"] or 0)
+
+    # ── Active students ─────────────────────────────────────────
+    cur.execute("SELECT COUNT(*) AS cnt FROM students WHERE status = 'active'")
+    active_students = cur.fetchone()["cnt"]
+
+    # ── New students this month ─────────────────────────────────
+    cur.execute("""
+        SELECT COUNT(*) AS cnt FROM students
+        WHERE strftime('%Y-%m', joined_date) = ?
+    """, [current_month])
+    new_students_this_month = cur.fetchone()["cnt"]
+
+    # ── Active leads ────────────────────────────────────────────
+    cur.execute("""
+        SELECT COUNT(*) AS cnt FROM leads
+        WHERE status = 'active' AND is_deleted = 0
+    """)
+    active_leads = cur.fetchone()["cnt"]
+
+    # ── Leads by stage ──────────────────────────────────────────
+    cur.execute("""
+        SELECT stage, COUNT(*) AS cnt FROM leads
+        WHERE status = 'active' AND is_deleted = 0
+        GROUP BY stage
+        ORDER BY cnt DESC
+    """)
+    leads_by_stage = cur.fetchall()
+
+    # ── Lead conversion stats ───────────────────────────────────
+    cur.execute("SELECT COUNT(*) AS cnt FROM leads WHERE status = 'converted' AND is_deleted = 0")
+    total_converted = cur.fetchone()["cnt"]
+    cur.execute("SELECT COUNT(*) AS cnt FROM leads WHERE is_deleted = 0")
+    total_leads_all = cur.fetchone()["cnt"]
+    conversion_rate = round((total_converted / total_leads_all * 100), 1) if total_leads_all else 0
+
+    # ── Today's new leads ───────────────────────────────────────
+    cur.execute("""
+        SELECT COUNT(*) AS cnt FROM leads
+        WHERE date(created_at) = ? AND is_deleted = 0
+    """, [today])
+    today_new_leads = cur.fetchone()["cnt"]
+
+    # ── Past due installments ───────────────────────────────────
+    cur.execute("""
         SELECT
-            ip.id,
-            ip.due_date,
-            ip.amount_due,
-            ip.amount_paid,
-            ip.status,
-            ip.remarks,
-            i.invoice_no,
-            i.id AS invoice_id,
-            s.full_name AS student_name,
-            s.student_code,
-            s.phone AS student_phone,
+            ip.id, ip.due_date, ip.amount_due, ip.amount_paid, ip.remarks,
+            i.invoice_no, i.id AS invoice_id,
+            s.full_name AS student_name, s.student_code, s.phone AS student_phone,
             (ip.amount_due - ip.amount_paid) AS balance_due
         FROM installment_plans ip
-        JOIN invoices i
-            ON ip.invoice_id = i.id
-        JOIN students s
-            ON i.student_id = s.id
+        JOIN invoices i ON ip.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
         ORDER BY parse_date(ip.due_date) ASC
-    """
-
-    cur.execute(past_dues_query, [today])
+    """, [today])
     past_dues = cur.fetchall()
+    total_past_due = sum(float(r["balance_due"] or 0) for r in past_dues)
 
-    # Today's dues
-    todays_dues_query = """
+    # ── Today's due installments ────────────────────────────────
+    cur.execute("""
         SELECT
-            ip.id,
-            ip.due_date,
-            ip.amount_due,
-            ip.amount_paid,
-            ip.status,
-            ip.remarks,
-            i.invoice_no,
-            i.id AS invoice_id,
-            s.full_name AS student_name,
-            s.student_code,
-            s.phone AS student_phone,
+            ip.id, ip.due_date, ip.amount_due, ip.amount_paid, ip.remarks,
+            i.invoice_no, i.id AS invoice_id,
+            s.full_name AS student_name, s.student_code, s.phone AS student_phone,
             (ip.amount_due - ip.amount_paid) AS balance_due
         FROM installment_plans ip
-        JOIN invoices i
-            ON ip.invoice_id = i.id
-        JOIN students s
-            ON i.student_id = s.id
+        JOIN invoices i ON ip.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
         ORDER BY s.full_name ASC
-    """
-
-    cur.execute(todays_dues_query, [today])
+    """, [today])
     todays_dues = cur.fetchall()
+    total_today_due = sum(float(r["balance_due"] or 0) for r in todays_dues)
 
-    total_past_due = sum(float(row["balance_due"] or 0) for row in past_dues)
-    total_today_due = sum(float(row["balance_due"] or 0) for row in todays_dues)
-
-    # Past due leads (followup due before today)
-    past_due_leads_query = """
+    # ── Due in next 7 days ──────────────────────────────────────
+    cur.execute("""
         SELECT
-            id,
-            name,
-            phone,
-            next_followup_date,
-            lead_score,
-            stage,
-            status
+            COALESCE(SUM(ip.amount_due - ip.amount_paid), 0) AS total,
+            COUNT(*) AS cnt
+        FROM installment_plans ip
+        JOIN invoices i ON ip.invoice_id = i.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) > ?
+          AND parse_date(ip.due_date) <= ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
+    """, [today, seven_days_later])
+    row = cur.fetchone()
+    total_next7_due = float(row["total"] or 0)
+    count_next7_due = row["cnt"]
+
+    # ── Bad debt total ──────────────────────────────────────────
+    cur.execute("SELECT COALESCE(SUM(amount_written_off), 0) AS total FROM bad_debt_writeoffs")
+    total_bad_debt = float(cur.fetchone()["total"] or 0)
+
+    # ── Today's attendance ──────────────────────────────────────
+    cur.execute("""
+        SELECT status, COUNT(*) AS cnt
+        FROM attendance_records
+        WHERE attendance_date = ?
+        GROUP BY status
+    """, [today])
+    att_rows = cur.fetchall()
+    att_summary = {r["status"]: r["cnt"] for r in att_rows}
+    att_present = att_summary.get("present", 0)
+    att_late = att_summary.get("late", 0)
+    att_absent = att_summary.get("absent", 0)
+    att_total = att_present + att_late + att_absent
+    attendance_rate = round(((att_present + att_late) / att_total * 100), 1) if att_total else None
+
+    # ── Active batches ──────────────────────────────────────────
+    cur.execute("SELECT COUNT(*) AS cnt FROM batches WHERE status = 'active'")
+    active_batches = cur.fetchone()["cnt"]
+
+    # ── Past due leads ──────────────────────────────────────────
+    cur.execute("""
+        SELECT id, name, phone, next_followup_date, lead_score, stage
         FROM leads
-        WHERE status = 'active'
-          AND is_deleted = 0
+        WHERE status = 'active' AND is_deleted = 0
           AND next_followup_date IS NOT NULL
           AND next_followup_date < ?
         ORDER BY next_followup_date ASC
-    """
-
-    cur.execute(past_due_leads_query, [today])
+    """, [today])
     past_due_leads = cur.fetchall()
 
-    # Today's due leads (followup due today)
-    today_due_leads_query = """
-        SELECT
-            id,
-            name,
-            phone,
-            next_followup_date,
-            lead_score,
-            stage,
-            status
+    # ── Today's due leads ───────────────────────────────────────
+    cur.execute("""
+        SELECT id, name, phone, next_followup_date, lead_score, stage
         FROM leads
-        WHERE status = 'active'
-          AND is_deleted = 0
-          AND next_followup_date IS NOT NULL
+        WHERE status = 'active' AND is_deleted = 0
           AND next_followup_date = ?
         ORDER BY lead_score DESC
-    """
+    """, [today])
+    today_due_leads = cur.fetchall()
 
-    cur.execute(today_due_leads_query, [today])
+    # ── Recent activity ─────────────────────────────────────────
+    cur.execute("""
+        SELECT al.action_type, al.module_name, al.description, al.created_at,
+               u.full_name AS user_name
+        FROM activity_logs al
+        LEFT JOIN users u ON al.user_id = u.id
+        ORDER BY al.created_at DESC
+        LIMIT 10
+    """)
+    recent_activity = cur.fetchall()
+
+    conn.close()
+
+    return render_template(
+        "core/dashboard_new.html",
+        today=today,
+        current_month=current_month,
+        # Revenue & Expenses
+        revenue_this_month=revenue_this_month,
+        expenses_this_month=expenses_this_month,
+        net_profit_this_month=revenue_this_month - expenses_this_month,
+        # Students
+        active_students=active_students,
+        new_students_this_month=new_students_this_month,
+        # Leads
+        active_leads=active_leads,
+        leads_by_stage=leads_by_stage,
+        conversion_rate=conversion_rate,
+        today_new_leads=today_new_leads,
+        # Receivables
+        past_dues=past_dues,
+        todays_dues=todays_dues,
+        total_past_due=total_past_due,
+        total_today_due=total_today_due,
+        total_next7_due=total_next7_due,
+        count_next7_due=count_next7_due,
+        total_bad_debt=total_bad_debt,
+        # Attendance
+        attendance_rate=attendance_rate,
+        att_present=att_present,
+        att_late=att_late,
+        att_absent=att_absent,
+        att_total=att_total,
+        active_batches=active_batches,
+        # Leads followup
+        past_due_leads=past_due_leads,
+        today_due_leads=today_due_leads,
+        # Activity
+        recent_activity=recent_activity,
+    )
+
+
+@core_bp.route("/dashboard_classic")
+@login_required
+def dashboard_classic():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    today = datetime.now().date().isoformat()
+
+    cur.execute("""
+        SELECT
+            ip.id, ip.due_date, ip.amount_due, ip.amount_paid, ip.status, ip.remarks,
+            i.invoice_no, i.id AS invoice_id,
+            s.full_name AS student_name, s.student_code, s.phone AS student_phone,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i ON ip.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) < ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
+        ORDER BY parse_date(ip.due_date) ASC
+    """, [today])
+    past_dues = cur.fetchall()
+
+    cur.execute("""
+        SELECT
+            ip.id, ip.due_date, ip.amount_due, ip.amount_paid, ip.status, ip.remarks,
+            i.invoice_no, i.id AS invoice_id,
+            s.full_name AS student_name, s.student_code, s.phone AS student_phone,
+            (ip.amount_due - ip.amount_paid) AS balance_due
+        FROM installment_plans ip
+        JOIN invoices i ON ip.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) = ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
+        ORDER BY s.full_name ASC
+    """, [today])
+    todays_dues = cur.fetchall()
+
+    total_past_due = sum(float(r["balance_due"] or 0) for r in past_dues)
+    total_today_due = sum(float(r["balance_due"] or 0) for r in todays_dues)
+
+    cur.execute("""
+        SELECT id, name, phone, next_followup_date, lead_score, stage, status
+        FROM leads
+        WHERE status = 'active' AND is_deleted = 0
+          AND next_followup_date IS NOT NULL AND next_followup_date < ?
+        ORDER BY next_followup_date ASC
+    """, [today])
+    past_due_leads = cur.fetchall()
+
+    cur.execute("""
+        SELECT id, name, phone, next_followup_date, lead_score, stage, status
+        FROM leads
+        WHERE status = 'active' AND is_deleted = 0
+          AND next_followup_date IS NOT NULL AND next_followup_date = ?
+        ORDER BY lead_score DESC
+    """, [today])
     today_due_leads = cur.fetchall()
 
     conn.close()
