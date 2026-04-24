@@ -143,9 +143,13 @@
     <div class="d-flex align-items-center gap-2 flex-wrap">
       <a href="{{ url_for('website.home') }}#courses" class="nav-link">Courses</a>
       <a href="{{ url_for('website.home') }}#enquire" class="nav-link">Contact</a>
+      <a href="{{ url_for('students.login') }}" class="btn btn-outline-secondary btn-sm px-3"
+         target="_blank" rel="noopener">
+        Student Login
+      </a>
       <a href="{{ url_for('core.login') }}" class="btn btn-outline-primary btn-sm px-3"
          target="_blank" rel="noopener">
-        Staff Login
+        Login
       </a>
     </div>
   </div>
@@ -185,7 +189,7 @@
         <div class="footer-title">Quick Links</div>
         <p><a href="{{ url_for('website.home') }}#courses">Our Courses</a></p>
         <p><a href="{{ url_for('website.home') }}#enquire">Enquire Now</a></p>
-        <p><a href="{{ url_for('core.login') }}">Staff Login</a></p>
+        <p><a href="{{ url_for('core.login') }}">Login</a></p>
         <p><a href="{{ url_for('students.login') }}">Student Portal</a></p>
       </div>
     </div>
