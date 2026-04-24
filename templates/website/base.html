@@ -27,7 +27,7 @@
     .site-navbar {
       background: #fff;
       border-bottom: 1px solid #dee2e6;
-      padding: 14px 0;
+      padding: 10px 0;
       position: sticky;
       top: 0;
       z-index: 1030;
@@ -46,6 +46,42 @@
       transition: background .15s;
     }
     .site-navbar .nav-link:hover { background: #f1f3f5; color: #0d6efd; }
+
+    /* Hamburger button */
+    .navbar-toggler {
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 6px 10px;
+      background: none;
+      cursor: pointer;
+    }
+    .navbar-toggler:focus { outline: none; box-shadow: none; }
+    .navbar-toggler-icon {
+      display: block;
+      width: 22px;
+      height: 2px;
+      background: #495057;
+      margin: 5px 0;
+      border-radius: 2px;
+      transition: all .25s;
+    }
+
+    /* Mobile nav dropdown */
+    .nav-collapse {
+      display: none;
+      padding: 12px 0 8px;
+      border-top: 1px solid #f0f0f0;
+      margin-top: 10px;
+    }
+    .nav-collapse.open { display: block; }
+    .nav-collapse .nav-link {
+      display: block;
+      padding: 10px 4px;
+      border-radius: 0;
+      border-bottom: 1px solid #f5f5f5;
+    }
+    .nav-collapse .nav-link:last-of-type { border-bottom: none; }
+    .nav-collapse .btn { width: 100%; text-align: center; margin-top: 6px; }
 
     /* ── Sections ── */
     .section { padding: 72px 0; }
@@ -123,6 +159,17 @@
       text-align: center;
       font-size: 0.82rem;
     }
+
+    /* ── Mobile overrides ── */
+    @media (max-width: 575px) {
+      .hero { padding: 60px 0 50px; }
+      .hero h1 { font-size: 1.8rem; }
+      .hero p  { font-size: 1rem; }
+      .section { padding: 48px 0; }
+      .section-title { font-size: 1.5rem; }
+      .enquire-card { padding: 20px; }
+      .site-footer { padding: 32px 0 16px; }
+    }
   </style>
   {% block head %}{% endblock %}
 </head>
@@ -130,27 +177,44 @@
 
 <!-- Navbar -->
 <nav class="site-navbar">
-  <div class="container d-flex align-items-center justify-content-between gap-3 flex-wrap">
-    <a href="{{ url_for('website.home') }}" class="brand">
-      {% if company.logo_filename %}
-        <img src="{{ url_for('static', filename='images/company_logo/' ~ company.logo_filename) }}"
-             alt="{{ company.company_short_name }}" height="36" class="me-2"
-             style="object-fit:contain; vertical-align:middle;">
-      {% endif %}
-      {{ company.company_short_name }}
-    </a>
+  <div class="container">
+    <!-- Top row: brand + hamburger -->
+    <div class="d-flex align-items-center justify-content-between">
+      <a href="{{ url_for('website.home') }}" class="brand d-flex align-items-center gap-2">
+        {% if company.logo_filename %}
+          <img src="{{ url_for('static', filename='images/company_logo/' ~ company.logo_filename) }}"
+               alt="{{ company.company_short_name }}" height="34"
+               style="object-fit:contain; vertical-align:middle;">
+        {% endif %}
+        {{ company.company_short_name }}
+      </a>
 
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-      <a href="{{ url_for('website.home') }}#courses" class="nav-link">Courses</a>
-      <a href="{{ url_for('website.home') }}#enquire" class="nav-link">Contact</a>
-      <a href="{{ url_for('students.login') }}" class="btn btn-outline-secondary btn-sm px-3"
-         target="_blank" rel="noopener">
-        Student Login
-      </a>
-      <a href="{{ url_for('core.login') }}" class="btn btn-outline-primary btn-sm px-3"
-         target="_blank" rel="noopener">
-        Login
-      </a>
+      <!-- Desktop nav (hidden on mobile) -->
+      <div class="d-none d-sm-flex align-items-center gap-2">
+        <a href="{{ url_for('website.home') }}#courses" class="nav-link">Courses</a>
+        <a href="{{ url_for('website.home') }}#enquire" class="nav-link">Contact</a>
+        <a href="{{ url_for('students.login') }}" class="btn btn-outline-secondary btn-sm px-3"
+           target="_blank" rel="noopener">Student Login</a>
+        <a href="{{ url_for('core.login') }}" class="btn btn-outline-primary btn-sm px-3"
+           target="_blank" rel="noopener">Login</a>
+      </div>
+
+      <!-- Hamburger (mobile only) -->
+      <button class="navbar-toggler d-sm-none" id="navToggler" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+        <span class="navbar-toggler-icon"></span>
+        <span class="navbar-toggler-icon"></span>
+      </button>
+    </div>
+
+    <!-- Mobile menu (shown when hamburger clicked) -->
+    <div class="nav-collapse d-sm-none" id="mobileNav">
+      <a href="{{ url_for('website.home') }}#courses" class="nav-link">📚 Courses</a>
+      <a href="{{ url_for('website.home') }}#enquire" class="nav-link">✉️ Contact</a>
+      <a href="{{ url_for('students.login') }}" class="btn btn-outline-secondary btn-sm"
+         target="_blank" rel="noopener">🎓 Student Login</a>
+      <a href="{{ url_for('core.login') }}" class="btn btn-outline-primary btn-sm"
+         target="_blank" rel="noopener">🔐 Login</a>
     </div>
   </div>
 </nav>
@@ -200,6 +264,18 @@
 </footer>
 
 <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+<script>
+  document.getElementById('navToggler').addEventListener('click', function () {
+    var menu = document.getElementById('mobileNav');
+    menu.classList.toggle('open');
+  });
+  // Close menu when a nav link is clicked (smooth UX)
+  document.querySelectorAll('#mobileNav .nav-link').forEach(function (link) {
+    link.addEventListener('click', function () {
+      document.getElementById('mobileNav').classList.remove('open');
+    });
+  });
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
