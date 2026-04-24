@@ -126,6 +126,13 @@
         🎓 Batch Access
       </a>
 
+      <!-- Course–Program Mapping -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint in ['lms_admin.list_course_mappings', 'lms_admin.bulk_assign_batch_programs'] else '' }}"
+        href="{{ url_for('lms_admin.list_course_mappings') }}">
+        🔗 Course Mapping
+      </a>
+
       <!-- Chapters (Coming Soon) -->
       <!-- <a
         class="nav-link"
@@ -161,6 +168,20 @@
         {% endif %}
       </div>
     </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="px-4 pt-3">
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
 
     <!-- Content Area -->
     <div class="p-4">

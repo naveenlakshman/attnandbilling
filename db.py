@@ -758,6 +758,20 @@ def init_db():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_course_program_map (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            course_id INTEGER NOT NULL,
+            program_id INTEGER NOT NULL,
+            display_order INTEGER NOT NULL DEFAULT 0,
+            created_by INTEGER,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(course_id, program_id),
+            FOREIGN KEY (course_id) REFERENCES courses(id),
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id)
+        )
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_student_topic_progress (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_id INTEGER NOT NULL,

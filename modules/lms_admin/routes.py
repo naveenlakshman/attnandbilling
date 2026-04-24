@@ -3379,3 +3379,491 @@ def view_batch_progress(batch_id):
         return redirect(url_for('lms_admin.progress_dashboard'))
     finally:
         conn.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LMS COURSE–PROGRAM MAPPING
+# Maps a combo course (e.g. DFA) to multiple LMS programs so admin can
+# bulk-assign batch/student access without creating a separate LMS program.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@lms_admin_bp.route('/course-mapping', methods=['GET'])
+@admin_required
+def list_course_mappings():
+    """List all course-to-program mappings grouped by course."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        # All mappings with course and program names
+        cur.execute("""
+            SELECT
+                m.id,
+                m.course_id,
+                m.program_id,
+                m.display_order,
+                m.created_at,
+                c.course_name,
+                lp.program_name
+            FROM lms_course_program_map m
+            JOIN courses c ON m.course_id = c.id
+            JOIN lms_programs lp ON m.program_id = lp.id
+            ORDER BY c.course_name, m.display_order, lp.program_name
+        """)
+        rows = cur.fetchall()
+
+        # Group by course
+        from collections import OrderedDict
+        grouped = OrderedDict()
+        for r in rows:
+            key = r['course_id']
+            if key not in grouped:
+                grouped[key] = {'course_id': r['course_id'],
+                                'course_name': r['course_name'],
+                                'programs': []}
+            grouped[key]['programs'].append({
+                'map_id': r['id'],
+                'program_id': r['program_id'],
+                'program_name': r['program_name'],
+                'display_order': r['display_order'],
+                'created_at': r['created_at']
+            })
+
+        # All courses (for the Add Mapping form)
+        cur.execute("""
+            SELECT id, course_name FROM courses WHERE is_active = 1
+            ORDER BY course_name
+        """)
+        all_courses = cur.fetchall()
+
+        # All published LMS programs (for the Add Mapping form)
+        cur.execute("""
+            SELECT id, program_name FROM lms_programs WHERE is_active = 1
+            ORDER BY program_name
+        """)
+        all_programs = cur.fetchall()
+
+        return render_template(
+            'lms_admin/lms_course_mapping.html',
+            grouped=list(grouped.values()),
+            all_courses=all_courses,
+            all_programs=all_programs
+        )
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/course-mapping/add', methods=['POST'])
+@admin_required
+def add_course_mapping():
+    """Add one or more program mappings for a course."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        course_id = request.form.get('course_id', '').strip()
+        program_ids = request.form.getlist('program_ids')  # multiple checkboxes
+
+        if not course_id:
+            flash('Please select a course.', 'danger')
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        if not program_ids:
+            flash('Please select at least one program.', 'danger')
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        try:
+            course_id = int(course_id)
+        except ValueError:
+            flash('Invalid course.', 'danger')
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        added = 0
+        skipped = 0
+        now = datetime.now().isoformat(timespec='seconds')
+
+        for pid in program_ids:
+            try:
+                pid = int(pid)
+            except ValueError:
+                continue
+            # Skip duplicates gracefully
+            cur.execute("""
+                SELECT id FROM lms_course_program_map
+                WHERE course_id = ? AND program_id = ?
+            """, (course_id, pid))
+            if cur.fetchone():
+                skipped += 1
+                continue
+
+            cur.execute("""
+                INSERT INTO lms_course_program_map
+                    (course_id, program_id, created_by, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (course_id, pid, session.get('user_id'), now))
+            added += 1
+
+        conn.commit()
+
+        if added:
+            cur.execute("SELECT course_name FROM courses WHERE id = ?", (course_id,))
+            cname = cur.fetchone()['course_name']
+            log_activity(
+                user_id=session['user_id'],
+                branch_id=session.get('branch_id'),
+                action_type='create',
+                module_name='lms_course_program_map',
+                record_id=course_id,
+                description=f'Added {added} program mapping(s) for course: {cname}'
+            )
+            flash(f'{added} mapping(s) added successfully.' +
+                  (f' ({skipped} already existed, skipped.)' if skipped else ''),
+                  'success')
+        else:
+            flash('All selected mappings already exist.', 'info')
+
+        return redirect(url_for('lms_admin.list_course_mappings'))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/course-mapping/<int:map_id>/delete', methods=['POST'])
+@admin_required
+def delete_course_mapping(map_id):
+    """Delete a single course-program mapping."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT m.id, m.course_id, m.program_id, c.course_name, lp.program_name
+            FROM lms_course_program_map m
+            JOIN courses c ON m.course_id = c.id
+            JOIN lms_programs lp ON m.program_id = lp.id
+            WHERE m.id = ?
+        """, (map_id,))
+        mapping = cur.fetchone()
+
+        if not mapping:
+            flash('Mapping not found.', 'danger')
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        cur.execute("DELETE FROM lms_course_program_map WHERE id = ?", (map_id,))
+        conn.commit()
+
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='delete',
+            module_name='lms_course_program_map',
+            record_id=map_id,
+            description=f"Removed mapping: {mapping['course_name']} → {mapping['program_name']}"
+        )
+        flash('Mapping removed.', 'success')
+        return redirect(url_for('lms_admin.list_course_mappings'))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/course-mapping/edit/<int:course_id>', methods=['GET', 'POST'])
+@admin_required
+def manage_course_mapping(course_id):
+    """Edit all program mappings for a single course at once."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        # Verify course exists
+        cur.execute("SELECT id, course_name FROM courses WHERE id = ?", (course_id,))
+        course = cur.fetchone()
+        if not course:
+            flash('Course not found.', 'danger')
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        if request.method == 'POST':
+            new_program_ids = {}  # {program_id: display_order}
+            for pid in request.form.getlist('program_ids'):
+                try:
+                    pid_int = int(pid)
+                    order_val = int(request.form.get(f'order_{pid}', 0) or 0)
+                    new_program_ids[pid_int] = order_val
+                except ValueError:
+                    pass
+
+            # Get currently mapped program IDs
+            cur.execute("""
+                SELECT program_id FROM lms_course_program_map WHERE course_id = ?
+            """, (course_id,))
+            existing_ids = {r['program_id'] for r in cur.fetchall()}
+
+            to_add = set(new_program_ids.keys()) - existing_ids
+            to_remove = existing_ids - set(new_program_ids.keys())
+            to_update = existing_ids & set(new_program_ids.keys())
+
+            now = datetime.now().isoformat(timespec='seconds')
+
+            for pid in to_add:
+                cur.execute("""
+                    INSERT INTO lms_course_program_map
+                        (course_id, program_id, display_order, created_by, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (course_id, pid, new_program_ids[pid], session.get('user_id'), now))
+
+            for pid in to_update:
+                cur.execute("""
+                    UPDATE lms_course_program_map SET display_order = ?
+                    WHERE course_id = ? AND program_id = ?
+                """, (new_program_ids[pid], course_id, pid))
+
+            for pid in to_remove:
+                cur.execute("""
+                    DELETE FROM lms_course_program_map WHERE course_id = ? AND program_id = ?
+                """, (course_id, pid))
+
+            conn.commit()
+
+            changes = len(to_add) + len(to_remove) + len(to_update)
+            if changes:
+                log_activity(
+                    user_id=session['user_id'],
+                    branch_id=session.get('branch_id'),
+                    action_type='update',
+                    module_name='lms_course_program_map',
+                    record_id=course_id,
+                    description=f"Updated mappings for {course['course_name']}: +{len(to_add)} added, -{len(to_remove)} removed, {len(to_update)} reordered"
+                )
+                flash(f'Mappings updated for {course["course_name"]}.'
+                      f' {len(to_add)} added, {len(to_remove)} removed, {len(to_update)} reordered.', 'success')
+            else:
+                flash('No changes made.', 'info')
+
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        # GET — load all programs, mark which are already mapped
+        cur.execute("""
+            SELECT id, program_name FROM lms_programs WHERE is_active = 1 ORDER BY program_name
+        """)
+        all_programs = cur.fetchall()
+
+        cur.execute("""
+            SELECT program_id, display_order FROM lms_course_program_map
+            WHERE course_id = ? ORDER BY display_order
+        """, (course_id,))
+        mapped_programs = {r['program_id']: r['display_order'] for r in cur.fetchall()}
+
+        return render_template(
+            'lms_admin/lms_course_mapping_edit.html',
+            course=course,
+            all_programs=all_programs,
+            mapped_programs=mapped_programs
+        )
+    finally:
+        conn.close()
+@login_required
+def api_batch_course(batch_id):
+    """Return the course linked to a batch (looks up via invoices or enrollments)."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        # Try to find course via invoices linked to this batch
+        cur.execute("""
+            SELECT c.id as course_id, c.course_name
+            FROM invoices i
+            JOIN courses c ON i.course_id = c.id
+            WHERE i.batch_id = ?
+            LIMIT 1
+        """, (batch_id,))
+        row = cur.fetchone()
+        if row:
+            return jsonify({'course_id': row['course_id'], 'course_name': row['course_name']})
+
+        # Fallback: try enrollments → courses
+        cur.execute("""
+            SELECT c.id as course_id, c.course_name
+            FROM student_batches sb
+            JOIN enrollments e ON sb.student_id = e.student_id
+            JOIN courses c ON e.course_id = c.id
+            WHERE sb.batch_id = ?
+            LIMIT 1
+        """, (batch_id,))
+        row = cur.fetchone()
+        if row:
+            return jsonify({'course_id': row['course_id'], 'course_name': row['course_name']})
+
+        return jsonify({'course_id': None, 'course_name': None})
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/course-mapping/api/programs-for-course/<int:course_id>', methods=['GET'])
+@login_required
+def api_programs_for_course(course_id):
+    """Return JSON list of LMS programs mapped to a given course (used by batch assign form)."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT lp.id, lp.program_name
+            FROM lms_course_program_map m
+            JOIN lms_programs lp ON m.program_id = lp.id
+            WHERE m.course_id = ? AND lp.is_active = 1
+            ORDER BY lp.program_name
+        """, (course_id,))
+        rows = cur.fetchall()
+        return jsonify({'programs': [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/batch-program/bulk-assign', methods=['GET', 'POST'])
+@admin_required
+def bulk_assign_batch_programs():
+    """
+    Bulk-assign all mapped programs for a batch's course in one go.
+    Perfect for combo courses like DFA (CCOM + Excel + Tally).
+    """
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        if request.method == 'POST':
+            batch_id = request.form.get('batch_id', '').strip()
+            program_ids = request.form.getlist('program_ids')
+            access_start_date = request.form.get('access_start_date', '').strip()
+            access_end_date = request.form.get('access_end_date', '').strip()
+            is_active = request.form.get('is_active') == 'on'
+
+            if not batch_id or not program_ids or not access_start_date:
+                flash('Batch, at least one program, and start date are required.', 'danger')
+                return redirect(url_for('lms_admin.bulk_assign_batch_programs'))
+
+            try:
+                batch_id = int(batch_id)
+            except ValueError:
+                flash('Invalid batch.', 'danger')
+                return redirect(url_for('lms_admin.bulk_assign_batch_programs'))
+
+            # Validate dates
+            try:
+                start_dt = datetime.strptime(access_start_date, '%Y-%m-%d')
+                if access_end_date:
+                    end_dt = datetime.strptime(access_end_date, '%Y-%m-%d')
+                    if end_dt < start_dt:
+                        flash('End date cannot be before start date.', 'danger')
+                        return redirect(url_for('lms_admin.bulk_assign_batch_programs'))
+            except ValueError:
+                flash('Invalid date format.', 'danger')
+                return redirect(url_for('lms_admin.bulk_assign_batch_programs'))
+
+            added = 0
+            skipped = 0
+            now_dt = datetime.now().isoformat(timespec='seconds')
+
+            for pid in program_ids:
+                try:
+                    pid = int(pid)
+                except ValueError:
+                    continue
+
+                # Check for duplicate
+                cur.execute("""
+                    SELECT id FROM lms_batch_program_access
+                    WHERE batch_id = ? AND program_id = ?
+                """, (batch_id, pid))
+                if cur.fetchone():
+                    skipped += 1
+                    continue
+
+                cur.execute("""
+                    INSERT INTO lms_batch_program_access
+                        (batch_id, program_id, access_start_date, access_end_date, is_active, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    batch_id, pid,
+                    access_start_date,
+                    access_end_date if access_end_date else None,
+                    1 if is_active else 0,
+                    now_dt, now_dt
+                ))
+                added += 1
+
+            conn.commit()
+
+            cur.execute("SELECT batch_name FROM batches WHERE id = ?", (batch_id,))
+            brow = cur.fetchone()
+            bname = brow['batch_name'] if brow else str(batch_id)
+
+            log_activity(
+                user_id=session['user_id'],
+                branch_id=session.get('branch_id'),
+                action_type='create',
+                module_name='lms_batch_program_access',
+                record_id=batch_id,
+                description=f'Bulk-assigned {added} program(s) to batch "{bname}"'
+            )
+
+            if added:
+                flash(f'{added} program(s) assigned to batch "{bname}".' +
+                      (f' ({skipped} already existed, skipped.)' if skipped else ''),
+                      'success')
+            else:
+                flash('All selected programs were already assigned to this batch.', 'info')
+
+            return redirect(url_for('lms_admin.list_batch_programs'))
+
+        # GET – build form data
+        cur.execute("""
+            SELECT id, batch_name FROM batches WHERE status = 'active'
+            ORDER BY batch_name
+        """)
+        batches = cur.fetchall()
+
+        cur.execute("""
+            SELECT id, program_name FROM lms_programs WHERE is_active = 1
+            ORDER BY program_name
+        """)
+        all_programs = cur.fetchall()
+
+        # Pass batch→course info so JS can pre-tick mapped programs
+        # build: {batch_id: course_id}
+        cur.execute("""
+            SELECT sb.batch_id, c.id as course_id, c.course_name
+            FROM (
+                SELECT DISTINCT batch_id,
+                    (SELECT course_id FROM invoices WHERE batch_id = batches.id LIMIT 1) as course_id
+                FROM batches WHERE status = 'active'
+            ) sb
+            JOIN courses c ON sb.course_id = c.id
+        """)
+        # Simpler: get course_id directly from batches table if it exists,
+        # otherwise from enrollments/invoices
+        # Let's get it via student_batches → enrollments → courses
+        cur.execute("""
+            SELECT b.id as batch_id, b.batch_name,
+                   c.id as course_id, c.course_name
+            FROM batches b
+            LEFT JOIN (
+                SELECT sb.batch_id, e.course_id
+                FROM student_batches sb
+                JOIN enrollments e ON sb.student_id = e.student_id
+                GROUP BY sb.batch_id
+                LIMIT 1
+            ) ec ON b.id = ec.batch_id
+            LEFT JOIN courses c ON ec.course_id = c.id
+            WHERE b.status = 'active'
+            ORDER BY b.batch_name
+        """)
+        # Fallback – just use batches; course lookup happens via AJAX
+        cur.execute("SELECT id, batch_name FROM batches WHERE status='active' ORDER BY batch_name")
+        batches = cur.fetchall()
+
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        return render_template(
+            'lms_admin/lms_bulk_assign.html',
+            batches=batches,
+            all_programs=all_programs,
+            today=today
+        )
+    finally:
+        conn.close()

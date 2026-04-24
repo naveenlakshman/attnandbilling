@@ -1,0 +1,292 @@
+{% extends "lms_admin/base.html" %}
+
+{% block page_title %}Edit Mapping – {{ course.course_name }}{% endblock %}
+
+{% block content %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid #0d6efd;
+        padding-bottom: 1rem;
+    }
+    .page-title { font-size: 1.6rem; font-weight: 700; color: #333; margin: 0; }
+
+    .edit-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        max-width: 700px;
+    }
+    .section-label {
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: #444;
+        margin-bottom: 0.75rem;
+    }
+
+    .program-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+        gap: 0.6rem;
+        margin-bottom: 1.25rem;
+    }
+    .prog-row {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.5rem 0.85rem;
+        border: 2px solid #dee2e6;
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+        color: #333;
+        background: #fafafa;
+        transition: all 0.15s;
+    }
+    .prog-row.mapped {
+        border-color: #0d6efd;
+        background: #e7f3ff;
+        font-weight: 600;
+    }
+    .prog-row:hover { border-color: #0d6efd; }
+    .drag-handle {
+        cursor: grab;
+        font-size: 1.1rem;
+        color: #aaa;
+        user-select: none;
+        padding: 0 2px;
+    }
+    .drag-handle:active { cursor: grabbing; }
+    .prog-name { flex: 1; }
+    .order-label {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.78rem;
+        font-weight: 400;
+        color: #555;
+        white-space: nowrap;
+    }
+    .order-input {
+        width: 56px;
+        padding: 0.2rem 0.4rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        font-size: 0.82rem;
+        text-align: center;
+    }
+    .prog-item input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+
+    .info-note {
+        background: #fff8e1;
+        border-left: 3px solid #ffc107;
+        border-radius: 0.25rem;
+        padding: 0.65rem 0.9rem;
+        font-size: 0.85rem;
+        color: #5a3e00;
+        margin-bottom: 1.25rem;
+    }
+
+    .btn-save {
+        background: linear-gradient(135deg, #28a745, #218838);
+        color: #fff;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.65rem 2rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-save:hover { background: linear-gradient(135deg, #218838, #1e7e34); transform: translateY(-1px); }
+    .btn-cancel {
+        background: #6c757d;
+        color: #fff;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.65rem 1.5rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        text-decoration: none;
+        transition: background 0.2s;
+    }
+    .btn-cancel:hover { background: #5a6268; color: #fff; text-decoration: none; }
+
+    .select-all-row {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+        font-size: 0.8rem;
+    }
+    .btn-sel { background: none; border: 1px solid #adb5bd; border-radius: 4px; padding: 0.2rem 0.6rem; cursor: pointer; font-size: 0.78rem; color: #555; }
+    .btn-sel:hover { background: #f0f0f0; }
+</style>
+
+<!-- Breadcrumb -->
+<nav style="font-size:0.875rem; margin-bottom:1rem;">
+    <a href="{{ url_for('lms_admin.list_course_mappings') }}">🔗 Course Mapping</a> →
+    <strong>Edit – {{ course.course_name }}</strong>
+</nav>
+
+<!-- Header -->
+<div class="page-header">
+    <h1 class="page-title">✏️ Edit Mapping</h1>
+    <a href="{{ url_for('lms_admin.list_course_mappings') }}" class="btn-cancel">← Back</a>
+</div>
+
+<div class="edit-card">
+    <div style="margin-bottom:1rem;">
+        <span style="font-size:0.8rem; color:#888; text-transform:uppercase; font-weight:600;">Course</span><br>
+        <span style="font-size:1.1rem; font-weight:700; color:#222;">{{ course.course_name }}</span>
+    </div>
+
+    <div class="info-note">
+        Tick the programs this course maps to. Set the <strong>Order #</strong> to control how they appear
+        on the student dashboard (1 = first). Unchecking removes the mapping.
+    </div>
+
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        {% if all_programs %}
+
+        {# Split into mapped (sorted by display_order) and unmapped #}
+        {% set mapped_sorted = all_programs | selectattr('id', 'in', mapped_programs) | sort(attribute='id') %}
+        {# We'll sort mapped by display_order in JS after page load; Jinja doesn't sort by dict value easily #}
+
+        {% set unmapped_list = all_programs | rejectattr('id', 'in', mapped_programs) | list %}
+
+        {# --- Mapped programs --- #}
+        {% if mapped_programs %}
+        <div class="section-label" style="margin-top:0.25rem;">
+            ✅ Mapped Programs
+            <span style="font-size:0.78rem; color:#666; font-weight:400; margin-left:0.5rem;">— drag to reorder, or edit the Order # field</span>
+        </div>
+        <div id="mappedList" style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1.25rem;">
+            {% for prog in all_programs %}
+            {% if prog.id in mapped_programs %}
+            {% set order_val = mapped_programs[prog.id] %}
+            <div class="prog-row mapped" id="row-{{ prog.id }}" draggable="true" data-prog-id="{{ prog.id }}">
+                <span class="drag-handle" title="Drag to reorder">⠿</span>
+                <input type="checkbox" name="program_ids" value="{{ prog.id }}" checked
+                       onchange="syncRow({{ prog.id }})">
+                <span class="prog-name">{{ prog.program_name }}</span>
+                <label class="order-label">Order #
+                    <input type="number" name="order_{{ prog.id }}" id="ord-{{ prog.id }}"
+                           value="{{ order_val }}" min="1" max="999"
+                           class="order-input">
+                </label>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# --- Unmapped programs --- #}
+        {% if unmapped_list %}
+        <div class="section-label" style="color:#888;">
+            ➕ Add More Programs
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.4rem; margin-bottom:1.25rem;" id="unmappedList">
+            {% for prog in unmapped_list %}
+            <div class="prog-row" id="row-{{ prog.id }}" data-prog-id="{{ prog.id }}">
+                <span class="drag-handle" style="visibility:hidden;">⠿</span>
+                <input type="checkbox" name="program_ids" value="{{ prog.id }}"
+                       onchange="syncRow({{ prog.id }})">
+                <span class="prog-name">{{ prog.program_name }}</span>
+                <label class="order-label" id="ord-label-{{ prog.id }}" style="visibility:hidden;">Order #
+                    <input type="number" name="order_{{ prog.id }}" id="ord-{{ prog.id }}"
+                           value="0" min="1" max="999"
+                           class="order-input">
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <p style="color:#888;">No active LMS programs found. Please create a program first.</p>
+        {% endif %}
+
+        <div style="display:flex; gap:1rem; padding-top:1rem; border-top:1px solid #eee; margin-top:0.5rem;">
+            <button type="submit" class="btn-save">💾 Save Changes</button>
+            <a href="{{ url_for('lms_admin.list_course_mappings') }}" class="btn-cancel">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function syncRow(progId) {
+        const cb = document.querySelector(`input[name="program_ids"][value="${progId}"]`);
+        const row = document.getElementById(`row-${progId}`);
+        const ordLabel = document.getElementById(`ord-label-${progId}`);
+        if (cb.checked) {
+            row.classList.add('mapped');
+            if (ordLabel) ordLabel.style.visibility = 'visible';
+            const handle = row.querySelector('.drag-handle');
+            if (handle) handle.style.visibility = 'visible';
+        } else {
+            row.classList.remove('mapped');
+            if (ordLabel) ordLabel.style.visibility = 'hidden';
+            const handle = row.querySelector('.drag-handle');
+            if (handle) handle.style.visibility = 'hidden';
+        }
+    }
+
+    // Sort the mapped list by current Order # value on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const list = document.getElementById('mappedList');
+        if (!list) return;
+        const rows = Array.from(list.querySelectorAll('.prog-row'));
+        rows.sort((a, b) => {
+            const aOrd = parseInt(a.querySelector('.order-input')?.value || 0);
+            const bOrd = parseInt(b.querySelector('.order-input')?.value || 0);
+            return aOrd - bOrd;
+        });
+        rows.forEach(r => list.appendChild(r));
+    });
+
+    // Drag-to-reorder for mapped programs
+    let dragSrc = null;
+    document.addEventListener('dragstart', function(e) {
+        const row = e.target.closest('.prog-row[draggable="true"]');
+        if (!row) return;
+        dragSrc = row;
+        e.dataTransfer.effectAllowed = 'move';
+        row.style.opacity = '0.5';
+    });
+    document.addEventListener('dragend', function(e) {
+        const row = e.target.closest('.prog-row');
+        if (row) row.style.opacity = '';
+        dragSrc = null;
+    });
+    document.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    });
+    document.addEventListener('drop', function(e) {
+        e.preventDefault();
+        const target = e.target.closest('#mappedList .prog-row');
+        if (!target || !dragSrc || target === dragSrc) return;
+        const list = document.getElementById('mappedList');
+        const rows = Array.from(list.querySelectorAll('.prog-row'));
+        const srcIdx = rows.indexOf(dragSrc);
+        const tgtIdx = rows.indexOf(target);
+        if (srcIdx < tgtIdx) {
+            target.after(dragSrc);
+        } else {
+            target.before(dragSrc);
+        }
+        // Renumber order inputs to reflect new visual order (1-based)
+        Array.from(list.querySelectorAll('.prog-row')).forEach((row, i) => {
+            const inp = row.querySelector('.order-input');
+            if (inp) inp.value = i + 1;
+        });
+    });
+</script>
+{% endblock %}

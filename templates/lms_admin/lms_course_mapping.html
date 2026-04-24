@@ -1,0 +1,350 @@
+{% extends "lms_admin/base.html" %}
+
+{% block page_title %}Course–Program Mapping{% endblock %}
+
+{% block content %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid #0d6efd;
+        padding-bottom: 1rem;
+    }
+    .page-title { font-size: 1.75rem; font-weight: 700; color: #333; margin: 0; }
+
+    .info-banner {
+        background: #e7f3ff;
+        border-left: 4px solid #0d6efd;
+        border-radius: 0.375rem;
+        padding: 0.875rem 1rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+        color: #004085;
+    }
+    .info-banner strong { display: block; margin-bottom: 0.25rem; }
+
+    /* Two-column layout */
+    .two-col { display: grid; grid-template-columns: 1fr 380px; gap: 1.5rem; }
+
+    /* Mapping cards */
+    .mapping-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        overflow: hidden;
+    }
+    .mapping-card-header {
+        background: #f8f9fa;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #e0e0e0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .course-name { font-weight: 700; font-size: 1rem; color: #222; }
+    .badge-count {
+        background: #0d6efd;
+        color: #fff;
+        border-radius: 999px;
+        padding: 0.2rem 0.6rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .program-list { padding: 0.5rem 0; }
+    .program-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 0.9rem;
+    }
+    .program-row:last-child { border-bottom: none; }
+    .program-name { color: #333; }
+    .program-tag {
+        background: #e8f5e9;
+        color: #2e7d32;
+        border-radius: 4px;
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.5rem;
+    }
+    .btn-remove {
+        background: none;
+        border: 1px solid #dc3545;
+        color: #dc3545;
+        border-radius: 4px;
+        padding: 0.2rem 0.6rem;
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-remove:hover { background: #dc3545; color: #fff; }
+    .btn-edit-mapping {
+        background: #0d6efd;
+        color: #fff;
+        border-radius: 4px;
+        padding: 0.2rem 0.65rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+        white-space: nowrap;
+    }
+    .btn-edit-mapping:hover { background: #0056b3; color: #fff; text-decoration: none; }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #888;
+        background: #fff;
+        border: 1px dashed #ccc;
+        border-radius: 0.5rem;
+    }
+
+    /* Add mapping form */
+    .add-form-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 0.5rem;
+        padding: 1.25rem;
+        position: sticky;
+        top: 1rem;
+    }
+    .form-card-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 1rem;
+        border-bottom: 2px solid #0d6efd;
+        padding-bottom: 0.5rem;
+    }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: #444;
+        margin-bottom: 0.375rem;
+    }
+    .form-group select,
+    .form-group input {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+    }
+    .form-group select:focus,
+    .form-group input:focus {
+        outline: none;
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
+    }
+    .checkbox-list {
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        padding: 0.5rem 0.75rem;
+        max-height: 240px;
+        overflow-y: auto;
+        background: #fafafa;
+    }
+    .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0;
+        font-size: 0.875rem;
+        color: #333;
+        cursor: pointer;
+    }
+    .checkbox-item input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+    .btn-add-mapping {
+        width: 100%;
+        background: linear-gradient(135deg, #0d6efd, #0056b3);
+        color: #fff;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.625rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-add-mapping:hover {
+        background: linear-gradient(135deg, #0056b3, #004085);
+        box-shadow: 0 4px 12px rgba(0,86,179,.35);
+        transform: translateY(-1px);
+    }
+    .required { color: #dc3545; }
+    .help-text { font-size: 0.78rem; color: #888; margin-top: 0.25rem; }
+
+    .bulk-assign-cta {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    .bulk-assign-cta p { margin: 0; font-size: 0.9rem; color: #664d03; }
+    .btn-bulk {
+        background: #ffc107;
+        color: #000;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        font-size: 0.875rem;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        transition: all 0.2s;
+        white-space: nowrap;
+    }
+    .btn-bulk:hover { background: #e0a800; color: #000; text-decoration: none; transform: translateY(-1px); }
+
+    @media (max-width: 900px) {
+        .two-col { grid-template-columns: 1fr; }
+        .add-form-card { position: static; }
+    }
+</style>
+
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" style="font-size:0.875rem; margin-bottom:1rem;">
+    <a href="{{ url_for('lms_admin.dashboard') }}">📊 Dashboard</a> →
+    <strong>🔗 Course–Program Mapping</strong>
+</nav>
+
+<!-- Header -->
+<div class="page-header">
+    <h1 class="page-title">🔗 Course–Program Mapping</h1>
+    <a href="{{ url_for('lms_admin.bulk_assign_batch_programs') }}" class="btn-bulk">
+        ⚡ Bulk Assign Batch Access
+    </a>
+</div>
+
+<!-- Info Banner -->
+<div class="info-banner">
+    <strong>What is Course–Program Mapping?</strong>
+    When a course (like <em>DFA</em>) is a combination of multiple subjects (e.g. CCOM + Advance Excel + Tally),
+    map it here. Then use <strong>Bulk Assign</strong> to give a batch access to all mapped programs in one click
+    — no need to create a separate LMS program for DFA.
+</div>
+
+<!-- Bulk assign CTA -->
+<div class="bulk-assign-cta">
+    <p>✅ Mappings configured? Now assign all mapped programs to a batch in one go.</p>
+    <a href="{{ url_for('lms_admin.bulk_assign_batch_programs') }}" class="btn-bulk">
+        ⚡ Bulk Assign Batch → Programs
+    </a>
+</div>
+
+<div class="two-col">
+    <!-- LEFT: Existing mappings -->
+    <div>
+        <div style="font-weight:700; font-size:1rem; color:#333; margin-bottom:0.75rem;">
+            Existing Mappings
+            <span style="font-size:0.8rem; color:#888; font-weight:400;">({{ grouped|length }} course(s) mapped)</span>
+        </div>
+
+        {% if grouped %}
+            {% for group in grouped %}
+            <div class="mapping-card">
+                <div class="mapping-card-header">
+                    <span class="course-name">{{ group.course_name }}</span>
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <span class="badge-count">{{ group.programs|length }} program(s)</span>
+                        {% if session.get('role') == 'admin' %}
+                        <a href="{{ url_for('lms_admin.manage_course_mapping', course_id=group.course_id) }}"
+                           class="btn-edit-mapping">✏️ Edit Mapping</a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="program-list">
+                    {% for prog in group.programs %}
+                    <div class="program-row">
+                        <div>
+                            <span class="program-tag">LMS</span>
+                            <span class="program-name">{{ prog.program_name }}</span>
+                        </div>
+                        {% if session.get('role') == 'admin' %}
+                        <form method="POST"
+                              action="{{ url_for('lms_admin.delete_course_mapping', map_id=prog.map_id) }}"
+                              onsubmit="return confirm('Remove this mapping?');"
+                              style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn-remove">✕ Remove</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <div style="font-size:2.5rem; margin-bottom:0.5rem;">🗂️</div>
+                <div style="font-weight:600; margin-bottom:0.25rem;">No mappings yet</div>
+                <div style="font-size:0.875rem;">Use the form on the right to add your first mapping.</div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- RIGHT: Add mapping form (admin only) -->
+    <div>
+        {% if session.get('role') == 'admin' %}
+        <div class="add-form-card">
+            <div class="form-card-title">➕ Add New Mapping</div>
+
+            <form method="POST" action="{{ url_for('lms_admin.add_course_mapping') }}" id="addMappingForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="form-group">
+                    <label for="course_id">Course <span class="required">*</span></label>
+                    <select id="course_id" name="course_id" required>
+                        <option value="">-- Select Course --</option>
+                        {% for course in all_courses %}
+                        <option value="{{ course.id }}">{{ course.course_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="help-text">Select the combo/parent course (e.g. DFA).</span>
+                </div>
+
+                <div class="form-group">
+                    <label>LMS Programs <span class="required">*</span></label>
+                    <div class="checkbox-list" id="programList">
+                        {% for prog in all_programs %}
+                        <label class="checkbox-item">
+                            <input type="checkbox" name="program_ids" value="{{ prog.id }}">
+                            {{ prog.program_name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <span class="help-text">Tick all programs this course should give access to.</span>
+                </div>
+
+                <button type="submit" class="btn-add-mapping">
+                    🔗 Save Mapping
+                </button>
+            </form>
+        </div>
+        {% else %}
+        <div class="add-form-card" style="text-align:center; color:#888; padding:2rem 1.25rem;">
+            <div style="font-size:2rem; margin-bottom:0.5rem;">🔒</div>
+            <div style="font-weight:600; margin-bottom:0.25rem;">Admin Only</div>
+            <div style="font-size:0.85rem;">Only administrators can add or edit course mappings.</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

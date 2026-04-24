@@ -10,10 +10,10 @@
     <p class="text-muted mb-0" style="font-size:14px;">Student Portal — Sign in to access your courses</p>
   </div>
 
-  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% with messages = get_flashed_messages(with_categories=true, category_filter=['danger', 'warning', 'student_error', 'student_warning']) %}
     {% if messages %}
       {% for category, message in messages %}
-        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        <div class="alert alert-{{ 'danger' if 'error' in category else category }} alert-dismissible fade show" role="alert">
           {{ message }}
           <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>

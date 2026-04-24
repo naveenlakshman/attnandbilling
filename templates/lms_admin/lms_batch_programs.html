@@ -416,6 +416,9 @@
     <h1 class="page-title">🎓 Batch-Program Assignments</h1>
     <div class="header-actions">
         {% if session.get('role') == 'admin' %}
+        <a href="{{ url_for('lms_admin.bulk_assign_batch_programs') }}" class="btn-add" style="background: linear-gradient(135deg, #fd7e14 0%, #e8650a 100%);">
+            ⚡ Bulk Assign (Course Mapping)
+        </a>
         <a href="{{ url_for('lms_admin.add_batch_program') }}" class="btn-add">
             + Add Assignment
         </a>

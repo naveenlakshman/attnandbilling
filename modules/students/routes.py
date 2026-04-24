@@ -130,7 +130,14 @@ def dashboard():
                     JOIN lms_chapters lc5 ON lt4.chapter_id = lc5.id
                     WHERE lc5.program_id = lp.id AND lc5.is_active = 1 AND lt4.is_active = 1
                     ORDER BY lc5.chapter_order, lt4.topic_order LIMIT 1
-                ) AS first_topic_id
+                ) AS first_topic_id,
+                (
+                    SELECT MIN(cpm_ord.display_order)
+                    FROM lms_course_program_map cpm_ord
+                    JOIN invoice_items ii_ord ON cpm_ord.course_id = ii_ord.course_id
+                    JOIN invoices i_ord ON ii_ord.invoice_id = i_ord.id
+                    WHERE cpm_ord.program_id = lp.id AND i_ord.student_id = ?
+                ) AS map_order
             FROM lms_programs lp
             WHERE lp.is_active = 1
             AND (
@@ -153,9 +160,16 @@ def dashboard():
                     WHERE i.student_id = ? AND ii.course_id = lp.course_id
                       AND lp.course_id IS NOT NULL
                 )
+                OR EXISTS (
+                    SELECT 1 FROM invoices i
+                    JOIN invoice_items ii ON ii.invoice_id = i.id
+                    JOIN lms_course_program_map cpm
+                         ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
+                    WHERE i.student_id = ?
+                )
             )
-            ORDER BY lp.program_name
-        """, (student_id, student_id, student_id, student_id, student_id)).fetchall()
+            ORDER BY CASE WHEN map_order IS NULL THEN 1 ELSE 0 END, map_order, lp.program_name
+        """, (student_id, student_id, student_id, student_id, student_id, student_id, student_id)).fetchall()
 
     finally:
         conn.close()
@@ -197,8 +211,15 @@ def program_view(program_id):
                     WHERE i.student_id = ? AND ii.course_id = lp.course_id
                       AND lp.course_id IS NOT NULL
                 )
+                OR EXISTS (
+                    SELECT 1 FROM invoices i
+                    JOIN invoice_items ii ON ii.invoice_id = i.id
+                    JOIN lms_course_program_map cpm
+                         ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
+                    WHERE i.student_id = ?
+                )
             )
-        """, (program_id, student_id, student_id, student_id)).fetchone()
+        """, (program_id, student_id, student_id, student_id, student_id)).fetchone()
 
         if not access:
             flash('You do not have access to this program.', 'danger')
@@ -283,8 +304,15 @@ def chapter_view(chapter_id):
                     WHERE i.student_id = ? AND ii.course_id = lp.course_id
                       AND lp.course_id IS NOT NULL
                 )
+                OR EXISTS (
+                    SELECT 1 FROM invoices i
+                    JOIN invoice_items ii ON ii.invoice_id = i.id
+                    JOIN lms_course_program_map cpm
+                         ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
+                    WHERE i.student_id = ?
+                )
             )
-        """, (chapter['program_id'], student_id, student_id, student_id)).fetchone()
+        """, (chapter['program_id'], student_id, student_id, student_id, student_id)).fetchone()
 
         if not access:
             flash('You do not have access to this program.', 'danger')
@@ -354,8 +382,15 @@ def topic_view(topic_id):
                     WHERE i.student_id = ? AND ii.course_id = lp.course_id
                       AND lp.course_id IS NOT NULL
                 )
+                OR EXISTS (
+                    SELECT 1 FROM invoices i
+                    JOIN invoice_items ii ON ii.invoice_id = i.id
+                    JOIN lms_course_program_map cpm
+                         ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
+                    WHERE i.student_id = ?
+                )
             )
-        """, (topic['program_id'], student_id, student_id, student_id)).fetchone()
+        """, (topic['program_id'], student_id, student_id, student_id, student_id)).fetchone()
 
         if not access:
             flash('You do not have access to this program.', 'danger')
