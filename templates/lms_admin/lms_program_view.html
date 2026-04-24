@@ -222,15 +222,26 @@
   .chapter-item {
     background: #f8f9fa;
     border-radius: 8px;
-    padding: 16px;
     border-left: 4px solid #667eea;
-    display: flex;
-    justify-content: space-between;
-    align-items: start;
+    overflow: hidden;
   }
 
+  .chapter-toggle {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    gap: 0.5rem;
+  }
+  .chapter-toggle:hover { background: rgba(102,126,234,0.06); }
+
   .chapter-info h4 {
-    margin: 0 0 6px 0;
+    margin: 0 0 4px 0;
     font-size: 14px;
     font-weight: 600;
     color: #212529;
@@ -240,18 +251,67 @@
     font-size: 12px;
     color: #6c757d;
     display: flex;
-    gap: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
   }
 
   .chapter-badge {
     background: white;
     border: 1px solid #dee2e6;
-    padding: 4px 10px;
+    padding: 3px 9px;
     border-radius: 20px;
     font-size: 12px;
     font-weight: 500;
     white-space: nowrap;
   }
+
+  .chevron {
+    font-size: 0.7rem;
+    color: #888;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .chapter-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+
+  .topics-dropdown {
+    border-top: 1px solid #e0e4f5;
+    background: #fff;
+    padding: 0.5rem 1rem 0.75rem 1rem;
+  }
+  .topic-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.5rem;
+    border-radius: 5px;
+    font-size: 0.82rem;
+    color: #333;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .topic-row:last-child { border-bottom: none; }
+  .topic-row:hover { background: #f5f7ff; color: #0d6efd; }
+  .topic-row:hover .topic-title { text-decoration: underline; }
+  .topic-num {
+    min-width: 22px;
+    font-size: 0.75rem;
+    color: #aaa;
+    font-weight: 600;
+    text-align: right;
+  }
+  .topic-title { flex: 1; }
+  .topic-type {
+    font-size: 0.7rem;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    background: #e8eaff;
+    color: #4040c0;
+  }
+  .topic-type.video { background: #ffe8e8; color: #c04040; }
+  .topic-type.quiz  { background: #e8ffe8; color: #207020; }
+  .topic-inactive { opacity: 0.45; }
+  .topics-empty { font-size: 0.8rem; color: #aaa; padding: 0.4rem 0.5rem; }
 
   .resources-list {
     display: flex;
@@ -474,13 +534,48 @@
     {% if summary.chapters %}
       <div class="chapters-list">
         {% for chapter in summary.chapters %}
+        {% set ch_topics = summary.topics_by_chapter.get(chapter.id, []) %}
         <div class="chapter-item">
-          <div class="chapter-info">
-            <h4>{{ chapter.chapter_order }}. {{ chapter.chapter_title }}</h4>
-            <div class="chapter-meta">
-              <span class="chapter-badge">📝 {{ chapter.topic_count }} {{ 'Topic' if chapter.topic_count == 1 else 'Topics' }}</span>
-              <span class="chapter-badge">{{ '✓ Active' if chapter.is_active else '✗ Inactive' }}</span>
+          <button class="chapter-toggle" type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#ch-{{ chapter.id }}"
+                  aria-expanded="false"
+                  aria-controls="ch-{{ chapter.id }}">
+            <div class="chapter-info">
+              <h4>{{ chapter.chapter_order }}. {{ chapter.chapter_title }}</h4>
+              <div class="chapter-meta">
+                <span class="chapter-badge">📝 {{ chapter.topic_count }} {{ 'Topic' if chapter.topic_count == 1 else 'Topics' }}</span>
+                <span class="chapter-badge">{{ '✓ Active' if chapter.is_active else '✗ Inactive' }}</span>
+              </div>
             </div>
+            <span class="chevron">▼</span>
+          </button>
+          <div class="collapse topics-dropdown" id="ch-{{ chapter.id }}">
+            {% if ch_topics %}
+              {% for t in ch_topics %}
+              <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=t.id) }}"
+                 class="topic-row {{ 'topic-inactive' if not t.is_active else '' }}"
+                 style="text-decoration:none;">
+                <span class="topic-num">{{ t.topic_order }}.</span>
+                <span class="topic-title">{{ t.topic_title }}</span>
+                {% if t.estimated_minutes %}
+                <span style="font-size:0.72rem; color:#999;">⏱ {{ t.estimated_minutes }}m</span>
+                {% endif %}
+                <span style="font-size:0.72rem; font-weight:600; padding:1px 7px; border-radius:10px; background:{% if t.content_count > 0 %}#e0f2fe; color:#0369a1;{% else %}#f3f4f6; color:#9ca3af;{% endif %}">
+                  📄 {{ t.content_count }} content{{ 's' if t.content_count != 1 else '' }}
+                </span>
+                {% if t.is_preview %}
+                <span style="font-size:0.7rem; color:#f59e0b; font-weight:600;">Preview</span>
+                {% endif %}
+                <span class="topic-type {{ t.content_type }}">{{ t.content_type }}</span>
+                {% if not t.is_active %}
+                <span style="font-size:0.7rem;color:#bbb;">inactive</span>
+                {% endif %}
+              </a>
+              {% endfor %}
+            {% else %}
+              <p class="topics-empty">No topics in this chapter yet.</p>
+            {% endif %}
           </div>
         </div>
         {% endfor %}

@@ -470,6 +470,25 @@ def program_view(program_id):
             'resource_count': len(resources),
             'recent_activity': recent_activity
         }
+
+        # Fetch topics for each chapter (for accordion display)
+        topics_by_chapter = {}
+        if chapters:
+            placeholders = ','.join('?' for _ in chapters)
+            chapter_ids = [c['id'] for c in chapters]
+            cur.execute(f"""
+                SELECT lt.id, lt.chapter_id, lt.topic_title, lt.topic_order, lt.content_type,
+                       lt.estimated_minutes, lt.is_active, lt.is_preview,
+                       COUNT(ltc.id) AS content_count
+                FROM lms_topics lt
+                LEFT JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
+                WHERE lt.chapter_id IN ({placeholders})
+                GROUP BY lt.id
+                ORDER BY lt.chapter_id, lt.topic_order
+            """, chapter_ids)
+            for t in cur.fetchall():
+                topics_by_chapter.setdefault(t['chapter_id'], []).append(dict(t))
+        summary['topics_by_chapter'] = topics_by_chapter
         
         return render_template('lms_program_view.html', summary=summary)
     finally:
