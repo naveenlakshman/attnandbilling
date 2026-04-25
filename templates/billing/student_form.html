@@ -325,7 +325,7 @@
 
 <div class="student-form-wrap">
   <div class="page-header-row">
-    <h2>{% if student %}Edit Student{% else %}Add Student{% endif %}</h2>
+    <h2>{% if student %}Edit Student{% elif prefill_lead %}Convert Lead to Student{% else %}Add Student{% endif %}</h2>
 
     <a href="{{ url_for('billing.students') }}" class="btn btn-secondary">
       ← Back to Students
@@ -349,6 +349,14 @@
     {% endif %}
     <form method="post" id="studentForm">
       <input type="hidden" name="force_save" id="force_save" value="{{ '1' if duplicate_warning else '0' }}">
+      {% if prefill_lead %}
+      <div style="background:#eff6ff; border:1px solid #93c5fd; color:#1e40af; border-radius:7px; padding:12px 16px; margin-bottom:18px; font-size:13px;">
+        <strong>🔄 Converting Lead to Student</strong><br>
+        Fields have been pre-filled from lead: <strong>{{ prefill_lead.name }}</strong> ({{ prefill_lead.phone }}).
+        Please complete any missing fields and upload a photo before saving.
+      </div>
+      <input type="hidden" name="lead_id" value="{{ prefill_lead.id }}">
+      {% endif %}
       <div class="student-form-grid">
         <div class="form-group">
           <label>Branch</label>
@@ -380,7 +388,7 @@
 
         <div class="form-group">
           <label>Full Name</label>
-          <input type="text" name="full_name" required value="{% if student %}{{ student.full_name }}{% elif form_data %}{{ form_data.get('full_name', '') }}{% endif %}">
+          <input type="text" name="full_name" required value="{% if student %}{{ student.full_name }}{% elif prefill_lead %}{{ prefill_lead.name }}{% elif form_data %}{{ form_data.get('full_name', '') }}{% endif %}">
         </div>
 
         <div class="form-group">
@@ -388,7 +396,7 @@
           <input type="text" id="phoneInput" name="phone" required
                  placeholder="10-digit mobile number"
                  maxlength="10"
-                 value="{% if student %}{{ student.phone }}{% elif form_data %}{{ form_data.get('phone', '') }}{% endif %}">
+                 value="{% if student %}{{ student.phone }}{% elif prefill_lead %}{{ prefill_lead.phone }}{% elif form_data %}{{ form_data.get('phone', '') }}{% endif %}">
           <div id="phoneFormatError" style="display:none; color:#dc3545; font-size:12px; margin-top:4px;"></div>
           <div id="phoneDupWarning" style="display:none; color:#9a3412; font-size:12px; margin-top:4px;"></div>
         </div>
@@ -420,7 +428,7 @@
           <label>Gender</label>
           <select name="gender">
             <option value="">-- Select --</option>
-            {% set _gender = (student.gender if student else form_data.get('gender', '') if form_data else '') %}
+            {% set _gender = (student.gender if student else prefill_lead.gender if prefill_lead else form_data.get('gender', '') if form_data else '') %}
             <option value="Male" {% if _gender == 'Male' %}selected{% endif %}>Male</option>
             <option value="Female" {% if _gender == 'Female' %}selected{% endif %}>Female</option>
             <option value="Other" {% if _gender == 'Other' %}selected{% endif %}>Other</option>
@@ -471,7 +479,16 @@
 
         <div class="form-group">
           <label>Education Level</label>
-          {% set _edlevel = (student.education_level if student else form_data.get('education_level', '') if form_data else '') %}
+          {% if prefill_lead and prefill_lead.education_status %}
+            {% set _edu_status = prefill_lead.education_status %}
+            {% if _edu_status == 'School Student' %}{% set _lead_edlevel = 'School' %}
+            {% elif _edu_status == 'PUC Student' %}{% set _lead_edlevel = 'Pre-University' %}
+            {% elif _edu_status == 'Degree Student' %}{% set _lead_edlevel = 'Undergraduate' %}
+            {% elif _edu_status == 'Graduate' %}{% set _lead_edlevel = 'Postgraduate' %}
+            {% else %}{% set _lead_edlevel = '' %}
+            {% endif %}
+          {% else %}{% set _lead_edlevel = '' %}{% endif %}
+          {% set _edlevel = (student.education_level if student else _lead_edlevel if prefill_lead else form_data.get('education_level', '') if form_data else '') %}
           <select name="education_level">
             <option value="">-- Select --</option>
             <option value="Pre-University" {% if _edlevel == 'Pre-University' %}selected{% endif %}>Pre-University</option>
@@ -501,7 +518,7 @@
 
         <div class="form-group">
           <label>Student From</label>
-          {% set _sloc = (student.student_location if student else form_data.get('student_location', '') if form_data else '') %}
+          {% set _sloc = (student.student_location if student else (prefill_lead.lead_location if prefill_lead else form_data.get('student_location', '') if form_data else '')) %}
           <select name="student_location">
             <option value="">-- Select --</option>
             <option value="rural" {% if _sloc == 'rural' %}selected{% endif %}>Rural</option>
@@ -521,15 +538,19 @@
           </select>
         </div>
 
+        {% if student %}
         <div class="form-group">
           <label>Student Status</label>
-          {% set _status = (student.status if student else form_data.get('status', 'active') if form_data else 'active') %}
+          {% set _status = student.status %}
           <select name="status">
             <option value="active" {% if _status == 'active' %}selected{% endif %}>Active</option>
             <option value="completed" {% if _status == 'completed' %}selected{% endif %}>Completed</option>
             <option value="dropped" {% if _status == 'dropped' %}selected{% endif %}>Dropped</option>
           </select>
         </div>
+        {% else %}
+        <input type="hidden" name="status" value="active">
+        {% endif %}
       </div>
 
       <div class="form-actions">

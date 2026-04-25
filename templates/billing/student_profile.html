@@ -891,6 +891,15 @@
       {{ student.status | upper }}
     </div>
 
+    {% if origin_lead %}
+    <div style="margin-bottom: 12px;">
+      <a href="{{ url_for('leads.lead_detail', lead_id=origin_lead.id) }}"
+         style="display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,0.15); color:#fff; border-radius:20px; padding:4px 14px; font-size:12px; font-weight:600; text-decoration:none; border:1px solid rgba(255,255,255,0.3);">
+        🔗 From Lead: {{ origin_lead.name }}
+      </a>
+    </div>
+    {% endif %}
+
     <div class="profile-header-quick-info">
       <div class="quick-info-item">
         <span class="quick-info-label">Branch</span>

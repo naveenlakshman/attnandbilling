@@ -557,6 +557,13 @@ def lead_detail(lead_id):
     """, (lead_id,))
     followups = cur.fetchall()
 
+    # Linked student (if this lead was converted)
+    cur.execute(
+        "SELECT id, student_code, full_name FROM students WHERE lead_id = ?",
+        (lead_id,)
+    )
+    linked_student = cur.fetchone()
+
     conn.close()
 
     return render_template(
@@ -566,6 +573,7 @@ def lead_detail(lead_id):
         followups=followups,
         methods=FOLLOWUP_METHODS,
         outcomes=FOLLOWUP_OUTCOMES,
+        linked_student=linked_student,
     )
 
 @leads_bp.route("/list")

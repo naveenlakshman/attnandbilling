@@ -832,6 +832,8 @@ def student_new():
         branch_id = request.form["branch_id"]
         full_name = request.form["full_name"].strip()
         phone = request.form["phone"].strip()
+        lead_id_raw = request.form.get("lead_id", "").strip()
+        form_lead_id = int(lead_id_raw) if lead_id_raw.isdigit() else None
 
         # Validate phone number
         import re as _re
@@ -970,10 +972,11 @@ def student_new():
                 status,
                 branch_id,
                 photo_filename,
+                lead_id,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(next_reg_no),
             full_name,
@@ -992,13 +995,45 @@ def student_new():
             status,
             branch_id,
             photo_filename,
+            form_lead_id,
             now,
             now
         ))
 
         student_id = cur.lastrowid
-        conn.commit()
-        conn.close()
+
+        # ── Lead linkage ────────────────────────────────────────────
+        if form_lead_id:
+            # Mark the originating lead as converted
+            cur.execute(
+                "UPDATE leads SET stage = 'Converted', status = 'converted', updated_at = ? WHERE id = ?",
+                (now, form_lead_id)
+            )
+            conn.commit()
+            conn.close()
+        else:
+            # Auto-create a lead record for this direct admission
+            _edu_map = {
+                "School": "School Student",
+                "Pre-University": "PUC Student",
+                "Diploma": "Degree Student",
+                "Undergraduate": "Degree Student",
+                "Postgraduate": "Graduate",
+                "Professional": "Working Professional",
+            }
+            lead_edu = _edu_map.get(education_level, "")
+            cur.execute(
+                """INSERT INTO leads
+                       (name, phone, gender, education_status, lead_location,
+                        stage, status, lead_source, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, 'Converted', 'converted', 'Walk-in', ?, ?)""",
+                (full_name, phone, gender, lead_edu, student_location, now, now)
+            )
+            new_lead_id = cur.lastrowid
+            cur.execute("UPDATE students SET lead_id = ? WHERE id = ?", (new_lead_id, student_id))
+            conn.commit()
+            conn.close()
+            flash("A lead record was automatically created for this student.", "info")
 
         _auto_enable_portal(student_id)
 
@@ -1022,6 +1057,16 @@ def student_new():
     """)
     branches = cur.fetchall()
 
+    # Pre-fill from a lead if ?from_lead=<id> is provided
+    prefill_lead = None
+    from_lead_raw = request.args.get("from_lead", "").strip()
+    if from_lead_raw.isdigit():
+        cur.execute(
+            "SELECT * FROM leads WHERE id = ? AND is_deleted = 0",
+            (int(from_lead_raw),)
+        )
+        prefill_lead = cur.fetchone()
+
     conn.close()
 
     return render_template(
@@ -1029,7 +1074,8 @@ def student_new():
         student=None,
         branches=branches,
         education_levels=QUALIFICATION_LEVELS.keys(),
-        qualification_levels=QUALIFICATION_LEVELS
+        qualification_levels=QUALIFICATION_LEVELS,
+        prefill_lead=prefill_lead
     )
 
 @billing_bp.route("/student/<int:student_id>/edit", methods=["GET", "POST"])
@@ -1511,6 +1557,15 @@ def student_profile(student_id):
     """, (student_id,))
     student_batches = cur.fetchall()
 
+    # Originating lead (if student was converted from or auto-linked to a lead)
+    origin_lead = None
+    if student["lead_id"]:
+        cur.execute(
+            "SELECT id, name, stage, status FROM leads WHERE id = ? AND is_deleted = 0",
+            (student["lead_id"],)
+        )
+        origin_lead = cur.fetchone()
+
     conn.close()
 
     return render_template(
@@ -1523,7 +1578,8 @@ def student_profile(student_id):
         total_billed=total_billed,
         total_paid=total_paid,
         total_balance=total_balance,
-        student_batches=student_batches
+        student_batches=student_batches,
+        origin_lead=origin_lead
     )
 
 @billing_bp.route("/students/export-csv")

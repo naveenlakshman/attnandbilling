@@ -187,6 +187,13 @@
     {% if lead.lead_source %}
       <span class="badge bg-white bg-opacity-25 text-white">{{ lead.lead_source }}</span>
     {% endif %}
+    {% if linked_student %}
+      <a href="{{ url_for('billing.student_profile', student_id=linked_student.id) }}"
+         class="badge text-decoration-none"
+         style="background:#fff; color:#198754; border:1px solid rgba(255,255,255,0.5);">
+        🎓 Student #{{ linked_student.student_code }}
+      </a>
+    {% endif %}
   </div>
 </div>
 
@@ -194,10 +201,17 @@
 <div class="action-bar">
   <a class="btn btn-outline-primary" href="{{ url_for('leads.lead_edit', lead_id=lead.id) }}">✏ Edit</a>
 
-  <form method="post" action="{{ url_for('leads.lead_set_stage', lead_id=lead.id) }}" style="flex:1; min-width:70px;">
-    <input type="hidden" name="stage" value="Converted">
-    <button class="btn btn-success w-100" type="submit">✓ Convert</button>
-  </form>
+  {% if linked_student %}
+  <a class="btn btn-success w-100" href="{{ url_for('billing.student_profile', student_id=linked_student.id) }}" style="flex:1; min-width:70px;">
+    👤 View Student #{{ linked_student.student_code }}
+  </a>
+  {% elif lead.status != 'converted' %}
+  <a class="btn btn-success w-100" href="{{ url_for('billing.student_new') }}?from_lead={{ lead.id }}" style="flex:1; min-width:70px;">
+    🎓 Convert to Student
+  </a>
+  {% else %}
+  <span class="btn btn-secondary w-100 disabled" style="flex:1; min-width:70px;">✓ Converted</span>
+  {% endif %}
 
   <button class="btn btn-outline-warning" type="button" data-bs-toggle="collapse" data-bs-target="#markLostPanel">
     Mark Lost
