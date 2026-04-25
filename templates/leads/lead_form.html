@@ -90,7 +90,19 @@
 
     <div class="col-md-6">
       <label class="form-label">Interested Courses</label>
+      {% if active_courses %}
+      <select class="form-select" name="interested_courses">
+        <option value="">(none)</option>
+        {% for c in active_courses %}
+          <option value="{{ c.course_name }}"
+            {% if (lead and lead.interested_courses == c.course_name) %}selected{% endif %}>
+            {{ c.course_name }}
+          </option>
+        {% endfor %}
+      </select>
+      {% else %}
       <input class="form-control" name="interested_courses" value="{{ lead.interested_courses if lead else '' }}" placeholder="Tally, Excel, CCOM...">
+      {% endif %}
     </div>
 
     <div class="col-md-4">

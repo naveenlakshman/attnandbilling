@@ -414,6 +414,11 @@ def lead_create():
             status = "active"
 
         if not name or not phone:
+            _conn2 = get_conn()
+            _cur2 = _conn2.cursor()
+            _cur2.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+            _active_courses = _cur2.fetchall()
+            _conn2.close()
             flash("Name and Phone are required.", "danger")
             return render_template(
                 "leads/lead_form.html",
@@ -426,6 +431,7 @@ def lead_create():
                 lead_sources=LEAD_SOURCE_OPTIONS,
                 decision_makers=DECISION_MAKER_OPTIONS,
                 timeframes=TIMEFRAME_OPTIONS,
+                active_courses=_active_courses,
             )
 
         conn = get_conn()
@@ -503,6 +509,12 @@ def lead_create():
         flash("Lead created successfully.", "success")
         return redirect(url_for("leads.dashboard"))
 
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+    active_courses = cur.fetchall()
+    conn.close()
+
     return render_template(
         "leads/lead_form.html",
         lead=None,
@@ -514,6 +526,7 @@ def lead_create():
         lead_sources=LEAD_SOURCE_OPTIONS,
         decision_makers=DECISION_MAKER_OPTIONS,
         timeframes=TIMEFRAME_OPTIONS,
+        active_courses=active_courses,
     )
 @leads_bp.route("/<int:lead_id>")
 @login_required
@@ -835,6 +848,11 @@ def lead_edit(lead_id):
             status = "active"
 
         if not name or not phone:
+            _conn3 = get_conn()
+            _cur3 = _conn3.cursor()
+            _cur3.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+            _active_courses_edit = _cur3.fetchall()
+            _conn3.close()
             conn.close()
             flash("Name and Phone are required.", "danger")
             return render_template(
@@ -848,6 +866,7 @@ def lead_edit(lead_id):
                 lead_sources=LEAD_SOURCE_OPTIONS,
                 decision_makers=DECISION_MAKER_OPTIONS,
                 timeframes=TIMEFRAME_OPTIONS,
+                active_courses=_active_courses_edit,
             )
 
         now = datetime.now().isoformat(timespec="seconds")
@@ -916,6 +935,8 @@ def lead_edit(lead_id):
         flash("Lead updated.", "success")
         return redirect(url_for("leads.lead_detail", lead_id=lead_id))
 
+    cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+    active_courses = cur.fetchall()
     conn.close()
 
     return render_template(
@@ -929,6 +950,7 @@ def lead_edit(lead_id):
         lead_sources=LEAD_SOURCE_OPTIONS,
         decision_makers=DECISION_MAKER_OPTIONS,
         timeframes=TIMEFRAME_OPTIONS,
+        active_courses=active_courses,
     )
 
 @leads_bp.route("/<int:lead_id>/stage", methods=["POST"])
