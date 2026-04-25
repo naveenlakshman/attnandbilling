@@ -239,7 +239,7 @@
             <th class="sortable" data-sort-key="stage">Stage</th>
             <th class="sortable" data-sort-key="score">Score</th>
             <th class="sortable" data-sort-key="created">Created</th>
-            <th>Owner</th>
+            <th class="sortable" data-sort-key="owner">Owner</th>
             <th></th>
           </tr>
         </thead>
@@ -265,7 +265,7 @@
             <td data-sort-key="created" data-sort-value="{{ l.created_at[:10] if l.created_at else '' }}">
               <small class="text-muted">{{ l.created_at[:10] if l.created_at else '—' }}</small>
             </td>
-            <td>
+            <td data-sort-key="owner" data-sort-value="{{ l.owner_name or l.owner_username or '' }}">
               <small class="text-muted">{{ l.owner_name or l.owner_username or 'Unassigned' }}</small>
             </td>
             <td>
