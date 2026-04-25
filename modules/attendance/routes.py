@@ -6,6 +6,38 @@ from functools import wraps
 attendance_bp = Blueprint('attendance', __name__)
 
 
+def auto_complete_expired_batches(conn):
+    """Mark active batches whose end_date has passed as completed.
+    Also marks the active students in those batches as completed.
+    """
+    cur = conn.cursor()
+    now = datetime.now().isoformat(timespec="seconds")
+    # Find active batches whose end_date is in the past
+    cur.execute("""
+        SELECT id FROM batches
+        WHERE status = 'active'
+          AND end_date IS NOT NULL
+          AND date(end_date) < date('now')
+    """)
+    rows = cur.fetchall()
+    if not rows:
+        return
+    expired_ids = [row['id'] for row in rows]
+    placeholders = ','.join('?' * len(expired_ids))
+    # Mark the batches as completed
+    cur.execute(
+        f"UPDATE batches SET status = 'completed', updated_at = ? WHERE id IN ({placeholders})",
+        [now] + expired_ids
+    )
+    # Mark active students in those batches as completed (leave 'dropped' unchanged)
+    cur.execute(
+        f"UPDATE student_batches SET status = 'completed', updated_at = ? "
+        f"WHERE batch_id IN ({placeholders}) AND status = 'active'",
+        [now] + expired_ids
+    )
+    conn.commit()
+
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -24,6 +56,9 @@ def dashboard():
     cur = conn.cursor()
     
     try:
+        # Auto-complete any batches whose end_date has passed
+        auto_complete_expired_batches(conn)
+
         # Get user info
         cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
@@ -317,8 +352,10 @@ def list_batches():
     user_id = session.get('user_id')
     conn = get_conn()
     cur = conn.cursor()
-    
     try:
+        # Auto-complete any batches whose end_date has passed
+        auto_complete_expired_batches(conn)
+
         # Get user info
         cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
@@ -434,7 +471,7 @@ def create_batch():
             start_time = request.form.get('start_time') or None
             end_time = request.form.get('end_time') or None
             trainer_id = request.form.get('trainer_id') or None
-            status = request.form.get('status', 'active')
+            status = 'active'  # New batches are always active
             
             # Validate
             if not batch_name:
@@ -442,6 +479,12 @@ def create_batch():
                                      courses=[], trainers=[], branches=[], user=user), 400
             if not branch_id:
                 return render_template('attendance/batch_form.html', error="Branch is required",
+                                     courses=[], trainers=[], branches=[], user=user), 400
+            if not start_date:
+                return render_template('attendance/batch_form.html', error="Start date is required",
+                                     courses=[], trainers=[], branches=[], user=user), 400
+            if not end_date:
+                return render_template('attendance/batch_form.html', error="End date is required",
                                      courses=[], trainers=[], branches=[], user=user), 400
             
             now = datetime.now().isoformat(timespec="seconds")
@@ -711,18 +754,25 @@ def edit_batch(batch_id):
             end_time = request.form.get('end_time') or None
             trainer_id = request.form.get('trainer_id') or None
             status = request.form.get('status', 'active')
+
+            def _edit_error(msg):
+                cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name ASC")
+                _courses = cur.fetchall()
+                cur.execute("SELECT id, full_name FROM users WHERE role = 'staff' AND is_active = 1 ORDER BY full_name ASC")
+                _trainers = cur.fetchall()
+                cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+                _branches = cur.fetchall()
+                return render_template('attendance/batch_form.html', batch=batch,
+                                       error=msg, courses=_courses, trainers=_trainers,
+                                       branches=_branches, user=user, edit=True), 400
             
             # Validate
             if not batch_name:
-                cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name ASC")
-                courses = cur.fetchall()
-                cur.execute("SELECT id, full_name FROM users WHERE role = 'staff' AND is_active = 1 ORDER BY full_name ASC")
-                trainers = cur.fetchall()
-                cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
-                branches = cur.fetchall()
-                return render_template('attendance/batch_form.html', batch=batch, 
-                                     error="Batch name is required", courses=courses, 
-                                     trainers=trainers, branches=branches, user=user), 400
+                return _edit_error("Batch name is required")
+            if not start_date:
+                return _edit_error("Start date is required")
+            if not end_date:
+                return _edit_error("End date is required")
             
             now = datetime.now().isoformat(timespec="seconds")
             
@@ -745,15 +795,7 @@ def edit_batch(batch_id):
                 return redirect(url_for('attendance.view_batch', batch_id=batch_id))
             
             except Exception as e:
-                cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name ASC")
-                courses = cur.fetchall()
-                cur.execute("SELECT id, full_name FROM users WHERE role = 'staff' AND is_active = 1 ORDER BY full_name ASC")
-                trainers = cur.fetchall()
-                cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
-                branches = cur.fetchall()
-                return render_template('attendance/batch_form.html', batch=batch, 
-                                     error=str(e), courses=courses, trainers=trainers, 
-                                     branches=branches, user=user), 400
+                return _edit_error(str(e))
         
         # GET request - show form
         cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name ASC")

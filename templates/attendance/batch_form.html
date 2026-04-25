@@ -194,20 +194,20 @@
         
         <div class="form-row">
           <div class="form-group">
-            <label for="start_date" class="form-label">Start Date</label>
+            <label for="start_date" class="form-label required">Start Date</label>
             <input type="date" class="form-control" id="start_date" name="start_date"
-                   value="{{ batch.start_date if batch else '' }}">
-            <div class="form-helper">Leave empty for ongoing batches</div>
+                   value="{{ batch.start_date if batch else '' }}" required>
           </div>
 
           <div class="form-group">
-            <label for="end_date" class="form-label">End Date</label>
+            <label for="end_date" class="form-label required">End Date</label>
             <input type="date" class="form-control" id="end_date" name="end_date"
-                   value="{{ batch.end_date if batch else '' }}">
+                   value="{{ batch.end_date if batch else '' }}" required>
           </div>
         </div>
       </div>
 
+      {% if edit %}
       <!-- Status -->
       <div class="form-section">
         <div class="form-section-title">✓ Status</div>
@@ -227,6 +227,7 @@
           </select>
         </div>
       </div>
+      {% endif %}
 
       <!-- Form Actions -->
       <div class="form-actions">
