@@ -77,6 +77,10 @@
     .mobile-leads-view { display: block; }
     .desktop-leads-view { display: none; }
   }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable::after { content: ' ↕'; color: #adb5bd; font-size: 10px; }
+  th.sort-asc::after { content: ' ↑'; color: #0d6efd; }
+  th.sort-desc::after { content: ' ↓'; color: #0d6efd; }
 </style>
 {% endblock %}
 
@@ -132,14 +136,18 @@
   <!-- Filter toggles: collapsible on mobile -->
   <div class="d-flex align-items-center gap-2 mb-2">
     <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="false">
-      ⚙ Filters{% if stage or source or selected_user_id %} <span class="badge bg-primary ms-1">!</span>{% endif %}
+      ⚙ Filters{% if stage or source or selected_user_id or date_from or date_to %} <span class="badge bg-primary ms-1">!</span>{% endif %}
     </button>
-    {% if stage or source or selected_user_id or q %}
+    {% if stage or source or selected_user_id or q or date_from or date_to or hide_converted %}
     <a href="{{ url_for('leads.leads_list') }}" class="btn btn-sm btn-outline-danger">✕ Clear</a>
     {% endif %}
 
     <!-- Quick stage chips (visible inline on mobile) -->
     <div class="d-flex gap-1 overflow-auto" style="flex:1; min-width:0; padding-bottom:2px;">
+      <input type="hidden" name="hide_converted" id="hideConvertedInput" value="{{ hide_converted }}">
+      <button type="button" onclick="toggleActiveOnly()" class="filter-chip {% if hide_converted == '1' %}active{% endif %}">
+        Active Only
+      </button>
       {% for s in stages %}
         <button type="submit" name="stage" value="{{ s }}" class="filter-chip {% if stage == s %}active{% endif %}" title="{{ s }}">
           {{ s }}
@@ -148,7 +156,7 @@
     </div>
   </div>
 
-  <div class="collapse {% if stage or source or selected_user_id %}show{% endif %}" id="filterCollapse">
+  <div class="collapse {% if stage or source or selected_user_id or date_from or date_to %}show{% endif %}" id="filterCollapse">
     <div class="card card-body p-2 mb-2" style="border-radius:10px; background:#f8f9fa; border:none;">
       <div class="row g-2">
         {% if is_admin %}
@@ -163,7 +171,7 @@
           </select>
         </div>
         {% endif %}
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-2">
           <select name="stage" id="stageFilter" class="form-select form-select-sm">
             <option value="">All stages</option>
             {% for s in stages %}
@@ -171,13 +179,19 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-2">
           <select name="source" id="sourceFilter" class="form-select form-select-sm">
             <option value="">All sources</option>
             {% for s in sources %}
               <option value="{{ s }}" {% if source == s %}selected{% endif %}>{{ s }}</option>
             {% endfor %}
           </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" title="Created from">
+        </div>
+        <div class="col-6 col-md-2">
+          <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" title="Created until">
         </div>
         <div class="col-12 col-md-2">
           <button class="btn btn-primary btn-sm w-100" type="submit">Apply Filters</button>
@@ -198,7 +212,8 @@
       <div class="lc-avatar">{{ initials }}</div>
       <div class="lc-body">
         <div class="lc-name">{{ l.name }}</div>
-        <div class="lc-phone">{{ l.phone or '—' }}</div>
+        <div class="lc-phone">{{ l.phone or '—' }}{% if l.interested_courses %} · <span style="color:#0d6efd;">{{ l.interested_courses }}</span>{% endif %}</div>
+        <div style="font-size:10px; color:#9ca3af; margin-top:1px;">{{ l.created_at[:10] if l.created_at else '' }}</div>
       </div>
       <div class="lc-right">
         <span class="lc-stage stage-{{ stage_lower }}">{{ l.stage }}</span>
@@ -218,10 +233,12 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>Name</th>
+            <th class="sortable" data-sort-key="name">Name</th>
             <th>Phone</th>
-            <th>Stage</th>
-            <th>Score</th>
+            <th class="sortable" data-sort-key="course">Course</th>
+            <th class="sortable" data-sort-key="stage">Stage</th>
+            <th class="sortable" data-sort-key="score">Score</th>
+            <th class="sortable" data-sort-key="created">Created</th>
             <th>Owner</th>
             <th></th>
           </tr>
@@ -229,14 +246,24 @@
         <tbody>
           {% for l in leads %}
           <tr>
-            <td>{{ loop.index }}</td>
-            <td>{{ l.name }}</td>
+            <td class="row-num">{{ loop.index }}</td>
+            <td data-sort-key="name" data-sort-value="{{ l.name }}">{{ l.name }}</td>
             <td>{{ l.phone }}</td>
-            <td>{{ l.stage }}</td>
-            <td>
+            <td data-sort-key="course" data-sort-value="{{ l.interested_courses or '' }}">
+              {% if l.interested_courses %}
+                <span class="badge bg-light text-dark border">{{ l.interested_courses }}</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td data-sort-key="stage" data-sort-value="{{ l.stage }}">{{ l.stage }}</td>
+            <td data-sort-key="score" data-sort-value="{{ l.lead_score }}">
               <span class="badge {% if l.lead_score >= 60 %}bg-danger{% else %}bg-secondary{% endif %}">
                 {{ l.lead_score }}
               </span>
+            </td>
+            <td data-sort-key="created" data-sort-value="{{ l.created_at[:10] if l.created_at else '' }}">
+              <small class="text-muted">{{ l.created_at[:10] if l.created_at else '—' }}</small>
             </td>
             <td>
               <small class="text-muted">{{ l.owner_name or l.owner_username or 'Unassigned' }}</small>
@@ -299,6 +326,52 @@
         searchTimer = setTimeout(() => filterForm.submit(), 600);
       });
     }
+
+    // ── Table column sorting ──────────────────────────────────
+    var sortKey = null;
+    var sortDir = 1; // 1 = asc, -1 = desc
+
+    document.querySelectorAll('th.sortable').forEach(function(th) {
+      th.addEventListener('click', function() {
+        var key = this.getAttribute('data-sort-key');
+        if (sortKey === key) {
+          sortDir = -sortDir;
+        } else {
+          sortKey = key;
+          sortDir = 1;
+        }
+        document.querySelectorAll('th.sortable').forEach(function(t) {
+          t.classList.remove('sort-asc', 'sort-desc');
+        });
+        this.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+
+        var tbody = document.querySelector('.desktop-leads-view tbody');
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function(a, b) {
+          var aCell = a.querySelector('td[data-sort-key="' + key + '"]');
+          var bCell = b.querySelector('td[data-sort-key="' + key + '"]');
+          if (!aCell || !bCell) return 0;
+          var aVal = aCell.getAttribute('data-sort-value') || '';
+          var bVal = bCell.getAttribute('data-sort-value') || '';
+          // Numeric sort for score
+          if (key === 'score') {
+            return (parseFloat(aVal) - parseFloat(bVal)) * sortDir;
+          }
+          return aVal.localeCompare(bVal) * sortDir;
+        });
+        rows.forEach(function(row, i) {
+          var numCell = row.querySelector('td.row-num');
+          if (numCell) numCell.textContent = i + 1;
+          tbody.appendChild(row);
+        });
+      });
+    });
   });
+
+  function toggleActiveOnly() {
+    var input = document.getElementById('hideConvertedInput');
+    input.value = input.value === '1' ? '' : '1';
+    document.getElementById('filterForm').submit();
+  }
 </script>
 {% endblock %}

@@ -599,6 +599,9 @@ def leads_list():
     stage = request.args.get("stage", "").strip()
     source = request.args.get("source", "").strip()
     user_id = request.args.get("user_id", "").strip()
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+    hide_converted = request.args.get("hide_converted", "").strip()
 
     current_user_id = session.get("user_id")
     current_user_role = session.get("role")
@@ -632,6 +635,15 @@ def leads_list():
     if source:
         query += " AND l.lead_source = ?"
         params.append(source)
+
+    if date_from:
+        query += " AND substr(l.created_at, 1, 10) >= ?"
+        params.append(date_from)
+    if date_to:
+        query += " AND substr(l.created_at, 1, 10) <= ?"
+        params.append(date_to)
+    if hide_converted == "1":
+        query += " AND l.status NOT IN ('converted', 'lost')"
 
     query += " ORDER BY l.updated_at DESC"
 
@@ -684,7 +696,7 @@ def leads_list():
     conn.close()
 
     stages = ["New Lead", "Contacted", "Interested", "Counseling Done", "Follow-up", "Converted", "Lost"]
-    sources = ["Walk-in", "Instagram", "Reference", "Website"]
+    sources = ["Walk-in", "Instagram", "Facebook", "WhatsApp", "Referral", "Banner", "College Campaign", "JustDial", "Other"]
 
     return render_template(
         "leads/leads_list.html",
@@ -692,6 +704,9 @@ def leads_list():
         q=q,
         stage=stage,
         source=source,
+        date_from=date_from,
+        date_to=date_to,
+        hide_converted=hide_converted,
         stages=stages,
         sources=sources,
         all_users=all_users,
