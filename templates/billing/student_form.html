@@ -407,7 +407,7 @@
         {% set _dob_m = _dob_parts[1]|int if _dob_parts|length == 3 else '' %}
         {% set _dob_d = _dob_parts[2]|int if _dob_parts|length == 3 else '' %}
         <div class="form-group">
-          <label>Date of Birth</label>
+          <label>Date of Birth <span style="color:#dc3545;">*</span></label>
           <div class="dob-selector">
             <input type="number" id="dob_day" placeholder="Day" min="1" max="31"
                    value="{{ _dob_d }}" aria-label="Day">
@@ -425,8 +425,8 @@
         </div>
 
         <div class="form-group">
-          <label>Gender</label>
-          <select name="gender">
+          <label>Gender <span style="color:#dc3545;">*</span></label>
+          <select name="gender" required>
             <option value="">-- Select --</option>
             {% set _gender = (student.gender if student else prefill_lead.gender if prefill_lead else form_data.get('gender', '') if form_data else '') %}
             <option value="Male" {% if _gender == 'Male' %}selected{% endif %}>Male</option>
@@ -436,8 +436,8 @@
         </div>
 
         <div class="form-group">
-          <label>Email</label>
-          <input type="email" name="email" value="{% if student %}{{ student.email }}{% elif form_data %}{{ form_data.get('email', '') }}{% endif %}">
+          <label>Email <span style="color:#dc3545;">*</span></label>
+          <input type="email" name="email" required value="{% if student %}{{ student.email }}{% elif form_data %}{{ form_data.get('email', '') }}{% endif %}">
         </div>
 
         <!-- ── Structured Address Block ── -->
@@ -447,34 +447,34 @@
 
             <!-- Row 1: Pincode + Locality -->
             <div class="form-group" style="position:relative;">
-              <label>Pincode</label>
-              <input type="text" id="pincode_field" name="pincode" maxlength="6" placeholder="6-digit pincode"
+              <label>Pincode <span style="color:#dc3545;">*</span></label>
+              <input type="text" id="pincode_field" name="pincode" maxlength="6" placeholder="6-digit pincode" required
                      value="{% if student %}{{ student.pincode or '' }}{% elif form_data %}{{ form_data.get('pincode', '') }}{% endif %}"
                      style="padding-right:36px;">
               <span id="pincode_spinner" style="display:none;position:absolute;right:10px;top:36px;font-size:16px;">⏳</span>
               <span id="pincode_status" style="font-size:12px;margin-top:4px;display:block;"></span>
             </div>
             <div class="form-group">
-              <label>Locality</label>
-              <input type="text" id="locality_field" name="locality" placeholder="Auto-filled from pincode"
+              <label>Locality <span style="color:#dc3545;">*</span></label>
+              <input type="text" id="locality_field" name="locality" placeholder="Auto-filled from pincode" required
                      value="{% if student %}{{ student.locality or '' }}{% elif form_data %}{{ form_data.get('locality', '') }}{% endif %}">
             </div>
 
             <!-- Row 2: Area and Street (full width) -->
             <div class="form-group full-width" style="grid-column: 1 / -1;">
-              <label>Address (Area and Street)</label>
-              <textarea name="address" rows="2" style="min-height:70px;">{% if student %}{{ student.address }}{% elif form_data %}{{ form_data.get('address', '') }}{% endif %}</textarea>
+              <label>Address (Area and Street) <span style="color:#dc3545;">*</span></label>
+              <textarea name="address" rows="2" style="min-height:70px;" required>{% if student %}{{ student.address }}{% elif form_data %}{{ form_data.get('address', '') }}{% endif %}</textarea>
             </div>
 
             <!-- Row 3: City + State -->
             <div class="form-group">
-              <label>City / District / Town</label>
-              <input type="text" id="city_field" name="city" placeholder="Auto-filled from pincode"
+              <label>City / District / Town <span style="color:#dc3545;">*</span></label>
+              <input type="text" id="city_field" name="city" placeholder="Auto-filled from pincode" required
                      value="{% if student %}{{ student.city or '' }}{% elif form_data %}{{ form_data.get('city', '') }}{% endif %}">
             </div>
             <div class="form-group">
-              <label>State</label>
-              <select id="state_field" name="state">
+              <label>State <span style="color:#dc3545;">*</span></label>
+              <select id="state_field" name="state" required>
                 <option value="">-- Select State --</option>
                 {% set _state_val = (student.state if student else form_data.get('state', '') if form_data else '') %}
                 {% for st in [
@@ -506,14 +506,14 @@
 
             <!-- Row 5: Address Type -->
             <div class="form-group full-width" style="grid-column: 1 / -1;">
-              <label>Address Type</label>
+              <label>Address Type <span style="color:#dc3545;">*</span></label>
               {% set _addr_type = (student.address_type if student else form_data.get('address_type', '') if form_data else '') %}
               <div style="display:flex; gap:20px; margin-top:4px;">
                 {% for atype in ['Home', 'Office', 'Other'] %}
                 <label style="font-weight:400; display:flex; align-items:center; gap:6px; cursor:pointer;">
                   <input type="radio" name="address_type" value="{{ atype }}"
                          {% if _addr_type == atype %}checked{% endif %}
-                         style="width:auto; margin:0;">
+                         required style="width:auto; margin:0;">
                   {{ atype }}
                 </label>
                 {% endfor %}
@@ -557,7 +557,7 @@
         </div>
 
         <div class="form-group">
-          <label>Education Level</label>
+          <label>Education Level <span style="color:#dc3545;">*</span></label>
           {% if prefill_lead and prefill_lead.education_status %}
             {% set _edu_status = prefill_lead.education_status %}
             {% if _edu_status == 'School Student' %}{% set _lead_edlevel = 'School' %}
@@ -568,37 +568,37 @@
             {% endif %}
           {% else %}{% set _lead_edlevel = '' %}{% endif %}
           {% set _edlevel = (student.education_level if student else _lead_edlevel if prefill_lead else form_data.get('education_level', '') if form_data else '') %}
-          <select name="education_level">
+          <select name="education_level" required>
             <option value="">-- Select --</option>
-            <option value="Pre-University" {% if _edlevel == 'Pre-University' %}selected{% endif %}>Pre-University</option>
-            <option value="Undergraduate" {% if _edlevel == 'Undergraduate' %}selected{% endif %}>Undergraduate</option>
-            <option value="School" {% if _edlevel == 'School' %}selected{% endif %}>School</option>
+            <option value="School" {% if _edlevel == 'School' %}selected{% endif %}>School (1st–10th)</option>
+            <option value="Pre-University" {% if _edlevel == 'Pre-University' %}selected{% endif %}>Pre-University / PUC / 11th–12th</option>
             <option value="Diploma" {% if _edlevel == 'Diploma' %}selected{% endif %}>Diploma</option>
-            <option value="Technical" {% if _edlevel == 'Technical' %}selected{% endif %}>Technical</option>
+            <option value="Undergraduate" {% if _edlevel == 'Undergraduate' %}selected{% endif %}>Undergraduate (Degree)</option>
             <option value="Postgraduate" {% if _edlevel == 'Postgraduate' %}selected{% endif %}>Postgraduate</option>
+            <option value="Doctoral" {% if _edlevel == 'Doctoral' %}selected{% endif %}>Doctoral (Ph.D / M.Phil)</option>
+            <option value="Technical" {% if _edlevel == 'Technical' %}selected{% endif %}>Technical / ITI / Polytechnic</option>
+            <option value="Professional" {% if _edlevel == 'Professional' %}selected{% endif %}>Working Professional</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label>Qualification</label>
-          <select id="qualification_select" name="qualification_select" style="margin-bottom: 10px;">
-            <option value="">-- Select from list or enter custom --</option>
+          <label>Qualification <span style="color:#dc3545;">*</span></label>
+          <select id="qualification_select" name="qualification_select" required>
+            <option value="">-- Select Education Level first --</option>
             <option value="custom">Other / Enter Custom</option>
           </select>
           <input type="text"
                  id="qualification_custom"
                  name="qualification"
-                 placeholder="Enter custom qualification or select from dropdown"
-                 value="{% if student %}{{ student.qualification }}{% elif form_data %}{{ form_data.get('qualification', '') }}{% endif %}">
-          <small class="field-help">
-            Select from the dropdown list above or enter a custom qualification directly in the text field.
-          </small>
+                 placeholder="Type here if selecting Other above"
+                 value="{% if student %}{{ student.qualification }}{% elif form_data %}{{ form_data.get('qualification', '') }}{% endif %}"
+                 style="margin-top:8px; display:none;">
         </div>
 
         <div class="form-group">
-          <label>Student From</label>
+          <label>Student From <span style="color:#dc3545;">*</span></label>
           {% set _sloc = (student.student_location if student else (prefill_lead.lead_location if prefill_lead else form_data.get('student_location', '') if form_data else '')) %}
-          <select name="student_location">
+          <select name="student_location" required>
             <option value="">-- Select --</option>
             <option value="rural" {% if _sloc == 'rural' %}selected{% endif %}>Rural</option>
             <option value="urban" {% if _sloc == 'urban' %}selected{% endif %}>Urban</option>
@@ -606,9 +606,9 @@
         </div>
 
         <div class="form-group">
-          <label>Employment Status</label>
+          <label>Employment Status <span style="color:#dc3545;">*</span></label>
           {% set _empstatus = (student.employment_status if student else form_data.get('employment_status', '') if form_data else '') %}
-          <select name="employment_status">
+          <select name="employment_status" required>
             <option value="">-- Select --</option>
             <option value="unemployed" {% if _empstatus == 'unemployed' %}selected{% endif %}>Unemployed</option>
             <option value="employed" {% if _empstatus == 'employed' %}selected{% endif %}>Employed</option>
@@ -655,32 +655,62 @@ const qualificationCustom = document.getElementById('qualification_custom');
 function updateQualifications() {
   const selectedLevel = educationLevelSelect.value;
 
+  // Remove all options except "Other / Enter Custom" (index 1)
   while (qualificationSelect.options.length > 2) {
     qualificationSelect.remove(2);
   }
 
   if (selectedLevel && qualificationLevels[selectedLevel]) {
-    const qualifications = qualificationLevels[selectedLevel];
+    // Update placeholder text
+    qualificationSelect.options[0].textContent = '-- Select Qualification --';
 
+    const qualifications = qualificationLevels[selectedLevel];
     qualifications.forEach(qual => {
       const option = document.createElement('option');
       option.value = qual;
       option.textContent = qual;
       qualificationSelect.appendChild(option);
     });
+
+    // Pre-select if there's an existing value (edit mode)
+    const existingVal = qualificationCustom.value.trim();
+    if (existingVal) {
+      const matchingOpt = Array.from(qualificationSelect.options).find(o => o.value === existingVal);
+      if (matchingOpt) {
+        qualificationSelect.value = existingVal;
+        qualificationCustom.style.display = 'none';
+      } else if (existingVal) {
+        qualificationSelect.value = 'custom';
+        qualificationCustom.style.display = '';
+      }
+    }
+  } else {
+    qualificationSelect.options[0].textContent = '-- Select Education Level first --';
+    qualificationCustom.style.display = 'none';
   }
 }
 
 qualificationSelect.addEventListener('change', function() {
-  if (this.value && this.value !== 'custom') {
-    qualificationCustom.value = this.value;
-  } else if (this.value === 'custom') {
+  if (this.value === 'custom') {
     qualificationCustom.value = '';
+    qualificationCustom.style.display = '';
     qualificationCustom.focus();
+  } else if (this.value) {
+    qualificationCustom.value = this.value;
+    qualificationCustom.style.display = 'none';
+  } else {
+    qualificationCustom.value = '';
+    qualificationCustom.style.display = 'none';
   }
 });
 
-educationLevelSelect.addEventListener('change', updateQualifications);
+educationLevelSelect.addEventListener('change', function() {
+  // Clear selection when education level changes
+  qualificationSelect.value = '';
+  qualificationCustom.value = '';
+  qualificationCustom.style.display = 'none';
+  updateQualifications();
+});
 
 document.addEventListener('DOMContentLoaded', function() {
   updateQualifications();
@@ -765,6 +795,24 @@ document.addEventListener('DOMContentLoaded', function() {
       if (dobError.style.display === 'block') {
         e.preventDefault();
         dobDayInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+      }
+      // DOB required — must be fully filled
+      if (!dobHidden.value) {
+        e.preventDefault();
+        dobError.textContent = 'Date of Birth is required. Please enter Day, Month, and Year.';
+        dobError.style.display = 'block';
+        dobDayInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+      }
+      // Qualification required
+      const qualVal = document.getElementById('qualification_custom');
+      if (!qualVal || !qualVal.value.trim()) {
+        e.preventDefault();
+        const qSel = document.getElementById('qualification_select');
+        qSel.style.outline = '2px solid #dc3545';
+        qSel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => { qSel.style.outline = ''; }, 3000);
         return false;
       }
       if (isNewStudent) {
