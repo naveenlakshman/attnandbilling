@@ -440,10 +440,89 @@
           <input type="email" name="email" value="{% if student %}{{ student.email }}{% elif form_data %}{{ form_data.get('email', '') }}{% endif %}">
         </div>
 
-        <div class="form-group full-width">
-          <label>Address</label>
-          <textarea name="address">{% if student %}{{ student.address }}{% elif form_data %}{{ form_data.get('address', '') }}{% endif %}</textarea>
+        <!-- ── Structured Address Block ── -->
+        <div class="form-group full-width" style="grid-column: 1 / -1;">
+          <label style="font-weight:700; font-size:15px; color:#333; margin-bottom:10px; display:block;">Address</label>
+          <div class="student-form-grid" style="gap:14px;">
+
+            <!-- Row 1: Pincode + Locality -->
+            <div class="form-group" style="position:relative;">
+              <label>Pincode</label>
+              <input type="text" id="pincode_field" name="pincode" maxlength="6" placeholder="6-digit pincode"
+                     value="{% if student %}{{ student.pincode or '' }}{% elif form_data %}{{ form_data.get('pincode', '') }}{% endif %}"
+                     style="padding-right:36px;">
+              <span id="pincode_spinner" style="display:none;position:absolute;right:10px;top:36px;font-size:16px;">⏳</span>
+              <span id="pincode_status" style="font-size:12px;margin-top:4px;display:block;"></span>
+            </div>
+            <div class="form-group">
+              <label>Locality</label>
+              <input type="text" id="locality_field" name="locality" placeholder="Auto-filled from pincode"
+                     value="{% if student %}{{ student.locality or '' }}{% elif form_data %}{{ form_data.get('locality', '') }}{% endif %}">
+            </div>
+
+            <!-- Row 2: Area and Street (full width) -->
+            <div class="form-group full-width" style="grid-column: 1 / -1;">
+              <label>Address (Area and Street)</label>
+              <textarea name="address" rows="2" style="min-height:70px;">{% if student %}{{ student.address }}{% elif form_data %}{{ form_data.get('address', '') }}{% endif %}</textarea>
+            </div>
+
+            <!-- Row 3: City + State -->
+            <div class="form-group">
+              <label>City / District / Town</label>
+              <input type="text" id="city_field" name="city" placeholder="Auto-filled from pincode"
+                     value="{% if student %}{{ student.city or '' }}{% elif form_data %}{{ form_data.get('city', '') }}{% endif %}">
+            </div>
+            <div class="form-group">
+              <label>State</label>
+              <select id="state_field" name="state">
+                <option value="">-- Select State --</option>
+                {% set _state_val = (student.state if student else form_data.get('state', '') if form_data else '') %}
+                {% for st in [
+                  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
+                  'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
+                  'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
+                  'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
+                  'Tripura','Uttar Pradesh','Uttarakhand','West Bengal',
+                  'Andaman and Nicobar Islands','Chandigarh',
+                  'Dadra and Nagar Haveli and Daman and Diu','Delhi',
+                  'Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'
+                ] %}
+                  <option value="{{ st }}" {% if _state_val == st %}selected{% endif %}>{{ st }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Row 4: Landmark + Alternate Phone -->
+            <div class="form-group">
+              <label>Landmark <span style="color:#888;font-weight:400;">(Optional)</span></label>
+              <input type="text" name="landmark" placeholder="Nearby landmark"
+                     value="{% if student %}{{ student.landmark or '' }}{% elif form_data %}{{ form_data.get('landmark', '') }}{% endif %}">
+            </div>
+            <div class="form-group">
+              <label>Alternate Phone <span style="color:#888;font-weight:400;">(Optional)</span></label>
+              <input type="text" name="alternate_phone" placeholder="Alternate contact number"
+                     value="{% if student %}{{ student.alternate_phone or '' }}{% elif form_data %}{{ form_data.get('alternate_phone', '') }}{% endif %}">
+            </div>
+
+            <!-- Row 5: Address Type -->
+            <div class="form-group full-width" style="grid-column: 1 / -1;">
+              <label>Address Type</label>
+              {% set _addr_type = (student.address_type if student else form_data.get('address_type', '') if form_data else '') %}
+              <div style="display:flex; gap:20px; margin-top:4px;">
+                {% for atype in ['Home', 'Office', 'Other'] %}
+                <label style="font-weight:400; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="radio" name="address_type" value="{{ atype }}"
+                         {% if _addr_type == atype %}checked{% endif %}
+                         style="width:auto; margin:0;">
+                  {{ atype }}
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+
+          </div><!-- end inner grid -->
         </div>
+        <!-- ── End Address Block ── -->
 
         <div class="form-group full-width">
           <label>Student Photo {% if not student %}<span style="color:#dc3545;">*</span>{% endif %}</label>
@@ -1022,6 +1101,69 @@ function forceSaveStudent() {
 
     closePhotoModal();
   };
+})();
+</script>
+
+<script>
+(function () {
+  const pincodeInput = document.getElementById('pincode_field');
+  const spinner = document.getElementById('pincode_spinner');
+  const statusEl = document.getElementById('pincode_status');
+  const localityField = document.getElementById('locality_field');
+  const cityField = document.getElementById('city_field');
+  const stateField = document.getElementById('state_field');
+
+  if (!pincodeInput) return;
+
+  let lookupTimer = null;
+
+  pincodeInput.addEventListener('input', function () {
+    const val = this.value.replace(/\D/g, '').slice(0, 6);
+    this.value = val;
+
+    clearTimeout(lookupTimer);
+    statusEl.textContent = '';
+    statusEl.style.color = '';
+
+    if (val.length === 6) {
+      spinner.style.display = 'inline';
+      lookupTimer = setTimeout(function () { doLookup(val); }, 400);
+    } else {
+      spinner.style.display = 'none';
+    }
+  });
+
+  function doLookup(pincode) {
+    fetch('/billing/api/pincode-lookup?pincode=' + encodeURIComponent(pincode), {
+      method: 'GET',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        spinner.style.display = 'none';
+        if (data.success) {
+          // Only fill fields that are currently empty, to avoid overwriting manual entries
+          if (data.locality && !localityField.value) localityField.value = data.locality;
+          if (data.city && !cityField.value) cityField.value = data.city;
+          if (data.state && stateField) {
+            // Select the matching state option (case-insensitive)
+            const opts = Array.from(stateField.options);
+            const match = opts.find(o => o.value.toLowerCase() === data.state.toLowerCase());
+            if (match && !stateField.value) stateField.value = match.value;
+          }
+          statusEl.textContent = '✓ ' + (data.city || '') + (data.state ? ', ' + data.state : '');
+          statusEl.style.color = '#198754';
+        } else {
+          statusEl.textContent = data.error || 'Pincode not found';
+          statusEl.style.color = '#dc3545';
+        }
+      })
+      .catch(function () {
+        spinner.style.display = 'none';
+        statusEl.textContent = 'Lookup failed — fill manually';
+        statusEl.style.color = '#dc3545';
+      });
+  }
 })();
 </script>
 

@@ -44,6 +44,9 @@ class Config:
     # Google AI (Gemini)
     GOOGLE_AI_API_KEY = os.environ.get("GOOGLE_AI_API_KEY")
 
+    # Google Maps (Geocoding / Pincode lookup)
+    GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")
+
     # LMS File Uploads
     UPLOAD_FOLDER = UPLOAD_DIR
 

@@ -1030,10 +1030,38 @@
   <!-- Contact Information -->
   <div class="info-card">
     <h3>Contact Information</h3>
+    {% if student.pincode or student.city or student.state or student.address or student.locality or student.landmark %}
+    <div class="info-item">
+      <span class="info-label">Address:</span>
+      <span class="info-value">
+        {% set addr_parts = [] %}
+        {% if student.address %}{% set _ = addr_parts.append(student.address) %}{% endif %}
+        {% if student.locality %}{% set _ = addr_parts.append(student.locality) %}{% endif %}
+        {% if student.landmark %}{% set _ = addr_parts.append('Near ' ~ student.landmark) %}{% endif %}
+        {% if student.city %}{% set _ = addr_parts.append(student.city) %}{% endif %}
+        {% if student.state %}{% set _ = addr_parts.append(student.state) %}{% endif %}
+        {% if student.pincode %}{% set _ = addr_parts.append(student.pincode) %}{% endif %}
+        {{ addr_parts | join(', ') or '-' }}
+      </span>
+    </div>
+    {% if student.address_type %}
+    <div class="info-item">
+      <span class="info-label">Address Type:</span>
+      <span class="info-value">{{ student.address_type }}</span>
+    </div>
+    {% endif %}
+    {% if student.alternate_phone %}
+    <div class="info-item">
+      <span class="info-label">Alternate Phone:</span>
+      <span class="info-value">{{ student.alternate_phone }}</span>
+    </div>
+    {% endif %}
+    {% else %}
     <div class="info-item">
       <span class="info-label">Address:</span>
       <span class="info-value">{{ student.address or '-' }}</span>
     </div>
+    {% endif %}
   </div>
 </div>
 

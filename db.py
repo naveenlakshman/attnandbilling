@@ -1195,5 +1195,17 @@ def init_db():
     except:
         pass
 
+    # ---------- ADDRESS FIELDS MIGRATION (Apr 2026) ----------
+    try:
+        add_column_if_not_exists(cur, 'students', 'pincode', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'locality', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'city', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'state', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'landmark', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'alternate_phone', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'address_type', 'TEXT')
+    except:
+        pass
+
     conn.commit()
     conn.close()

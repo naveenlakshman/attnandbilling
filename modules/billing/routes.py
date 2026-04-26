@@ -822,6 +822,63 @@ def student_check_duplicate():
     return jsonify({"duplicate": False})
 
 
+@billing_bp.route("/api/pincode-lookup")
+@login_required
+def pincode_lookup():
+    """Backend proxy: resolve Indian pincode to city/state/locality via Google Geocoding API."""
+    import re as _re
+    import urllib.request
+    import json as _json
+    from flask import current_app
+
+    pincode = request.args.get("pincode", "").strip()
+    if not _re.fullmatch(r"\d{6}", pincode):
+        return jsonify({"success": False, "error": "Invalid pincode"})
+
+    api_key = current_app.config.get("GOOGLE_MAPS_API_KEY", "")
+    if not api_key:
+        return jsonify({"success": False, "error": "Maps API not configured"})
+
+    url = (
+        "https://maps.googleapis.com/maps/api/geocode/json"
+        f"?address={pincode},India&key={api_key}"
+    )
+
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = _json.loads(resp.read().decode())
+    except Exception as e:
+        return jsonify({"success": False, "error": "Lookup failed"})
+
+    if data.get("status") != "OK" or not data.get("results"):
+        return jsonify({"success": False, "error": "Pincode not found"})
+
+    components = data["results"][0].get("address_components", [])
+
+    locality = ""
+    city = ""
+    state = ""
+
+    for comp in components:
+        types = comp.get("types", [])
+        name = comp.get("long_name", "")
+        if "locality" in types and not locality:
+            locality = name
+        if "administrative_area_level_3" in types and not city:
+            city = name
+        if "administrative_area_level_2" in types and not city:
+            city = name
+        if "administrative_area_level_1" in types:
+            state = name
+
+    return jsonify({
+        "success": True,
+        "locality": locality,
+        "city": city,
+        "state": state,
+    })
+
+
 @billing_bp.route("/student/new", methods=["GET", "POST"])
 @login_required
 def student_new():
@@ -855,6 +912,13 @@ def student_new():
         gender = request.form.get("gender", "").strip()
         email = request.form.get("email", "").strip()
         address = request.form.get("address", "").strip()
+        pincode = request.form.get("pincode", "").strip()
+        locality = request.form.get("locality", "").strip()
+        city = request.form.get("city", "").strip()
+        state = request.form.get("state", "").strip()
+        landmark = request.form.get("landmark", "").strip()
+        alternate_phone = request.form.get("alternate_phone", "").strip()
+        address_type = request.form.get("address_type", "").strip()
         education_level = request.form.get("education_level", "").strip()
         qualification = request.form.get("qualification", "").strip()
         student_location = request.form.get("student_location", "").strip()
@@ -961,6 +1025,13 @@ def student_new():
                 gender,
                 email,
                 address,
+                pincode,
+                locality,
+                city,
+                state,
+                landmark,
+                alternate_phone,
+                address_type,
                 education_level,
                 qualification,
                 student_location,
@@ -976,7 +1047,7 @@ def student_new():
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(next_reg_no),
             full_name,
@@ -984,6 +1055,13 @@ def student_new():
             gender,
             email,
             address,
+            pincode,
+            locality,
+            city,
+            state,
+            landmark,
+            alternate_phone,
+            address_type,
             education_level,
             qualification,
             student_location,
@@ -1121,6 +1199,13 @@ def student_edit(student_id):
         gender = request.form.get("gender", "").strip()
         email = request.form.get("email", "").strip()
         address = request.form.get("address", "").strip()
+        pincode = request.form.get("pincode", "").strip()
+        locality = request.form.get("locality", "").strip()
+        city = request.form.get("city", "").strip()
+        state = request.form.get("state", "").strip()
+        landmark = request.form.get("landmark", "").strip()
+        alternate_phone = request.form.get("alternate_phone", "").strip()
+        address_type = request.form.get("address_type", "").strip()
         education_level = request.form.get("education_level", "").strip()
         qualification = request.form.get("qualification", "").strip()
         student_location = request.form.get("student_location", "").strip()
@@ -1196,6 +1281,13 @@ def student_edit(student_id):
                 gender = ?,
                 email = ?,
                 address = ?,
+                pincode = ?,
+                locality = ?,
+                city = ?,
+                state = ?,
+                landmark = ?,
+                alternate_phone = ?,
+                address_type = ?,
                 education_level = ?,
                 qualification = ?,
                 student_location = ?,
@@ -1214,6 +1306,13 @@ def student_edit(student_id):
             gender,
             email,
             address,
+            pincode,
+            locality,
+            city,
+            state,
+            landmark,
+            alternate_phone,
+            address_type,
             education_level,
             qualification,
             student_location,
