@@ -1,6 +1,6 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
-{% block title %}Global IT ERP - Receipts{% endblock %}
+{% block title %}{{ company.company_short_name }} - Receipts{% endblock %}
 
 {% block content %}
 
@@ -133,48 +133,63 @@
 
   <div style="margin-bottom: 20px;">
     <!-- Toggle Buttons -->
-    <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
-      <button 
-        id="btnToday" 
-        onclick="toggleStatsView('today')" 
-        style="padding: 8px 16px; border: 2px solid #3498db; background-color: #3498db; color: white; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;"
-      >
-        📅 Today
-      </button>
-      <button 
-        id="btnMonth" 
-        onclick="toggleStatsView('month')" 
+    <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <form method="get" id="date-stats-form" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
+        <label for="stats_date" style="font-weight: 600; margin: 0; white-space: nowrap;">📅 Date:</label>
+        <input
+          type="date"
+          id="stats_date"
+          name="stats_date"
+          value="{{ stats_date }}"
+          max="{{ today }}"
+          style="padding: 7px 10px; border: 2px solid #3498db; border-radius: 6px; font-size: 14px; cursor: pointer;"
+          onchange="document.getElementById('date-stats-form').submit();"
+        >
+        <button
+          id="btnDate"
+          type="submit"
+          style="padding: 8px 16px; border: 2px solid #3498db; background-color: #3498db; color: white; border-radius: 6px; cursor: pointer; font-weight: 600;"
+        >
+          View
+        </button>
+      </form>
+      <button
+        id="btnMonth"
+        onclick="toggleStatsView('month')"
         style="padding: 8px 16px; border: 2px solid #95a5a6; background-color: white; color: #333; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;"
       >
         📆 This Month
       </button>
     </div>
 
-    <!-- Today Stats -->
-    <div id="todayStats" style="display: block;">
-      <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">Today</h4>
+    <!-- Date Stats -->
+    <div id="dateStats" style="display: block;">
+      <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">
+        {{ stats_date if stats_date != today else 'Today' }}
+      </h4>
       <div class="invoice-stats-grid">
         <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
           <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Receipts</div>
-          <div style="font-size: 24px; font-weight: bold;">{{ today_stats.total_receipts or 0 }}</div>
+          <div style="font-size: 24px; font-weight: bold;">{{ date_stats.total_receipts or 0 }}</div>
         </div>
 
         <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
           <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
-          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.total_amount or 0) }}</div>
+          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(date_stats.total_amount or 0) }}</div>
         </div>
 
         <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
           <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Payment Methods</div>
-          <div style="font-size: 12px; font-weight: bold; table-layout: fixed;">
-            <div style="margin-bottom: 4px;">💵 Cash: {{ today_stats.cash_count or 0 }} - ₹ {{ "%.2f"|format(today_stats.cash_amount or 0) }}</div>
-            <div>📱 UPI: {{ today_stats.upi_count or 0 }} - ₹ {{ "%.2f"|format(today_stats.upi_amount or 0) }}</div>
+          <div style="font-size: 12px; font-weight: bold;">
+            <div style="margin-bottom: 4px;">💵 Cash: {{ date_stats.cash_count or 0 }} - ₹ {{ "%.2f"|format(date_stats.cash_amount or 0) }}</div>
+            <div>📱 UPI: {{ date_stats.upi_count or 0 }} - ₹ {{ "%.2f"|format(date_stats.upi_amount or 0) }}</div>
           </div>
         </div>
 
         <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
           <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Avg Receipt</div>
-          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.avg_amount or 0) }}</div>
+          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(date_stats.avg_amount or 0) }}</div>
         </div>
       </div>
     </div>
@@ -310,33 +325,22 @@
 
 <script>
 function toggleStatsView(view) {
-  const todayStats = document.getElementById('todayStats');
+  const dateStats = document.getElementById('dateStats');
   const monthStats = document.getElementById('monthStats');
-  const btnToday = document.getElementById('btnToday');
   const btnMonth = document.getElementById('btnMonth');
 
-  if (view === 'today') {
-    todayStats.style.display = 'block';
-    monthStats.style.display = 'none';
-    
-    btnToday.style.backgroundColor = '#3498db';
-    btnToday.style.borderColor = '#3498db';
-    btnToday.style.color = 'white';
-    
-    btnMonth.style.backgroundColor = 'white';
-    btnMonth.style.borderColor = '#95a5a6';
-    btnMonth.style.color = '#333';
-  } else if (view === 'month') {
-    todayStats.style.display = 'none';
+  if (view === 'month') {
+    dateStats.style.display = 'none';
     monthStats.style.display = 'block';
-    
-    btnToday.style.backgroundColor = 'white';
-    btnToday.style.borderColor = '#95a5a6';
-    btnToday.style.color = '#333';
-    
     btnMonth.style.backgroundColor = '#3498db';
     btnMonth.style.borderColor = '#3498db';
     btnMonth.style.color = 'white';
+  } else {
+    dateStats.style.display = 'block';
+    monthStats.style.display = 'none';
+    btnMonth.style.backgroundColor = 'white';
+    btnMonth.style.borderColor = '#95a5a6';
+    btnMonth.style.color = '#333';
   }
 }
 

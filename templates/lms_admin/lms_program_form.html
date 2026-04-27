@@ -279,7 +279,7 @@
     {% endif %}
 
     <form method="post" id="programForm">
-      
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <!-- Basic Information Section -->
       <div class="form-section">
         <div class="form-section-title">📝 Basic Information</div>

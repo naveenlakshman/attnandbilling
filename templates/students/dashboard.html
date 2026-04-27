@@ -1,0 +1,61 @@
+{% extends "students/base.html" %}
+{% block title %}My Programs{% endblock %}
+{% block page_title %}🏠 My Programs{% endblock %}
+
+{% block content %}
+{% if programs %}
+  <div class="row g-4">
+    {% for program in programs %}
+    <div class="col-md-6 col-lg-4">
+      {% set target_topic = program.last_topic_id or program.first_topic_id %}
+      <a href="{{ url_for('students.topic_view', topic_id=target_topic) if target_topic else url_for('students.program_view', program_id=program.id) }}"
+         class="text-decoration-none">
+        <div class="card h-100 shadow-sm border-0 program-card">
+          <div class="card-body p-4">
+            <div style="font-size:32px; margin-bottom:12px;">📚</div>
+            <h5 class="card-title fw-bold text-dark mb-1">{{ program.program_name }}</h5>
+            {% if program.description %}
+              <p class="text-muted mb-3" style="font-size:13px; line-height:1.5;">
+                {{ program.description[:120] }}{% if program.description|length > 120 %}…{% endif %}
+              </p>
+            {% endif %}
+            <div class="d-flex gap-3 mt-2" style="font-size:12px; color:#6c757d;">
+              <span>📑 {{ program.chapter_count }} Chapters</span>
+              <span>📝 {{ program.topic_count }} Topics</span>
+            </div>
+            {% if program.topic_count > 0 %}
+            <div class="mt-3">
+              <div class="d-flex justify-content-between mb-1" style="font-size:11px; color:#6c757d;">
+                <span>{{ program.completed_count }} / {{ program.topic_count }} Completed</span>
+                <span>{{ ((program.completed_count / program.topic_count) * 100)|int }}%</span>
+              </div>
+              <div class="progress" style="height:6px; border-radius:3px;">
+                <div class="progress-bar bg-success" style="width:{{ ((program.completed_count / program.topic_count) * 100)|int }}%"></div>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+          <div class="card-footer bg-primary text-white text-center py-2" style="font-size:13px;">
+            {% if program.completed_count > 0 %}Continue Learning →{% else %}Start Learning →{% endif %}
+          </div>
+        </div>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-center py-5">
+    <div style="font-size:64px;">📭</div>
+    <h4 class="mt-3 text-muted">No Programs Enrolled</h4>
+    <p class="text-muted">You haven't been enrolled in any programs yet.<br>
+       Please contact your instructor.</p>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .program-card { transition: transform 0.15s, box-shadow 0.15s; }
+  .program-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important; }
+</style>
+{% endblock %}

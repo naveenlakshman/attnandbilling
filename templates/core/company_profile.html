@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Company Profile - {{ company.company_short_name }}{% endblock %}
+{% block page_title %}Company Profile{% endblock %}
+
+{% block extra_css %}
+<style>
+  .profile-card {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 30px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    max-width: 720px;
+  }
+  .section-heading {
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: #6c757d;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 6px;
+    margin: 24px 0 16px;
+  }
+  .logo-preview img {
+    max-height: 80px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 6px;
+    background: #f8f9fa;
+  }
+  .logo-preview .no-logo {
+    width: 100px;
+    height: 60px;
+    background: #e9ecef;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #adb5bd;
+    font-size: .8rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="profile-card">
+  <div class="d-flex align-items-center gap-3 mb-2">
+    <div class="logo-preview">
+      {% if profile.logo_filename %}
+        <img src="{{ url_for('static', filename='images/company_logo/' + profile.logo_filename) }}"
+             alt="{{ profile.company_name }} Logo">
+      {% else %}
+        <div class="no-logo">No Logo</div>
+      {% endif %}
+    </div>
+    <div>
+      <h4 class="mb-0">{{ profile.company_name }}</h4>
+      <div class="text-muted small">{{ profile.tagline or '' }}</div>
+      {% if profile.updated_at %}
+        <div class="text-muted" style="font-size:.75rem;">Last updated: {{ profile.updated_at | format_datetime }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <form method="POST" enctype="multipart/form-data" action="{{ url_for('core.company_profile') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="section-heading">Branding</div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Company Name <span class="text-danger">*</span></label>
+      <input type="text" class="form-control" name="company_name"
+             value="{{ profile.company_name }}" required maxlength="120"
+             placeholder="e.g. {{ company.company_name }}">
+      <div class="form-text">Shown in sidebar, print headers, SMS messages, and legal documents.</div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Short Name / ERP Title <span class="text-danger">*</span></label>
+      <input type="text" class="form-control" name="company_short_name"
+             value="{{ profile.company_short_name }}" required maxlength="80"
+             placeholder="e.g. {{ company.company_short_name }}">
+      <div class="form-text">Used in browser tab titles and topbar labels.</div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Tagline</label>
+      <input type="text" class="form-control" name="tagline"
+             value="{{ profile.tagline or '' }}" maxlength="120"
+             placeholder="e.g. ERP System">
+      <div class="form-text">Optional subtitle shown below the company name in the sidebar.</div>
+    </div>
+
+    <div class="section-heading">Logo</div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Upload Logo</label>
+      <input type="file" class="form-control" name="logo_file"
+             accept=".png,.jpg,.jpeg,.svg,.webp">
+      <div class="form-text">PNG, JPG, SVG or WEBP. Max 2 MB. Displayed in sidebar and PDF print headers.</div>
+    </div>
+
+    {% if profile.logo_filename %}
+    <div class="mb-3">
+      <button type="button" class="btn btn-sm btn-outline-danger"
+              onclick="if(confirm('Remove the current logo?')) document.getElementById('removeLogoForm').submit()">
+        🗑 Remove Current Logo
+      </button>
+    </div>
+    {% endif %}
+
+    <div class="section-heading">Contact Details</div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <label class="form-label fw-semibold">Phone</label>
+        <input type="text" class="form-control" name="phone"
+               value="{{ profile.phone or '' }}" maxlength="30"
+               placeholder="e.g. 9071717161">
+        <div class="form-text">Shown on receipts, invoices, and SMS templates.</div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label fw-semibold">Email</label>
+        <input type="email" class="form-control" name="email"
+               value="{{ profile.email or '' }}" maxlength="120"
+               placeholder="e.g. help@yourcompany.com">
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Address</label>
+      <textarea class="form-control" name="address" rows="2" maxlength="300"
+                placeholder="Full address shown on print documents">{{ profile.address or '' }}</textarea>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Website</label>
+      <input type="text" class="form-control" name="website"
+             value="{{ profile.website or '' }}" maxlength="120"
+             placeholder="e.g. https://yourcompany.com">
+    </div>
+
+    <div class="section-heading">Legal / Registration</div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Registration / GSTIN Number</label>
+      <input type="text" class="form-control" name="reg_number"
+             value="{{ profile.reg_number or '' }}" maxlength="60"
+             placeholder="e.g. 29AMEPL6934C2ZZ">
+      <div class="form-text">Shown on bill of supply / invoice print. Leave blank if not applicable.</div>
+    </div>
+
+    <div class="d-flex gap-2 mt-4">
+      <button type="submit" class="btn btn-primary">💾 Save Company Profile</button>
+      <a href="{{ url_for('core.dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+
+  {% if profile.logo_filename %}
+  <form id="removeLogoForm" method="POST"
+        action="{{ url_for('core.company_profile_remove_logo') }}"
+        style="display:none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

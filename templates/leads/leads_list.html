@@ -1,175 +1,291 @@
-{% extends "leads/base.html" %}
-{% block title %}Leads - Global IT ERP{% endblock %}
+﻿{% extends "leads/base.html" %}
+{% block title %}Leads - {{ company.company_short_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Leads list mobile styles */
+  .leads-header { align-items: center; }
+  .leads-header h5 { font-size: 16px; font-weight: 700; margin: 0; }
+
+  /* Mini stats row */
+  .mini-stat {
+    text-align: center;
+    padding: 8px 4px;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  .mini-stat .msval { font-size: 18px; font-weight: 700; line-height: 1; }
+  .mini-stat .mslabel { font-size: 10px; color: #9ca3af; margin-top: 2px; }
+
+  /* Filter chip bar */
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: #f1f3f5; border: 1px solid #dee2e6;
+    border-radius: 20px; padding: 4px 10px;
+    font-size: 12px; cursor: pointer; white-space: nowrap;
+    transition: background .12s;
+  }
+  .filter-chip.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+
+  /* Lead card */
+  .lead-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 5px rgba(0,0,0,.07);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    color: inherit;
+    gap: 12px;
+    transition: box-shadow .12s;
+  }
+  .lead-card:hover, .lead-card:active { box-shadow: 0 2px 10px rgba(0,0,0,.12); color: inherit; }
+  .lead-card .lc-avatar {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: #e9ecef; display: flex; align-items: center;
+    justify-content: center; font-weight: 700; font-size: 15px;
+    color: #495057; flex-shrink: 0; text-transform: uppercase;
+  }
+  .lead-card .lc-body { flex: 1; min-width: 0; }
+  .lead-card .lc-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lead-card .lc-phone { font-size: 12px; color: #6c757d; }
+  .lead-card .lc-right { flex-shrink: 0; text-align: right; }
+  .lead-card .lc-stage { font-size: 11px; background: #e9ecef; border-radius: 20px; padding: 2px 8px; color: #495057; font-weight: 500; display: inline-block; }
+  .lead-card .lc-owner { font-size: 10px; color: #9ca3af; margin-top: 3px; }
+
+  /* Stage color coding */
+  .stage-new { background: #dbeafe; color: #1d4ed8; }
+  .stage-contacted { background: #fef9c3; color: #854d0e; }
+  .stage-interested { background: #dcfce7; color: #166534; }
+  .stage-converted { background: #d1fae5; color: #065f46; }
+  .stage-lost { background: #fee2e2; color: #991b1b; }
+
+  /* Search bar */
+  .search-bar { position: relative; }
+  .search-bar input { padding-left: 36px; border-radius: 10px; background: #fff; }
+  .search-bar .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #9ca3af; font-size: 15px; pointer-events: none; }
+
+  /* Desktop table */
+  @media (min-width: 768px) {
+    .mobile-leads-view { display: none; }
+    .desktop-leads-view { display: block; }
+  }
+  @media (max-width: 767.98px) {
+    .mobile-leads-view { display: block; }
+    .desktop-leads-view { display: none; }
+  }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable::after { content: ' ↕'; color: #adb5bd; font-size: 10px; }
+  th.sort-asc::after { content: ' ↑'; color: #0d6efd; }
+  th.sort-desc::after { content: ' ↓'; color: #0d6efd; }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h2 class="mb-0">Leads</h2>
+
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-center mb-3 leads-header">
+  <h5>Leads <span class="text-muted fw-normal" style="font-size:13px;">({{ leads | length }})</span></h5>
   <div class="d-flex gap-2">
     {% if is_admin %}
-    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.deleted_leads') }}">Deactivated Leads</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.deleted_leads') }}">Deactivated</a>
     {% endif %}
-    <a class="btn btn-sm btn-primary" href="{{ url_for('leads.lead_create') }}">New Lead</a>
+    <a class="btn btn-sm btn-primary" href="{{ url_for('leads.lead_create') }}">+ New Lead</a>
   </div>
 </div>
 
-<div class="row g-3 mb-3">
-  <div class="col-md-3">
-    <div class="card h-100 border-secondary-subtle">
-      <div class="card-body py-3">
-        <div class="text-muted small">Total Leads</div>
-        <div class="d-flex justify-content-between align-items-end">
-          <div>
-            <div class="fs-4 fw-bold text-dark">{{ metrics.total_overall }}</div>
-            <div class="small text-muted">Overall</div>
-          </div>
-          <div class="text-end">
-            <div class="fs-5 fw-semibold">{{ metrics.total_this_month }}</div>
-            <div class="small text-muted">This Month</div>
-          </div>
-        </div>
-      </div>
+<!-- Mini stats: 4-col on mobile -->
+<div class="row g-2 mb-3">
+  <div class="col-3">
+    <div class="mini-stat">
+      <div class="msval text-dark">{{ metrics.total_overall }}</div>
+      <div class="mslabel">Total</div>
     </div>
   </div>
-
-  <div class="col-md-3">
-    <div class="card h-100 border-primary-subtle">
-      <div class="card-body py-3">
-        <div class="text-muted small">Active Leads</div>
-        <div class="d-flex justify-content-between align-items-end">
-          <div>
-            <div class="fs-4 fw-bold text-primary">{{ metrics.active_overall }}</div>
-            <div class="small text-muted">Overall</div>
-          </div>
-          <div class="text-end">
-            <div class="fs-5 fw-semibold">{{ metrics.active_this_month }}</div>
-            <div class="small text-muted">This Month</div>
-          </div>
-        </div>
-      </div>
+  <div class="col-3">
+    <div class="mini-stat">
+      <div class="msval text-primary">{{ metrics.active_overall }}</div>
+      <div class="mslabel">Active</div>
     </div>
   </div>
-
-  <div class="col-md-3">
-    <div class="card h-100 border-success-subtle">
-      <div class="card-body py-3">
-        <div class="text-muted small">Converted</div>
-        <div class="d-flex justify-content-between align-items-end">
-          <div>
-            <div class="fs-4 fw-bold text-success">{{ metrics.converted_overall }}</div>
-            <div class="small text-muted">Overall</div>
-          </div>
-          <div class="text-end">
-            <div class="fs-5 fw-semibold">{{ metrics.converted_this_month }}</div>
-            <div class="small text-muted">This Month</div>
-          </div>
-        </div>
-      </div>
+  <div class="col-3">
+    <div class="mini-stat">
+      <div class="msval text-success">{{ metrics.converted_overall }}</div>
+      <div class="mslabel">Conv.</div>
     </div>
   </div>
-
-  <div class="col-md-3">
-    <div class="card h-100 border-danger-subtle">
-      <div class="card-body py-3">
-        <div class="text-muted small">Lost</div>
-        <div class="d-flex justify-content-between align-items-end">
-          <div>
-            <div class="fs-4 fw-bold text-danger">{{ metrics.lost_overall }}</div>
-            <div class="small text-muted">Overall</div>
-          </div>
-          <div class="text-end">
-            <div class="fs-5 fw-semibold">{{ metrics.lost_this_month }}</div>
-            <div class="small text-muted">This Month</div>
-          </div>
-        </div>
-      </div>
+  <div class="col-3">
+    <div class="mini-stat">
+      <div class="msval text-danger">{{ metrics.lost_overall }}</div>
+      <div class="mslabel">Lost</div>
     </div>
   </div>
 </div>
 
-<form method="get" class="row g-2 mb-3" id="filterForm">
-  <div class="col-md-3">
-    <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Search name/phone">
+<!-- Filter form -->
+<form method="get" id="filterForm" class="mb-3">
+  <!-- Search bar (always visible) -->
+  <div class="search-bar mb-2">
+    <span class="search-icon">🔍</span>
+    <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Search name or phone…" id="searchInput">
   </div>
 
-  {% if is_admin %}
-  <div class="col-md-2">
-    <select id="userFilter" name="user_id" class="form-select">
-      <option value="">All Users</option>
-      {% for user in all_users %}
-        <option value="{{ user.id }}" {% if selected_user_id == user.id|string %}selected{% endif %}>
-          {{ user.full_name or user.username }}
-        </option>
-      {% endfor %}
-    </select>
-  </div>
-  {% endif %}
+  <!-- Filter toggles: collapsible on mobile -->
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="false">
+      ⚙ Filters{% if stage or source or selected_user_id or date_from or date_to %} <span class="badge bg-primary ms-1">!</span>{% endif %}
+    </button>
+    {% if stage or source or selected_user_id or q or date_from or date_to or hide_converted %}
+    <a href="{{ url_for('leads.leads_list') }}" class="btn btn-sm btn-outline-danger">✕ Clear</a>
+    {% endif %}
 
-  <div class="col-md-{% if is_admin %}2{% else %}3{% endif %}">
-    <select name="stage" id="stageFilter" class="form-select">
-      <option value="">All stages</option>
+    <!-- Quick stage chips (visible inline on mobile) -->
+    <div class="d-flex gap-1 overflow-auto" style="flex:1; min-width:0; padding-bottom:2px;">
+      <input type="hidden" name="hide_converted" id="hideConvertedInput" value="{{ hide_converted }}">
+      <button type="button" onclick="toggleActiveOnly()" class="filter-chip {% if hide_converted == '1' %}active{% endif %}">
+        Active Only
+      </button>
       {% for s in stages %}
-        <option value="{{ s }}" {% if stage == s %}selected{% endif %}>{{ s }}</option>
+        <button type="submit" name="stage" value="{{ s }}" class="filter-chip {% if stage == s %}active{% endif %}" title="{{ s }}">
+          {{ s }}
+        </button>
       {% endfor %}
-    </select>
+    </div>
   </div>
 
-  <div class="col-md-{% if is_admin %}2{% else %}3{% endif %}">
-    <select name="source" id="sourceFilter" class="form-select">
-      <option value="">All sources</option>
-      {% for s in sources %}
-        <option value="{{ s }}" {% if source == s %}selected{% endif %}>{{ s }}</option>
-      {% endfor %}
-    </select>
-  </div>
-
-  <div class="col-md-1">
-    <button class="btn btn-secondary w-100" type="submit">Filter</button>
+  <div class="collapse {% if stage or source or selected_user_id or date_from or date_to %}show{% endif %}" id="filterCollapse">
+    <div class="card card-body p-2 mb-2" style="border-radius:10px; background:#f8f9fa; border:none;">
+      <div class="row g-2">
+        {% if is_admin %}
+        <div class="col-12 col-md-3">
+          <select id="userFilter" name="user_id" class="form-select form-select-sm">
+            <option value="">All Users</option>
+            {% for user in all_users %}
+              <option value="{{ user.id }}" {% if selected_user_id == user.id|string %}selected{% endif %}>
+                {{ user.full_name or user.username }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="col-6 col-md-2">
+          <select name="stage" id="stageFilter" class="form-select form-select-sm">
+            <option value="">All stages</option>
+            {% for s in stages %}
+              <option value="{{ s }}" {% if stage == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <select name="source" id="sourceFilter" class="form-select form-select-sm">
+            <option value="">All sources</option>
+            {% for s in sources %}
+              <option value="{{ s }}" {% if source == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" title="Created from">
+        </div>
+        <div class="col-6 col-md-2">
+          <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" title="Created until">
+        </div>
+        <div class="col-12 col-md-2">
+          <button class="btn btn-primary btn-sm w-100" type="submit">Apply Filters</button>
+        </div>
+      </div>
+    </div>
   </div>
 </form>
 
 {% if leads %}
-  <div class="table-responsive">
-    <table class="table table-sm align-middle">
-      <thead>
-        <tr>
-          <th>Sl No</th>
-          <th>Name</th>
-          <th>Phone</th>
-          <th>Stage</th>
-          <th>Score</th>
-          <th>Owner</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for l in leads %}
-        <tr>
-          <td>{{ loop.index }}</td>
-          <td>{{ l.name }}</td>
-          <td>{{ l.phone }}</td>
-          <td>{{ l.stage }}</td>
-          <td>
-            <span class="badge {% if l.lead_score >= 60 %}bg-danger{% else %}bg-secondary{% endif %}">
-              {{ l.lead_score }}
-            </span>
-          </td>
-          <td>
-            <small class="text-muted">
-              {{ l.owner_name or l.owner_username or 'Unassigned' }}
-            </small>
-          </td>
-          <td>
-            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">
-              Open
-            </a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+
+  <!-- ===== MOBILE CARD VIEW ===== -->
+  <div class="mobile-leads-view">
+    {% for l in leads %}
+    {% set initials = (l.name[:1] | upper) if l.name else '?' %}
+    {% set stage_lower = l.stage | lower | replace(' ', '-') if l.stage else '' %}
+    <a class="lead-card" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">
+      <div class="lc-avatar">{{ initials }}</div>
+      <div class="lc-body">
+        <div class="lc-name">{{ l.name }}</div>
+        <div class="lc-phone">{{ l.phone or '—' }}{% if l.interested_courses %} · <span style="color:#0d6efd;">{{ l.interested_courses }}</span>{% endif %}</div>
+        <div style="font-size:10px; color:#9ca3af; margin-top:1px;">{{ l.created_at[:10] if l.created_at else '' }}</div>
+      </div>
+      <div class="lc-right">
+        <span class="lc-stage stage-{{ stage_lower }}">{{ l.stage }}</span>
+        <div class="lc-owner">{{ l.owner_name or l.owner_username or 'Unassigned' }}</div>
+        {% if l.lead_score >= 60 %}
+          <span class="badge bg-danger mt-1" style="font-size:9px;">🔥 {{ l.lead_score }}</span>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
   </div>
+
+  <!-- ===== DESKTOP TABLE VIEW ===== -->
+  <div class="desktop-leads-view">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th class="sortable" data-sort-key="name">Name</th>
+            <th>Phone</th>
+            <th class="sortable" data-sort-key="course">Course</th>
+            <th class="sortable" data-sort-key="stage">Stage</th>
+            <th class="sortable" data-sort-key="score">Score</th>
+            <th class="sortable" data-sort-key="created">Created</th>
+            <th class="sortable" data-sort-key="owner">Owner</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in leads %}
+          <tr>
+            <td class="row-num">{{ loop.index }}</td>
+            <td data-sort-key="name" data-sort-value="{{ l.name }}">{{ l.name }}</td>
+            <td>{{ l.phone }}</td>
+            <td data-sort-key="course" data-sort-value="{{ l.interested_courses or '' }}">
+              {% if l.interested_courses %}
+                <span class="badge bg-light text-dark border">{{ l.interested_courses }}</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td data-sort-key="stage" data-sort-value="{{ l.stage }}">{{ l.stage }}</td>
+            <td data-sort-key="score" data-sort-value="{{ l.lead_score }}">
+              <span class="badge {% if l.lead_score >= 60 %}bg-danger{% else %}bg-secondary{% endif %}">
+                {{ l.lead_score }}
+              </span>
+            </td>
+            <td data-sort-key="created" data-sort-value="{{ l.created_at[:10] if l.created_at else '' }}">
+              <small class="text-muted">{{ l.created_at[:10] if l.created_at else '—' }}</small>
+            </td>
+            <td data-sort-key="owner" data-sort-value="{{ l.owner_name or l.owner_username or '' }}">
+              <small class="text-muted">{{ l.owner_name or l.owner_username or 'Unassigned' }}</small>
+            </td>
+            <td>
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">Open</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 {% else %}
-  <div class="text-muted">No leads found.</div>
+  <div class="text-center py-5 text-muted">
+    <div style="font-size:2.5em;">🔍</div>
+    <div class="mt-2">No leads found.</div>
+    {% if q or stage or source %}
+      <a href="{{ url_for('leads.leads_list') }}" class="btn btn-sm btn-outline-secondary mt-2">Clear filters</a>
+    {% endif %}
+  </div>
 {% endif %}
 
 <script>
@@ -184,31 +300,78 @@
       if (savedUserId && !userFilterSelect.value) {
         userFilterSelect.value = savedUserId;
       }
-
       userFilterSelect.addEventListener('change', function() {
-        const selectedUserId = this.value;
-
-        if (selectedUserId) {
-          localStorage.setItem('leadsUserFilter', selectedUserId);
+        if (this.value) {
+          localStorage.setItem('leadsUserFilter', this.value);
         } else {
           localStorage.removeItem('leadsUserFilter');
         }
-
         filterForm.submit();
       });
     }
 
     if (stageFilter) {
-      stageFilter.addEventListener('change', function() {
-        filterForm.submit();
+      stageFilter.addEventListener('change', function() { filterForm.submit(); });
+    }
+    if (sourceFilter) {
+      sourceFilter.addEventListener('change', function() { filterForm.submit(); });
+    }
+
+    // Live search on mobile (debounced)
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+      let searchTimer;
+      searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => filterForm.submit(), 600);
       });
     }
 
-    if (sourceFilter) {
-      sourceFilter.addEventListener('change', function() {
-        filterForm.submit();
+    // ── Table column sorting ──────────────────────────────────
+    var sortKey = null;
+    var sortDir = 1; // 1 = asc, -1 = desc
+
+    document.querySelectorAll('th.sortable').forEach(function(th) {
+      th.addEventListener('click', function() {
+        var key = this.getAttribute('data-sort-key');
+        if (sortKey === key) {
+          sortDir = -sortDir;
+        } else {
+          sortKey = key;
+          sortDir = 1;
+        }
+        document.querySelectorAll('th.sortable').forEach(function(t) {
+          t.classList.remove('sort-asc', 'sort-desc');
+        });
+        this.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+
+        var tbody = document.querySelector('.desktop-leads-view tbody');
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort(function(a, b) {
+          var aCell = a.querySelector('td[data-sort-key="' + key + '"]');
+          var bCell = b.querySelector('td[data-sort-key="' + key + '"]');
+          if (!aCell || !bCell) return 0;
+          var aVal = aCell.getAttribute('data-sort-value') || '';
+          var bVal = bCell.getAttribute('data-sort-value') || '';
+          // Numeric sort for score
+          if (key === 'score') {
+            return (parseFloat(aVal) - parseFloat(bVal)) * sortDir;
+          }
+          return aVal.localeCompare(bVal) * sortDir;
+        });
+        rows.forEach(function(row, i) {
+          var numCell = row.querySelector('td.row-num');
+          if (numCell) numCell.textContent = i + 1;
+          tbody.appendChild(row);
+        });
       });
-    }
+    });
   });
+
+  function toggleActiveOnly() {
+    var input = document.getElementById('hideConvertedInput');
+    input.value = input.value === '1' ? '' : '1';
+    document.getElementById('filterForm').submit();
+  }
 </script>
 {% endblock %}

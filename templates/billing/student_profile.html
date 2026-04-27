@@ -1,10 +1,150 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
-{% block title %}Student Profile - Global IT ERP{% endblock %}
+{% block title %}Student Profile - {{ company.company_short_name }}{% endblock %}
 
 {% block content %}
 
 <style>
+  .profile-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 30px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+  }
+
+  /* Photo upload overlay */
+  .profile-photo-wrapper {
+    flex-shrink: 0;
+    position: relative;
+    display: inline-block;
+  }
+
+  .photo-upload-btn {
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    color: #667eea;
+    border: 2px solid #667eea;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    z-index: 2;
+    transition: background 0.2s, color 0.2s;
+  }
+  .photo-upload-btn:hover {
+    background: #667eea;
+    color: #fff;
+  }
+
+  /* Photo upload modal */
+  #photoModal .modal-content {
+    max-width: 400px;
+  }
+  #photoPreviewBox {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    background: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 2px dashed #ccc;
+    margin-bottom: 12px;
+    cursor: pointer;
+    position: relative;
+  }
+  #photoPreviewBox img {
+    width: 100%; height: 100%; object-fit: cover;
+  }
+  #photoPreviewBox .preview-hint {
+    color: #aaa; font-size: 14px; text-align: center; padding: 10px;
+  }
+
+  .profile-photo {
+    width: 150px;
+    height: 150px;
+    border-radius: 10px;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 3px solid white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .profile-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .profile-photo-placeholder {
+    font-size: 48px;
+    color: #667eea;
+  }
+
+  .profile-header-content {
+    flex: 1;
+  }
+
+  .profile-header-content h1 {
+    margin: 0 0 5px 0;
+    font-size: 32px;
+    font-weight: 700;
+  }
+
+  .profile-header-content .student-code {
+    font-size: 18px;
+    opacity: 0.95;
+    margin-bottom: 15px;
+  }
+
+  .profile-header-content .status-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 15px;
+  }
+
+  .profile-header-quick-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    font-size: 14px;
+  }
+
+  .quick-info-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .quick-info-label {
+    opacity: 0.85;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .quick-info-value {
+    font-weight: 600;
+    margin-top: 3px;
+  }
+
   .page-actions {
     display: flex;
     gap: 10px;
@@ -14,130 +154,2165 @@
 
   .profile-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 20px;
-    margin-bottom: 20px;
+    margin-bottom: 30px;
   }
 
-  .profile-card h3 {
-    margin-top: 0;
-    margin-bottom: 16px;
+  .info-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   }
 
-  .profile-card p {
-    margin-bottom: 10px;
-    font-size: 14px;
+  .info-card h3 {
+    margin: 0 0 15px 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f0f0f0;
   }
 
-  .student-profile-table {
+  .info-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+
+  .info-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .info-label {
+    font-weight: 600;
+    color: #666;
+    min-width: 120px;
+  }
+
+  .info-value {
+    color: #333;
+    text-align: right;
+    flex: 1;
+    word-break: break-word;
+  }
+
+  .billing-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 30px;
+  }
+
+  .billing-card {
+    background: white;
+    border-left: 4px solid #667eea;
+    padding: 15px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    text-align: center;
+  }
+
+  .billing-card.paid {
+    border-left-color: #27ae60;
+  }
+
+  .billing-card.balance {
+    border-left-color: #e74c3c;
+  }
+
+  .billing-card.total {
+    border-left-color: #f39c12;
+  }
+
+  .billing-card-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+
+  .billing-card-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #333;
+  }
+
+  .section {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .section h3 {
+    margin: 0 0 20px 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #333;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f0f0f0;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+  }
+
+  .data-table {
+    width: 100%;
     border-collapse: collapse;
+    font-size: 13px;
   }
 
-  .student-profile-table thead tr {
-    background-color: #f5f6f7;
+  .data-table thead tr {
+    background-color: #f8f9fa;
   }
 
-  .student-profile-table th {
-    padding: 10px 8px;
+  .data-table th {
+    padding: 12px 10px;
     text-align: left;
     font-weight: 600;
-    font-size: 13px;
     color: #333;
-    border: 1px solid #ddd;
+    border-bottom: 2px solid #e0e0e0;
   }
 
-  .student-profile-table td {
-    padding: 10px 8px;
-    border: 1px solid #ddd;
-    font-size: 13px;
-    vertical-align: middle;
+  .data-table td {
+    padding: 12px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    color: #555;
   }
 
-  .student-profile-table tbody tr:hover {
+  .data-table tbody tr:hover {
     background-color: #f9f9f9;
   }
 
-  @media (max-width: 900px) {
+  .status-label {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .status-label.paid {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .status-label.pending {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  .status-label.active {
+    background-color: #d1ecf1;
+    color: #0c5460;
+  }
+
+  .status-label.completed {
+    background-color: #d4edda;
+    color: #155724;
+  }
+
+  .status-label.dropped {
+    background-color: #f8d7da;
+    color: #721c24;
+  }
+
+  .status-label.partially_paid {
+    background-color: #fff3cd;
+    color: #856404;
+  }
+
+  .no-data {
+    text-align: center;
+    color: #999;
+    padding: 30px 10px;
+    font-style: italic;
+  }
+
+  .text-right {
+    text-align: right;
+  }
+
+  .text-success {
+    color: #27ae60;
+    font-weight: 600;
+  }
+
+  .text-danger {
+    color: #e74c3c;
+    font-weight: 600;
+  }
+
+  @media (max-width: 1200px) {
     .profile-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .billing-summary {
+      grid-template-columns: 1fr 1fr;
     }
   }
+
+  @media (max-width: 768px) {
+    /* ── Profile header: horizontal compact layout ── */
+    .profile-header {
+      flex-direction: row;
+      align-items: flex-start;
+      text-align: left;
+      padding: 14px;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .profile-photo {
+      width: 80px;
+      height: 80px;
+    }
+    .profile-photo-placeholder { font-size: 30px; }
+    .photo-upload-btn { font-size: 9px; padding: 2px 8px; bottom: -8px; }
+    .profile-header-content h1 { font-size: 17px; margin-bottom: 2px; }
+    .profile-header-content .student-code { font-size: 12px; margin-bottom: 6px; }
+    .profile-header-content .status-badge { font-size: 11px; padding: 3px 10px; margin-bottom: 8px; }
+
+    /* Quick info: 2-col; phone/email span full width */
+    .profile-header-quick-info {
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+    }
+    .quick-info-item { border-bottom: none; padding-bottom: 0; }
+    .quick-info-label { font-size: 10px; }
+    .quick-info-value { font-size: 12px; margin-top: 1px; }
+    /* Phone item (4th) and Email (5th) span full width */
+    .profile-header-quick-info .quick-info-item:nth-child(4),
+    .profile-header-quick-info .quick-info-item:nth-child(5) {
+      grid-column: 1 / -1;
+    }
+
+    /* ── Billing summary: compact 2x2 ── */
+    .billing-summary {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .billing-card { padding: 10px 8px; }
+    .billing-card-value { font-size: 16px; }
+    .billing-card-label { font-size: 10px; margin-bottom: 4px; }
+
+    /* ── Info cards: 2-col grid ── */
+    .profile-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    /* Contact card (3rd) spans full width (has address text) */
+    .profile-grid .info-card:nth-child(3) { grid-column: 1 / -1; }
+    .info-card { padding: 12px; }
+    .info-card h3 { font-size: 13px; margin-bottom: 10px; padding-bottom: 6px; }
+
+    .info-item { flex-direction: column; gap: 1px; margin-bottom: 8px; }
+    .info-label { text-align: left; font-size: 11px; }
+    .info-value { text-align: left; font-size: 13px; }
+
+    /* ── Sections: tighter ── */
+    .section { padding: 12px; margin-bottom: 14px; }
+    .section h3 { font-size: 14px; margin-bottom: 12px; padding-bottom: 8px; }
+
+    /* ── Page actions ── */
+    .page-actions { flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .page-actions .btn { flex: 1; min-width: 110px; text-align: center; font-size: 12px; padding: 8px 8px; }
+
+    .data-table { font-size: 11px; }
+    .data-table th, .data-table td { padding: 7px 5px; }
+  }
+
+  @media (max-width: 480px) {
+    .billing-summary { grid-template-columns: 1fr 1fr; gap: 6px; }
+    .billing-card { padding: 8px 6px; }
+    .billing-card-value { font-size: 14px; }
+    .profile-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .profile-grid .info-card:nth-child(3) { grid-column: 1 / -1; }
+    .profile-header { padding: 10px; gap: 8px; }
+    .profile-photo { width: 65px; height: 65px; }
+    .profile-header-content h1 { font-size: 14px; }
+    .profile-header-content .student-code { font-size: 11px; }
+    .section { padding: 10px; margin-bottom: 10px; }
+
+    /* ── Tables → mobile card rows ── */
+    .mobile-card-table thead { display: none; }
+    .mobile-card-table tbody tr {
+      display: block;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      background: #fafafa;
+    }
+    .mobile-card-table tbody td {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 0;
+      border: none;
+      font-size: 12px;
+    }
+    .mobile-card-table tbody td:before {
+      content: attr(data-label);
+      font-weight: 600;
+      color: #888;
+      font-size: 11px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      margin-right: 8px;
+    }
+    .mobile-card-table tbody td.no-data {
+      justify-content: center;
+    }
+    .mobile-card-table tbody td.no-data:before { display: none; }
+  }
+
+  /* Save Contact button — mobile only */
+  .save-contact-btn { display: none; }
+  @media (max-width: 768px) {
+    .save-contact-btn { display: inline-flex !important; }
+  }
+
+  @media print {
+    .page-actions {
+      display: none;
+    }
+
+    .profile-header,
+    .info-card,
+    .section {
+      box-shadow: none;
+      border: 1px solid #ccc;
+      page-break-inside: avoid;
+    }
+  }
+
+  /* Modal Styles */
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+  }
+
+  .modal.show {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-content {
+    background-color: white;
+    padding: 30px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  }
+
+  .modal-header {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    color: #333;
+  }
+
+  .modal-body {
+    margin-bottom: 20px;
+  }
+
+  .modal-invoice-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .invoice-option {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .invoice-option:hover {
+    border-color: #667eea;
+    background-color: #f8f9ff;
+  }
+
+  .invoice-option input[type="radio"] {
+    margin-right: 12px;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+  }
+
+  .invoice-option-info {
+    flex: 1;
+  }
+
+  .invoice-option-invoice-no {
+    font-weight: 600;
+    color: #333;
+  }
+
+  .invoice-option-date {
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+  }
+
+  .invoice-option-amount {
+    font-weight: 600;
+    color: #667eea;
+    text-align: right;
+  }
+
+  .modal-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  .modal-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .modal-btn.primary {
+    background-color: #667eea;
+    color: white;
+  }
+
+  .modal-btn.primary:hover {
+    background-color: #5568d3;
+  }
+
+  .modal-btn.secondary {
+    background-color: #e0e0e0;
+    color: #333;
+  }
+
+  .modal-btn.secondary:hover {
+    background-color: #d0d0d0;
+  }
+
+  /* ── Signature Section ────────────────────────────────── */
+  .sig-status-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 600px) {
+    .sig-status-grid { grid-template-columns: 1fr; }
+  }
+  .sig-status-box {
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 18px 16px;
+    background: #fafafa;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+  }
+  .sig-box-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .sig-preview-img {
+    max-width: 100%;
+    max-height: 80px;
+    object-fit: contain;
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+    background: white;
+    padding: 4px;
+  }
+  .sig-date-info {
+    font-size: 11px;
+    color: #6b7280;
+  }
+  .sig-empty-box {
+    width: 100%;
+    height: 64px;
+    border: 2px dashed #d1d5db;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 13px;
+  }
+  .sig-collect-btn {
+    padding: 9px 0;
+    width: 100%;
+    border: none;
+    border-radius: 7px;
+    background: #2563eb;
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .sig-collect-btn:hover { background: #1d4ed8; }
+
+  /* ── Signature Pad Modal ──────────────────────────────── */
+  #sigPadModal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+  }
+  #sigPadModal.show {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  @media (min-width: 640px) {
+    #sigPadModal.show { align-items: center; }
+    #sigPadModal .sig-modal-box { border-radius: 14px; }
+  }
+  #sigPadModal .sig-modal-box {
+    background: white;
+    width: 100%;
+    max-width: 640px;
+    border-radius: 18px 18px 0 0;
+    padding: 22px 20px 30px;
+    box-shadow: 0 -6px 32px rgba(0,0,0,0.25);
+  }
+  .sig-modal-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #111;
+    margin-bottom: 4px;
+  }
+  .sig-modal-subtitle {
+    font-size: 13px;
+    color: #6b7280;
+    margin-bottom: 14px;
+  }
+  #sigCanvas {
+    width: 100%;
+    height: 210px;
+    display: block;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    cursor: crosshair;
+    background: white;
+    touch-action: none;
+    user-select: none;
+  }
+  #sigCanvas:active { border-color: #2563eb; }
+  .sig-toolbar {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    margin-bottom: 16px;
+    align-items: center;
+  }
+  .sig-tool-btn {
+    padding: 6px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: white;
+    font-size: 13px;
+    cursor: pointer;
+    color: #374151;
+    font-weight: 500;
+  }
+  .sig-tool-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
+  .sig-stroke-hint {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-left: auto;
+  }
+  .sig-save-row {
+    display: flex;
+    gap: 10px;
+  }
+  .sig-btn-save {
+    flex: 2;
+    padding: 13px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 9px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .sig-btn-save:hover:not(:disabled) { background: #1d4ed8; }
+  .sig-btn-save:disabled { background: #93c5fd; cursor: not-allowed; }
+  .sig-btn-cancel {
+    flex: 1;
+    padding: 13px;
+    background: #f3f4f6;
+    color: #374151;
+    border: none;
+    border-radius: 9px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .sig-btn-cancel:hover { background: #e5e7eb; }
+  .sig-status-msg {
+    font-size: 13px;
+    margin-top: 10px;
+    text-align: center;
+    min-height: 18px;
+    color: #6b7280;
+  }
+  .sig-status-msg.success { color: #16a34a; font-weight: 700; }
+  .sig-status-msg.error   { color: #dc2626; font-weight: 600; }
+
+  /* Tabs */
+  .sig-tab-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .sig-tab {
+    flex: 1;
+    padding: 8px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    background: white;
+    font-size: 13px;
+    font-weight: 600;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sig-tab.active {
+    border-color: #2563eb;
+    color: #2563eb;
+    background: #eff6ff;
+  }
+
+  /* Upload drop zone */
+  #sigUploadDrop {
+    width: 100%;
+    height: 190px;
+    border: 2px dashed #d1d5db;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: #f9fafb;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  #sigUploadDrop:hover { border-color: #2563eb; background: #eff6ff; }
+  #sigUploadDrop.has-image { border-style: solid; border-color: #2563eb; background: white; }
+  #sigUploadHint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
 </style>
 
 <div class="page-actions no-print">
-  <a class="btn btn-secondary" href="{{ url_for('billing.students') }}">Back to Students</a>
-  <a class="btn btn-primary" href="{{ url_for('billing.student_edit', student_id=student.id) }}">Edit Student</a>
+  <a class="btn btn-secondary" href="{{ url_for('billing.students') }}">← Back to Students</a>
+  <a class="btn btn-primary" href="{{ url_for('billing.student_edit', student_id=student.id) }}">✎ Edit Student</a>
+  <a class="btn btn-success" href="{{ url_for('billing.invoice_new', student_id=student.id) }}">🧾 New Invoice</a>
+  <button class="btn btn-info" onclick="openAddToBatchModal()">➕ Add to Batch</button>
+  {% if invoices %}
+  <button class="btn btn-secondary" onclick="showAgreementModal()">📄 Generate Enrollment Agreement</button>
+  {% endif %}
+  <!-- Portal Access Toggle -->
+  <form method="POST" action="{{ url_for('billing.toggle_portal', student_id=student.id) }}" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if student.portal_enabled %}
+      <button type="submit" class="btn" style="background:#dc3545;color:#fff;" title="Student can currently log in. Click to disable."
+              onclick="return confirm('Disable portal access for {{ student.full_name }}? They will not be able to log in.')">
+        🔒 Disable Student Login
+      </button>
+    {% else %}
+      <button type="submit" class="btn" style="background:#198754;color:#fff;" title="Student cannot log in. Click to enable.">
+        🔓 Enable Student Login
+      </button>
+    {% endif %}
+  </form>
 </div>
 
-<h2 style="margin-bottom: 20px;">Student Profile</h2>
-
-<div class="profile-grid">
-  <div class="card profile-card">
-    <h3>Student Details</h3>
-    <p><strong>Student Code:</strong> {{ student.student_code }}</p>
-    <p><strong>Name:</strong> {{ student.full_name }}</p>
-    <p><strong>Phone:</strong> {{ student.phone or "-" }}</p>
-    <p><strong>Email:</strong> {{ student.email or "-" }}</p>
-    <p><strong>Address:</strong> {{ student.address or "-" }}</p>
-    <p><strong>Qualification:</strong> {{ student.qualification or "-" }}</p>
-    <p><strong>Student Location:</strong> {{ student.student_location or "-" }}</p>
-    <p><strong>Employment Status:</strong> {{ student.employment_status or "-" }}</p>
-    <p><strong>Joined Date:</strong> {{ student.joined_date or "-" }}</p>
-    <p><strong>Status:</strong> {{ student.status or "-" }}</p>
-    <p><strong>Branch:</strong> {{ student.branch_name or "-" }}</p>
-  </div>
-
-  <div class="card profile-card">
-    <h3>Billing Summary</h3>
-    <p><strong>Total Invoices:</strong> {{ total_invoices }}</p>
-    <p><strong>Total Billed:</strong> ₹ {{ "%.2f"|format(total_billed or 0) }}</p>
-    <p><strong>Total Paid:</strong> ₹ {{ "%.2f"|format(total_paid or 0) }}</p>
-    <p><strong>Total Balance:</strong> ₹ {{ "%.2f"|format(total_balance or 0) }}</p>
-  </div>
-</div>
-
-<div class="card">
-  <h3 style="margin-top: 0;">Invoice History</h3>
-
-  <table border="1" width="100%" cellpadding="10" class="student-profile-table">
-    <thead>
-      <tr>
-        <th style="width: 70px;">ID</th>
-        <th style="width: 130px;">Invoice No</th>
-        <th style="width: 120px;">Date</th>
-        <th style="width: 130px;">Total</th>
-        <th style="width: 130px;">Paid</th>
-        <th style="width: 130px;">Balance</th>
-        <th style="width: 120px;">Status</th>
-        <th style="width: 100px;">Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for inv in invoices %}
-      {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
-      <tr>
-        <td>{{ inv.id }}</td>
-        <td>
-          <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="text-decoration: none;">
-            {{ inv.invoice_no }}
-          </a>
-        </td>
-        <td>{{ inv.invoice_date }}</td>
-        <td>₹ {{ "%.2f"|format(inv.total_amount or 0) }}</td>
-        <td style="color: green;">₹ {{ "%.2f"|format(inv.paid_amount or 0) }}</td>
-        <td style="color: #c0392b;">₹ {{ "%.2f"|format(balance or 0) }}</td>
-        <td>{{ inv.status }}</td>
-        <td>
-          <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}">View</a>
-        </td>
-      </tr>
+<!-- Profile Header -->
+<div class="profile-header">
+  <div class="profile-photo-wrapper">
+    <div class="profile-photo" id="profilePhotoDisplay">
+      {% if student.photo_filename %}
+        <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="Student Photo" id="profilePhotoImg">
       {% else %}
-      <tr>
-        <td colspan="8" style="text-align:center;">No invoices found for this student.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+        <div class="profile-photo-placeholder" id="profilePhotoImg">👤</div>
+      {% endif %}
+    </div>
+    <button type="button" class="photo-upload-btn" onclick="openPhotoModal()">
+      📷 {% if student.photo_filename %}Change{% else %}Add Photo{% endif %}
+    </button>
+  </div>
+
+  <div class="profile-header-content">
+    <h1>{{ student.full_name }}</h1>
+    <div class="student-code">Registration No: {{ student.student_code }}</div>
+    
+    <div class="status-badge" style="background: {% if student.status == 'active' %}rgba(39, 174, 96, 0.2){% elif student.status == 'completed' %}rgba(46, 204, 113, 0.2){% else %}rgba(231, 76, 60, 0.2){% endif %}; color: {% if student.status == 'active' %}white{% elif student.status == 'completed' %}white{% else %}white{% endif %};">
+      {{ student.status | upper }}
+    </div>
+
+    {% if origin_lead %}
+    <div style="margin-bottom: 12px;">
+      <a href="{{ url_for('leads.lead_detail', lead_id=origin_lead.id) }}"
+         style="display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,0.15); color:#fff; border-radius:20px; padding:4px 14px; font-size:12px; font-weight:600; text-decoration:none; border:1px solid rgba(255,255,255,0.3);">
+        🔗 From Lead: {{ origin_lead.name }}
+      </a>
+    </div>
+    {% endif %}
+
+    <div class="profile-header-quick-info">
+      <div class="quick-info-item">
+        <span class="quick-info-label">Branch</span>
+        <span class="quick-info-value">{{ student.branch_name or '-' }}</span>
+      </div>
+      {% if student_batches %}
+      <div class="quick-info-item">
+        <span class="quick-info-label">Batches</span>
+        <span class="quick-info-value">
+          {% for b in student_batches %}
+          <div style="{% if not loop.first %}margin-top: 6px;{% endif %}">
+            <a href="{{ url_for('attendance.view_batch', batch_id=b.batch_id) }}"
+               style="color: #fff; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; opacity: 0.92;"
+               title="{{ b.course_name or '' }}">
+              {{ b.batch_name }}
+            </a>
+            {% if b.start_time %}
+            <span style="font-size: 11px; opacity: 0.75; margin-left: 6px;">{{ b.start_time }}–{{ b.end_time }}</span>
+            {% endif %}
+            {% if b.enroll_status != 'active' %}
+            <span style="font-size: 10px; background: rgba(255,255,255,0.2); border-radius: 10px; padding: 1px 7px; margin-left: 5px; opacity: 0.85;">{{ b.enroll_status | capitalize }}</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </span>
+      </div>
+      {% endif %}
+      <div class="quick-info-item">
+        <span class="quick-info-label">Joined Date</span>
+        <span class="quick-info-value">{{ student.joined_date or '-' }}</span>
+      </div>
+      <div class="quick-info-item">
+        <span class="quick-info-label">Phone</span>
+        <span class="quick-info-value" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          {{ student.phone or '-' }}
+          {% if student.phone %}
+          <a href="tel:{{ student.phone | replace(' ', '') | replace('-', '') }}"
+             title="Call {{ student.full_name }}"
+             style="display: inline-flex; align-items: center; gap: 5px; background: #2e7d32; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; text-decoration: none; white-space: nowrap;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="white">
+              <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+            </svg>
+            Call
+          </a>
+          <a href="https://wa.me/91{{ student.phone | replace(' ', '') | replace('-', '') }}"
+             target="_blank"
+             rel="noopener noreferrer"
+             title="Chat on WhatsApp"
+             style="display: inline-flex; align-items: center; gap: 5px; background: #25D366; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; text-decoration: none; white-space: nowrap;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="white">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+            </svg>
+            WhatsApp
+          </a>
+          <button onclick="saveContact()" class="save-contact-btn"
+             title="Save to Contacts"
+             style="display: inline-flex; align-items: center; gap: 5px; background: #1565c0; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; border: none; cursor: pointer; white-space: nowrap;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+            Save Contact
+          </button>
+          {% endif %}
+        </span>
+      </div>
+      <div class="quick-info-item">
+        <span class="quick-info-label">Email</span>
+        <span class="quick-info-value">{{ student.email or '-' }}</span>
+      </div>
+    </div>
+  </div>
 </div>
+
+<!-- Billing Summary -->
+<div class="billing-summary">
+  <div class="billing-card total">
+    <div class="billing-card-label">Total Billed</div>
+    <div class="billing-card-value">₹ {{ "%.2f"|format(total_billed or 0) }}</div>
+  </div>
+  <div class="billing-card paid">
+    <div class="billing-card-label">Total Paid</div>
+    <div class="billing-card-value">₹ {{ "%.2f"|format(total_paid or 0) }}</div>
+  </div>
+  <div class="billing-card balance">
+    <div class="billing-card-label">Balance Due</div>
+    <div class="billing-card-value">₹ {{ "%.2f"|format(total_balance or 0) }}</div>
+  </div>
+  <div class="billing-card">
+    <div class="billing-card-label">Total Invoices</div>
+    <div class="billing-card-value">{{ total_invoices }}</div>
+  </div>
+</div>
+
+<!-- Information Cards Grid -->
+<div class="profile-grid">
+  <!-- Personal Information -->
+  <div class="info-card">
+    <h3>Personal Information</h3>
+    <div class="info-item">
+      <span class="info-label">Date of Birth:</span>
+      <span class="info-value">{{ student.date_of_birth or '-' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Gender:</span>
+      <span class="info-value">{{ student.gender or '-' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Location:</span>
+      <span class="info-value">{{ student.student_location | upper or '-' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Employment:</span>
+      <span class="info-value">{{ student.employment_status | upper or '-' }}</span>
+    </div>
+  </div>
+
+  <!-- Education Information -->
+  <div class="info-card">
+    <h3>Education Details</h3>
+    <div class="info-item">
+      <span class="info-label">Education Level:</span>
+      <span class="info-value">{{ student.education_level or '-' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Qualification:</span>
+      <span class="info-value">{{ student.qualification or '-' }}</span>
+    </div>
+  </div>
+
+  <!-- Contact Information -->
+  <div class="info-card">
+    <h3>Contact Information</h3>
+    {% if student.pincode or student.city or student.state or student.address or student.locality or student.landmark %}
+    <div class="info-item">
+      <span class="info-label">Address:</span>
+      <span class="info-value">
+        {% set addr_parts = [] %}
+        {% if student.address %}{% set _ = addr_parts.append(student.address) %}{% endif %}
+        {% if student.locality %}{% set _ = addr_parts.append(student.locality) %}{% endif %}
+        {% if student.landmark %}{% set _ = addr_parts.append('Near ' ~ student.landmark) %}{% endif %}
+        {% if student.city %}{% set _ = addr_parts.append(student.city) %}{% endif %}
+        {% if student.state %}{% set _ = addr_parts.append(student.state) %}{% endif %}
+        {% if student.pincode %}{% set _ = addr_parts.append(student.pincode) %}{% endif %}
+        {{ addr_parts | join(', ') or '-' }}
+      </span>
+    </div>
+    {% if student.address_type %}
+    <div class="info-item">
+      <span class="info-label">Address Type:</span>
+      <span class="info-value">{{ student.address_type }}</span>
+    </div>
+    {% endif %}
+    {% if student.alternate_phone %}
+    <div class="info-item">
+      <span class="info-label">Alternate Phone:</span>
+      <span class="info-value">{{ student.alternate_phone }}</span>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="info-item">
+      <span class="info-label">Address:</span>
+      <span class="info-value">{{ student.address or '-' }}</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Guardian Information -->
+{% if student.parent_name or student.parent_contact %}
+<div class="section">
+  <h3>Parent/Guardian Information</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="info-item">
+      <span class="info-label">Name:</span>
+      <span class="info-value">{{ student.parent_name or '-' }}</span>
+    </div>
+    <div class="info-item">
+      <span class="info-label">Contact:</span>
+      <span class="info-value">{{ student.parent_contact or '-' }}</span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Enrollment Signatures Section ──────────────────── -->
+<div class="section">
+  <h3>✍️ Enrollment Signatures</h3>
+  <div class="sig-status-grid">
+
+    <!-- Student Signature -->
+    <div class="sig-status-box" id="sigBox_student">
+      <div class="sig-box-label">Student Signature</div>
+      {% if student.student_signature_filename %}
+        <img class="sig-preview-img" id="sigImg_student"
+             src="/static/images/student_signatures/{{ student.student_signature_filename }}"
+             alt="Student Signature">
+        <div class="sig-date-info" id="sigDate_student">
+          Signed: {{ student.student_signature_date[:10] if student.student_signature_date else '' }}
+        </div>
+      {% else %}
+        <div class="sig-empty-box" id="sigEmpty_student">Not yet collected</div>
+        <div id="sigPreviewWrap_student" style="display:none; width:100%;">
+          <img class="sig-preview-img" id="sigImg_student" src="" alt="Student Signature" style="display:block; margin:0 auto;">
+          <div class="sig-date-info" id="sigDate_student"></div>
+        </div>
+      {% endif %}
+      <button class="sig-collect-btn" id="sigBtn_student" onclick="openSigModal('student')">
+        {% if student.student_signature_filename %}🔄 Update Signature{% else %}✍️ Collect Signature{% endif %}
+      </button>
+    </div>
+
+    <!-- Parent/Guardian Signature -->
+    <div class="sig-status-box" id="sigBox_parent">
+      <div class="sig-box-label">Parent / Guardian Signature</div>
+      {% if student.parent_signature_filename %}
+        <img class="sig-preview-img" id="sigImg_parent"
+             src="/static/images/student_signatures/{{ student.parent_signature_filename }}"
+             alt="Parent Signature">
+        <div class="sig-date-info" id="sigDate_parent">
+          Signed: {{ student.parent_signature_date[:10] if student.parent_signature_date else '' }}
+        </div>
+      {% else %}
+        <div class="sig-empty-box" id="sigEmpty_parent">Not yet collected</div>
+        <div id="sigPreviewWrap_parent" style="display:none; width:100%;">
+          <img class="sig-preview-img" id="sigImg_parent" src="" alt="Parent Signature" style="display:block; margin:0 auto;">
+          <div class="sig-date-info" id="sigDate_parent"></div>
+        </div>
+      {% endif %}
+      <button class="sig-collect-btn" id="sigBtn_parent" onclick="openSigModal('parent')">
+        {% if student.parent_signature_filename %}🔄 Update Signature{% else %}✍️ Collect Signature{% endif %}
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Invoices Section -->
+<div class="section">
+  <h3>Invoice History</h3>
+  <div class="table-wrapper">
+    <table class="data-table mobile-card-table">
+      <thead>
+        <tr>
+          <th>Invoice No</th>
+          <th>Date</th>
+          <th>Total Amount</th>
+          <th>Paid Amount</th>
+          <th>Balance</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
+        {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
+        <tr>
+          <td data-label="Invoice No">{{ inv.invoice_no }}</td>
+          <td data-label="Date">{{ inv.invoice_date }}</td>
+          <td data-label="Total">₹ {{ "%.2f"|format(inv.total_amount or 0) }}</td>
+          <td data-label="Paid" class="text-success">₹ {{ "%.2f"|format(inv.paid_amount or 0) }}</td>
+          <td data-label="Balance" class="text-danger">₹ {{ "%.2f"|format(balance or 0) }}</td>
+          <td data-label="Status">
+            <span class="status-label {{ inv.status | lower }}">{{ inv.status }}</span>
+          </td>
+          <td data-label="Actions">
+            <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="text-decoration: none; color: #0066cc; margin-right: 10px;">View</a>
+            <a href="{{ url_for('billing.student_enrollment_agreement', student_id=student.id, invoice_id=inv.id) }}" style="text-decoration: none; color: #27ae60;">Agreement</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="no-data">No invoices found</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Installments Section -->
+{% if installment_plans %}
+<div class="section">
+  <h3>Installment Plans</h3>
+  <div class="table-wrapper">
+    <table class="data-table mobile-card-table">
+      <thead>
+        <tr>
+          <th>Invoice No</th>
+          <th>Installment #</th>
+          <th>Due Date</th>
+          <th>Amount Due</th>
+          <th>Amount Paid</th>
+          <th>Status</th>
+          <th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for plan in installment_plans %}
+        <tr>
+          <td data-label="Invoice No">{{ plan.invoice_no }}</td>
+          <td data-label="Installment">#{{ plan.installment_no }}</td>
+          <td data-label="Due Date">{{ plan.due_date }}</td>
+          <td data-label="Amount Due">₹ {{ "%.2f"|format(plan.amount_due or 0) }}</td>
+          <td data-label="Paid" class="text-success">₹ {{ "%.2f"|format(plan.amount_paid or 0) }}</td>
+          <td data-label="Status">
+            <span class="status-label {{ plan.status | lower }}">{{ plan.status }}</span>
+          </td>
+          <td data-label="Remarks">{{ plan.remarks or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Enrolled Courses Section -->
+<div class="section">
+  <h3>Enrolled Courses</h3>
+  <div class="table-wrapper">
+    <table class="data-table mobile-card-table">
+      <thead>
+        <tr>
+          <th>Invoice No</th>
+          <th>Invoice Date</th>
+          <th>Course Name</th>
+          <th style="text-align: center;">Quantity</th>
+          <th class="text-right">Unit Price</th>
+          <th class="text-right">Discount</th>
+          <th class="text-right">Line Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in invoice_items %}
+        <tr>
+          <td data-label="Invoice No">
+            <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}" style="text-decoration: none; color: #0066cc;">
+              {{ item.invoice_no }}
+            </a>
+          </td>
+          <td data-label="Date">{{ item.invoice_date }}</td>
+          <td data-label="Course">{{ item.description }}</td>
+          <td data-label="Qty" style="text-align: center;">{{ item.quantity }}</td>
+          <td data-label="Unit Price" class="text-right">₹ {{ "%.2f"|format(item.unit_price or 0) }}</td>
+          <td data-label="Discount" class="text-right">₹ {{ "%.2f"|format(item.discount or 0) }}</td>
+          <td data-label="Total" class="text-right">₹ {{ "%.2f"|format(item.line_total or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="no-data">No courses enrolled</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Enrollment Agreement Modal -->
+<div id="agreementModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">Select Invoice for Enrollment Agreement</div>
+    <div class="modal-body">
+      <div class="modal-invoice-list">
+        {% for inv in invoices %}
+        {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
+        <label class="invoice-option">
+          <input type="radio" name="invoice-select" value="{{ url_for('billing.student_enrollment_agreement', student_id=student.id, invoice_id=inv.id) }}">
+          <div class="invoice-option-info">
+            <div class="invoice-option-invoice-no">{{ inv.invoice_no }}</div>
+            <div class="invoice-option-date">{{ inv.invoice_date }} • Balance: ₹ {{ "%.2f"|format(balance or 0) }}</div>
+          </div>
+          <div class="invoice-option-amount">₹ {{ "%.2f"|format(inv.total_amount or 0) }}</div>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn secondary" onclick="closeAgreementModal()">Cancel</button>
+      <button class="modal-btn primary" onclick="openAgreement()">Generate Agreement</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function saveContact() {
+    var name    = {{ student.full_name | tojson }};
+    var phone   = {{ (student.phone or '') | tojson }};
+    var email   = {{ (student.email or '') | tojson }};
+    var address = {{ (student.address or '') | tojson }};
+    var org     = {{ company.company_short_name | tojson }};
+    var note    = "Student Code: " + {{ student.student_code | tojson }};
+
+    var vcard = [
+      "BEGIN:VCARD",
+      "VERSION:3.0",
+      "FN:" + name,
+      "N:" + name + ";;;;" ,
+      phone  ? "TEL;TYPE=CELL:" + phone  : "",
+      email  ? "EMAIL:" + email          : "",
+      address? "ADR:;;" + address.replace(/\n/g, " ") + ";;;;;" : "",
+      "ORG:" + org,
+      "NOTE:" + note,
+      "END:VCARD"
+    ].filter(Boolean).join("\r\n");
+
+    var blob = new Blob([vcard], { type: "text/vcard;charset=utf-8" });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement("a");
+    a.href  = url;
+    a.download = name.replace(/\s+/g, "_") + ".vcf";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  }
+
+  function showAgreementModal() {
+    document.getElementById('agreementModal').classList.add('show');
+  }
+
+  function closeAgreementModal() {
+    document.getElementById('agreementModal').classList.remove('show');
+  }
+
+  function openAgreement() {
+    const selected = document.querySelector('input[name="invoice-select"]:checked');
+    if (selected && selected.value) {
+      window.location.href = selected.value;
+    } else {
+      alert('Please select an invoice');
+    }
+  }
+
+  // Close modal when clicking outside
+  window.onclick = function(event) {
+    const modal = document.getElementById('agreementModal');
+    if (event.target === modal) {
+      closeAgreementModal();
+    }
+  }
+
+  // Allow Enter key to confirm
+  document.addEventListener('keypress', function(event) {
+    if (event.key === 'Enter') {
+      const modal = document.getElementById('agreementModal');
+      if (modal.classList.contains('show')) {
+        openAgreement();
+      }
+    }
+  });
+</script>
+
+<!-- ── Add to Batch Modal ─────────────────────────────────── -->
+<div id="addToBatchModal" class="modal" onclick="if(event.target===this)closeAddToBatchModal()">
+  <div class="modal-content" style="max-width:480px;">
+    <div class="modal-header">➕ Add to Batch</div>
+    <div class="modal-body">
+      <div id="batchLoadMsg" style="text-align:center;padding:16px;color:#666;">Loading batches…</div>
+      <div id="batchSelectWrap" style="display:none;">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#374151;">Select Batch</label>
+        <select id="batchSelect" style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none;">
+          <option value="">— Choose a batch —</option>
+        </select>
+        <div id="batchDetail" style="margin-top:10px;padding:10px 12px;background:#f3f4f6;border-radius:8px;font-size:13px;color:#374151;display:none;"></div>
+      </div>
+      <div id="batchEmptyMsg" style="display:none;text-align:center;padding:16px;color:#6b7280;">
+        No available batches. Student is already enrolled in all active batches.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="modal-btn secondary" onclick="closeAddToBatchModal()">Cancel</button>
+      <button type="button" class="modal-btn primary" id="saveAddToBatchBtn" onclick="saveAddToBatch()" disabled>Enroll</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var availableBatches = [];
+  var addToBatchUrl = "{{ url_for('billing.student_add_to_batch', student_id=student.id) }}";
+  var availableUrl  = "{{ url_for('billing.student_batches_available', student_id=student.id) }}";
+
+  window.openAddToBatchModal = function() {
+    document.getElementById('batchLoadMsg').style.display = 'block';
+    document.getElementById('batchSelectWrap').style.display = 'none';
+    document.getElementById('batchEmptyMsg').style.display = 'none';
+    document.getElementById('batchDetail').style.display = 'none';
+    document.getElementById('saveAddToBatchBtn').disabled = true;
+    document.getElementById('addToBatchModal').classList.add('show');
+
+    fetch(availableUrl)
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        availableBatches = data.batches || [];
+        document.getElementById('batchLoadMsg').style.display = 'none';
+        var sel = document.getElementById('batchSelect');
+        sel.innerHTML = '<option value="">— Choose a batch —</option>';
+        if (availableBatches.length === 0) {
+          document.getElementById('batchEmptyMsg').style.display = 'block';
+        } else {
+          availableBatches.forEach(function(b){
+            var opt = document.createElement('option');
+            opt.value = b.id;
+            var time = (b.start_time && b.end_time) ? ' · ' + b.start_time + '–' + b.end_time : '';
+            opt.textContent = b.batch_name + time + (b.branch_name ? ' [' + b.branch_name + ']' : '');
+            sel.appendChild(opt);
+          });
+          document.getElementById('batchSelectWrap').style.display = 'block';
+        }
+      })
+      .catch(function(){ 
+        document.getElementById('batchLoadMsg').textContent = 'Failed to load batches.';
+      });
+  };
+
+  window.closeAddToBatchModal = function() {
+    document.getElementById('addToBatchModal').classList.remove('show');
+  };
+
+  document.getElementById('batchSelect').addEventListener('change', function(){
+    var id = parseInt(this.value);
+    var btn = document.getElementById('saveAddToBatchBtn');
+    var detail = document.getElementById('batchDetail');
+    if (!id) { btn.disabled = true; detail.style.display = 'none'; return; }
+    btn.disabled = false;
+    var b = availableBatches.find(function(x){ return x.id === id; });
+    if (b) {
+      detail.style.display = 'block';
+      detail.innerHTML =
+        '<strong>' + b.batch_name + '</strong>' +
+        (b.course_name ? '<br>Course: ' + b.course_name : '') +
+        (b.start_time && b.end_time ? '<br>Time: ' + b.start_time + ' – ' + b.end_time : '') +
+        (b.branch_name ? '<br>Branch: ' + b.branch_name : '');
+    }
+  });
+
+  window.saveAddToBatch = function() {
+    var batchId = document.getElementById('batchSelect').value;
+    if (!batchId) return;
+    var btn = document.getElementById('saveAddToBatchBtn');
+    btn.disabled = true;
+    btn.textContent = 'Enrolling…';
+
+    var formData = new FormData();
+    formData.append('batch_id', batchId);
+
+    fetch(addToBatchUrl, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content }, body: formData })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (data.success) {
+          closeAddToBatchModal();
+          // Reload page to show new batch in profile
+          window.location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Enrollment failed'));
+          btn.disabled = false;
+          btn.textContent = 'Enroll';
+        }
+      })
+      .catch(function(err){
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Enroll';
+      });
+  };
+})();
+</script>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+<style>
+  #photoCropWrapper {
+    background: #fff;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    overflow: auto;
+    max-height: 400px;
+    margin-bottom: 10px;
+  }
+  #photoCropWrapper img {
+    max-width: 100%;
+    display: block;
+  }
+</style>
+
+<!-- ── Photo Upload Modal ─────────────────────────────────── -->
+<div id="photoModal" class="modal" onclick="if(event.target===this)closePhotoModal()">
+  <div class="modal-content" style="max-width:520px;">
+    <div class="modal-header">📷 Update Photo</div>
+    <div class="modal-body">
+      <!-- Step 1: Select source -->
+      <div id="photoStep1">
+        <!-- Default: file/camera choice -->
+        <div id="photoStep1Default">
+          <div id="photoPreviewBox" onclick="document.getElementById('photoFileInput').click()" title="Click to choose a photo">
+            <span class="preview-hint">Click here or use camera to select a photo</span>
+          </div>
+          <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="handlePhotoFile(this)">
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="document.getElementById('photoFileInput').click()">🖼 Choose File</button>
+            <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="openCamera()">📸 Camera</button>
+          </div>
+        </div>
+        <!-- Camera active UI (shown when camera is running) -->
+        <div id="cameraControls" style="display:none;">
+          <div style="position:relative; margin-bottom:8px;">
+            <video id="cameraVideo" style="width:100%; border-radius:8px; display:block;" autoplay playsinline></video>
+            <button type="button" class="modal-btn secondary" style="position:absolute; top:8px; right:8px; padding:5px 11px; font-size:12px; opacity:0.9;" onclick="flipCamera()">🔄 Flip</button>
+          </div>
+          <canvas id="cameraCanvas" style="display:none;"></canvas>
+          <button type="button" class="modal-btn primary" style="width:100%; margin-bottom:6px;" onclick="snapPhoto()">📷 Snap Photo</button>
+          <button type="button" class="modal-btn secondary" style="width:100%; font-size:13px;" onclick="stopCamera()">✕ Cancel</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Crop -->
+      <div id="photoStep2" style="display:none;">
+        <div id="photoCropWrapper">
+          <img id="photoCropImage" src="" alt="Crop">
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:4px;">
+          <button type="button" class="modal-btn primary" style="flex:1;" onclick="applyCrop()">✂️ Crop & Use</button>
+          <button type="button" class="modal-btn secondary" style="flex:1;" onclick="backToStep1()">← Back</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Preview cropped result -->
+      <div id="photoStep3" style="display:none; text-align:center;">
+        <img id="photoCroppedPreview" src="" alt="Cropped preview" style="max-width:100%; max-height:280px; border-radius:8px; border:1px solid #dee2e6;">
+        <div style="margin-top:10px;">
+          <button type="button" class="modal-btn secondary" style="font-size:13px;" onclick="backToStep1()">🔄 Change Photo</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="modal-btn secondary" onclick="closePhotoModal()">Cancel</button>
+      <button type="button" class="modal-btn primary" id="savePhotoBtn" onclick="savePhoto()" disabled>Save Photo</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+<script>
+(function(){
+  let croppedDataUrl = null;
+  let cameraStream = null;
+  let photoCropper = null;
+  let currentFacingMode = 'environment';
+
+  window.openPhotoModal = function() {
+    resetPhotoModal();
+    document.getElementById('photoModal').classList.add('show');
+  };
+  window.closePhotoModal = function() {
+    stopCamera();
+    destroyCropper();
+    document.getElementById('photoModal').classList.remove('show');
+  };
+
+  function resetPhotoModal() {
+    croppedDataUrl = null;
+    document.getElementById('savePhotoBtn').disabled = true;
+    const box = document.getElementById('photoPreviewBox');
+    box.innerHTML = '<span class="preview-hint">Click here or use camera to select a photo</span>';
+    document.getElementById('photoFileInput').value = '';
+    showStep(1);
+    stopCamera();
+    destroyCropper();
+  }
+
+  function showStep(n) {
+    document.getElementById('photoStep1').style.display = n === 1 ? '' : 'none';
+    document.getElementById('photoStep2').style.display = n === 2 ? '' : 'none';
+    document.getElementById('photoStep3').style.display = n === 3 ? '' : 'none';
+  }
+
+  function destroyCropper() {
+    if (photoCropper) {
+      photoCropper.destroy();
+      photoCropper = null;
+    }
+  }
+
+  window.handlePhotoFile = function(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      loadIntoCropper(e.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  function loadIntoCropper(dataUrl) {
+    stopCamera();
+    destroyCropper();
+    const img = document.getElementById('photoCropImage');
+    img.src = dataUrl;
+    showStep(2);
+    setTimeout(function() {
+      photoCropper = new Cropper(img, {
+        aspectRatio: 1,
+        viewMode: 1,
+        autoCropArea: 0.9,
+        responsive: true,
+        guides: true,
+        highlight: true,
+        cropBoxMovable: true,
+        cropBoxResizable: true,
+        toggleDragModeOnDblclick: true,
+      });
+      document.getElementById('savePhotoBtn').disabled = false;
+    }, 100);
+  }
+
+  window.applyCrop = function() {
+    if (!photoCropper) return;
+    const canvas = photoCropper.getCroppedCanvas({
+      maxWidth: 800,
+      maxHeight: 800,
+      fillColor: '#fff',
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+    croppedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    document.getElementById('photoCroppedPreview').src = croppedDataUrl;
+    document.getElementById('savePhotoBtn').disabled = false;
+    destroyCropper();
+    showStep(3);
+  };
+
+  window.backToStep1 = function() {
+    croppedDataUrl = null;
+    document.getElementById('savePhotoBtn').disabled = true;
+    destroyCropper();
+    showStep(1);
+    document.getElementById('photoFileInput').value = '';
+  };
+
+  window.openCamera = function() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Camera not supported on this device/browser.');
+      return;
+    }
+    // Stop existing stream before (re)starting
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
+      .then(function(stream) {
+        cameraStream = stream;
+        const video = document.getElementById('cameraVideo');
+        video.srcObject = stream;
+        document.getElementById('photoStep1Default').style.display = 'none';
+        document.getElementById('cameraControls').style.display = '';
+      })
+      .catch(function(err) {
+        alert('Could not access camera: ' + err.message);
+      });
+  };
+
+  window.flipCamera = function() {
+    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+    window.openCamera();
+  };
+
+  window.snapPhoto = function() {
+    const video = document.getElementById('cameraVideo');
+    const canvas = document.getElementById('cameraCanvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
+    stopCamera();
+    loadIntoCropper(dataUrl);
+  };
+
+  window.stopCamera = function() {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    const video = document.getElementById('cameraVideo');
+    if (video) { video.srcObject = null; }
+    document.getElementById('cameraControls').style.display = 'none';
+    document.getElementById('photoStep1Default').style.display = '';
+  };
+  // Local alias for calls within the IIFE
+  function stopCamera() { window.stopCamera(); }
+
+  window.savePhoto = function() {
+    // If user hasn't clicked "Crop & Use", auto-crop from the cropper
+    if (!croppedDataUrl && photoCropper) {
+      const canvas = photoCropper.getCroppedCanvas({
+        maxWidth: 800,
+        maxHeight: 800,
+        fillColor: '#fff',
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high',
+      });
+      croppedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    }
+    if (!croppedDataUrl) return;
+    const btn = document.getElementById('savePhotoBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const formData = new FormData();
+    formData.append('photo_data', croppedDataUrl);
+
+    fetch('{{ url_for("billing.student_upload_photo", student_id=student.id) }}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
+      body: formData
+    })
+    .then(r => r.json())
+    .then(function(data) {
+      if (data.success) {
+        // Update photo on page live
+        const display = document.getElementById('profilePhotoDisplay');
+        display.innerHTML = '<img src="/static/images/student_photos/' + data.photo_filename + '?t=' + Date.now() + '" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;">';
+        // Update button label
+        document.querySelector('.photo-upload-btn').innerHTML = '📷 Change';
+        closePhotoModal();
+      } else {
+        alert('Error saving photo: ' + (data.error || 'Unknown error'));
+        btn.disabled = false;
+        btn.textContent = 'Save Photo';
+      }
+    })
+    .catch(function(err) {
+      alert('Network error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = 'Save Photo';
+    });
+  };
+})();
+</script>
+
+<!-- ── Signature Pad Modal ────────────────────────────────────────── -->
+<div id="sigPadModal" onclick="if(event.target===this)closeSigModal()">
+  <div class="sig-modal-box">
+    <div class="sig-modal-title" id="sigModalTitle">✍️ Student Signature</div>
+    <div class="sig-modal-subtitle" id="sigModalSubtitle">Sign clearly within the box. Use finger or stylus on mobile.</div>
+
+    <!-- Tab switcher -->
+    <div class="sig-tab-row">
+      <button class="sig-tab active" id="tabDraw"   onclick="switchSigTab('draw')">✍️ Draw</button>
+      <button class="sig-tab"        id="tabCamera" onclick="switchSigTab('camera')">📷 Camera</button>
+      <button class="sig-tab"        id="tabUpload" onclick="switchSigTab('upload')">🖼 Upload</button>
+    </div>
+
+    <!-- Draw panel -->
+    <div id="sigDrawPanel">
+      <canvas id="sigCanvas"></canvas>
+      <div class="sig-toolbar">
+        <button class="sig-tool-btn" onclick="sigUndo()">↩ Undo</button>
+        <button class="sig-tool-btn" onclick="sigClear()">🗑 Clear</button>
+        <span class="sig-stroke-hint" id="sigStrokeHint">Draw your signature above</span>
+      </div>
+    </div>
+
+    <!-- Camera panel -->
+    <div id="sigCameraPanel" style="display:none;">
+      <!-- Live view -->
+      <div id="sigCamLive">
+        <div style="position:relative; border-radius:8px; overflow:hidden; background:#000;">
+          <video id="sigCamVideo" style="width:100%; max-height:220px; display:block; object-fit:cover;" autoplay playsinline></video>
+          <button type="button" style="position:absolute; top:8px; right:8px; padding:5px 11px; border:none; border-radius:6px; background:rgba(0,0,0,0.55); color:white; font-size:12px; font-weight:600; cursor:pointer;" onclick="flipSigCam()">🔄 Flip</button>
+        </div>
+        <canvas id="sigCamCanvas" style="display:none;"></canvas>
+        <button type="button" class="sig-btn-save" style="margin-top:8px; width:100%;" onclick="snapSigCam()">📸 Capture</button>
+      </div>
+      <!-- Snap preview -->
+      <div id="sigCamPreview" style="display:none;">
+        <div style="width:100%; height:160px; display:flex; align-items:center; justify-content:center; border:2px solid #2563eb; border-radius:8px; background:white; overflow:hidden;">
+          <img id="sigCamImg" src="" alt="Captured" style="max-width:100%; max-height:156px; object-fit:contain;">
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="sig-tool-btn" style="flex:1;" onclick="retakeSigCam()">🔄 Retake</button>
+          <button class="sig-tool-btn" style="flex:1; background:#2563eb; color:white; border:none; font-weight:700;" onclick="useSigCamSnap()">✔ Use This</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload panel -->
+    <div id="sigUploadPanel" style="display:none;">
+
+      <!-- Step A: Pick file -->
+      <div id="sigPickStep">
+        <div id="sigUploadDrop" onclick="document.getElementById('sigFileInput').click()">
+          <div id="sigUploadHint">
+            <div style="font-size:32px; margin-bottom:8px;">🖼</div>
+            <div style="font-size:14px; font-weight:600; color:#374151;">Tap to choose an image</div>
+            <div style="font-size:12px; color:#9ca3af; margin-top:4px;">JPG, PNG, WEBP supported</div>
+          </div>
+        </div>
+        <input type="file" id="sigFileInput" accept="image/*" style="display:none" onchange="handleSigUpload(this)">
+      </div>
+
+      <!-- Step B: Crop -->
+      <div id="sigCropStep" style="display:none;">
+        <div id="sigCropWrapper" style="width:100%; max-height:220px; overflow:hidden; border-radius:8px; border:1px solid #e5e7eb; background:#f9fafb;">
+          <img id="sigCropImage" src="" alt="Crop" style="display:block; max-width:100%;">
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="sig-tool-btn" style="flex:1; background:#2563eb; color:white; border:none; font-weight:700;" onclick="applySigCrop()">✂️ Crop & Use</button>
+          <button class="sig-tool-btn" style="flex:1;" onclick="backToSigPick()">← Change</button>
+        </div>
+      </div>
+
+      <!-- Step C: Preview after crop -->
+      <div id="sigPreviewStep" style="display:none;">
+        <div style="width:100%; height:160px; display:flex; align-items:center; justify-content:center; border:2px solid #2563eb; border-radius:8px; background:white; overflow:hidden;">
+          <img id="sigUploadPreview" src="" alt="Preview" style="max-width:100%; max-height:156px; object-fit:contain;">
+        </div>
+        <button class="sig-tool-btn" style="width:100%; margin-top:8px;" onclick="clearSigUpload()">🗑 Remove &amp; Re-pick</button>
+      </div>
+
+    </div>
+
+    <div class="sig-save-row">
+      <button class="sig-btn-save" id="sigSaveBtn" onclick="saveSig()" disabled>💾 Save Signature</button>
+      <button class="sig-btn-cancel" onclick="closeSigModal()">Cancel</button>
+    </div>
+    <div class="sig-status-msg" id="sigStatusMsg"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var sigType = null;
+  var pad = null;
+  var sigCropper = null;
+  var saveUrl = "{{ url_for('billing.student_save_signature', student_id=student.id) }}";
+
+  /* ═══════════════════════════════════════════════════════
+     SignaturePad — smooth Bézier-interpolated drawing
+  ═══════════════════════════════════════════════════════ */
+  function SignaturePad(canvas) {
+    this.canvas   = canvas;
+    this.ctx      = canvas.getContext('2d');
+    this.strokes  = [];      // Array of completed point arrays
+    this.live     = null;    // Current in-progress stroke
+    this.drawing  = false;
+    this._bindEvents();
+  }
+
+  SignaturePad.prototype._setupCtx = function() {
+    this.ctx.strokeStyle = '#1a1a2e';
+    this.ctx.lineWidth   = 2.2;
+    this.ctx.lineCap     = 'round';
+    this.ctx.lineJoin    = 'round';
+  };
+
+  SignaturePad.prototype._getPos = function(e) {
+    var r = this.canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  SignaturePad.prototype._bindEvents = function() {
+    var self = this, c = this.canvas;
+    c.addEventListener('pointerdown',  function(e){ e.preventDefault(); self._down(e); },  { passive: false });
+    c.addEventListener('pointermove',  function(e){ e.preventDefault(); self._move(e); },  { passive: false });
+    c.addEventListener('pointerup',    function(e){ self._up(e); });
+    c.addEventListener('pointercancel',function(e){ self._up(e); });
+    c.addEventListener('pointerleave', function(e){ self._up(e); });
+  };
+
+  SignaturePad.prototype._down = function(e) {
+    this.canvas.setPointerCapture(e.pointerId);
+    this.drawing = true;
+    var p = this._getPos(e);
+    this.live = [p];
+    this._setupCtx();
+    this.ctx.beginPath();
+    this.ctx.moveTo(p.x, p.y);
+    _onUpdate();
+  };
+
+  SignaturePad.prototype._move = function(e) {
+    if (!this.drawing || !this.live) return;
+    var p = this._getPos(e);
+    this.live.push(p);
+    var pts = this.live, n = pts.length;
+    if (n >= 3) {
+      var p1 = pts[n-3], p2 = pts[n-2], p3 = pts[n-1];
+      var mid1 = { x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2 };
+      var mid2 = { x:(p2.x+p3.x)/2, y:(p2.y+p3.y)/2 };
+      if (n === 3) {
+        this.ctx.beginPath();
+        this.ctx.moveTo(mid1.x, mid1.y);
+      }
+      this.ctx.quadraticCurveTo(p2.x, p2.y, mid2.x, mid2.y);
+      this.ctx.stroke();
+    } else if (n === 2) {
+      this.ctx.beginPath();
+      this.ctx.moveTo(pts[0].x, pts[0].y);
+      this.ctx.lineTo(pts[1].x,  pts[1].y);
+      this.ctx.stroke();
+    }
+  };
+
+  SignaturePad.prototype._up = function() {
+    if (!this.drawing) return;
+    this.drawing = false;
+    if (this.live && this.live.length > 0) {
+      this.strokes.push(this.live.slice());
+    }
+    this.live = null;
+    _onUpdate();
+  };
+
+  SignaturePad.prototype.resize = function() {
+    var dpr = window.devicePixelRatio || 1;
+    var r = this.canvas.getBoundingClientRect();
+    var w = r.width, h = r.height;
+    var saved = this.strokes.slice();
+    this.canvas.width  = Math.round(w * dpr);
+    this.canvas.height = Math.round(h * dpr);
+    this.ctx = this.canvas.getContext('2d');
+    this.ctx.scale(dpr, dpr);
+    this.strokes = saved;
+    this._setupCtx();
+    this._drawGuide();
+    this._redraw();
+  };
+
+  SignaturePad.prototype._drawGuide = function() {
+    var r = this.canvas.getBoundingClientRect();
+    var w = r.width, h = r.height;
+    this.ctx.save();
+    this.ctx.strokeStyle = '#e5e7eb';
+    this.ctx.lineWidth   = 1;
+    this.ctx.setLineDash([5, 5]);
+    this.ctx.beginPath();
+    this.ctx.moveTo(14, h * 0.78);
+    this.ctx.lineTo(w - 14, h * 0.78);
+    this.ctx.stroke();
+    this.ctx.setLineDash([]);
+    this.ctx.restore();
+  };
+
+  SignaturePad.prototype._redraw = function() {
+    this._setupCtx();
+    for (var s = 0; s < this.strokes.length; s++) {
+      var pts = this.strokes[s];
+      if (!pts.length) continue;
+      if (pts.length === 1) {
+        this.ctx.beginPath();
+        this.ctx.arc(pts[0].x, pts[0].y, 1.2, 0, Math.PI * 2);
+        this.ctx.fillStyle = '#1a1a2e';
+        this.ctx.fill();
+        continue;
+      }
+      this.ctx.beginPath();
+      this.ctx.moveTo(pts[0].x, pts[0].y);
+      for (var i = 1; i < pts.length - 1; i++) {
+        var mid = { x: (pts[i].x + pts[i+1].x) / 2, y: (pts[i].y + pts[i+1].y) / 2 };
+        this.ctx.quadraticCurveTo(pts[i].x, pts[i].y, mid.x, mid.y);
+      }
+      this.ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+      this.ctx.stroke();
+    }
+  };
+
+  SignaturePad.prototype.undo = function() {
+    if (this.strokes.length === 0) return;
+    this.strokes.pop();
+    var r = this.canvas.getBoundingClientRect();
+    this.ctx.clearRect(0, 0, r.width, r.height);
+    this._drawGuide();
+    this._redraw();
+    _onUpdate();
+  };
+
+  SignaturePad.prototype.clear = function() {
+    this.strokes = [];
+    var r = this.canvas.getBoundingClientRect();
+    this.ctx.clearRect(0, 0, r.width, r.height);
+    this._drawGuide();
+    _onUpdate();
+  };
+
+  SignaturePad.prototype.isEmpty = function() {
+    return this.strokes.length === 0;
+  };
+
+  /* Returns a white-background PNG data URL suitable for server storage */
+  SignaturePad.prototype.toDataURL = function() {
+    var dpr = window.devicePixelRatio || 1;
+    var r   = this.canvas.getBoundingClientRect();
+    var off = document.createElement('canvas');
+    off.width  = this.canvas.width;
+    off.height = this.canvas.height;
+    var ctx = off.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, off.width, off.height);
+    ctx.drawImage(this.canvas, 0, 0);
+    return off.toDataURL('image/png');
+  };
+
+  /* ═══════════════════════════════════════════════════════
+     UI helpers
+  ═══════════════════════════════════════════════════════ */
+  function _onUpdate() {
+    if (!pad) return;
+    var n    = pad.strokes.length;
+    var hint = document.getElementById('sigStrokeHint');
+    var btn  = document.getElementById('sigSaveBtn');
+    if (n === 0) {
+      hint.textContent = 'Draw your signature above';
+      btn.disabled = true;
+    } else {
+      hint.textContent = n + ' stroke' + (n === 1 ? '' : 's');
+      btn.disabled = false;
+    }
+    // Also handle upload/camera mode
+    if (sigMode === 'upload' || sigMode === 'camera') {
+      btn.disabled = !uploadedDataURL;
+    }
+  }
+
+  function _clearMsg() {
+    var el = document.getElementById('sigStatusMsg');
+    el.textContent = '';
+    el.className = 'sig-status-msg';
+  }
+
+  /* ═══════════════════════════════════════════════════════
+     Tab switching
+  ═══════════════════════════════════════════════════════ */
+  var sigMode = 'draw';   // 'draw', 'camera', or 'upload'
+  var uploadedDataURL = null;
+  var camStream = null;
+  var camFacingMode = 'user';   // prefer front camera for signatures
+
+  window.switchSigTab = function(mode) {
+    // Stop camera if leaving camera tab
+    if (sigMode === 'camera' && mode !== 'camera') { _stopSigCam(); }
+    sigMode = mode;
+    document.getElementById('tabDraw').classList.toggle('active',   mode === 'draw');
+    document.getElementById('tabCamera').classList.toggle('active', mode === 'camera');
+    document.getElementById('tabUpload').classList.toggle('active', mode === 'upload');
+    document.getElementById('sigDrawPanel').style.display   = mode === 'draw'   ? '' : 'none';
+    document.getElementById('sigCameraPanel').style.display = mode === 'camera' ? '' : 'none';
+    document.getElementById('sigUploadPanel').style.display = mode === 'upload' ? '' : 'none';
+    _onUpdate();
+    if (mode === 'draw' && pad) { pad.resize(); }
+    if (mode === 'camera') { _startSigCam(); }
+  };
+
+  /* ── Camera helpers ─────────────────────────────────── */
+  function _startSigCam() {
+    _stopSigCam();
+    document.getElementById('sigCamLive').style.display    = '';
+    document.getElementById('sigCamPreview').style.display = 'none';
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacingMode }, audio: false })
+      .then(function(stream) {
+        camStream = stream;
+        var v = document.getElementById('sigCamVideo');
+        v.srcObject = stream;
+        v.play();
+      })
+      .catch(function(err) {
+        var msg = document.getElementById('sigStatusMsg');
+        msg.textContent = '✗ Camera error: ' + err.message;
+        msg.className = 'sig-status-msg error';
+      });
+  }
+
+  function _stopSigCam() {
+    if (camStream) {
+      camStream.getTracks().forEach(function(t){ t.stop(); });
+      camStream = null;
+    }
+    var v = document.getElementById('sigCamVideo');
+    v.srcObject = null;
+  }
+
+  window.flipSigCam = function() {
+    camFacingMode = camFacingMode === 'user' ? 'environment' : 'user';
+    _startSigCam();
+  };
+
+  window.snapSigCam = function() {
+    var v = document.getElementById('sigCamVideo');
+    var c = document.getElementById('sigCamCanvas');
+    c.width  = v.videoWidth  || 640;
+    c.height = v.videoHeight || 480;
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    var snap = c.toDataURL('image/png');
+    _stopSigCam();
+    document.getElementById('sigCamImg').src = snap;
+    document.getElementById('sigCamLive').style.display    = 'none';
+    document.getElementById('sigCamPreview').style.display = '';
+    // Temporarily store so Use This can commit
+    window._sigCamSnap = snap;
+  };
+
+  window.retakeSigCam = function() {
+    window._sigCamSnap = null;
+    _startSigCam();
+    document.getElementById('sigCamPreview').style.display = 'none';
+    document.getElementById('sigCamLive').style.display    = '';
+    _onUpdate();
+  };
+
+  window.useSigCamSnap = function() {
+    if (!window._sigCamSnap) return;
+    uploadedDataURL = window._sigCamSnap;
+    window._sigCamSnap = null;
+    _onUpdate();
+  };
+
+  window.handleSigUpload = function(input) {
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      // Show crop step
+      document.getElementById('sigPickStep').style.display    = 'none';
+      document.getElementById('sigCropStep').style.display    = '';
+      document.getElementById('sigPreviewStep').style.display = 'none';
+
+      var img = document.getElementById('sigCropImage');
+      img.src = e.target.result;
+
+      // Destroy any previous cropper
+      if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+
+      img.onload = function() {
+        sigCropper = new Cropper(img, {
+          viewMode: 1,
+          dragMode: 'move',
+          autoCropArea: 0.9,
+          responsive: true,
+          checkCrossOrigin: false,
+          background: false,
+          movable: true,
+          zoomable: true,
+          rotatable: false
+        });
+      };
+    };
+    reader.readAsDataURL(file);
+  };
+
+  window.applySigCrop = function() {
+    if (!sigCropper) return;
+    var canvas = sigCropper.getCroppedCanvas({ maxWidth: 800, maxHeight: 400, fillColor: '#fff' });
+    uploadedDataURL = canvas.toDataURL('image/png');
+    sigCropper.destroy();
+    sigCropper = null;
+
+    // Show preview step
+    document.getElementById('sigUploadPreview').src         = uploadedDataURL;
+    document.getElementById('sigPickStep').style.display    = 'none';
+    document.getElementById('sigCropStep').style.display    = 'none';
+    document.getElementById('sigPreviewStep').style.display = '';
+    _onUpdate();
+  };
+
+  window.backToSigPick = function() {
+    if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+    document.getElementById('sigCropStep').style.display = 'none';
+    document.getElementById('sigPickStep').style.display = '';
+    document.getElementById('sigFileInput').value = '';
+  };
+
+  window.clearSigUpload = function() {
+    uploadedDataURL = null;
+    if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+    document.getElementById('sigUploadPreview').src         = '';
+    document.getElementById('sigPickStep').style.display    = '';
+    document.getElementById('sigCropStep').style.display    = 'none';
+    document.getElementById('sigPreviewStep').style.display = 'none';
+    document.getElementById('sigFileInput').value = '';
+    _onUpdate();
+  };
+
+  /* ═══════════════════════════════════════════════════════
+     Modal open / close
+  ═══════════════════════════════════════════════════════ */
+  window.openSigModal = function(type) {
+    sigType = type;
+    var isParent = (type === 'parent');
+    document.getElementById('sigModalTitle').textContent =
+      isParent ? '✍️ Parent / Guardian Signature' : '✍️ Student Signature';
+    document.getElementById('sigModalSubtitle').textContent =
+      isParent
+        ? ({{ (student.parent_name or 'Parent/Guardian') | tojson }}) + ': please sign clearly within the box.'
+        : ({{ student.full_name | tojson }}) + ': please sign clearly within the box.';
+    _clearMsg();
+    document.getElementById('sigSaveBtn').textContent  = '💾 Save Signature';
+    document.getElementById('sigSaveBtn').disabled     = true;
+    // Reset to Draw tab
+    _stopSigCam();
+    window._sigCamSnap = null;
+    sigMode = 'draw';
+    uploadedDataURL = null;
+    document.getElementById('tabDraw').classList.add('active');
+    document.getElementById('tabCamera').classList.remove('active');
+    document.getElementById('tabUpload').classList.remove('active');
+    document.getElementById('sigDrawPanel').style.display   = '';
+    document.getElementById('sigCameraPanel').style.display = 'none';
+    document.getElementById('sigUploadPanel').style.display = 'none';
+    clearSigUpload();
+    document.getElementById('sigPadModal').classList.add('show');
+    document.body.style.overflow = 'hidden';
+
+    /* Init pad after modal is visible so getBoundingClientRect() is accurate */
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        var canvas = document.getElementById('sigCanvas');
+        pad = new SignaturePad(canvas);
+        pad.resize();
+        _onUpdate();
+      });
+    });
+  };
+
+  window.closeSigModal = function() {
+    _stopSigCam();
+    window._sigCamSnap = null;
+    document.getElementById('sigPadModal').classList.remove('show');
+    document.body.style.overflow = '';
+    pad = null;
+    sigType = null;
+    uploadedDataURL = null;
+    if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+    clearSigUpload();
+  };
+
+  window.sigUndo  = function() { if (pad && sigMode === 'draw') pad.undo(); };
+  window.sigClear = function() {
+    if (sigMode === 'draw') {
+      if (!pad || pad.isEmpty()) return;
+      if (!confirm('Clear the signature?')) return;
+      pad.clear();
+    }
+  };
+
+  /* ═══════════════════════════════════════════════════════
+     Save to server
+  ═══════════════════════════════════════════════════════ */
+  window.saveSig = function() {
+    var btn = document.getElementById('sigSaveBtn');
+    var msg = document.getElementById('sigStatusMsg');
+    var dataURL;
+
+    if (sigMode === 'upload' || sigMode === 'camera') {
+      if (!uploadedDataURL) return;
+      dataURL = uploadedDataURL;
+    } else {
+      if (!pad || pad.isEmpty()) return;
+      dataURL = pad.toDataURL();
+    }
+
+    btn.disabled     = true;
+    btn.textContent  = '⏳ Saving…';
+    msg.textContent  = '';
+    msg.className    = 'sig-status-msg';
+
+    var fd = new FormData();
+    fd.append('sig_type', sigType);
+    fd.append('sig_data',  dataURL);
+
+    fetch(saveUrl, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content }, body: fd })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          msg.textContent = '✓ Saved on ' + data.signed_at;
+          msg.className   = 'sig-status-msg success';
+          btn.textContent = '✓ Saved!';
+          _updateStatusBox(sigType, dataURL, data.signed_at);
+          setTimeout(closeSigModal, 1100);
+        } else {
+          msg.textContent = '✗ ' + (data.error || 'Save failed');
+          msg.className   = 'sig-status-msg error';
+          btn.disabled    = false;
+          btn.textContent = '💾 Save Signature';
+        }
+      })
+      .catch(function(err) {
+        msg.textContent = '✗ Network error: ' + err.message;
+        msg.className   = 'sig-status-msg error';
+        btn.disabled    = false;
+        btn.textContent = '💾 Save Signature';
+      });
+  };
+
+  /* ═══════════════════════════════════════════════════════
+     Refresh signature status box without page reload
+  ═══════════════════════════════════════════════════════ */
+  function _updateStatusBox(type, dataURL, signedAt) {
+    var dateStr = signedAt ? 'Signed: ' + signedAt.substring(0, 10) : '';
+
+    var emptyEl = document.getElementById('sigEmpty_'       + type);
+    var wrapEl  = document.getElementById('sigPreviewWrap_' + type);
+    var imgEl   = document.getElementById('sigImg_'         + type);
+    var dateEl  = document.getElementById('sigDate_'        + type);
+    var btnEl   = document.getElementById('sigBtn_'         + type);
+
+    if (emptyEl)  emptyEl.style.display  = 'none';
+    if (wrapEl)   wrapEl.style.display   = 'block';
+    if (imgEl)    imgEl.src              = dataURL;
+    if (dateEl)   dateEl.textContent     = dateStr;
+    if (btnEl)    btnEl.textContent      = '🔄 Update Signature';
+  }
+
+  /* Resize canvas if modal size changes (e.g. virtual keyboard hides) */
+  window.addEventListener('resize', function() { if (pad) pad.resize(); });
+
+})();
+</script>
 
 {% endblock %}

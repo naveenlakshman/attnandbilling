@@ -1,6 +1,7 @@
-from flask import Flask, send_from_directory
+from flask import Flask
+from extensions import csrf, limiter
 from config import Config
-from db import init_db
+from db import init_db, get_company_profile
 from modules.leads.routes import leads_bp
 from modules.billing.routes import billing_bp
 from modules.assets.routes import assets_bp
@@ -8,9 +9,10 @@ from modules.reports.routes import reports_bp
 from modules.import_export.routes import import_export_bp
 from modules.baddebt.routes import baddebt_bp
 from modules.attendance.routes import attendance_bp
-from modules.lms_admin.routes import lms_admin_bp
-from datetime import datetime
-import os
+from modules.lms_admin import lms_admin_bp
+from modules.students import students_bp
+from modules.website import website_bp
+from datetime import datetime, timedelta
 
 def format_datetime(value):
     """Jinja2 filter to format ISO datetime to user-friendly format"""
@@ -28,14 +30,32 @@ def format_datetime(value):
     except (ValueError, AttributeError):
         return str(value)
 
+def to_ist_time(value):
+    """Jinja2 filter: convert a UTC datetime string to IST HH:MM (adds +5:30)"""
+    if not value:
+        return ""
+    try:
+        if 'T' in str(value):
+            dt = datetime.fromisoformat(str(value))
+        else:
+            dt = datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
+        ist = dt + timedelta(hours=5, minutes=30)
+        return ist.strftime("%I:%M %p")  # e.g. 12:23 PM
+    except (ValueError, AttributeError):
+        return str(value)[11:16]
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    csrf.init_app(app)
+    limiter.init_app(app)
 
     init_db()
 
     from modules.core.routes import core_bp
     app.register_blueprint(core_bp)
+    app.register_blueprint(website_bp)
     app.register_blueprint(leads_bp, url_prefix="/leads")
     app.register_blueprint(billing_bp, url_prefix="/billing")
     app.register_blueprint(assets_bp, url_prefix="/assets")
@@ -44,6 +64,7 @@ def create_app():
     app.register_blueprint(baddebt_bp, url_prefix="/baddebt")
     app.register_blueprint(attendance_bp, url_prefix="/attendance")
     app.register_blueprint(lms_admin_bp)
+    app.register_blueprint(students_bp)
 
     # File serving route for uploaded content
     @app.route('/uploads/content/<path:filename>')
@@ -58,6 +79,11 @@ def create_app():
 
     # Register Jinja2 filters
     app.jinja_env.filters['format_datetime'] = format_datetime
+    app.jinja_env.filters['to_ist_time'] = to_ist_time
+
+    @app.context_processor
+    def inject_company():
+        return {"company": get_company_profile()}
 
     return app
 

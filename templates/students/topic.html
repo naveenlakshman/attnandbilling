@@ -1,0 +1,433 @@
+{% extends "students/base.html" %}
+{% block title %}{{ topic.topic_title }}{% endblock %}
+{% block page_title %}{{ topic.program_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Override base layout for full-width LMS view */
+  .main-content { padding: 0 !important; }
+  .topbar { margin: 0 !important; border-radius: 0; position: sticky; top: 0; z-index: 200; }
+
+  .lms-layout {
+    display: flex;
+    height: calc(100vh - 57px);
+    overflow: hidden;
+  }
+
+  /* ── Content area ── */
+  .lms-content {
+    flex: 1;
+    overflow: hidden;
+    background: #f8f9fa;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .lms-content-inner {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 32px;
+    max-width: 900px;
+    width: 100%;
+    margin: 0 auto;
+    min-height: 0;
+  }
+
+  /* breadcrumb */
+  .lms-breadcrumb { font-size: 13px; color: #6c757d; margin-bottom: 6px; }
+  .lms-breadcrumb a { color: #6c757d; text-decoration: none; }
+  .lms-breadcrumb a:hover { color: #0d6efd; }
+  .lms-topic-title { font-size: 22px; font-weight: 700; color: #1a1a2e; margin-bottom: 20px; }
+
+  /* content blocks */
+  .content-block {
+    background: #fff; border-radius: 10px; padding: 20px;
+    margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  .content-block-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #212529; }
+  .type-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; margin-bottom: 10px;
+  }
+  .type-youtube  { background:#fff3cd; color:#856404; }
+  .type-pdf      { background:#cfe2ff; color:#084298; }
+  .type-download { background:#d1ecf1; color:#0c5460; }
+
+  /* Watch / Read tabs */
+  .content-tabs {
+    display: flex; gap: 4px; margin-bottom: 20px;
+    border-bottom: 2px solid #e9ecef;
+  }
+  .tab-btn {
+    padding: 9px 20px; font-size: 14px; font-weight: 600;
+    background: none; border: none; border-bottom: 3px solid transparent;
+    margin-bottom: -2px; cursor: pointer; color: #6c757d;
+    border-radius: 0; transition: color 0.15s;
+  }
+  .tab-btn:hover { color: #0d6efd; }
+  .tab-btn.active { color: #0d6efd; border-bottom-color: #0d6efd; }
+  .tab-btn.disabled { color: #ced4da; cursor: default; pointer-events: none; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* bottom bar — fixed to bottom of content pane */
+  .lms-bottom-bar {
+    background: #fff; border-top: 2px solid #e9ecef;
+    padding: 12px 24px; display: flex; align-items: center;
+    justify-content: space-between; gap: 10px; flex-shrink: 0;
+  }
+  .btn-notes {
+    background: none; border: 1px solid #6c757d; color: #495057;
+    padding: 8px 16px; border-radius: 6px; font-size: 13px;
+    cursor: pointer; font-weight: 500; white-space: nowrap;
+  }
+  .btn-notes:hover { background: #f8f9fa; }
+  .btn-complete {
+    background: #fff; color: #198754; border: 2px solid #198754;
+    padding: 9px 22px; border-radius: 8px; font-weight: 700;
+    font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 7px;
+    transition: all 0.2s;
+  }
+  .btn-complete:hover { background: #198754; color: #fff; }
+  .btn-complete.completed { background: #198754; color: #fff; }
+  .btn-complete.completed:hover { background: #157347; }
+  .btn-nav-group { display: flex; gap: 8px; align-items: center; }
+  .btn-nav {
+    background: #fff; border: 1px solid #dee2e6; color: #495057;
+    padding: 8px 18px; border-radius: 8px; font-size: 14px;
+    cursor: pointer; font-weight: 500; text-decoration: none;
+    transition: background 0.15s; white-space: nowrap;
+  }
+  .btn-nav:hover { background: #f8f9fa; color: #212529; }
+  .btn-nav-next {
+    background: #0d6efd; color: #fff; border-color: #0d6efd;
+  }
+  .btn-nav-next:hover { background: #0b5ed7; color: #fff; }
+
+  /* ── Sidebar ── */
+  .lms-sidebar {
+    width: 320px; flex-shrink: 0;
+    background: #fff; border-left: 1px solid #e9ecef;
+    overflow-y: auto; display: flex; flex-direction: column;
+  }
+  .sidebar-header {
+    padding: 16px 16px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    position: sticky; top: 0; background: #fff; z-index: 10;
+  }
+  .sidebar-program-name {
+    font-size: 13px; font-weight: 700; color: #1a1a2e;
+    margin-bottom: 8px; line-height: 1.3;
+  }
+  .progress-bar-wrap { background: #e9ecef; border-radius: 4px; height: 6px; margin-bottom: 5px; }
+  .progress-bar-fill { background: #198754; height: 6px; border-radius: 4px; transition: width 0.3s; }
+  .progress-label { font-size: 11px; color: #6c757d; }
+
+  .chapter-item { border-bottom: 1px solid #f0f0f0; }
+  .chapter-header {
+    padding: 11px 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px; font-weight: 600; color: #212529;
+    background: #f8f9fa; user-select: none;
+  }
+  .chapter-header:hover { background: #f0f4ff; }
+  .chapter-header .chevron { transition: transform 0.2s; font-size: 11px; color: #6c757d; }
+  .chapter-header.open .chevron { transform: rotate(180deg); }
+  .chapter-topics { display: none; }
+  .chapter-topics.open { display: block; }
+
+  .topic-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 16px 9px 24px;
+    font-size: 13px; color: #495057; cursor: pointer;
+    text-decoration: none; border-left: 3px solid transparent;
+    transition: background 0.1s;
+  }
+  .topic-item:hover { background: #f0f4ff; color: #0d6efd; }
+  .topic-item.active {
+    background: #e8f0fe; color: #0d6efd; font-weight: 600;
+    border-left-color: #0d6efd;
+  }
+  .topic-item .check {
+    width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid #dee2e6; display: flex; align-items: center;
+    justify-content: center; font-size: 10px; color: transparent;
+  }
+  .topic-item.done .check {
+    background: #198754; border-color: #198754; color: #fff;
+  }
+
+  /* IP protection */
+  .content-block { user-select: none; -webkit-user-select: none; }
+  @media print { body * { visibility: hidden !important; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lms-layout">
+
+  <!-- ── Left: Content ── -->
+  <div class="lms-content">
+    <div class="lms-content-inner">
+      <div class="lms-breadcrumb">
+        <a href="{{ url_for('students.dashboard') }}">My Programs</a> ›
+        <a href="{{ url_for('students.program_view', program_id=topic.program_id) }}">{{ topic.program_name }}</a> ›
+        {{ topic.chapter_title }} › {{ topic.topic_title }}
+      </div>
+      <div class="lms-topic-title">{{ topic.topic_title }}</div>
+
+      <!-- Watch / Read Tabs -->
+      <div class="content-tabs">
+        <button class="tab-btn {% if video_content %}active{% else %}disabled{% endif %}"
+                id="tabWatch" onclick="switchTab('watch')">Watch</button>
+        <button class="tab-btn {% if not video_content and (pdf_content or download_content) %}active{% elif not pdf_content and not download_content %}disabled{% endif %}"
+                id="tabRead" onclick="switchTab('read')">Read</button>
+      </div>
+
+      <!-- Watch Pane -->
+      <div class="tab-pane {% if video_content %}active{% endif %}" id="paneWatch">
+        {% if video_content %}
+          <div class="content-block">
+            <div class="content-block-title">{{ video_content.content_title }}</div>
+            {% if embed_urls[video_content.id] %}
+              <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;">
+                <iframe src="{{ embed_urls[video_content.id] }}"
+                    style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
+                    allowfullscreen
+                    allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture">
+                </iframe>
+                <div style="position:absolute;top:0;left:0;width:100%;height:13%;z-index:10;cursor:default;" oncontextmenu="return false;"></div>
+                <div style="position:absolute;bottom:0;right:0;width:22%;height:12%;z-index:10;cursor:default;" oncontextmenu="return false;"></div>
+                <div style="position:absolute;bottom:0;left:0;width:8%;height:12%;z-index:10;cursor:default;" oncontextmenu="return false;"></div>
+              </div>
+            {% else %}
+              <div class="alert alert-warning py-2">Video URL not configured.</div>
+            {% endif %}
+            {% if video_content.content_body %}
+              <div class="text-muted mt-3 p-3 bg-light rounded" style="font-size:13px;">{{ video_content.content_body }}</div>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="text-center py-5 text-muted">
+            <div style="font-size:40px;">🎬</div>
+            <p class="mt-2">No video content for this topic.</p>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Read Pane -->
+      <div class="tab-pane {% if not video_content and (pdf_content or download_content) %}active{% endif %}" id="paneRead">
+        {% if pdf_content %}
+          <div class="content-block">
+            <div class="content-block-title">{{ pdf_content.content_title }}</div>
+            <div id="pdf-loading-{{ pdf_content.id }}" class="text-center py-3 text-muted">Loading PDF…</div>
+            <div id="pdf-viewer-{{ pdf_content.id }}"
+                 data-pdf-url="{{ url_for('students.serve_pdf', content_id=pdf_content.id) }}"
+                 style="overflow-y:auto;"></div>
+            {% if pdf_content.content_body %}
+              <div class="text-muted mt-3 p-3 bg-light rounded" style="font-size:13px;">{{ pdf_content.content_body }}</div>
+            {% endif %}
+          </div>
+        {% endif %}
+        {% if download_content %}
+          <div class="content-block">
+            <div class="d-flex align-items-center gap-3 p-3 bg-light rounded">
+              <span style="font-size:28px;">📎</span>
+              <div class="flex-grow-1">
+                <div class="fw-semibold">{{ download_content.content_title }}</div>
+                {% if download_content.content_body %}<div class="text-muted" style="font-size:13px;">{{ download_content.content_body }}</div>{% endif %}
+              </div>
+              <a href="{{ url_for('students.serve_download', content_id=download_content.id) }}" class="btn btn-primary btn-sm">⬇ Download</a>
+            </div>
+          </div>
+        {% endif %}
+        {% if not pdf_content and not download_content %}
+          <div class="text-center py-5 text-muted">
+            <div style="font-size:40px;">📖</div>
+            <p class="mt-2">No reading material for this topic.</p>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if not video_content and not pdf_content and not download_content %}
+        <div class="text-center py-5 text-muted">
+          <div style="font-size:48px;">📭</div>
+          <p class="mt-3">No content for this topic yet.</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Bottom bar: Notes | Complete | Previous + Next -->
+    <div class="lms-bottom-bar">
+      <!-- Left: Notes placeholder -->
+      <div>
+        <button class="btn-notes" onclick="alert('Notes feature coming soon!')">✏ Add / Edit Notes</button>
+      </div>
+      <!-- Center: Mark Complete -->
+      <button class="btn-complete {% if is_completed %}completed{% endif %}"
+              id="completeBtn"
+              onclick="toggleComplete()">
+        {% if is_completed %}
+          ✓ Completed
+        {% else %}
+          Mark as Complete ✓
+        {% endif %}
+      </button>
+      <!-- Right: Previous + Next -->
+      <div class="btn-nav-group">
+        {% if prev_topic_id %}
+          <a href="{{ url_for('students.topic_view', topic_id=prev_topic_id) }}" class="btn-nav">‹ Previous</a>
+        {% else %}
+          <span class="btn-nav" style="opacity:.4;pointer-events:none;">‹ Previous</span>
+        {% endif %}
+        {% if next_topic_id %}
+          <a href="{{ url_for('students.topic_view', topic_id=next_topic_id) }}" class="btn-nav btn-nav-next">Next ›</a>
+        {% else %}
+          <span class="btn-nav btn-nav-next" style="opacity:.4;pointer-events:none;">Next ›</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right: Sidebar ── -->
+  <div class="lms-sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-program-name">{{ topic.program_name }}</div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progressFill"
+             style="width: {% if total_topics > 0 %}{{ (completed_topics / total_topics * 100)|int }}{% else %}0{% endif %}%">
+        </div>
+      </div>
+      <div class="progress-label" id="progressLabel">
+        {{ completed_topics }} / {{ total_topics }} Completed
+      </div>
+    </div>
+
+    {% for chapter in chapters_sidebar %}
+    <div class="chapter-item">
+      <div class="chapter-header {% if chapter.id == topic.chapter_id %}open{% endif %}"
+           onclick="toggleChapter(this)">
+        <span>{{ chapter.chapter_order }}. {{ chapter.chapter_title }}</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="chapter-topics {% if chapter.id == topic.chapter_id %}open{% endif %}">
+        {% for t in topics_by_chapter.get(chapter.id, []) %}
+        <a href="{{ url_for('students.topic_view', topic_id=t.id) }}"
+           class="topic-item {% if t.id == topic.id %}active{% endif %} {% if t.is_completed %}done{% endif %}">
+          <span class="check">{% if t.is_completed %}✓{% endif %}</span>
+          <span>{{ t.topic_order }}. {{ t.topic_title }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/pdfjs/pdf.min.js') }}"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  '{{ url_for("static", filename="js/pdfjs/pdf.worker.min.js") }}';
+
+var PDF_BASE_SCALE = 1.5;
+var DPR = window.devicePixelRatio || 1;
+
+/* Render all PDFs now that pdfjsLib is loaded */
+document.querySelectorAll('[data-pdf-url]').forEach(function(viewer) {
+  var url = viewer.getAttribute('data-pdf-url');
+  var loadingEl = document.getElementById(viewer.id.replace('pdf-viewer-', 'pdf-loading-'));
+  pdfjsLib.getDocument(url).promise.then(function(pdf) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    function renderPage(n) {
+      pdf.getPage(n).then(function(page) {
+        /* Scale at DPR for HiDPI sharpness, then shrink CSS size back */
+        var vp = page.getViewport({ scale: PDF_BASE_SCALE * DPR });
+        var canvas = document.createElement('canvas');
+        canvas.width  = vp.width;   /* physical pixels */
+        canvas.height = vp.height;  /* physical pixels */
+        canvas.style.display = 'block';
+        canvas.style.margin  = '0 auto 16px';
+        canvas.style.width   = (vp.width  / DPR) + 'px';  /* CSS pixels */
+        canvas.style.height  = (vp.height / DPR) + 'px';  /* CSS pixels */
+        canvas.style.boxShadow = '0 1px 4px rgba(0,0,0,0.10)';
+        canvas.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+        viewer.appendChild(canvas);
+        page.render({ canvasContext: canvas.getContext('2d'), viewport: vp });
+        if (n < pdf.numPages) renderPage(n + 1);
+      });
+    }
+    renderPage(1);
+  }).catch(function() {
+    if (loadingEl) loadingEl.textContent = 'Failed to load PDF.';
+  });
+});
+
+/* IP protection */
+document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+document.addEventListener('keydown', function(e){
+  if((e.ctrlKey||e.metaKey) && (e.key==='s'||e.key==='p'||e.key==='u')) e.preventDefault();
+});
+
+/* Watch / Read tab switcher */
+function switchTab(tab) {
+  document.getElementById('paneWatch').classList.toggle('active', tab === 'watch');
+  document.getElementById('paneRead').classList.toggle('active', tab === 'read');
+  document.getElementById('tabWatch').classList.toggle('active', tab === 'watch');
+  document.getElementById('tabRead').classList.toggle('active', tab === 'read');
+}
+
+/* Sidebar chapter toggle */
+function toggleChapter(el) {
+  el.classList.toggle('open');
+  el.nextElementSibling.classList.toggle('open');
+}
+
+/* Mark complete */
+var isCompleted = {{ 'true' if is_completed else 'false' }};
+var topicId = {{ topic.id }};
+var totalTopics = {{ total_topics }};
+var completedTopics = {{ completed_topics }};
+var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+function toggleComplete() {
+  var action = isCompleted ? 'incomplete' : 'complete';
+  var formData = new FormData();
+  formData.append('action', action);
+  formData.append('csrf_token', csrfToken);
+
+  fetch('/student/topic/' + topicId + '/complete', {
+    method: 'POST', body: formData
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if(data.status === 'ok') {
+      isCompleted = (action === 'complete');
+      var btn = document.getElementById('completeBtn');
+      if(isCompleted) {
+        btn.textContent = '✓ Completed';
+        btn.classList.add('completed');
+        // mark sidebar item as done
+        document.querySelectorAll('.topic-item.active').forEach(function(el){
+          el.classList.add('done');
+          el.querySelector('.check').textContent = '✓';
+        });
+        completedTopics++;
+      } else {
+        btn.textContent = 'Mark as Complete ✓';
+        btn.classList.remove('completed');
+        document.querySelectorAll('.topic-item.active').forEach(function(el){
+          el.classList.remove('done');
+          el.querySelector('.check').textContent = '';
+        });
+        completedTopics--;
+      }
+      // update progress bar
+      var pct = totalTopics > 0 ? Math.round(completedTopics / totalTopics * 100) : 0;
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressLabel').textContent = completedTopics + ' / ' + totalTopics + ' Completed';
+    }
+  });
+}
+</script>
+{% endblock %}

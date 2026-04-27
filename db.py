@@ -1,16 +1,15 @@
 import sqlite3
+import time
 from datetime import datetime
 from werkzeug.security import generate_password_hash
 from config import DB_PATH
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, timeout=10.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
-    conn.execute("PRAGMA journal_mode = WAL;")
-    conn.execute("PRAGMA busy_timeout = 30000;")
-    conn.execute("PRAGMA synchronous = NORMAL;")
+    conn.execute("PRAGMA busy_timeout = 5000;")
 
     def parse_ddmmyyyy(date_str):
         if not date_str:
@@ -33,8 +32,59 @@ def get_conn():
     return conn
 
 
-def log_activity(user_id, branch_id, action_type, module_name, record_id, description):
+_company_cache = {"data": None, "ts": 0}
+
+
+def get_company_profile():
+    """Return company profile, cached for 5 minutes to avoid a DB hit on every request."""
+    global _company_cache
+    if _company_cache["data"] is not None and (time.time() - _company_cache["ts"]) < 300:
+        return _company_cache["data"]
     conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM company_profile WHERE id = 1")
+        row = cur.fetchone()
+        if row:
+            result = dict(row)
+        else:
+            result = {
+                "id": 1,
+                "company_name": "My Company",
+                "company_short_name": "My Company ERP",
+                "tagline": "ERP System",
+                "address": "",
+                "phone": "",
+                "email": "",
+                "website": "",
+                "logo_filename": None,
+                "reg_number": "",
+                "updated_at": None,
+            }
+        _company_cache["data"] = result
+        _company_cache["ts"] = time.time()
+        return result
+    finally:
+        conn.close()
+
+
+def clear_company_cache():
+    """Call this after saving company profile so the cache refreshes immediately."""
+    global _company_cache
+    _company_cache["data"] = None
+    _company_cache["ts"] = 0
+
+
+
+def log_activity(user_id, branch_id, action_type, module_name, record_id, description, conn=None):
+    """
+    Insert an activity log entry.
+    Pass an existing `conn` to reuse it (caller must commit).
+    Without `conn`, opens its own connection and auto-commits.
+    """
+    _own_conn = conn is None
+    if _own_conn:
+        conn = get_conn()
     try:
         cur = conn.cursor()
         now = datetime.now().isoformat(timespec="seconds")
@@ -58,23 +108,50 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
             description,
             now
         ))
-        conn.commit()
+        if _own_conn:
+            conn.commit()
+    except Exception as e:
+        print(f"Activity log error: {e}")
     finally:
-        conn.close()
+        if _own_conn:
+            conn.close()
 
 
 def add_column_if_not_exists(cur, table_name, column_name, column_def):
-    cur.execute(f"PRAGMA table_info({table_name})")
-    columns = [row["name"] for row in cur.fetchall()]
-    if column_name not in columns:
-        clean_def = column_def.replace(" UNIQUE", "").replace("UNIQUE ", "")
-        cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {clean_def}")
+    try:
+        cur.execute(f"PRAGMA table_info({table_name})")
+        columns = [row["name"] for row in cur.fetchall()]
+        if column_name not in columns:
+            clean_def = column_def.replace(" UNIQUE", "").replace("UNIQUE ", "")
+            cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {clean_def}")
+    except Exception as e:
+        print(f"Warning: Could not add column {column_name} to {table_name}: {e}")
 
 
 def init_db():
     conn = get_conn()
+    # One-time DB configuration (WAL mode + performance settings)
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
     cur = conn.cursor()
     now = datetime.now().isoformat(timespec="seconds")
+
+    # ---------- COMPANY PROFILE ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS company_profile (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            company_name TEXT NOT NULL DEFAULT 'My Company',
+            company_short_name TEXT NOT NULL DEFAULT 'My Company ERP',
+            tagline TEXT DEFAULT 'ERP System',
+            address TEXT,
+            phone TEXT,
+            email TEXT,
+            website TEXT,
+            logo_filename TEXT,
+            reg_number TEXT,
+            updated_at TEXT
+        )
+    """)
 
     # ---------- BRANCHES ----------
     cur.execute("""
@@ -174,6 +251,9 @@ def init_db():
             qualification TEXT,
             employment_status TEXT DEFAULT 'unemployed',
             branch_id INTEGER,
+            date_of_birth TEXT,
+            parent_name TEXT,
+            parent_contact TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT,
             FOREIGN KEY (branch_id) REFERENCES branches(id)
@@ -251,6 +331,30 @@ def init_db():
             FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
             FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
             FOREIGN KEY (branch_id) REFERENCES branches(id),
+            FOREIGN KEY (marked_by) REFERENCES users(id)
+        )
+    """)
+
+    # ---------- ATTENDANCE TIME WARNINGS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS attendance_time_warnings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            branch_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            attendance_date TEXT NOT NULL,
+            attendance_status TEXT NOT NULL,
+            marked_at TEXT NOT NULL,
+            actual_time TEXT NOT NULL,
+            batch_start_time TEXT,
+            batch_end_time TEXT,
+            warning_type TEXT NOT NULL
+                CHECK(warning_type IN ('before_start', 'after_end')),
+            reason TEXT,
+            marked_by INTEGER,
+            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
             FOREIGN KEY (marked_by) REFERENCES users(id)
         )
     """)
@@ -481,15 +585,34 @@ def init_db():
         )
     """)
 
-    # ---------- LMS MODULE ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS reminder_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            invoice_id INTEGER NOT NULL,
+            installment_id INTEGER NOT NULL,
+            phone_number TEXT,
+            reminder_type TEXT NOT NULL,
+            message_text TEXT NOT NULL,
+            status TEXT NOT NULL,
+            sent_via TEXT NOT NULL,
+            followup_note TEXT,
+            sent_by INTEGER,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(invoice_id) REFERENCES invoices(id),
+            FOREIGN KEY(installment_id) REFERENCES installment_plans(id),
+            FOREIGN KEY(sent_by) REFERENCES users(id)
+        )
+    """)
 
-    # 1) LMS PROGRAMS
+    # ---------- LMS TABLES ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_programs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             course_id INTEGER,
             program_name TEXT NOT NULL,
-            slug TEXT UNIQUE,
+            slug TEXT NOT NULL UNIQUE,
             description TEXT,
             thumbnail_path TEXT,
             is_published INTEGER NOT NULL DEFAULT 0,
@@ -497,12 +620,11 @@ def init_db():
             created_by INTEGER,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE SET NULL,
-            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+            FOREIGN KEY (course_id) REFERENCES courses(id),
+            FOREIGN KEY (created_by) REFERENCES users(id)
         )
     """)
 
-    # 2) LMS CHAPTERS
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_chapters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -517,7 +639,6 @@ def init_db():
         )
     """)
 
-    # 3) LMS TOPICS
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_topics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -525,28 +646,26 @@ def init_db():
             topic_title TEXT NOT NULL,
             topic_order INTEGER NOT NULL DEFAULT 1,
             short_description TEXT,
-            estimated_minutes INTEGER DEFAULT 0,
-            content_type TEXT NOT NULL DEFAULT 'lesson'
-                CHECK(content_type IN ('lesson', 'video', 'pdf', 'assignment', 'ebook', 'workbook')),
+            estimated_minutes INTEGER,
+            content_type TEXT NOT NULL DEFAULT 'lesson',
             is_preview INTEGER NOT NULL DEFAULT 0,
             is_active INTEGER NOT NULL DEFAULT 1,
+            is_required INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT,
             FOREIGN KEY (chapter_id) REFERENCES lms_chapters(id) ON DELETE CASCADE
         )
     """)
 
-    # 4) LMS TOPIC CONTENTS
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_topic_contents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             topic_id INTEGER NOT NULL,
-            content_title TEXT,
-            content_mode TEXT NOT NULL DEFAULT 'text'
-                CHECK(content_mode IN ('text', 'html', 'youtube', 'video_file', 'pdf', 'image', 'download')),
-            content_body TEXT,
-            file_path TEXT,
+            content_mode TEXT NOT NULL DEFAULT 'text',
+            content_title TEXT NOT NULL,
             external_url TEXT,
+            file_path TEXT,
+            content_body TEXT,
             display_order INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT,
@@ -554,28 +673,31 @@ def init_db():
         )
     """)
 
-    # 5) LMS TOPIC ATTACHMENTS
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_topic_attachments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             topic_id INTEGER NOT NULL,
+            attachment_type TEXT NOT NULL DEFAULT 'other',
             file_name TEXT NOT NULL,
+            file_size INTEGER NOT NULL DEFAULT 0,
             file_path TEXT NOT NULL,
-            file_type TEXT,
+            description TEXT,
+            uploaded_by INTEGER,
+            is_required INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
-            FOREIGN KEY (topic_id) REFERENCES lms_topics(id) ON DELETE CASCADE
+            updated_at TEXT,
+            FOREIGN KEY (topic_id) REFERENCES lms_topics(id) ON DELETE CASCADE,
+            FOREIGN KEY (uploaded_by) REFERENCES users(id)
         )
     """)
 
-    # 6) LMS PROGRAM RESOURCES
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_program_resources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             program_id INTEGER NOT NULL,
             resource_title TEXT NOT NULL,
-            resource_type TEXT NOT NULL
-                CHECK(resource_type IN ('ebook', 'workbook', 'pdf', 'ppt', 'other')),
-            file_path TEXT NOT NULL,
+            resource_type TEXT NOT NULL DEFAULT 'other',
+            file_path TEXT,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT,
@@ -583,80 +705,6 @@ def init_db():
         )
     """)
 
-    # 7) LMS BATCH PROGRAMS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lms_batch_programs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            batch_id INTEGER NOT NULL,
-            program_id INTEGER NOT NULL,
-            start_date TEXT,
-            end_date TEXT,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL,
-            updated_at TEXT,
-            UNIQUE(batch_id, program_id),
-            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
-            FOREIGN KEY (program_id) REFERENCES lms_programs(id) ON DELETE CASCADE
-        )
-    """)
-
-    # 8) LMS STUDENT PROGRAM ACCESS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lms_student_program_access (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id INTEGER NOT NULL,
-            batch_id INTEGER,
-            program_id INTEGER NOT NULL,
-            access_status TEXT NOT NULL DEFAULT 'active'
-                CHECK(access_status IN ('active', 'blocked', 'completed')),
-            access_start_date TEXT,
-            access_end_date TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT,
-            UNIQUE(student_id, program_id),
-            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL,
-            FOREIGN KEY (program_id) REFERENCES lms_programs(id) ON DELETE CASCADE
-        )
-    """)
-
-    # 9) LMS STUDENT TOPIC PROGRESS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lms_student_topic_progress (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id INTEGER NOT NULL,
-            batch_id INTEGER,
-            topic_id INTEGER NOT NULL,
-            status TEXT NOT NULL DEFAULT 'not_started'
-                CHECK(status IN ('not_started', 'in_progress', 'completed')),
-            started_at TEXT,
-            completed_at TEXT,
-            last_opened_at TEXT,
-            time_spent_minutes INTEGER NOT NULL DEFAULT 0,
-            completion_percentage REAL NOT NULL DEFAULT 0,
-            UNIQUE(student_id, topic_id),
-            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL,
-            FOREIGN KEY (topic_id) REFERENCES lms_topics(id) ON DELETE CASCADE
-        )
-    """)
-
-    # 10) LMS STUDENT NOTES
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lms_student_notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id INTEGER NOT NULL,
-            topic_id INTEGER NOT NULL,
-            note_text TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT,
-            UNIQUE(student_id, topic_id),
-            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-            FOREIGN KEY (topic_id) REFERENCES lms_topics(id) ON DELETE CASCADE
-        )
-    """)
-
-    # 11) LMS MOCK TESTS
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_mock_tests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -665,111 +713,89 @@ def init_db():
             topic_id INTEGER,
             test_title TEXT NOT NULL,
             description TEXT,
-            duration_minutes INTEGER DEFAULT 30,
-            total_marks REAL DEFAULT 0,
-            pass_marks REAL DEFAULT 0,
-            max_attempts INTEGER DEFAULT 0,
-            randomize_questions INTEGER NOT NULL DEFAULT 0,
-            show_result_immediately INTEGER NOT NULL DEFAULT 1,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            created_by INTEGER,
-            created_at TEXT NOT NULL,
-            updated_at TEXT,
-            FOREIGN KEY (program_id) REFERENCES lms_programs(id) ON DELETE SET NULL,
-            FOREIGN KEY (chapter_id) REFERENCES lms_chapters(id) ON DELETE SET NULL,
-            FOREIGN KEY (topic_id) REFERENCES lms_topics(id) ON DELETE SET NULL,
-            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-        )
-    """)
-
-    # 12) LMS TEST QUESTIONS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lms_test_questions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            test_id INTEGER NOT NULL,
-            question_text TEXT NOT NULL,
-            question_type TEXT NOT NULL DEFAULT 'mcq'
-                CHECK(question_type IN ('mcq', 'true_false')),
-            marks REAL NOT NULL DEFAULT 1,
-            explanation TEXT,
-            question_order INTEGER NOT NULL DEFAULT 1,
+            total_marks REAL NOT NULL DEFAULT 0,
+            pass_marks REAL NOT NULL DEFAULT 0,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
-            updated_at TEXT,
-            FOREIGN KEY (test_id) REFERENCES lms_mock_tests(id) ON DELETE CASCADE
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id),
+            FOREIGN KEY (chapter_id) REFERENCES lms_chapters(id),
+            FOREIGN KEY (topic_id) REFERENCES lms_topics(id)
         )
     """)
 
-    # 13) LMS TEST QUESTION OPTIONS
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS lms_test_question_options (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            question_id INTEGER NOT NULL,
-            option_text TEXT NOT NULL,
-            is_correct INTEGER NOT NULL DEFAULT 0,
-            option_order INTEGER NOT NULL DEFAULT 1,
-            FOREIGN KEY (question_id) REFERENCES lms_test_questions(id) ON DELETE CASCADE
-        )
-    """)
-
-    # 14) LMS TEST ATTEMPTS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lms_test_attempts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            test_id INTEGER NOT NULL,
-            student_id INTEGER NOT NULL,
-            batch_id INTEGER,
-            attempt_no INTEGER NOT NULL DEFAULT 1,
-            started_at TEXT,
-            submitted_at TEXT,
-            score REAL DEFAULT 0,
-            total_marks REAL DEFAULT 0,
-            percentage REAL DEFAULT 0,
-            result_status TEXT DEFAULT 'failed'
-                CHECK(result_status IN ('passed', 'failed')),
-            created_at TEXT NOT NULL,
-            updated_at TEXT,
-            FOREIGN KEY (test_id) REFERENCES lms_mock_tests(id) ON DELETE CASCADE,
-            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL
-        )
-    """)
-
-    # 15) LMS TEST ATTEMPT ANSWERS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lms_test_attempt_answers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            attempt_id INTEGER NOT NULL,
-            question_id INTEGER NOT NULL,
-            selected_option_id INTEGER,
-            is_correct INTEGER NOT NULL DEFAULT 0,
-            marks_awarded REAL NOT NULL DEFAULT 0,
-            FOREIGN KEY (attempt_id) REFERENCES lms_test_attempts(id) ON DELETE CASCADE,
-            FOREIGN KEY (question_id) REFERENCES lms_test_questions(id) ON DELETE CASCADE,
-            FOREIGN KEY (selected_option_id) REFERENCES lms_test_question_options(id) ON DELETE SET NULL
-        )
-    """)
-
-    # 16) LMS CERTIFICATES
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lms_certificates (
+        CREATE TABLE IF NOT EXISTS lms_student_program_access (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_id INTEGER NOT NULL,
             program_id INTEGER NOT NULL,
             batch_id INTEGER,
-            certificate_no TEXT NOT NULL UNIQUE,
-            issue_date TEXT NOT NULL,
-            certificate_file_path TEXT,
-            verification_code TEXT UNIQUE,
-            status TEXT NOT NULL DEFAULT 'issued'
-                CHECK(status IN ('issued', 'revoked')),
-            created_by INTEGER,
+            access_start_date TEXT,
+            access_end_date TEXT,
+            access_status TEXT NOT NULL DEFAULT 'active',
+            is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-            FOREIGN KEY (program_id) REFERENCES lms_programs(id) ON DELETE CASCADE,
-            FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL,
-            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id),
+            FOREIGN KEY (batch_id) REFERENCES batches(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_batch_program_access (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            program_id INTEGER NOT NULL,
+            access_start_date TEXT,
+            access_end_date TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE(batch_id, program_id),
+            FOREIGN KEY (batch_id) REFERENCES batches(id),
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_course_program_map (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            course_id INTEGER NOT NULL,
+            program_id INTEGER NOT NULL,
+            display_order INTEGER NOT NULL DEFAULT 0,
+            created_by INTEGER,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(course_id, program_id),
+            FOREIGN KEY (course_id) REFERENCES courses(id),
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_student_topic_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            topic_id INTEGER NOT NULL,
+            completion_percentage REAL NOT NULL DEFAULT 0,
+            last_accessed TEXT,
+            time_spent_minutes INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(student_id, topic_id),
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (topic_id) REFERENCES lms_topics(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_student_test_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            test_id INTEGER NOT NULL,
+            score REAL,
+            total_marks REAL,
+            obtained_percentage REAL,
+            test_date TEXT,
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (test_id) REFERENCES lms_mock_tests(id)
         )
     """)
 
@@ -785,9 +811,28 @@ def init_db():
     add_column_if_not_exists(cur, "students", "employment_status", "TEXT DEFAULT 'unemployed'")
     add_column_if_not_exists(cur, "students", "branch_id", "INTEGER")
     add_column_if_not_exists(cur, "students", "student_location", "TEXT")
+    add_column_if_not_exists(cur, "students", "date_of_birth", "TEXT")
+    add_column_if_not_exists(cur, "students", "parent_name", "TEXT")
+    add_column_if_not_exists(cur, "students", "parent_contact", "TEXT")
+    add_column_if_not_exists(cur, "students", "photo_filename", "TEXT")
+    add_column_if_not_exists(cur, "students", "student_signature_filename", "TEXT")
+    add_column_if_not_exists(cur, "students", "student_signature_date", "TEXT")
+    add_column_if_not_exists(cur, "students", "parent_signature_filename", "TEXT")
+    add_column_if_not_exists(cur, "students", "parent_signature_date", "TEXT")
+    # Student portal login
+    add_column_if_not_exists(cur, "students", "password_hash", "TEXT")
+    add_column_if_not_exists(cur, "students", "portal_enabled", "INTEGER NOT NULL DEFAULT 0")
+    # Lead-to-student linkage
+    add_column_if_not_exists(cur, "students", "lead_id", "INTEGER")
     add_column_if_not_exists(cur, "leads", "lead_location", "TEXT")
+    add_column_if_not_exists(cur, "leads", "email", "TEXT")
 
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")
+    add_column_if_not_exists(cur, "courses", "course_domain", "TEXT")
+    add_column_if_not_exists(cur, "courses", "course_category", "TEXT")
+    add_column_if_not_exists(cur, "courses", "show_on_website", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_not_exists(cur, "courses", "duration_hours", "INTEGER")
+    add_column_if_not_exists(cur, "courses", "course_slug", "TEXT")
 
     add_column_if_not_exists(cur, "invoices", "branch_id", "INTEGER")
 
@@ -795,6 +840,73 @@ def init_db():
 
     add_column_if_not_exists(cur, "receipts", "payment_mode", "TEXT DEFAULT 'cash'")
     add_column_if_not_exists(cur, "receipts", "notes", "TEXT")
+
+    add_column_if_not_exists(cur, "branches", "no_of_computers", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_not_exists(cur, "branches", "opening_time", "TEXT")
+    add_column_if_not_exists(cur, "branches", "closing_time", "TEXT")
+
+    add_column_if_not_exists(cur, "student_batches", "uses_own_laptop", "INTEGER NOT NULL DEFAULT 0")
+
+    # LMS topic progress tracking
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_topic_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            topic_id INTEGER NOT NULL,
+            is_completed INTEGER NOT NULL DEFAULT 0,
+            completed_at TEXT,
+            UNIQUE(student_id, topic_id)
+        )
+    """)
+
+    # ---------- MIGRATE attendance_records FK (batch_id: CASCADE -> SET NULL) ----------
+    # Makes batch_id nullable so deleting a batch does not wipe attendance history
+    try:
+        cur.execute("PRAGMA table_info(attendance_records)")
+        cols = {row['name']: row for row in cur.fetchall()}
+        if cols.get('batch_id') and cols['batch_id']['notnull'] == 1:
+            # batch_id is still NOT NULL - recreate table with nullable + SET NULL
+            cur.execute("PRAGMA foreign_keys = OFF")
+            conn.commit()
+            cur.execute("SELECT * FROM attendance_records")
+            att_backup = cur.fetchall()
+            cur.execute("DROP TABLE IF EXISTS attendance_records")
+            cur.execute("""
+                CREATE TABLE attendance_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    attendance_date TEXT NOT NULL,
+                    student_id INTEGER NOT NULL,
+                    batch_id INTEGER,
+                    branch_id INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'absent'
+                        CHECK(status IN ('present', 'absent', 'late', 'leave')),
+                    remarks TEXT,
+                    marked_by INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT,
+                    UNIQUE(attendance_date, student_id, batch_id),
+                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                    FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL,
+                    FOREIGN KEY (branch_id) REFERENCES branches(id),
+                    FOREIGN KEY (marked_by) REFERENCES users(id)
+                )
+            """)
+            if att_backup:
+                for row in att_backup:
+                    cur.execute("""
+                        INSERT INTO attendance_records
+                            (id, attendance_date, student_id, batch_id, branch_id,
+                             status, remarks, marked_by, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        row['id'], row['attendance_date'], row['student_id'],
+                        row['batch_id'], row['branch_id'], row['status'],
+                        row['remarks'], row['marked_by'], row['created_at'], row['updated_at']
+                    ))
+            conn.commit()
+            cur.execute("PRAGMA foreign_keys = ON")
+    except Exception as e:
+        print(f"Warning: attendance_records FK migration failed: {e}")
 
     # ---------- MIGRATE asset_logs CONSTRAINT ----------
     # Update asset_logs table to allow 'Updated' action
@@ -830,6 +942,27 @@ def init_db():
                     """, (row["id"], row["asset_id"], row["action"], row["description"], row["done_by"], row["created_at"]))
     except:
         pass
+
+    # ---------- DEFAULT COMPANY PROFILE ----------
+    cur.execute("SELECT id FROM company_profile WHERE id = 1")
+    if not cur.fetchone():
+        cur.execute("""
+            INSERT INTO company_profile (
+                id, company_name, company_short_name, tagline,
+                address, phone, email, website, logo_filename, reg_number, updated_at
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            "Global IT Education",
+            "Global IT ERP",
+            "ERP System",
+            "J C Galaxy Building, 2nd Floor, College Road, Near Ayyapaswamy Temple, Hoskote - 562114",
+            "9071717161",
+            "help@globaliteducation.com",
+            "https://globaliteducation.com",
+            None,
+            "29AMEPL6934C2ZZ",
+            now
+        ))
 
     # ---------- DEFAULT BRANCHES ----------
     cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HO",))
@@ -1014,6 +1147,63 @@ def init_db():
         
         # Add remarks to attendance_followups if missing
         add_column_if_not_exists(cur, 'attendance_followups', 'remarks', 'TEXT')
+
+        # Add reason to attendance_time_warnings if missing (added Apr 2026)
+        add_column_if_not_exists(cur, 'attendance_time_warnings', 'reason', 'TEXT')
+
+        # Remove UNIQUE(batch_id, student_id, attendance_date) from attendance_time_warnings
+        # so multiple warnings per student per day can be stored (added Apr 2026)
+        res = cur.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='attendance_time_warnings'"
+        ).fetchone()
+        if res and 'UNIQUE(batch_id, student_id, attendance_date)' in res[0]:
+            cur.execute("""
+                CREATE TABLE attendance_time_warnings_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    batch_id INTEGER NOT NULL,
+                    branch_id INTEGER NOT NULL,
+                    student_id INTEGER NOT NULL,
+                    attendance_date TEXT NOT NULL,
+                    attendance_status TEXT NOT NULL,
+                    marked_at TEXT NOT NULL,
+                    actual_time TEXT NOT NULL,
+                    batch_start_time TEXT,
+                    batch_end_time TEXT,
+                    warning_type TEXT NOT NULL
+                        CHECK(warning_type IN ('before_start', 'after_end')),
+                    reason TEXT,
+                    marked_by INTEGER,
+                    FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
+                    FOREIGN KEY (branch_id) REFERENCES branches(id),
+                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                    FOREIGN KEY (marked_by) REFERENCES users(id)
+                )
+            """)
+            cur.execute("""
+                INSERT INTO attendance_time_warnings_new
+                    (id, batch_id, branch_id, student_id, attendance_date,
+                     attendance_status, marked_at, actual_time,
+                     batch_start_time, batch_end_time, warning_type, reason, marked_by)
+                SELECT
+                    id, batch_id, branch_id, student_id, attendance_date,
+                    attendance_status, marked_at, actual_time,
+                    batch_start_time, batch_end_time, warning_type, reason, marked_by
+                FROM attendance_time_warnings
+            """)
+            cur.execute("DROP TABLE attendance_time_warnings")
+            cur.execute("ALTER TABLE attendance_time_warnings_new RENAME TO attendance_time_warnings")
+    except:
+        pass
+
+    # ---------- ADDRESS FIELDS MIGRATION (Apr 2026) ----------
+    try:
+        add_column_if_not_exists(cur, 'students', 'pincode', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'locality', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'city', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'state', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'landmark', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'alternate_phone', 'TEXT')
+        add_column_if_not_exists(cur, 'students', 'address_type', 'TEXT')
     except:
         pass
 

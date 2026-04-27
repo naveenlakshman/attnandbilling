@@ -1,87 +1,62 @@
-from flask import render_template, request, jsonify
+from flask import render_template, request, jsonify, send_from_directory
 from . import lms_admin_bp
 from db import get_conn, log_activity
-from functools import wraps
 from flask import session, redirect, url_for, flash
 from datetime import datetime
 import re
 import os
 from werkzeug.utils import secure_filename
 from config import Config
-
-# Authentication decorator
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('core.login'))
-        return f(*args, **kwargs)
-    return decorated_function
+from modules.core.utils import login_required, admin_required
 
 
 # File Upload Handler
 def upload_file(file_obj, content_type):
     """
-    Handle file upload with validation
-    
-    Args:
-        file_obj: File object from request.files
-        content_type: Type of content (video_file, pdf, image, download)
-    
-    Returns:
-        tuple: (success: bool, file_path: str or error_msg: str)
+    Save uploaded file to static/lms/<subdir>/ and return the Flask static path.
+    content_type: 'pdf' or 'download'
+    Returns: (success: bool, path_or_error: str)
     """
     if not file_obj or file_obj.filename == '':
-        return False, f"No file selected for {content_type}"
-    
-    # Get allowed extensions and size limit for this content type
-    allowed_exts = Config.ALLOWED_EXTENSIONS.get(content_type, set())
-    max_size = Config.FILE_LIMITS.get(content_type, 10 * 1024 * 1024)
-    
-    # Check file extension
+        return False, f"No file selected"
+
+    allowed_exts = {
+        'pdf':      {'pdf'},
+        'download': {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'txt', 'ppt', 'pptx'},
+    }
+    max_sizes = {
+        'pdf':      50 * 1024 * 1024,   # 50 MB
+        'download': 100 * 1024 * 1024,  # 100 MB
+    }
+
     filename = secure_filename(file_obj.filename)
     if not filename:
         return False, "Invalid filename"
-    
+
     file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
-    if file_ext not in allowed_exts:
-        return False, f"File type .{file_ext} not allowed. Allowed: {', '.join(allowed_exts)}"
-    
-    # Check file size
+    exts = allowed_exts.get(content_type, set())
+    if file_ext not in exts:
+        return False, f"File type .{file_ext} not allowed. Allowed: {', '.join(sorted(exts))}"
+
     file_obj.seek(0, os.SEEK_END)
     file_size = file_obj.tell()
     file_obj.seek(0)
-    
+    max_size = max_sizes.get(content_type, 50 * 1024 * 1024)
     if file_size > max_size:
-        max_mb = max_size / (1024 * 1024)
-        return False, f"File size {file_size / (1024*1024):.1f}MB exceeds limit of {max_mb:.0f}MB"
-    
-    # Create upload directory for this content type
-    type_dir_map = {
-        'video_file': 'videos',
-        'pdf': 'pdfs',
-        'image': 'images',
-        'download': 'downloads'
-    }
-    
-    type_subdir = type_dir_map.get(content_type, 'other')
-    upload_path = os.path.join(Config.UPLOAD_FOLDER, type_subdir)
-    os.makedirs(upload_path, exist_ok=True)
-    
-    # Create unique filename with timestamp
+        return False, f"File too large ({file_size/(1024*1024):.1f} MB). Max: {max_size/(1024*1024):.0f} MB"
+
+    subdir = 'pdfs' if content_type == 'pdf' else 'downloads'
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'static', 'lms', subdir))
+    os.makedirs(base_dir, exist_ok=True)
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_")
     unique_filename = timestamp + filename
-    full_path = os.path.join(upload_path, unique_filename)
-    
+    full_path = os.path.join(base_dir, unique_filename)
+
     try:
-        # Save file
         file_obj.save(full_path)
-        
-        # Return relative path for storage in database
-        # This allows portability across different installations
-        relative_path = f"/uploads/content/{type_subdir}/{unique_filename}"
-        return True, relative_path
-        
+        # Store as Flask static path: static/lms/pdfs/filename or static/lms/downloads/filename
+        return True, f"static/lms/{subdir}/{unique_filename}"
     except Exception as e:
         return False, f"Error saving file: {str(e)}"
 
@@ -145,7 +120,7 @@ def list_programs():
     try:
         cur = conn.cursor()
         
-        # Get all programs with related information
+        # Get all programs with related information and content coverage
         cur.execute("""
             SELECT 
                 lp.id,
@@ -157,7 +132,13 @@ def list_programs():
                 lp.created_at,
                 lp.updated_at,
                 c.course_name,
-                COUNT(DISTINCT lc.id) as chapter_count
+                COUNT(DISTINCT lc.id) as chapter_count,
+                (SELECT COUNT(*) FROM lms_topics WHERE chapter_id IN
+                    (SELECT id FROM lms_chapters WHERE program_id = lp.id)) as total_topics,
+                (SELECT COUNT(DISTINCT lt.id) FROM lms_topics lt
+                    JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
+                    WHERE lt.chapter_id IN
+                    (SELECT id FROM lms_chapters WHERE program_id = lp.id)) as topics_with_content
             FROM lms_programs lp
             LEFT JOIN courses c ON lp.course_id = c.id
             LEFT JOIN lms_chapters lc ON lp.id = lc.program_id
@@ -181,7 +162,7 @@ def generate_slug(title):
 
 
 @lms_admin_bp.route('/program/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def program_new():
     """Add new LMS program"""
     conn = get_conn()
@@ -246,8 +227,8 @@ def program_new():
             ))
             
             program_id = cur.lastrowid
-            conn.commit()
             
+            conn.commit()
             log_activity(
                 user_id=session['user_id'],
                 branch_id=session.get('branch_id'),
@@ -275,7 +256,7 @@ def program_new():
 
 
 @lms_admin_bp.route('/program/<int:program_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def program_edit(program_id):
     """Edit existing LMS program"""
     conn = get_conn()
@@ -345,7 +326,6 @@ def program_edit(program_id):
             ))
             
             conn.commit()
-            
             log_activity(
                 user_id=session['user_id'],
                 branch_id=session.get('branch_id'),
@@ -496,7 +476,56 @@ def program_view(program_id):
             'resource_count': len(resources),
             'recent_activity': recent_activity
         }
-        
+
+        # Fetch topics for each chapter (for accordion display)
+        topics_by_chapter = {}
+        if chapters:
+            placeholders = ','.join('?' for _ in chapters)
+            chapter_ids = [c['id'] for c in chapters]
+            cur.execute(f"""
+                SELECT lt.id, lt.chapter_id, lt.topic_title, lt.topic_order, lt.content_type,
+                       lt.estimated_minutes, lt.is_active, lt.is_preview,
+                       COUNT(ltc.id) AS content_count
+                FROM lms_topics lt
+                LEFT JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
+                WHERE lt.chapter_id IN ({placeholders})
+                GROUP BY lt.id
+                ORDER BY lt.chapter_id, lt.topic_order
+            """, chapter_ids)
+            for t in cur.fetchall():
+                topics_by_chapter.setdefault(t['chapter_id'], []).append(dict(t))
+        summary['topics_by_chapter'] = topics_by_chapter
+
+        # Content coverage: count topics that have each content type
+        if total_topics > 0:
+            cur.execute("""
+                SELECT
+                    SUM(CASE WHEN EXISTS (
+                        SELECT 1 FROM lms_topic_contents
+                        WHERE topic_id = lt.id AND content_mode = 'youtube'
+                    ) THEN 1 ELSE 0 END) AS topics_with_video,
+                    SUM(CASE WHEN EXISTS (
+                        SELECT 1 FROM lms_topic_contents
+                        WHERE topic_id = lt.id AND content_mode = 'pdf'
+                    ) THEN 1 ELSE 0 END) AS topics_with_pdf,
+                    SUM(CASE WHEN EXISTS (
+                        SELECT 1 FROM lms_topic_contents
+                        WHERE topic_id = lt.id AND content_mode = 'download'
+                    ) THEN 1 ELSE 0 END) AS topics_with_download
+                FROM lms_topics lt
+                WHERE lt.chapter_id IN (
+                    SELECT id FROM lms_chapters WHERE program_id = ?
+                )
+            """, (program_id,))
+            coverage = cur.fetchone()
+            summary['topics_with_video'] = coverage['topics_with_video'] or 0
+            summary['topics_with_pdf'] = coverage['topics_with_pdf'] or 0
+            summary['topics_with_download'] = coverage['topics_with_download'] or 0
+        else:
+            summary['topics_with_video'] = 0
+            summary['topics_with_pdf'] = 0
+            summary['topics_with_download'] = 0
+
         return render_template('lms_program_view.html', summary=summary)
     finally:
         conn.close()
@@ -522,7 +551,7 @@ def list_chapters(program_id):
             flash('Program not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
         
-        # Get all chapters with topic count
+        # Get all chapters with topic count and content coverage
         cur.execute("""
             SELECT 
                 lc.id,
@@ -532,9 +561,11 @@ def list_chapters(program_id):
                 lc.is_active,
                 lc.created_at,
                 lc.updated_at,
-                COUNT(DISTINCT lt.id) as topic_count
+                COUNT(DISTINCT lt.id) as topic_count,
+                COUNT(DISTINCT CASE WHEN ltc.id IS NOT NULL THEN lt.id END) as topics_with_content
             FROM lms_chapters lc
             LEFT JOIN lms_topics lt ON lc.id = lt.chapter_id
+            LEFT JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
             WHERE lc.program_id = ?
             GROUP BY lc.id
             ORDER BY lc.chapter_order ASC
@@ -553,7 +584,7 @@ def list_chapters(program_id):
 
 
 @lms_admin_bp.route('/program/<int:program_id>/chapter/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def chapter_new(program_id):
     """Add new chapter to a program"""
     conn = get_conn()
@@ -622,7 +653,7 @@ def chapter_new(program_id):
                 action_type='create',
                 module_name='lms_chapters',
                 record_id=chapter_id,
-                description=f'Created chapter: {chapter_title} for program {program.program_name}'
+                description=f'Created chapter: {chapter_title} for program {program["program_name"]}'
             )
             
             flash('Chapter created successfully.', 'success')
@@ -643,7 +674,7 @@ def chapter_new(program_id):
 
 
 @lms_admin_bp.route('/chapter/<int:chapter_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def chapter_edit(chapter_id):
     """Edit existing chapter"""
     conn = get_conn()
@@ -717,7 +748,6 @@ def chapter_edit(chapter_id):
             ))
             
             conn.commit()
-            
             log_activity(
                 user_id=session['user_id'],
                 branch_id=session.get('branch_id'),
@@ -736,7 +766,7 @@ def chapter_edit(chapter_id):
 
 
 @lms_admin_bp.route('/chapter/<int:chapter_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_chapter(chapter_id):
     """Delete a chapter (soft delete pattern - set is_deleted flag)"""
     conn = get_conn()
@@ -763,7 +793,6 @@ def delete_chapter(chapter_id):
             WHERE id = ?
         """, (chapter_id,))
         conn.commit()
-        
         log_activity(
             user_id=session['user_id'],
             branch_id=session.get('branch_id'),
@@ -854,7 +883,7 @@ def list_topics(chapter_id):
 
 
 @lms_admin_bp.route('/chapter/<int:chapter_id>/topic/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def topic_new(chapter_id):
     """Add new topic to a chapter"""
     conn = get_conn()
@@ -883,7 +912,7 @@ def topic_new(chapter_id):
             topic_order = request.form.get('topic_order', '1')
             short_description = request.form.get('short_description', '').strip()
             estimated_minutes = request.form.get('estimated_minutes', '')
-            content_type = request.form.get('content_type', 'lesson').strip() or 'lesson'
+            content_type = request.form.get('content_type', 'video').strip() or 'video'
             is_preview = request.form.get('is_preview', 0)
             is_active = request.form.get('is_active', 0)
             
@@ -893,9 +922,9 @@ def topic_new(chapter_id):
                 return redirect(url_for('lms_admin.topic_new', chapter_id=chapter_id))
             
             # Validate content type
-            valid_content_types = ['lesson', 'video', 'pdf', 'assignment', 'ebook', 'workbook']
+            valid_content_types = ['video', 'pdf', 'download']
             if content_type not in valid_content_types:
-                content_type = 'lesson'
+                content_type = 'video'
             
             # Convert order to integer
             try:
@@ -981,7 +1010,7 @@ def topic_new(chapter_id):
 
 
 @lms_admin_bp.route('/topic/<int:topic_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def topic_edit(topic_id):
     """Edit existing topic"""
     conn = get_conn()
@@ -1041,7 +1070,9 @@ def topic_edit(topic_id):
                 flash('Topic title is required.', 'danger')
                 return redirect(url_for('lms_admin.topic_edit', topic_id=topic_id))
             
-            # Convert order to integer
+            # Validate content type
+            if content_type not in ['video', 'pdf', 'download']:
+                content_type = 'video'
             try:
                 topic_order = int(topic_order) if topic_order else 1
             except ValueError:
@@ -1083,7 +1114,6 @@ def topic_edit(topic_id):
             ))
             
             conn.commit()
-            
             log_activity(
                 user_id=session['user_id'],
                 branch_id=session.get('branch_id'),
@@ -1102,7 +1132,7 @@ def topic_edit(topic_id):
 
 
 @lms_admin_bp.route('/topic/<int:topic_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_topic(topic_id):
     """Delete a topic"""
     conn = get_conn()
@@ -1128,7 +1158,6 @@ def delete_topic(topic_id):
             WHERE id = ?
         """, (topic_id,))
         conn.commit()
-        
         log_activity(
             user_id=session['user_id'],
             branch_id=session.get('branch_id'),
@@ -1143,141 +1172,6 @@ def delete_topic(topic_id):
     except Exception as e:
         flash(f'Error deleting topic: {str(e)}', 'danger')
         return redirect(url_for('lms_admin.list_topics', chapter_id=topic['chapter_id']))
-    finally:
-        conn.close()
-
-
-@lms_admin_bp.route('/topic/<int:topic_id>/view', methods=['GET'])
-@login_required
-def topic_view(topic_id):
-    """View topic details with content"""
-    conn = get_conn()
-    try:
-        cur = conn.cursor()
-        
-        # Get topic, chapter and program details
-        cur.execute("""
-            SELECT 
-                lt.id,
-                lt.chapter_id,
-                lt.topic_title,
-                lt.topic_order,
-                lt.short_description,
-                lt.estimated_minutes,
-                lt.content_type,
-                lt.is_preview,
-                lt.is_active,
-                lt.created_at,
-                lt.updated_at,
-                lc.chapter_title,
-                lc.program_id,
-                lp.program_name
-            FROM lms_topics lt
-            JOIN lms_chapters lc ON lt.chapter_id = lc.id
-            JOIN lms_programs lp ON lc.program_id = lp.id
-            WHERE lt.id = ?
-        """, (topic_id,))
-        topic = cur.fetchone()
-        
-        if not topic:
-            flash('Topic not found.', 'danger')
-            return redirect(url_for('lms_admin.list_programs'))
-        
-        # Get all content items for this topic
-        cur.execute("""
-            SELECT 
-                id,
-                topic_id,
-                content_mode,
-                content_title,
-                external_url,
-                file_path,
-                content_body,
-                display_order,
-                created_at,
-                updated_at
-            FROM lms_topic_contents
-            WHERE topic_id = ?
-            ORDER BY display_order ASC
-        """, (topic_id,))
-        content_items = cur.fetchall()
-        
-        # Get content count
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_topic_contents
-            WHERE topic_id = ?
-        """, (topic_id,))
-        content_count = cur.fetchone()['count']
-        
-        # Get any associated tests (if any)
-        cur.execute("""
-            SELECT 
-                id,
-                test_title,
-                description,
-                total_marks,
-                pass_marks,
-                is_active,
-                created_at
-            FROM lms_mock_tests
-            WHERE topic_id = ?
-            ORDER BY created_at DESC
-        """, (topic_id,))
-        tests = cur.fetchall()
-        
-        # Get test count
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_mock_tests
-            WHERE topic_id = ?
-        """, (topic_id,))
-        test_count = cur.fetchone()['count']
-        
-        # Get recent activity for this topic
-        cur.execute("""
-            SELECT 
-                al.id,
-                al.action_type,
-                al.description,
-                al.created_at,
-                u.full_name
-            FROM activity_logs al
-            LEFT JOIN users u ON al.user_id = u.id
-            WHERE al.module_name = 'lms_topics' 
-            AND al.record_id = ?
-            ORDER BY al.created_at DESC
-            LIMIT 5
-        """, (topic_id,))
-        recent_activity = cur.fetchall()
-        
-        # Organize content by type
-        content_by_type = {}
-        for item in content_items:
-            content_mode = item['content_mode']
-            if content_mode not in content_by_type:
-                content_by_type[content_mode] = []
-            content_by_type[content_mode].append(item)
-        
-        data = {
-            'topic': topic,
-            'chapter': {
-                'id': topic['chapter_id'],
-                'chapter_title': topic['chapter_title']
-            },
-            'program': {
-                'id': topic['program_id'],
-                'program_name': topic['program_name']
-            },
-            'content_items': content_items,
-            'content_by_type': content_by_type,
-            'content_count': content_count,
-            'tests': tests,
-            'test_count': test_count,
-            'recent_activity': recent_activity
-        }
-        
-        return render_template('lms_topic_view.html', data=data)
     finally:
         conn.close()
 
@@ -1311,41 +1205,25 @@ def list_topic_contents(topic_id):
             flash('Topic not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
         
-        # Get all content items for this topic
-        cur.execute("""
-            SELECT 
-                id,
-                topic_id,
-                content_mode,
-                content_title,
-                external_url,
-                file_path,
-                content_body,
-                display_order,
-                created_at,
-                updated_at
-            FROM lms_topic_contents
-            WHERE topic_id = ?
-            ORDER BY display_order ASC
-        """, (topic_id,))
-        content_items = cur.fetchall()
-        
-        # Get total content count
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_topic_contents
-            WHERE topic_id = ?
-        """, (topic_id,))
-        total_content = cur.fetchone()['count']
-        
-        # Organize by content type
-        content_by_type = {}
-        for item in content_items:
-            ctype = item['content_mode']
-            if ctype not in content_by_type:
-                content_by_type[ctype] = []
-            content_by_type[ctype].append(item)
-        
+        # Fetch the first content item of each type (one-per-type system)
+        video_content = cur.execute("""
+            SELECT * FROM lms_topic_contents
+            WHERE topic_id = ? AND content_mode = 'youtube'
+            ORDER BY display_order ASC LIMIT 1
+        """, (topic_id,)).fetchone()
+
+        pdf_content = cur.execute("""
+            SELECT * FROM lms_topic_contents
+            WHERE topic_id = ? AND content_mode = 'pdf'
+            ORDER BY display_order ASC LIMIT 1
+        """, (topic_id,)).fetchone()
+
+        download_content = cur.execute("""
+            SELECT * FROM lms_topic_contents
+            WHERE topic_id = ? AND content_mode = 'download'
+            ORDER BY display_order ASC LIMIT 1
+        """, (topic_id,)).fetchone()
+
         data = {
             'program': {
                 'id': topic['program_id'],
@@ -1356,11 +1234,11 @@ def list_topic_contents(topic_id):
                 'chapter_title': topic['chapter_title']
             },
             'topic': topic,
-            'content_items': content_items,
-            'content_by_type': content_by_type,
-            'total_content': total_content
+            'video_content': video_content,
+            'pdf_content': pdf_content,
+            'download_content': download_content
         }
-        
+
         return render_template('lms_topic_contents.html', data=data)
     finally:
         conn.close()
@@ -1465,100 +1343,68 @@ def content_new(topic_id):
         
         if request.method == 'POST':
             title = request.form.get('title', '').strip()
-            content_mode = request.form.get('content_mode', 'html')  # FIXED: was content_type
+            content_mode = request.form.get('content_mode', 'youtube')
             description = request.form.get('content_body', '').strip()
             display_order = request.form.get('display_order', '1')
-            
-            # Content specific fields
             external_url = request.form.get('external_url', '').strip()
-            text_content = request.form.get('text_content', '').strip()
-            html_content = request.form.get('html_content', '').strip()
-            
-            # Validate required fields
+
             if not title:
                 flash('Content title is required.', 'danger')
                 return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
-            
-            # Convert order to integer
+
+            if content_mode not in ['youtube', 'pdf', 'download']:
+                content_mode = 'youtube'
+
             try:
                 display_order = int(display_order) if display_order else 1
             except ValueError:
                 display_order = 1
-            
-            # Initialize file path
+
             file_path = ''
-            final_content_body = description
-            
-            # Handle file uploads for file-based content types
-            if content_mode in ['video_file', 'pdf', 'image', 'download', 'html']:
-                file_field_map = {
-                    'video_file': 'video_file',
-                    'pdf': 'pdf_file',
-                    'image': 'image_file',
-                    'download': 'download_file',
-                    'html': 'html_file'
-                }
-                
-                file_field = file_field_map.get(content_mode)
-                if file_field and file_field in request.files:
-                    file_obj = request.files[file_field]
-                    if file_obj and file_obj.filename:
-                        success, result = upload_file(file_obj, content_mode)
-                        if success:
-                            file_path = result
-                            flash(f'File uploaded successfully: {file_obj.filename}', 'info')
-                        else:
-                            flash(f'File upload failed: {result}', 'danger')
-                            return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
-                    elif content_mode in ['video_file', 'pdf', 'image', 'download']:
-                        # File required for these types
-                        flash(f'Please select a file for {content_mode} content.', 'danger')
-                        return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
-                    # For HTML, allow textarea content if no file uploaded
-            
-            # Use appropriate content body based on type
-            if content_mode == 'text':
-                final_content_body = text_content if text_content else description
-            elif content_mode == 'html':
-                # If HTML file was uploaded, use that; otherwise use textarea content
-                if not file_path:
-                    final_content_body = html_content if html_content else description
-                else:
-                    # File will be served from file_path, store minimal reference in body
-                    final_content_body = description if description else 'HTML content from uploaded file'
-            else:
-                final_content_body = description
-            
+
+            if content_mode == 'youtube':
+                if not external_url:
+                    flash('YouTube URL is required.', 'danger')
+                    return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
+
+            elif content_mode in ['pdf', 'download']:
+                file_field = 'pdf_file' if content_mode == 'pdf' else 'download_file'
+                if file_field not in request.files or not request.files[file_field].filename:
+                    flash('Please select a file to upload.', 'danger')
+                    return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
+                success, result = upload_file(request.files[file_field], content_mode)
+                if not success:
+                    flash(f'Upload failed: {result}', 'danger')
+                    return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
+                file_path = result
+
+            # Enforce one-per-type: reject if this mode already exists for this topic
+            cur.execute(
+                "SELECT id FROM lms_topic_contents WHERE topic_id = ? AND content_mode = ?",
+                (topic_id, content_mode)
+            )
+            if cur.fetchone():
+                mode_labels = {'youtube': 'Video', 'pdf': 'PDF', 'download': 'Download File'}
+                flash(f'A {mode_labels.get(content_mode, content_mode)} is already set for this topic. Edit or remove it first.', 'danger')
+                return redirect(url_for('lms_admin.list_topic_contents', topic_id=topic_id))
+
             now = datetime.now().isoformat(timespec='seconds')
-            
+
             try:
                 cur.execute("""
                     INSERT INTO lms_topic_contents (
-                        topic_id,
-                        content_title,
-                        content_mode,
-                        content_body,
-                        external_url,
-                        file_path,
-                        display_order,
-                        created_at,
-                        updated_at
+                        topic_id, content_title, content_mode, content_body,
+                        external_url, file_path, display_order, created_at, updated_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    topic_id,
-                    title,
-                    content_mode,  # FIXED: was content_type
-                    final_content_body,
+                    topic_id, title, content_mode, description,
                     external_url if content_mode == 'youtube' else '',
-                    file_path,
-                    display_order,
-                    now,
-                    now
+                    file_path, display_order, now, now
                 ))
-                
+
                 content_id = cur.lastrowid
+
                 conn.commit()
-                
                 log_activity(
                     user_id=session['user_id'],
                     branch_id=session.get('branch_id'),
@@ -1567,12 +1413,12 @@ def content_new(topic_id):
                     record_id=content_id,
                     description=f'Created content: {title} in topic {topic["topic_title"]}'
                 )
-                
-                flash('Content created successfully.', 'success')
+
+                flash('Content added successfully.', 'success')
                 return redirect(url_for('lms_admin.list_topic_contents', topic_id=topic_id))
-                
+
             except Exception as e:
-                flash(f'Error creating content: {str(e)}', 'danger')
+                flash(f'Error saving content: {str(e)}', 'danger')
                 return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
         
         # GET: Get next content order
@@ -1594,7 +1440,12 @@ def content_new(topic_id):
             'chapter_title': topic['chapter_title']
         }
         
-        return render_template('lms_admin/lms_topic_content_form.html', program=program, chapter=chapter, topic=topic, content=None, next_order=next_order)
+        # Read preset type from query string (e.g. ?type=youtube)
+        preset_type = request.args.get('type', '')
+        if preset_type not in ['youtube', 'pdf', 'download']:
+            preset_type = ''
+
+        return render_template('lms_admin/lms_topic_content_form.html', program=program, chapter=chapter, topic=topic, content=None, next_order=next_order, preset_type=preset_type)
     finally:
         conn.close()
 
@@ -1636,15 +1487,82 @@ def content_view(content_id):
         if not content:
             flash('Content not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
-        
+
+        # Convert YouTube watch URL to embed URL
+        embed_url = None
+        if content['content_mode'] == 'youtube' and content['external_url']:
+            raw = content['external_url'].strip()
+            video_id = None
+            # Handle youtu.be/VIDEO_ID
+            if 'youtu.be/' in raw:
+                video_id = raw.split('youtu.be/')[-1].split('?')[0].split('&')[0]
+            # Handle youtube.com/watch?v=VIDEO_ID
+            elif 'youtube.com/watch' in raw:
+                import urllib.parse
+                qs = urllib.parse.urlparse(raw).query
+                params = urllib.parse.parse_qs(qs)
+                video_id = params.get('v', [None])[0]
+            # Already an embed URL
+            elif 'youtube.com/embed/' in raw:
+                embed_url = raw
+            if video_id:
+                embed_url = f'https://www.youtube.com/embed/{video_id}?rel=0&modestbranding=1&disablekb=0'
+
         # Format data for display
-        return render_template('lms_admin/lms_topic_content_view.html', 
+        return render_template('lms_admin/lms_topic_content_view.html',
                               content=content,
+                              embed_url=embed_url,
                               is_preview=True)
     
     except Exception as e:
         flash(f'Error viewing content: {str(e)}', 'danger')
         return redirect(url_for('lms_admin.list_programs'))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/content/<int:content_id>/download', methods=['GET'])
+@login_required
+def serve_protected_file(content_id):
+    """Serve a downloadable file without exposing the real path"""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT file_path, content_title FROM lms_topic_contents WHERE id = ?", (content_id,))
+        row = cur.fetchone()
+        if not row or not row['file_path']:
+            flash('File not found.', 'danger')
+            return redirect(url_for('lms_admin.list_programs'))
+        # file_path stored as e.g. "static/lms/downloads/filename.zip"
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        abs_path = os.path.join(base_dir, row['file_path'].replace('/', os.sep))
+        directory = os.path.dirname(abs_path)
+        filename = os.path.basename(abs_path)
+        return send_from_directory(directory, filename, as_attachment=True, download_name=filename)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/content/<int:content_id>/pdf', methods=['GET'])
+@login_required
+def serve_pdf(content_id):
+    """Serve PDF inline for PDF.js rendering — actual file path never exposed to browser"""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT file_path FROM lms_topic_contents WHERE id = ? AND content_mode = 'pdf'", (content_id,))
+        row = cur.fetchone()
+        if not row or not row['file_path']:
+            return "Not found", 404
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        abs_path = os.path.join(base_dir, row['file_path'].replace('/', os.sep))
+        directory = os.path.dirname(abs_path)
+        filename = os.path.basename(abs_path)
+        response = send_from_directory(directory, filename, mimetype='application/pdf')
+        response.headers['Content-Disposition'] = 'inline'
+        response.headers['Cache-Control'] = 'no-store, no-cache'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response
     finally:
         conn.close()
 
@@ -1705,98 +1623,59 @@ def content_edit(content_id):
         
         if request.method == 'POST':
             title = request.form.get('title', '').strip()
-            content_mode = request.form.get('content_mode', content['content_mode'])  # FIXED: was content_type
-            content_body = request.form.get('content_body', '').strip()
+            content_mode = request.form.get('content_mode', content['content_mode'])
+            description = request.form.get('content_body', '').strip()
             display_order = request.form.get('display_order', str(content['display_order']))
-            
-            # Content specific fields
             external_url = request.form.get('external_url', '').strip()
-            file_path = content['file_path']  # Keep existing file path by default
-            text_content = request.form.get('text_content', '').strip()
-            html_content = request.form.get('html_content', '').strip()
-            
-            # Validate required fields
+            file_path = content['file_path']  # keep existing by default
+
             if not title:
                 flash('Content title is required.', 'danger')
                 return redirect(url_for('lms_admin.content_edit', content_id=content_id))
-            
-            # Convert order to integer
+
+            if content_mode not in ['youtube', 'pdf', 'download']:
+                content_mode = 'youtube'
+
             try:
                 display_order = int(display_order) if display_order else 1
             except ValueError:
                 display_order = 1
-            
-            # Handle file uploads for file-based content types
-            if content_mode in ['video_file', 'pdf', 'image', 'download', 'html']:
-                file_field_map = {
-                    'video_file': 'video_file',
-                    'pdf': 'pdf_file',
-                    'image': 'image_file',
-                    'download': 'download_file',
-                    'html': 'html_file'
-                }
-                
-                file_field = file_field_map.get(content_mode)
-                if file_field and file_field in request.files:
-                    file_obj = request.files[file_field]
-                    if file_obj and file_obj.filename:
-                        # Delete old file if it exists
-                        if file_path and file_path.startswith('/uploads/'):
-                            old_file_path = os.path.join(Config.UPLOAD_FOLDER, file_path.replace('/uploads/content/', ''))
-                            if os.path.exists(old_file_path):
-                                try:
-                                    os.remove(old_file_path)
-                                except Exception as e:
-                                    print(f"Warning: Could not delete old file {old_file_path}: {e}")
-                        
-                        # Upload new file
-                        success, result = upload_file(file_obj, content_mode)
-                        if success:
-                            file_path = result
-                            flash(f'File updated successfully: {file_obj.filename}', 'info')
-                        else:
-                            flash(f'File upload failed: {result}', 'danger')
-                            return redirect(url_for('lms_admin.content_edit', content_id=content_id))
-            
-            # Determine content body based on type
-            final_content_body = content_body
-            if content_mode == 'text':
-                final_content_body = text_content if text_content else content_body
-            elif content_mode == 'html':
-                # If HTML file was uploaded, use that; otherwise use textarea content
-                if not file_path or (file_field and file_field in request.files and not request.files[file_field].filename):
-                    # No file upload or file field is empty, use textarea
-                    final_content_body = html_content if html_content else content_body
-                else:
-                    # File path exists (either old or new), keep minimal reference
-                    final_content_body = content_body
-            
+
+            if content_mode == 'youtube':
+                if not external_url:
+                    flash('YouTube URL is required.', 'danger')
+                    return redirect(url_for('lms_admin.content_edit', content_id=content_id))
+                file_path = ''
+
+            elif content_mode in ['pdf', 'download']:
+                file_field = 'pdf_file' if content_mode == 'pdf' else 'download_file'
+                if file_field in request.files and request.files[file_field].filename:
+                    # Delete old file if it exists in static/lms/
+                    if file_path and file_path.startswith('static/lms/'):
+                        old_full = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')), file_path)
+                        if os.path.exists(old_full):
+                            try:
+                                os.remove(old_full)
+                            except Exception:
+                                pass
+                    success, result = upload_file(request.files[file_field], content_mode)
+                    if not success:
+                        flash(f'Upload failed: {result}', 'danger')
+                        return redirect(url_for('lms_admin.content_edit', content_id=content_id))
+                    file_path = result
+                external_url = ''
+
             now = datetime.now().isoformat(timespec='seconds')
-            
+
             try:
                 cur.execute("""
                     UPDATE lms_topic_contents
-                    SET content_mode = ?,
-                        content_title = ?,
-                        external_url = ?,
-                        file_path = ?,
-                        content_body = ?,
-                        display_order = ?,
-                        updated_at = ?
+                    SET content_mode = ?, content_title = ?, external_url = ?,
+                        file_path = ?, content_body = ?, display_order = ?, updated_at = ?
                     WHERE id = ?
-                """, (
-                    content_mode,  # FIXED: was content_mode = '', now using content_mode variable
-                    title,
-                    external_url if content_mode == 'youtube' else '',
-                    file_path,
-                    final_content_body,
-                    display_order,
-                    now,
-                    content_id
-                ))
-                
+                """, (content_mode, title, external_url, file_path, description, display_order, now, content_id))
+
                 conn.commit()
-                
                 log_activity(
                     user_id=session['user_id'],
                     branch_id=session.get('branch_id'),
@@ -1805,10 +1684,10 @@ def content_edit(content_id):
                     record_id=content_id,
                     description=f'Updated content: {title} in topic {topic["topic_title"]}'
                 )
-                
+
                 flash('Content updated successfully.', 'success')
                 return redirect(url_for('lms_admin.list_topic_contents', topic_id=content['topic_id']))
-                
+
             except Exception as e:
                 flash(f'Error updating content: {str(e)}', 'danger')
                 return redirect(url_for('lms_admin.content_edit', content_id=content_id))
@@ -1819,7 +1698,7 @@ def content_edit(content_id):
 
 
 @lms_admin_bp.route('/content/<int:content_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_content(content_id):
     """Delete content from a topic"""
     conn = get_conn()
@@ -1845,7 +1724,6 @@ def delete_content(content_id):
             WHERE id = ?
         """, (content_id,))
         conn.commit()
-        
         log_activity(
             user_id=session['user_id'],
             branch_id=session.get('branch_id'),
@@ -1959,7 +1837,7 @@ def list_topic_attachments(topic_id):
 
 
 @lms_admin_bp.route('/topic/<int:topic_id>/attachment/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def add_topic_attachment(topic_id):
     """Add a new attachment to a topic"""
     conn = get_conn()
@@ -2023,16 +1901,15 @@ def add_topic_attachment(topic_id):
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                 """, (topic_id, attachment_type, file_name, file_size, file_path, description, session['user_id'], is_required))
                 
-                conn.commit()
-                
                 # Log activity
+                conn.commit()
                 log_activity(
-                    conn,
-                    session['user_id'],
-                    'lms_topic_attachments',
-                    'CREATE',
-                    topic_id,
-                    f"Added attachment: {file_name}"
+                    user_id=session['user_id'],
+                    branch_id=session.get('branch_id'),
+                    action_type='create',
+                    module_name='lms_topic_attachments',
+                    record_id=topic_id,
+                    description=f"Added attachment: {file_name}"
                 )
                 
                 flash(f'Attachment "{file_name}" added successfully!', 'success')
@@ -2060,7 +1937,7 @@ def add_topic_attachment(topic_id):
 
 
 @lms_admin_bp.route('/attachment/<int:attachment_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def edit_topic_attachment(attachment_id):
     """Edit an existing attachment"""
     conn = get_conn()
@@ -2137,16 +2014,15 @@ def edit_topic_attachment(attachment_id):
                     WHERE id = ?
                 """, (attachment_type, file_name, file_path, description, is_required, attachment_id))
                 
-                conn.commit()
-                
                 # Log activity
+                conn.commit()
                 log_activity(
-                    conn,
-                    session['user_id'],
-                    'lms_topic_attachments',
-                    'UPDATE',
-                    attachment['topic_id'],
-                    f"Updated attachment: {file_name}"
+                    user_id=session['user_id'],
+                    branch_id=session.get('branch_id'),
+                    action_type='update',
+                    module_name='lms_topic_attachments',
+                    record_id=attachment['topic_id'],
+                    description=f"Updated attachment: {file_name}"
                 )
                 
                 flash(f'Attachment "{file_name}" updated successfully!', 'success')
@@ -2178,7 +2054,7 @@ def edit_topic_attachment(attachment_id):
 
 
 @lms_admin_bp.route('/attachment/<int:attachment_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_topic_attachment(attachment_id):
     """Delete an attachment"""
     conn = get_conn()
@@ -2203,16 +2079,15 @@ def delete_topic_attachment(attachment_id):
             DELETE FROM lms_topic_attachments WHERE id = ?
         """, (attachment_id,))
         
-        conn.commit()
-        
         # Log activity
+        conn.commit()
         log_activity(
-            conn,
-            session['user_id'],
-            'lms_topic_attachments',
-            'DELETE',
-            topic_id,
-            f"Deleted attachment: {file_name}"
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='delete',
+            module_name='lms_topic_attachments',
+            record_id=topic_id,
+            description=f"Deleted attachment: {file_name}"
         )
         
         flash(f'Attachment "{file_name}" deleted successfully!', 'success')
@@ -2294,7 +2169,7 @@ def list_program_resources(program_id):
 
 
 @lms_admin_bp.route('/program/<int:program_id>/resource/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def add_program_resource(program_id):
     """Add a new resource to a program"""
     conn = get_conn()
@@ -2347,16 +2222,15 @@ def add_program_resource(program_id):
                     VALUES (?, ?, ?, ?, ?, datetime('now'))
                 """, (program_id, resource_title, resource_type, file_path, 1 if is_active else 0))
                 
-                conn.commit()
-                
                 # Log activity
+                conn.commit()
                 log_activity(
-                    conn,
-                    session['user_id'],
-                    'lms_program_resources',
-                    'CREATE',
-                    program_id,
-                    f"Added resource: {resource_title}"
+                    user_id=session['user_id'],
+                    branch_id=session.get('branch_id'),
+                    action_type='create',
+                    module_name='lms_program_resources',
+                    record_id=program_id,
+                    description=f"Added resource: {resource_title}"
                 )
                 
                 flash(f'Resource "{resource_title}" added successfully!', 'success')
@@ -2376,7 +2250,7 @@ def add_program_resource(program_id):
 
 
 @lms_admin_bp.route('/resource/<int:resource_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def edit_program_resource(resource_id):
     """Edit an existing resource"""
     conn = get_conn()
@@ -2445,16 +2319,15 @@ def edit_program_resource(resource_id):
                     WHERE id = ?
                 """, (resource_type, resource_title, file_path, 1 if is_active else 0, resource_id))
                 
-                conn.commit()
-                
                 # Log activity
+                conn.commit()
                 log_activity(
-                    conn,
-                    session['user_id'],
-                    'lms_program_resources',
-                    'UPDATE',
-                    resource['program_id'],
-                    f"Updated resource: {resource_title}"
+                    user_id=session['user_id'],
+                    branch_id=session.get('branch_id'),
+                    action_type='update',
+                    module_name='lms_program_resources',
+                    record_id=resource['program_id'],
+                    description=f"Updated resource: {resource_title}"
                 )
                 
                 flash(f'Resource "{resource_title}" updated successfully!', 'success')
@@ -2477,7 +2350,7 @@ def edit_program_resource(resource_id):
 
 
 @lms_admin_bp.route('/resource/<int:resource_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_program_resource(resource_id):
     """Delete a resource"""
     conn = get_conn()
@@ -2502,16 +2375,15 @@ def delete_program_resource(resource_id):
             DELETE FROM lms_program_resources WHERE id = ?
         """, (resource_id,))
         
-        conn.commit()
-        
         # Log activity
+        conn.commit()
         log_activity(
-            conn,
-            session['user_id'],
-            'lms_program_resources',
-            'DELETE',
-            program_id,
-            f"Deleted resource: {resource_title}"
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='delete',
+            module_name='lms_program_resources',
+            record_id=program_id,
+            description=f"Deleted resource: {resource_title}"
         )
         
         flash(f'Resource "{resource_title}" deleted successfully!', 'success')
@@ -2598,7 +2470,7 @@ def list_batch_programs():
 
 
 @lms_admin_bp.route('/batch-program/new', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def add_batch_program():
     """Assign a program to a batch"""
     conn = get_conn()
@@ -2635,7 +2507,7 @@ def add_batch_program():
                 return redirect(url_for('lms_admin.add_batch_program'))
             
             # Check if batch exists
-            cur.execute("SELECT id FROM attendance_batch WHERE id = ?", (batch_id,))
+            cur.execute("SELECT id FROM batches WHERE id = ?", (batch_id,))
             if not cur.fetchone():
                 flash('Batch not found.', 'danger')
                 return redirect(url_for('lms_admin.add_batch_program'))
@@ -2675,16 +2547,15 @@ def add_batch_program():
                     VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                 """, (batch_id, program_id, access_start_date, access_end_date if access_end_date else None, is_active))
                 
-                conn.commit()
-                
                 # Log activity
+                conn.commit()
                 log_activity(
-                    conn,
-                    session['user_id'],
-                    'lms_batch_program_access',
-                    'CREATE',
-                    batch_id,
-                    f"Assigned program {program_id} to batch {batch_id}"
+                    user_id=session['user_id'],
+                    branch_id=session.get('branch_id'),
+                    action_type='create',
+                    module_name='lms_batch_program_access',
+                    record_id=batch_id,
+                    description=f"Assigned program {program_id} to batch {batch_id}"
                 )
                 
                 flash('Batch-program assignment created successfully!', 'success')
@@ -2695,7 +2566,7 @@ def add_batch_program():
         
         # Get all available batches
         cur.execute("""
-            SELECT id, batch_title FROM attendance_batch ORDER BY batch_title ASC
+            SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name ASC
         """)
         batches = cur.fetchall()
         
@@ -2717,7 +2588,7 @@ def add_batch_program():
 
 
 @lms_admin_bp.route('/batch-program/<int:assignment_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def edit_batch_program(assignment_id):
     """Edit a batch-program assignment"""
     conn = get_conn()
@@ -2733,10 +2604,10 @@ def edit_batch_program(assignment_id):
                 lbpa.access_start_date,
                 lbpa.access_end_date,
                 lbpa.is_active,
-                ab.batch_title,
+                ab.batch_name,
                 lp.program_name
             FROM lms_batch_program_access lbpa
-            JOIN attendance_batch ab ON lbpa.batch_id = ab.id
+            JOIN batches ab ON lbpa.batch_id = ab.id
             JOIN lms_programs lp ON lbpa.program_id = lp.id
             WHERE lbpa.id = ?
         """, (assignment_id,))
@@ -2779,16 +2650,15 @@ def edit_batch_program(assignment_id):
                     WHERE id = ?
                 """, (access_start_date, access_end_date if access_end_date else None, is_active, assignment_id))
                 
-                conn.commit()
-                
                 # Log activity
+                conn.commit()
                 log_activity(
-                    conn,
-                    session['user_id'],
-                    'lms_batch_program_access',
-                    'UPDATE',
-                    assignment['batch_id'],
-                    f"Updated access for program {assignment['program_id']} in batch {assignment['batch_id']}"
+                    user_id=session['user_id'],
+                    branch_id=session.get('branch_id'),
+                    action_type='update',
+                    module_name='lms_batch_program_access',
+                    record_id=assignment['batch_id'],
+                    description=f"Updated access for program {assignment['program_id']} in batch {assignment['batch_id']}"
                 )
                 
                 flash('Assignment updated successfully!', 'success')
@@ -2799,7 +2669,7 @@ def edit_batch_program(assignment_id):
         
         # Get all available batches
         cur.execute("""
-            SELECT id, batch_title FROM attendance_batch ORDER BY batch_title ASC
+            SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name ASC
         """)
         batches = cur.fetchall()
         
@@ -2821,7 +2691,7 @@ def edit_batch_program(assignment_id):
 
 
 @lms_admin_bp.route('/batch-program/<int:assignment_id>/delete', methods=['POST'])
-@login_required
+@admin_required
 def delete_batch_program(assignment_id):
     """Delete a batch-program assignment"""
     conn = get_conn()
@@ -2843,16 +2713,15 @@ def delete_batch_program(assignment_id):
             DELETE FROM lms_batch_program_access WHERE id = ?
         """, (assignment_id,))
         
-        conn.commit()
-        
         # Log activity
+        conn.commit()
         log_activity(
-            conn,
-            session['user_id'],
-            'lms_batch_program_access',
-            'DELETE',
-            assignment['batch_id'],
-            f"Removed program {assignment['program_id']} from batch {assignment['batch_id']}"
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='delete',
+            module_name='lms_batch_program_access',
+            record_id=assignment['batch_id'],
+            description=f"Removed program {assignment['program_id']} from batch {assignment['batch_id']}"
         )
         
         flash('Assignment deleted successfully!', 'success')
@@ -2888,110 +2757,96 @@ def progress_dashboard():
         # Total completed topics
         cur.execute("""
             SELECT COUNT(*) as count
-            FROM lms_student_topic_progress
-            WHERE completion_percentage = 100
+            FROM lms_topic_progress
+            WHERE is_completed = 1
         """)
         completed_topics = cur.fetchone()['count']
         
-        # Total incomplete topics
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_student_topic_progress
-            WHERE completion_percentage < 100 AND completion_percentage > 0
-        """)
-        in_progress_topics = cur.fetchone()['count']
+        # In progress (binary state — no partial completion)
+        in_progress_topics = 0
         
-        # Total not started
+        # Total not started (records exist but not completed)
         cur.execute("""
             SELECT COUNT(*) as count
-            FROM lms_student_topic_progress
-            WHERE completion_percentage = 0
+            FROM lms_topic_progress
+            WHERE is_completed = 0
         """)
         not_started_topics = cur.fetchone()['count']
         
         # Overall completion percentage
         cur.execute("""
-            SELECT AVG(completion_percentage) as avg_completion
-            FROM lms_student_topic_progress
+            SELECT
+                CASE WHEN COUNT(*) = 0 THEN 0
+                ELSE ROUND(100.0 * SUM(is_completed) / COUNT(*), 1)
+                END as avg_completion
+            FROM lms_topic_progress
         """)
         result = cur.fetchone()
         overall_completion = result['avg_completion'] if result['avg_completion'] else 0
         
-        # Top 5 progressing students (by average completion)
+        # Top 5 progressing students (by completion)
         cur.execute("""
             SELECT 
                 stp.student_id,
-                ast.first_name,
-                ast.last_name,
+                ast.full_name as first_name,
+                '' as last_name,
                 COUNT(stp.topic_id) as topics_count,
-                AVG(stp.completion_percentage) as avg_completion,
-                MAX(stp.last_accessed) as last_accessed
-            FROM lms_student_topic_progress stp
-            LEFT JOIN attendance_student ast ON stp.student_id = ast.id
+                ROUND(100.0 * SUM(stp.is_completed) / COUNT(*), 1) as avg_completion,
+                MAX(stp.completed_at) as last_accessed
+            FROM lms_topic_progress stp
+            LEFT JOIN students ast ON stp.student_id = ast.id
             GROUP BY stp.student_id
             ORDER BY avg_completion DESC
             LIMIT 5
         """)
         top_students = cur.fetchall()
         
-        # Bottom 5 low engagement students (lowest completion)
+        # Bottom 5 low engagement students: have program access but least/no progress
         cur.execute("""
             SELECT 
-                stp.student_id,
-                ast.first_name,
-                ast.last_name,
-                COUNT(stp.topic_id) as topics_count,
-                AVG(stp.completion_percentage) as avg_completion,
-                MAX(stp.last_accessed) as last_accessed
-            FROM lms_student_topic_progress stp
-            LEFT JOIN attendance_student ast ON stp.student_id = ast.id
-            GROUP BY stp.student_id
-            HAVING AVG(stp.completion_percentage) > 0
-            ORDER BY avg_completion ASC
+                spa.student_id,
+                ast.full_name as first_name,
+                '' as last_name,
+                COUNT(DISTINCT stp.topic_id) as topics_count,
+                COALESCE(ROUND(100.0 * SUM(CASE WHEN stp.is_completed = 1 THEN 1 ELSE 0 END) / 
+                    NULLIF(COUNT(DISTINCT stp.topic_id), 0), 1), 0) as avg_completion,
+                MAX(stp.completed_at) as last_accessed
+            FROM lms_student_program_access spa
+            JOIN students ast ON spa.student_id = ast.id
+            LEFT JOIN lms_topic_progress stp ON spa.student_id = stp.student_id
+            WHERE spa.is_active = 1
+            GROUP BY spa.student_id
+            ORDER BY avg_completion ASC, topics_count ASC
             LIMIT 5
         """)
         low_engagement_students = cur.fetchall()
         
-        # Recent activity - last 10 progress updates
+        # Recent activity - last 10 completions
         cur.execute("""
             SELECT 
                 stp.student_id,
-                ast.first_name,
-                ast.last_name,
+                ast.full_name as first_name,
+                '' as last_name,
                 lt.topic_title,
-                stp.completion_percentage,
-                stp.last_accessed
-            FROM lms_student_topic_progress stp
-            LEFT JOIN attendance_student ast ON stp.student_id = ast.id
+                CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END as completion_percentage,
+                stp.completed_at as last_accessed
+            FROM lms_topic_progress stp
+            LEFT JOIN students ast ON stp.student_id = ast.id
             LEFT JOIN lms_topics lt ON stp.topic_id = lt.id
-            ORDER BY stp.last_accessed DESC
+            WHERE stp.is_completed = 1
+            ORDER BY stp.completed_at DESC
             LIMIT 10
         """)
         recent_activity = cur.fetchall()
         
-        # Completion distribution
+        # Completion distribution (binary: completed or not started)
         cur.execute("""
             SELECT 
-                CASE 
-                    WHEN completion_percentage = 0 THEN 'Not Started'
-                    WHEN completion_percentage BETWEEN 1 AND 25 THEN '1-25%'
-                    WHEN completion_percentage BETWEEN 26 AND 50 THEN '26-50%'
-                    WHEN completion_percentage BETWEEN 51 AND 75 THEN '51-75%'
-                    WHEN completion_percentage BETWEEN 76 AND 99 THEN '76-99%'
-                    WHEN completion_percentage = 100 THEN '100%'
-                END as completion_range,
+                CASE WHEN is_completed = 1 THEN '100%' ELSE 'Not Started' END as completion_range,
                 COUNT(*) as count
-            FROM lms_student_topic_progress
-            GROUP BY completion_range
-            ORDER BY 
-                CASE 
-                    WHEN completion_range = 'Not Started' THEN 0
-                    WHEN completion_range = '1-25%' THEN 1
-                    WHEN completion_range = '26-50%' THEN 2
-                    WHEN completion_range = '51-75%' THEN 3
-                    WHEN completion_range = '76-99%' THEN 4
-                    WHEN completion_range = '100%' THEN 5
-                END
+            FROM lms_topic_progress
+            GROUP BY is_completed
+            ORDER BY is_completed
         """)
         completion_distribution = cur.fetchall()
         
@@ -3000,15 +2855,17 @@ def progress_dashboard():
             SELECT 
                 ab.id,
                 ab.batch_name,
-                ab.batch_code,
                 COUNT(DISTINCT lbpa.program_id) as programs_count,
                 COUNT(DISTINCT CASE WHEN lbpa.is_active = 1 THEN lbpa.program_id END) as active_programs,
-                COUNT(DISTINCT ast.id) as students_count,
-                ROUND(AVG(stp.completion_percentage), 1) as avg_completion
-            FROM attendance_batch ab
+                COUNT(DISTINCT sb.student_id) as students_count,
+                ROUND(
+                    CASE WHEN COUNT(stp.id) = 0 THEN 0
+                    ELSE 100.0 * SUM(CASE WHEN stp.is_completed = 1 THEN 1 ELSE 0 END) / COUNT(stp.id)
+                    END, 1) as avg_completion
+            FROM batches ab
             LEFT JOIN lms_batch_program_access lbpa ON ab.id = lbpa.batch_id
-            LEFT JOIN attendance_student ast ON ab.id = ast.batch_id
-            LEFT JOIN lms_student_topic_progress stp ON ast.id = stp.student_id
+            LEFT JOIN student_batches sb ON ab.id = sb.batch_id AND sb.status = 'active'
+            LEFT JOIN lms_topic_progress stp ON sb.student_id = stp.student_id
             WHERE lbpa.program_id IS NOT NULL
             GROUP BY ab.id
             ORDER BY ab.batch_name
@@ -3055,8 +2912,9 @@ def view_student_progress(student_id):
         
         # Get student info
         cur.execute("""
-            SELECT id, first_name, last_name, roll_number, email
-            FROM attendance_student
+            SELECT id, full_name as first_name, '' as last_name,
+                   student_code as roll_number, email
+            FROM students
             WHERE id = ?
         """, (student_id,))
         student = cur.fetchone()
@@ -3068,14 +2926,13 @@ def view_student_progress(student_id):
         # Get student's assigned programs with access info
         cur.execute("""
             SELECT 
-                spa.assignment_id,
+                spa.id as assignment_id,
                 spa.program_id,
                 spa.access_start_date,
                 spa.access_end_date,
                 spa.is_active,
-                lp.program_title,
+                lp.program_name,
                 lp.description,
-                lp.program_code,
                 (SELECT COUNT(*) FROM lms_chapters WHERE program_id = lp.id) as total_chapters
             FROM lms_student_program_access spa
             LEFT JOIN lms_programs lp ON spa.program_id = lp.id
@@ -3095,16 +2952,16 @@ def view_student_progress(student_id):
                 SELECT 
                     lc.id,
                     lc.chapter_title,
-                    lc.chapter_number,
+                    lc.chapter_order,
                     lc.description,
                     (SELECT COUNT(*) FROM lms_topics WHERE chapter_id = lc.id) as total_topics,
-                    (SELECT COUNT(*) FROM lms_student_topic_progress 
+                    (SELECT COUNT(*) FROM lms_topic_progress 
                      WHERE student_id = ? AND topic_id IN 
                      (SELECT id FROM lms_topics WHERE chapter_id = lc.id) 
-                     AND completion_percentage = 100) as completed_topics
+                     AND is_completed = 1) as completed_topics
                 FROM lms_chapters lc
                 WHERE lc.program_id = ?
-                ORDER BY lc.chapter_number
+                ORDER BY lc.chapter_order
             """, (student_id, program_id))
             chapters = cur.fetchall()
             
@@ -3118,22 +2975,22 @@ def view_student_progress(student_id):
                     SELECT 
                         lt.id,
                         lt.topic_title,
-                        lt.topic_number,
+                        lt.topic_order,
                         lt.is_required,
-                        COALESCE(stp.completion_percentage, 0) as completion_percentage,
-                        COALESCE(stp.last_accessed, 'Not started') as last_accessed,
-                        COALESCE(stp.time_spent_minutes, 0) as time_spent_minutes
+                        COALESCE(CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END, 0) as completion_percentage,
+                        COALESCE(stp.completed_at, 'Not started') as last_accessed,
+                        0 as time_spent_minutes
                     FROM lms_topics lt
-                    LEFT JOIN lms_student_topic_progress stp ON lt.id = stp.topic_id AND stp.student_id = ?
+                    LEFT JOIN lms_topic_progress stp ON lt.id = stp.topic_id AND stp.student_id = ?
                     WHERE lt.chapter_id = ?
-                    ORDER BY lt.topic_number
+                    ORDER BY lt.topic_order
                 """, (student_id, chapter_id))
                 topics = cur.fetchall()
                 
                 chapters_with_topics.append({
                     'id': chap['id'],
                     'chapter_title': chap['chapter_title'],
-                    'chapter_number': chap['chapter_number'],
+                    'chapter_order': chap['chapter_order'],
                     'description': chap['description'],
                     'total_topics': chap['total_topics'],
                     'completed_topics': chap['completed_topics'],
@@ -3148,9 +3005,8 @@ def view_student_progress(student_id):
             programs_with_details.append({
                 'assignment_id': prog['assignment_id'],
                 'program_id': prog['program_id'],
-                'program_title': prog['program_title'],
+                'program_name': prog['program_name'],
                 'description': prog['description'],
-                'program_code': prog['program_code'],
                 'access_start_date': prog['access_start_date'],
                 'access_end_date': prog['access_end_date'],
                 'is_active': prog['is_active'],
@@ -3165,7 +3021,7 @@ def view_student_progress(student_id):
         cur.execute("""
             SELECT 
                 str.test_id,
-                lmt.test_name,
+                lmt.test_title,
                 str.score,
                 str.total_marks,
                 str.obtained_percentage,
@@ -3188,12 +3044,12 @@ def view_student_progress(student_id):
             SELECT 
                 stp.student_id,
                 lt.topic_title,
-                stp.completion_percentage,
-                stp.last_accessed
-            FROM lms_student_topic_progress stp
+                CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END as completion_percentage,
+                stp.completed_at as last_accessed
+            FROM lms_topic_progress stp
             LEFT JOIN lms_topics lt ON stp.topic_id = lt.id
             WHERE stp.student_id = ?
-            ORDER BY stp.last_accessed DESC
+            ORDER BY stp.completed_at DESC
             LIMIT 5
         """, (student_id,))
         recent_activities = cur.fetchall()
@@ -3238,8 +3094,8 @@ def view_batch_progress(batch_id):
         
         # Get batch info
         cur.execute("""
-            SELECT id, batch_name, batch_code
-            FROM attendance_batch
+            SELECT id, batch_name
+            FROM batches
             WHERE id = ?
         """, (batch_id,))
         batch = cur.fetchone()
@@ -3252,21 +3108,24 @@ def view_batch_progress(batch_id):
         cur.execute("""
             SELECT 
                 ast.id,
-                ast.first_name,
-                ast.last_name,
-                ast.roll_number,
+                ast.full_name as first_name,
+                '' as last_name,
+                ast.student_code as roll_number,
                 COUNT(DISTINCT spa.program_id) as programs_assigned,
                 COUNT(DISTINCT CASE WHEN spa.is_active = 1 THEN spa.program_id END) as programs_active,
                 COUNT(DISTINCT stp.topic_id) as topics_accessed,
-                AVG(stp.completion_percentage) as avg_completion,
-                MAX(stp.last_accessed) as last_activity,
-                COUNT(DISTINCT CASE WHEN stp.completion_percentage = 100 THEN stp.topic_id END) as topics_completed
-            FROM attendance_student ast
-            WHERE ast.batch_id = ?
+                ROUND(
+                    CASE WHEN COUNT(stp.id) = 0 THEN 0
+                    ELSE 100.0 * SUM(CASE WHEN stp.is_completed = 1 THEN 1 ELSE 0 END) / COUNT(stp.id)
+                    END, 1) as avg_completion,
+                MAX(stp.completed_at) as last_activity,
+                COUNT(DISTINCT CASE WHEN stp.is_completed = 1 THEN stp.topic_id END) as topics_completed
+            FROM students ast
+            JOIN student_batches sb ON ast.id = sb.student_id AND sb.batch_id = ? AND sb.status = 'active'
             LEFT JOIN lms_student_program_access spa ON ast.id = spa.student_id
-            LEFT JOIN lms_student_topic_progress stp ON ast.id = stp.student_id
+            LEFT JOIN lms_topic_progress stp ON ast.id = stp.student_id
             GROUP BY ast.id
-            ORDER BY ast.roll_number
+            ORDER BY ast.student_code
         """, (batch_id,))
         batch_students = cur.fetchall()
         
@@ -3274,12 +3133,11 @@ def view_batch_progress(batch_id):
         cur.execute("""
             SELECT DISTINCT 
                 lp.id,
-                lp.program_title,
-                lp.program_code
+                lp.program_name
             FROM lms_batch_program_access lbpa
             JOIN lms_programs lp ON lbpa.program_id = lp.id
             WHERE lbpa.batch_id = ? AND lbpa.is_active = 1
-            ORDER BY lp.program_title
+            ORDER BY lp.program_name
         """, (batch_id,))
         batch_programs = cur.fetchall()
         
@@ -3299,15 +3157,15 @@ def view_batch_progress(batch_id):
                     SELECT 
                         lc.id,
                         lc.chapter_title,
-                        lc.chapter_number,
+                        lc.chapter_order,
                         COUNT(lt.id) as total_topics,
-                        COUNT(CASE WHEN stp.completion_percentage = 100 THEN lt.id END) as completed_topics
+                        COUNT(CASE WHEN stp.is_completed = 1 THEN lt.id END) as completed_topics
                     FROM lms_chapters lc
                     LEFT JOIN lms_topics lt ON lc.id = lt.chapter_id
-                    LEFT JOIN lms_student_topic_progress stp ON lt.id = stp.topic_id AND stp.student_id = ?
+                    LEFT JOIN lms_topic_progress stp ON lt.id = stp.topic_id AND stp.student_id = ?
                     WHERE lc.program_id = ?
                     GROUP BY lc.id
-                    ORDER BY lc.chapter_number
+                    ORDER BY lc.chapter_order
                 """, (student_id, program_id))
                 chapters_data = cur.fetchall()
                 
@@ -3347,16 +3205,17 @@ def view_batch_progress(batch_id):
         # Recent batch activity
         cur.execute("""
             SELECT 
-                ast.first_name,
-                ast.last_name,
+                ast.full_name as first_name,
+                '' as last_name,
                 lt.topic_title,
-                stp.completion_percentage,
-                stp.last_accessed
-            FROM lms_student_topic_progress stp
-            JOIN attendance_student ast ON stp.student_id = ast.id
+                CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END as completion_percentage,
+                stp.completed_at as last_accessed
+            FROM lms_topic_progress stp
+            JOIN students ast ON stp.student_id = ast.id
+            JOIN student_batches sb ON ast.id = sb.student_id AND sb.batch_id = ?
             LEFT JOIN lms_topics lt ON stp.topic_id = lt.id
-            WHERE ast.batch_id = ?
-            ORDER BY stp.last_accessed DESC
+            WHERE stp.is_completed = 1
+            ORDER BY stp.completed_at DESC
             LIMIT 10
         """, (batch_id,))
         batch_activity = cur.fetchall()
@@ -3371,23 +3230,24 @@ def view_batch_progress(batch_id):
                     SELECT 
                         lc.id,
                         lc.chapter_title,
-                        lc.chapter_number,
+                        lc.chapter_order,
                         COUNT(DISTINCT ast.id) as total_students,
-                        COUNT(DISTINCT CASE 
-                            WHEN stp.completion_percentage = 100 
-                            THEN ast.id 
-                        END) as students_completed,
-                        ROUND(AVG(stp.completion_percentage), 1) as avg_completion
+                        COUNT(DISTINCT CASE WHEN stp.is_completed = 1 THEN ast.id END) as students_completed,
+                        ROUND(
+                            CASE WHEN COUNT(stp.id) = 0 THEN 0
+                            ELSE 100.0 * SUM(CASE WHEN stp.is_completed = 1 THEN 1 ELSE 0 END) / COUNT(stp.id)
+                            END, 1) as avg_completion
                     FROM lms_chapters lc
                     LEFT JOIN lms_topics lt ON lc.id = lt.chapter_id
-                    LEFT JOIN lms_student_topic_progress stp ON lt.id = stp.topic_id
-                    LEFT JOIN attendance_student ast ON stp.student_id = ast.id AND ast.batch_id = ?
+                    LEFT JOIN lms_topic_progress stp ON lt.id = stp.topic_id
+                    LEFT JOIN students ast ON stp.student_id = ast.id
+                    LEFT JOIN student_batches astb ON ast.id = astb.student_id AND astb.batch_id = ?
                     WHERE lc.program_id = ?
                     GROUP BY lc.id
-                    ORDER BY lc.chapter_number
+                    ORDER BY lc.chapter_order
                 """, (batch_id, program_id))
                 
-                chapter_summary[prog['program_title']] = cur.fetchall()
+                chapter_summary[prog['program_name']] = cur.fetchall()
         
         def format_date(date_str):
             """Format date string for display"""
@@ -3438,5 +3298,493 @@ def view_batch_progress(batch_id):
     except Exception as e:
         flash(f'Error loading batch progress: {str(e)}', 'danger')
         return redirect(url_for('lms_admin.progress_dashboard'))
+    finally:
+        conn.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LMS COURSE–PROGRAM MAPPING
+# Maps a combo course (e.g. DFA) to multiple LMS programs so admin can
+# bulk-assign batch/student access without creating a separate LMS program.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@lms_admin_bp.route('/course-mapping', methods=['GET'])
+@admin_required
+def list_course_mappings():
+    """List all course-to-program mappings grouped by course."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        # All mappings with course and program names
+        cur.execute("""
+            SELECT
+                m.id,
+                m.course_id,
+                m.program_id,
+                m.display_order,
+                m.created_at,
+                c.course_name,
+                lp.program_name
+            FROM lms_course_program_map m
+            JOIN courses c ON m.course_id = c.id
+            JOIN lms_programs lp ON m.program_id = lp.id
+            ORDER BY c.course_name, m.display_order, lp.program_name
+        """)
+        rows = cur.fetchall()
+
+        # Group by course
+        from collections import OrderedDict
+        grouped = OrderedDict()
+        for r in rows:
+            key = r['course_id']
+            if key not in grouped:
+                grouped[key] = {'course_id': r['course_id'],
+                                'course_name': r['course_name'],
+                                'programs': []}
+            grouped[key]['programs'].append({
+                'map_id': r['id'],
+                'program_id': r['program_id'],
+                'program_name': r['program_name'],
+                'display_order': r['display_order'],
+                'created_at': r['created_at']
+            })
+
+        # All courses (for the Add Mapping form)
+        cur.execute("""
+            SELECT id, course_name FROM courses WHERE is_active = 1
+            ORDER BY course_name
+        """)
+        all_courses = cur.fetchall()
+
+        # All published LMS programs (for the Add Mapping form)
+        cur.execute("""
+            SELECT id, program_name FROM lms_programs WHERE is_active = 1
+            ORDER BY program_name
+        """)
+        all_programs = cur.fetchall()
+
+        return render_template(
+            'lms_admin/lms_course_mapping.html',
+            grouped=list(grouped.values()),
+            all_courses=all_courses,
+            all_programs=all_programs
+        )
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/course-mapping/add', methods=['POST'])
+@admin_required
+def add_course_mapping():
+    """Add one or more program mappings for a course."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        course_id = request.form.get('course_id', '').strip()
+        program_ids = request.form.getlist('program_ids')  # multiple checkboxes
+
+        if not course_id:
+            flash('Please select a course.', 'danger')
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        if not program_ids:
+            flash('Please select at least one program.', 'danger')
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        try:
+            course_id = int(course_id)
+        except ValueError:
+            flash('Invalid course.', 'danger')
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        added = 0
+        skipped = 0
+        now = datetime.now().isoformat(timespec='seconds')
+
+        for pid in program_ids:
+            try:
+                pid = int(pid)
+            except ValueError:
+                continue
+            # Skip duplicates gracefully
+            cur.execute("""
+                SELECT id FROM lms_course_program_map
+                WHERE course_id = ? AND program_id = ?
+            """, (course_id, pid))
+            if cur.fetchone():
+                skipped += 1
+                continue
+
+            cur.execute("""
+                INSERT INTO lms_course_program_map
+                    (course_id, program_id, created_by, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (course_id, pid, session.get('user_id'), now))
+            added += 1
+
+        conn.commit()
+
+        if added:
+            cur.execute("SELECT course_name FROM courses WHERE id = ?", (course_id,))
+            cname = cur.fetchone()['course_name']
+            log_activity(
+                user_id=session['user_id'],
+                branch_id=session.get('branch_id'),
+                action_type='create',
+                module_name='lms_course_program_map',
+                record_id=course_id,
+                description=f'Added {added} program mapping(s) for course: {cname}'
+            )
+            flash(f'{added} mapping(s) added successfully.' +
+                  (f' ({skipped} already existed, skipped.)' if skipped else ''),
+                  'success')
+        else:
+            flash('All selected mappings already exist.', 'info')
+
+        return redirect(url_for('lms_admin.list_course_mappings'))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/course-mapping/<int:map_id>/delete', methods=['POST'])
+@admin_required
+def delete_course_mapping(map_id):
+    """Delete a single course-program mapping."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT m.id, m.course_id, m.program_id, c.course_name, lp.program_name
+            FROM lms_course_program_map m
+            JOIN courses c ON m.course_id = c.id
+            JOIN lms_programs lp ON m.program_id = lp.id
+            WHERE m.id = ?
+        """, (map_id,))
+        mapping = cur.fetchone()
+
+        if not mapping:
+            flash('Mapping not found.', 'danger')
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        cur.execute("DELETE FROM lms_course_program_map WHERE id = ?", (map_id,))
+        conn.commit()
+
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='delete',
+            module_name='lms_course_program_map',
+            record_id=map_id,
+            description=f"Removed mapping: {mapping['course_name']} → {mapping['program_name']}"
+        )
+        flash('Mapping removed.', 'success')
+        return redirect(url_for('lms_admin.list_course_mappings'))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/course-mapping/edit/<int:course_id>', methods=['GET', 'POST'])
+@admin_required
+def manage_course_mapping(course_id):
+    """Edit all program mappings for a single course at once."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        # Verify course exists
+        cur.execute("SELECT id, course_name FROM courses WHERE id = ?", (course_id,))
+        course = cur.fetchone()
+        if not course:
+            flash('Course not found.', 'danger')
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        if request.method == 'POST':
+            new_program_ids = {}  # {program_id: display_order}
+            for pid in request.form.getlist('program_ids'):
+                try:
+                    pid_int = int(pid)
+                    order_val = int(request.form.get(f'order_{pid}', 0) or 0)
+                    new_program_ids[pid_int] = order_val
+                except ValueError:
+                    pass
+
+            # Get currently mapped program IDs
+            cur.execute("""
+                SELECT program_id FROM lms_course_program_map WHERE course_id = ?
+            """, (course_id,))
+            existing_ids = {r['program_id'] for r in cur.fetchall()}
+
+            to_add = set(new_program_ids.keys()) - existing_ids
+            to_remove = existing_ids - set(new_program_ids.keys())
+            to_update = existing_ids & set(new_program_ids.keys())
+
+            now = datetime.now().isoformat(timespec='seconds')
+
+            for pid in to_add:
+                cur.execute("""
+                    INSERT INTO lms_course_program_map
+                        (course_id, program_id, display_order, created_by, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (course_id, pid, new_program_ids[pid], session.get('user_id'), now))
+
+            for pid in to_update:
+                cur.execute("""
+                    UPDATE lms_course_program_map SET display_order = ?
+                    WHERE course_id = ? AND program_id = ?
+                """, (new_program_ids[pid], course_id, pid))
+
+            for pid in to_remove:
+                cur.execute("""
+                    DELETE FROM lms_course_program_map WHERE course_id = ? AND program_id = ?
+                """, (course_id, pid))
+
+            conn.commit()
+
+            changes = len(to_add) + len(to_remove) + len(to_update)
+            if changes:
+                log_activity(
+                    user_id=session['user_id'],
+                    branch_id=session.get('branch_id'),
+                    action_type='update',
+                    module_name='lms_course_program_map',
+                    record_id=course_id,
+                    description=f"Updated mappings for {course['course_name']}: +{len(to_add)} added, -{len(to_remove)} removed, {len(to_update)} reordered"
+                )
+                flash(f'Mappings updated for {course["course_name"]}.'
+                      f' {len(to_add)} added, {len(to_remove)} removed, {len(to_update)} reordered.', 'success')
+            else:
+                flash('No changes made.', 'info')
+
+            return redirect(url_for('lms_admin.list_course_mappings'))
+
+        # GET — load all programs, mark which are already mapped
+        cur.execute("""
+            SELECT id, program_name FROM lms_programs WHERE is_active = 1 ORDER BY program_name
+        """)
+        all_programs = cur.fetchall()
+
+        cur.execute("""
+            SELECT program_id, display_order FROM lms_course_program_map
+            WHERE course_id = ? ORDER BY display_order
+        """, (course_id,))
+        mapped_programs = {r['program_id']: r['display_order'] for r in cur.fetchall()}
+
+        return render_template(
+            'lms_admin/lms_course_mapping_edit.html',
+            course=course,
+            all_programs=all_programs,
+            mapped_programs=mapped_programs
+        )
+    finally:
+        conn.close()
+@login_required
+def api_batch_course(batch_id):
+    """Return the course linked to a batch (looks up via invoices or enrollments)."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        # Try to find course via invoices linked to this batch
+        cur.execute("""
+            SELECT c.id as course_id, c.course_name
+            FROM invoices i
+            JOIN courses c ON i.course_id = c.id
+            WHERE i.batch_id = ?
+            LIMIT 1
+        """, (batch_id,))
+        row = cur.fetchone()
+        if row:
+            return jsonify({'course_id': row['course_id'], 'course_name': row['course_name']})
+
+        # Fallback: try enrollments → courses
+        cur.execute("""
+            SELECT c.id as course_id, c.course_name
+            FROM student_batches sb
+            JOIN enrollments e ON sb.student_id = e.student_id
+            JOIN courses c ON e.course_id = c.id
+            WHERE sb.batch_id = ?
+            LIMIT 1
+        """, (batch_id,))
+        row = cur.fetchone()
+        if row:
+            return jsonify({'course_id': row['course_id'], 'course_name': row['course_name']})
+
+        return jsonify({'course_id': None, 'course_name': None})
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/course-mapping/api/programs-for-course/<int:course_id>', methods=['GET'])
+@login_required
+def api_programs_for_course(course_id):
+    """Return JSON list of LMS programs mapped to a given course (used by batch assign form)."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT lp.id, lp.program_name
+            FROM lms_course_program_map m
+            JOIN lms_programs lp ON m.program_id = lp.id
+            WHERE m.course_id = ? AND lp.is_active = 1
+            ORDER BY lp.program_name
+        """, (course_id,))
+        rows = cur.fetchall()
+        return jsonify({'programs': [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/batch-program/bulk-assign', methods=['GET', 'POST'])
+@admin_required
+def bulk_assign_batch_programs():
+    """
+    Bulk-assign all mapped programs for a batch's course in one go.
+    Perfect for combo courses like DFA (CCOM + Excel + Tally).
+    """
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        if request.method == 'POST':
+            batch_id = request.form.get('batch_id', '').strip()
+            program_ids = request.form.getlist('program_ids')
+            access_start_date = request.form.get('access_start_date', '').strip()
+            access_end_date = request.form.get('access_end_date', '').strip()
+            is_active = request.form.get('is_active') == 'on'
+
+            if not batch_id or not program_ids or not access_start_date:
+                flash('Batch, at least one program, and start date are required.', 'danger')
+                return redirect(url_for('lms_admin.bulk_assign_batch_programs'))
+
+            try:
+                batch_id = int(batch_id)
+            except ValueError:
+                flash('Invalid batch.', 'danger')
+                return redirect(url_for('lms_admin.bulk_assign_batch_programs'))
+
+            # Validate dates
+            try:
+                start_dt = datetime.strptime(access_start_date, '%Y-%m-%d')
+                if access_end_date:
+                    end_dt = datetime.strptime(access_end_date, '%Y-%m-%d')
+                    if end_dt < start_dt:
+                        flash('End date cannot be before start date.', 'danger')
+                        return redirect(url_for('lms_admin.bulk_assign_batch_programs'))
+            except ValueError:
+                flash('Invalid date format.', 'danger')
+                return redirect(url_for('lms_admin.bulk_assign_batch_programs'))
+
+            added = 0
+            skipped = 0
+            now_dt = datetime.now().isoformat(timespec='seconds')
+
+            for pid in program_ids:
+                try:
+                    pid = int(pid)
+                except ValueError:
+                    continue
+
+                # Check for duplicate
+                cur.execute("""
+                    SELECT id FROM lms_batch_program_access
+                    WHERE batch_id = ? AND program_id = ?
+                """, (batch_id, pid))
+                if cur.fetchone():
+                    skipped += 1
+                    continue
+
+                cur.execute("""
+                    INSERT INTO lms_batch_program_access
+                        (batch_id, program_id, access_start_date, access_end_date, is_active, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    batch_id, pid,
+                    access_start_date,
+                    access_end_date if access_end_date else None,
+                    1 if is_active else 0,
+                    now_dt, now_dt
+                ))
+                added += 1
+
+            conn.commit()
+
+            cur.execute("SELECT batch_name FROM batches WHERE id = ?", (batch_id,))
+            brow = cur.fetchone()
+            bname = brow['batch_name'] if brow else str(batch_id)
+
+            log_activity(
+                user_id=session['user_id'],
+                branch_id=session.get('branch_id'),
+                action_type='create',
+                module_name='lms_batch_program_access',
+                record_id=batch_id,
+                description=f'Bulk-assigned {added} program(s) to batch "{bname}"'
+            )
+
+            if added:
+                flash(f'{added} program(s) assigned to batch "{bname}".' +
+                      (f' ({skipped} already existed, skipped.)' if skipped else ''),
+                      'success')
+            else:
+                flash('All selected programs were already assigned to this batch.', 'info')
+
+            return redirect(url_for('lms_admin.list_batch_programs'))
+
+        # GET – build form data
+        cur.execute("""
+            SELECT id, batch_name FROM batches WHERE status = 'active'
+            ORDER BY batch_name
+        """)
+        batches = cur.fetchall()
+
+        cur.execute("""
+            SELECT id, program_name FROM lms_programs WHERE is_active = 1
+            ORDER BY program_name
+        """)
+        all_programs = cur.fetchall()
+
+        # Pass batch→course info so JS can pre-tick mapped programs
+        # build: {batch_id: course_id}
+        cur.execute("""
+            SELECT sb.batch_id, c.id as course_id, c.course_name
+            FROM (
+                SELECT DISTINCT batch_id,
+                    (SELECT course_id FROM invoices WHERE batch_id = batches.id LIMIT 1) as course_id
+                FROM batches WHERE status = 'active'
+            ) sb
+            JOIN courses c ON sb.course_id = c.id
+        """)
+        # Simpler: get course_id directly from batches table if it exists,
+        # otherwise from enrollments/invoices
+        # Let's get it via student_batches → enrollments → courses
+        cur.execute("""
+            SELECT b.id as batch_id, b.batch_name,
+                   c.id as course_id, c.course_name
+            FROM batches b
+            LEFT JOIN (
+                SELECT sb.batch_id, e.course_id
+                FROM student_batches sb
+                JOIN enrollments e ON sb.student_id = e.student_id
+                GROUP BY sb.batch_id
+                LIMIT 1
+            ) ec ON b.id = ec.batch_id
+            LEFT JOIN courses c ON ec.course_id = c.id
+            WHERE b.status = 'active'
+            ORDER BY b.batch_name
+        """)
+        # Fallback – just use batches; course lookup happens via AJAX
+        cur.execute("SELECT id, batch_name FROM batches WHERE status='active' ORDER BY batch_name")
+        batches = cur.fetchall()
+
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        return render_template(
+            'lms_admin/lms_bulk_assign.html',
+            batches=batches,
+            all_programs=all_programs,
+            today=today
+        )
     finally:
         conn.close()

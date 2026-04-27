@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
 {% block title %}
-    {% if mode == 'create' %}Add Branch{% else %}Edit Branch{% endif %} - Global IT ERP
+    {% if mode == 'create' %}Add Branch{% else %}Edit Branch{% endif %} - {{ company.company_short_name }}
 {% endblock %}
 
 {% block page_title %}
@@ -107,6 +107,32 @@
                 <label for="address">Address</label>
                 <textarea id="address" name="address" rows="4">{{ branch.address if branch else '' }}</textarea>
                 <small>Enter the complete address of the branch</small>
+            </div>
+
+            <div class="form-group">
+                <label for="no_of_computers">Number of Computers</label>
+                <input type="number" id="no_of_computers" name="no_of_computers" min="0"
+                       value="{{ branch.no_of_computers if branch else 0 }}">
+                <small>Total computers available at this branch (used for batch capacity planning)</small>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="opening_time">Branch Opening Time</label>
+                        <input type="time" id="opening_time" name="opening_time"
+                               value="{{ branch.opening_time if branch and branch.opening_time else '' }}">
+                        <small>When does the branch open? e.g. <strong>08:00</strong> for 8 AM</small>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="closing_time">Branch Closing Time</label>
+                        <input type="time" id="closing_time" name="closing_time"
+                               value="{{ branch.closing_time if branch and branch.closing_time else '' }}">
+                        <small>When does the branch close? e.g. <strong>20:00</strong> for 8 PM (24-hour format)</small>
+                    </div>
+                </div>
             </div>
 
             <div class="button-group">

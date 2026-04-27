@@ -1,0 +1,47 @@
+{% extends "login_base.html" %}
+
+{% block title %}Student Login — {{ company.company_short_name }}{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm p-4 login-card">
+  <div class="text-center mb-4">
+    <div style="font-size:36px;">🎓</div>
+    <h4 class="mb-1 mt-2">{{ company.company_short_name }}</h4>
+    <p class="text-muted mb-0" style="font-size:14px;">Student Portal — Sign in to access your courses</p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true, category_filter=['danger', 'warning', 'student_error', 'student_warning']) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ 'danger' if 'error' in category else category }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Student ID</label>
+      <input type="text" name="student_code" class="form-control form-control-lg"
+             placeholder="e.g. STU001" required autofocus
+             style="text-transform:uppercase;">
+      <small class="text-muted">Your Student ID provided at enrollment</small>
+    </div>
+    <div class="mb-4">
+      <label class="form-label fw-semibold">Password</label>
+      <input type="password" name="password" class="form-control form-control-lg"
+             placeholder="Enter your password" required>
+      <small class="text-muted">Default password is your Student ID (first login)</small>
+    </div>
+    <button type="submit" class="btn btn-primary w-100 btn-lg">Sign In →</button>
+  </form>
+
+  <hr class="my-4">
+  <p class="text-center text-muted" style="font-size:13px;">
+    Staff? <a href="{{ url_for('core.login') }}">Admin login here</a>
+  </p>
+</div>
+{% endblock %}

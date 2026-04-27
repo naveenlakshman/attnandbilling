@@ -1,6 +1,6 @@
-{% extends "attendance/base.html" %}
+﻿{% extends "attendance/base.html" %}
 
-{% block title %}Daily Attendance Report - Global IT ERP{% endblock %}
+{% block title %}Daily Attendance Report - {{ company.company_short_name }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -309,6 +309,42 @@
       padding: 10px;
     }
   }
+
+  @media print {
+    /* Hide everything except the report card */
+    body * { visibility: hidden; }
+    .report-card, .report-card * { visibility: visible; }
+    .report-card {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      box-shadow: none;
+      border-radius: 0;
+      padding: 16px;
+    }
+
+    /* Hide interactive/nav elements inside report card */
+    .export-buttons { display: none !important; }
+
+    /* Clean table for print */
+    .attendance-table { font-size: 11px; }
+    .attendance-table th,
+    .attendance-table td { padding: 6px 8px; }
+
+    /* Keep status badge colors visible in print */
+    .status-badge { border: 1px solid #ccc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .summary-stats { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    /* Print-only title */
+    .print-title { display: block !important; margin-bottom: 12px; font-size: 13px; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+
+    /* Avoid page break inside a row */
+    .attendance-table tr { page-break-inside: avoid; }
+
+    /* Print header info */
+    .header-card { display: none !important; }
+    .filter-card { display: none !important; }
+  }
 </style>
 {% endblock %}
 
@@ -338,6 +374,7 @@
           <label for="batch_id" class="form-label">📚 Batch</label>
           <select class="form-select" id="batch_id" name="batch_id">
             <option value="">-- Select Batch --</option>
+            <option value="all" {% if batch_id == 'all' %}selected{% endif %}>📋 All Batches</option>
             {% for batch in batches %}
             <option value="{{ batch.id }}" {% if batch_id == batch.id %}selected{% endif %}>
               {{ batch.batch_name }}
@@ -416,6 +453,24 @@
         <div class="stat-value" style="color: #0dcaf0;">{{ summary_stats.leave }}</div>
         <div class="stat-label">Leave</div>
       </div>
+      <div class="stat">
+        <div class="stat-value" style="color: #6c757d;">{{ summary_stats.total_unmarked }}</div>
+        <div class="stat-label">Unmarked</div>
+      </div>
+    </div>
+
+    <!-- Enrollment Stats -->
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px;">
+      <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:14px; text-align:center;">
+        <div style="font-size:28px; font-weight:700; color:#166534;">{{ summary_stats.total_active_students }}</div>
+        <div style="font-size:12px; color:#166534; margin-top:4px; font-weight:600;">Total Active Students</div>
+        <div style="font-size:11px; color:#6b7280; margin-top:2px;">(branch-wide)</div>
+      </div>
+      <div style="background:#fef9c3; border:1px solid #fde68a; border-radius:10px; padding:14px; text-align:center;">
+        <div style="font-size:28px; font-weight:700; color:#92400e;">{{ summary_stats.not_in_any_batch }}</div>
+        <div style="font-size:12px; color:#92400e; margin-top:4px; font-weight:600;">Not in Any Batch</div>
+        <div style="font-size:11px; color:#6b7280; margin-top:2px;">(not yet enrolled)</div>
+      </div>
     </div>
 
     <!-- Attendance Records Table -->
@@ -425,6 +480,7 @@
           <tr>
             <th>Code</th>
             <th>Student Name</th>
+            {% if batch_id == 'all' %}<th>Batch</th>{% endif %}
             <th>Status</th>
             <th>Remarks</th>
             <th>Marked By</th>
@@ -435,12 +491,15 @@
           {% for record in attendance_records %}
           <tr>
             <td>
-              <span class="student-code">{{ record.student_code }}</span>
+              <a href="{{ url_for('billing.student_profile', student_id=record.student_id) }}" style="text-decoration:none; color:#0d6efd; font-size:0.9rem;" target="_blank">{{ record.student_code }}</a>
             </td>
             <td>
-              <span class="student-name">{{ record.full_name }}</span>
+              <a href="{{ url_for('billing.student_profile', student_id=record.student_id) }}" style="text-decoration:none; color:inherit;" target="_blank"><span class="student-name">{{ record.full_name }}</span></a>
               <div style="font-size: 0.85rem; color: #6c757d;">{{ record.phone }}</div>
             </td>
+            {% if batch_id == 'all' %}
+            <td style="font-size:0.9rem; color:#495057;">{{ record.batch_name }}</td>
+            {% endif %}
             <td>
               <span class="status-badge {{ record.status }}">
                 {% if record.status == 'present' %}✓ Present
@@ -461,7 +520,19 @@
               <span class="marked-by">{{ record.marked_by_name or '-' }}</span>
             </td>
             <td>
-              <span class="time-badge">{{ record.updated_at.split('T')[1] if record.updated_at else '-' }}</span>
+              {% if record.updated_at %}
+              {% set t = record.updated_at.split('T')[1][:5] if 'T' in record.updated_at else record.updated_at[:5] %}
+              {% set h_utc = t.split(':')[0]|int %}
+              {% set m_utc = t.split(':')[1]|int %}
+              {% set total_min = (h_utc * 60 + m_utc + 330) % 1440 %}
+              {% set h_ist = total_min // 60 %}
+              {% set m_ist = total_min % 60 %}
+              {% set ampm = 'AM' if h_ist < 12 else 'PM' %}
+              {% set h12 = h_ist % 12 %}{% if h12 == 0 %}{% set h12 = 12 %}{% endif %}
+              <span class="time-badge">{{ "%02d:%02d %s"|format(h12, m_ist, ampm) }}</span>
+              {% else %}
+              <span style="color:#adb5bd;">-</span>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -474,6 +545,12 @@
       <button class="btn-export" onclick="window.print()">🖨️ Print Report</button>
       <button class="btn-export" onclick="exportToCSV()">📥 Export to CSV</button>
     </div>
+
+    <!-- Print-only header (hidden on screen) -->
+    <div class="print-title" style="display:none;">
+      <strong>{{ company.company_name }} – Daily Attendance Report</strong><br>
+      Date: {{ reported_date }} &nbsp;|&nbsp; {{ batch_info.batch_name }}
+    </div>
   </div>
 
   <!-- Batch Selected But No Records -->
@@ -481,7 +558,7 @@
   <div class="report-card">
     <div class="empty-state">
       <div class="empty-state-icon">📭</div>
-      <p class="mb-0"><strong>No attendance marked for this batch on {{ reported_date }}</strong></p>
+      <p class="mb-0"><strong>No attendance marked {% if batch_id == 'all' %}for any batch{% else %}for this batch{% endif %} on {{ reported_date }}</strong></p>
       <p style="margin-top: 8px; font-size: 0.9rem;">
         <a href="{{ url_for('attendance.mark_attendance', batch_id=batch_id, date=reported_date) }}">
           Go to Mark Attendance
@@ -544,13 +621,19 @@
     document.body.removeChild(link);
   }
 
-  // Handle branch change to reload batches
+  // Auto-submit form when branch changes (also resets batch to all)
   document.getElementById('branch_id').addEventListener('change', function() {
-    // Get the form and submit it to reload with new branch
-    const form = document.querySelector('form');
-    // Reset batch selection when branch changes
-    document.getElementById('batch_id').value = '';
-    form.submit();
+    document.getElementById('batch_id').value = 'all';
+    document.querySelector('form').submit();
+  });
+
+  // Auto-submit when batch or date changes
+  document.getElementById('batch_id').addEventListener('change', function() {
+    document.querySelector('form').submit();
+  });
+
+  document.getElementById('date').addEventListener('change', function() {
+    document.querySelector('form').submit();
   });
 </script>
 {% endblock %}

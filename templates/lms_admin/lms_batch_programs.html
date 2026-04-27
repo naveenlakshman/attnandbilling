@@ -415,9 +415,14 @@
 <div class="page-header">
     <h1 class="page-title">🎓 Batch-Program Assignments</h1>
     <div class="header-actions">
+        {% if session.get('role') == 'admin' %}
+        <a href="{{ url_for('lms_admin.bulk_assign_batch_programs') }}" class="btn-add" style="background: linear-gradient(135deg, #fd7e14 0%, #e8650a 100%);">
+            ⚡ Bulk Assign (Course Mapping)
+        </a>
         <a href="{{ url_for('lms_admin.add_batch_program') }}" class="btn-add">
             + Add Assignment
         </a>
+        {% endif %}
         <a href="{{ url_for('lms_admin.list_programs') }}" class="btn-add" style="background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);">
             ← Back to Programs
         </a>
@@ -504,13 +509,16 @@
                             <!-- Actions -->
                             <td>
                                 <div class="action-buttons">
+                                    {% if session.get('role') == 'admin' %}
                                     <a href="{{ url_for('lms_admin.edit_batch_program', assignment_id=assignment.id) }}" class="btn-sm btn-edit" title="Edit Assignment">✏️ Edit</a>
                                     <form method="POST" 
                                           action="{{ url_for('lms_admin.delete_batch_program', assignment_id=assignment.id) }}" 
                                           style="display: inline;"
                                           onsubmit="return confirm('Remove this assignment?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn-sm btn-delete">🗑️ Delete</button>
                                     </form>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -525,9 +533,11 @@
                 <div class="empty-text">
                     Batch-to-program assignments control which student batches have access to which LMS programs and time periods.
                 </div>
+                {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('lms_admin.add_batch_program') }}" class="btn-primary">
                     + Add Your First Assignment
                 </a>
+                {% endif %}
                 <p style="color: #666; font-size: 0.85rem; margin-top: 1rem;">
                     💡 <strong>Tip:</strong> Use batch assignments to manage program access for different cohorts of students with specific start and end dates.
                 </p>
@@ -563,10 +573,12 @@
                 <p style="margin-bottom: 0.75rem;">
                     Link a batch to a program to grant access.
                 </p>
+                {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('lms_admin.add_batch_program') }}" 
                    class="btn-primary" style="width: 100%; text-align: center; display: block; text-decoration: none;">
                     + Add Assignment
                 </a>
+                {% endif %}
             </div>
         </div>
         
