@@ -551,7 +551,7 @@ def list_chapters(program_id):
             flash('Program not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
         
-        # Get all chapters with topic count
+        # Get all chapters with topic count and content coverage
         cur.execute("""
             SELECT 
                 lc.id,
@@ -561,9 +561,11 @@ def list_chapters(program_id):
                 lc.is_active,
                 lc.created_at,
                 lc.updated_at,
-                COUNT(DISTINCT lt.id) as topic_count
+                COUNT(DISTINCT lt.id) as topic_count,
+                COUNT(DISTINCT CASE WHEN ltc.id IS NOT NULL THEN lt.id END) as topics_with_content
             FROM lms_chapters lc
             LEFT JOIN lms_topics lt ON lc.id = lt.chapter_id
+            LEFT JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
             WHERE lc.program_id = ?
             GROUP BY lc.id
             ORDER BY lc.chapter_order ASC

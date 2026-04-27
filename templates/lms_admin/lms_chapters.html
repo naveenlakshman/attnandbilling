@@ -364,6 +364,15 @@
             {% if chapter.description %}
             <div class="chapter-description" title="{{ chapter.description }}">{{ chapter.description }}</div>
             {% endif %}
+            {% if chapter.topic_count > 0 %}
+            {% set cpct = ((chapter.topics_with_content / chapter.topic_count) * 100) | round(0) | int %}
+            <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+              <div style="flex: 1; max-width: 180px; background: #e9ecef; border-radius: 4px; height: 6px; overflow: hidden;">
+                <div style="width: {{ cpct }}%; height: 100%; border-radius: 4px; background: {{ '#198754' if cpct == 100 else ('#fd7e14' if cpct >= 50 else '#dc3545') }};"></div>
+              </div>
+              <span style="font-size: 11px; color: #6c757d; white-space: nowrap;">{{ chapter.topics_with_content }}/{{ chapter.topic_count }} content</span>
+            </div>
+            {% endif %}
           </td>
           <td>
             <span class="topics-badge">📝 {{ chapter.topic_count }} {{ 'Topic' if chapter.topic_count == 1 else 'Topics' }}</span>
