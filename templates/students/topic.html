@@ -226,14 +226,13 @@
         {% if read_items %}
           {% for content in read_items %}
           <div class="content-block">
-            <div class="content-block-title">{{ content.content_title }}</div>
+            
 
             {% if content.content_mode == 'pdf' %}
-              <div class="alert alert-warning py-2 mb-2" style="font-size:12px;">🔒 Saving and printing are disabled.</div>
               <div id="pdf-loading-{{ content.id }}" class="text-center py-3 text-muted">Loading PDF…</div>
               <div id="pdf-viewer-{{ content.id }}"
                    data-pdf-url="{{ url_for('students.serve_pdf', content_id=content.id) }}"
-                   style="background:#525659;padding:8px;border-radius:6px;max-height:640px;overflow-y:auto;"></div>
+                   style="overflow-y:auto;"></div>
 
             {% elif content.content_mode == 'download' %}
               <div class="d-flex align-items-center gap-3 p-3 bg-light rounded">
@@ -337,10 +336,13 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="{{ url_for('static', filename='js/pdfjs/pdf.min.js') }}"></script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  '{{ url_for("static", filename="js/pdfjs/pdf.worker.min.js") }}';
+
+var PDF_BASE_SCALE = 1.5;
+var DPR = window.devicePixelRatio || 1;
 
 /* Render all PDFs now that pdfjsLib is loaded */
 document.querySelectorAll('[data-pdf-url]').forEach(function(viewer) {
@@ -350,10 +352,16 @@ document.querySelectorAll('[data-pdf-url]').forEach(function(viewer) {
     if (loadingEl) loadingEl.style.display = 'none';
     function renderPage(n) {
       pdf.getPage(n).then(function(page) {
-        var vp = page.getViewport({ scale: 1.4 });
+        /* Scale at DPR for HiDPI sharpness, then shrink CSS size back */
+        var vp = page.getViewport({ scale: PDF_BASE_SCALE * DPR });
         var canvas = document.createElement('canvas');
-        canvas.height = vp.height; canvas.width = vp.width;
-        canvas.style.cssText = 'display:block;margin:0 auto 8px;max-width:100%;box-shadow:0 2px 6px rgba(0,0,0,0.4)';
+        canvas.width  = vp.width;   /* physical pixels */
+        canvas.height = vp.height;  /* physical pixels */
+        canvas.style.display = 'block';
+        canvas.style.margin  = '0 auto 16px';
+        canvas.style.width   = (vp.width  / DPR) + 'px';  /* CSS pixels */
+        canvas.style.height  = (vp.height / DPR) + 'px';  /* CSS pixels */
+        canvas.style.boxShadow = '0 1px 4px rgba(0,0,0,0.10)';
         canvas.addEventListener('contextmenu', function(e){ e.preventDefault(); });
         viewer.appendChild(canvas);
         page.render({ canvasContext: canvas.getContext('2d'), viewport: vp });

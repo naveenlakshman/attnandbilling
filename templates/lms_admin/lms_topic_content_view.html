@@ -149,33 +149,31 @@
                                 🔒 This content is protected. Saving and printing are disabled.
                             </div>
                             <div id="pdf-loading" class="text-center py-4 text-muted">Loading PDF…</div>
-                            <div id="pdf-viewer" class="protected-content-wrapper"
-                                 style="background:#525659; padding:12px; border-radius:4px; max-height:650px; overflow-y:auto;">
-                            </div>
-                            <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+                            <div id="pdf-viewer" class="protected-content-wrapper" style="overflow-y:auto;"></div>
+                            <script src="{{ url_for('static', filename='js/pdfjs/pdf.min.js') }}"></script>
                             <script>
                                 pdfjsLib.GlobalWorkerOptions.workerSrc =
-                                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                                    '{{ url_for("static", filename="js/pdfjs/pdf.worker.min.js") }}';
 
                                 const pdfUrl = '{{ url_for("lms_admin.serve_pdf", content_id=content.id) }}';
+                                const PDF_DPR = window.devicePixelRatio || 1;
+                                const PDF_BASE_SCALE = 1.5;
 
                                 pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
                                     document.getElementById('pdf-loading').style.display = 'none';
                                     const viewer = document.getElementById('pdf-viewer');
 
-                                    // Render pages sequentially
                                     function renderPage(num) {
                                         pdf.getPage(num).then(function(page) {
-                                            const scale = 1.4;
-                                            const viewport = page.getViewport({ scale });
+                                            const viewport = page.getViewport({ scale: PDF_BASE_SCALE * PDF_DPR });
                                             const canvas = document.createElement('canvas');
-                                            canvas.height = viewport.height;
-                                            canvas.width = viewport.width;
-                                            canvas.style.display = 'block';
-                                            canvas.style.margin = '0 auto 8px';
-                                            canvas.style.maxWidth = '100%';
-                                            canvas.style.boxShadow = '0 2px 6px rgba(0,0,0,0.4)';
-                                            // Block right-click on each canvas
+                                            canvas.width  = viewport.width;   /* physical pixels */
+                                            canvas.height = viewport.height;  /* physical pixels */
+                                            canvas.style.display    = 'block';
+                                            canvas.style.margin     = '0 auto 16px';
+                                            canvas.style.width      = (viewport.width  / PDF_DPR) + 'px'; /* CSS pixels */
+                                            canvas.style.height     = (viewport.height / PDF_DPR) + 'px'; /* CSS pixels */
+                                            canvas.style.boxShadow  = '0 1px 4px rgba(0,0,0,0.10)';
                                             canvas.addEventListener('contextmenu', function(e) { e.preventDefault(); });
                                             viewer.appendChild(canvas);
                                             page.render({ canvasContext: canvas.getContext('2d'), viewport });
