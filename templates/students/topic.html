@@ -176,27 +176,22 @@
       </div>
       <div class="lms-topic-title">{{ topic.topic_title }}</div>
 
-      {# Separate content into Watch (youtube) and Read (pdf/download) #}
-      {% set watch_items = contents | selectattr('content_mode', 'equalto', 'youtube') | list %}
-      {% set read_items  = contents | rejectattr('content_mode', 'equalto', 'youtube') | list %}
-
       <!-- Watch / Read Tabs -->
       <div class="content-tabs">
-        <button class="tab-btn {% if watch_items %}active{% else %}disabled{% endif %}"
+        <button class="tab-btn {% if video_content %}active{% else %}disabled{% endif %}"
                 id="tabWatch" onclick="switchTab('watch')">Watch</button>
-        <button class="tab-btn {% if not watch_items and read_items %}active{% elif not read_items %}disabled{% endif %}"
+        <button class="tab-btn {% if not video_content and (pdf_content or download_content) %}active{% elif not pdf_content and not download_content %}disabled{% endif %}"
                 id="tabRead" onclick="switchTab('read')">Read</button>
       </div>
 
       <!-- Watch Pane -->
-      <div class="tab-pane {% if watch_items %}active{% endif %}" id="paneWatch">
-        {% if watch_items %}
-          {% for content in watch_items %}
+      <div class="tab-pane {% if video_content %}active{% endif %}" id="paneWatch">
+        {% if video_content %}
           <div class="content-block">
-            <div class="content-block-title">{{ content.content_title }}</div>
-            {% if embed_urls[content.id] %}
+            <div class="content-block-title">{{ video_content.content_title }}</div>
+            {% if embed_urls[video_content.id] %}
               <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;">
-                <iframe src="{{ embed_urls[content.id] }}"
+                <iframe src="{{ embed_urls[video_content.id] }}"
                     style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
                     allowfullscreen
                     allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture">
@@ -208,11 +203,10 @@
             {% else %}
               <div class="alert alert-warning py-2">Video URL not configured.</div>
             {% endif %}
-            {% if content.content_body %}
-              <div class="text-muted mt-3 p-3 bg-light rounded" style="font-size:13px;">{{ content.content_body }}</div>
+            {% if video_content.content_body %}
+              <div class="text-muted mt-3 p-3 bg-light rounded" style="font-size:13px;">{{ video_content.content_body }}</div>
             {% endif %}
           </div>
-          {% endfor %}
         {% else %}
           <div class="text-center py-5 text-muted">
             <div style="font-size:40px;">🎬</div>
@@ -222,35 +216,32 @@
       </div>
 
       <!-- Read Pane -->
-      <div class="tab-pane {% if not watch_items and read_items %}active{% endif %}" id="paneRead">
-        {% if read_items %}
-          {% for content in read_items %}
+      <div class="tab-pane {% if not video_content and (pdf_content or download_content) %}active{% endif %}" id="paneRead">
+        {% if pdf_content %}
           <div class="content-block">
-            
-
-            {% if content.content_mode == 'pdf' %}
-              <div id="pdf-loading-{{ content.id }}" class="text-center py-3 text-muted">Loading PDF…</div>
-              <div id="pdf-viewer-{{ content.id }}"
-                   data-pdf-url="{{ url_for('students.serve_pdf', content_id=content.id) }}"
-                   style="overflow-y:auto;"></div>
-
-            {% elif content.content_mode == 'download' %}
-              <div class="d-flex align-items-center gap-3 p-3 bg-light rounded">
-                <span style="font-size:28px;">📎</span>
-                <div class="flex-grow-1">
-                  <div class="fw-semibold">{{ content.content_title }}</div>
-                  {% if content.content_body %}<div class="text-muted" style="font-size:13px;">{{ content.content_body }}</div>{% endif %}
-                </div>
-                <a href="{{ url_for('students.serve_download', content_id=content.id) }}" class="btn btn-primary btn-sm">⬇ Download</a>
-              </div>
-            {% endif %}
-
-            {% if content.content_body and content.content_mode == 'pdf' %}
-              <div class="text-muted mt-3 p-3 bg-light rounded" style="font-size:13px;">{{ content.content_body }}</div>
+            <div class="content-block-title">{{ pdf_content.content_title }}</div>
+            <div id="pdf-loading-{{ pdf_content.id }}" class="text-center py-3 text-muted">Loading PDF…</div>
+            <div id="pdf-viewer-{{ pdf_content.id }}"
+                 data-pdf-url="{{ url_for('students.serve_pdf', content_id=pdf_content.id) }}"
+                 style="overflow-y:auto;"></div>
+            {% if pdf_content.content_body %}
+              <div class="text-muted mt-3 p-3 bg-light rounded" style="font-size:13px;">{{ pdf_content.content_body }}</div>
             {% endif %}
           </div>
-          {% endfor %}
-        {% else %}
+        {% endif %}
+        {% if download_content %}
+          <div class="content-block">
+            <div class="d-flex align-items-center gap-3 p-3 bg-light rounded">
+              <span style="font-size:28px;">📎</span>
+              <div class="flex-grow-1">
+                <div class="fw-semibold">{{ download_content.content_title }}</div>
+                {% if download_content.content_body %}<div class="text-muted" style="font-size:13px;">{{ download_content.content_body }}</div>{% endif %}
+              </div>
+              <a href="{{ url_for('students.serve_download', content_id=download_content.id) }}" class="btn btn-primary btn-sm">⬇ Download</a>
+            </div>
+          </div>
+        {% endif %}
+        {% if not pdf_content and not download_content %}
           <div class="text-center py-5 text-muted">
             <div style="font-size:40px;">📖</div>
             <p class="mt-2">No reading material for this topic.</p>
@@ -258,7 +249,7 @@
         {% endif %}
       </div>
 
-      {% if not contents %}
+      {% if not video_content and not pdf_content and not download_content %}
         <div class="text-center py-5 text-muted">
           <div style="font-size:48px;">📭</div>
           <p class="mt-3">No content for this topic yet.</p>

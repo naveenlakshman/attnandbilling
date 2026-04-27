@@ -312,10 +312,29 @@
           <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
           <td>
             <a href="{{ url_for('lms_admin.program_view', program_id=program.id) }}" style="text-decoration: none; color: inherit;">
-              <div class="program-name">{{ program.program_name }}</div>
-              {% if program.description %}
-              <div class="description-preview" title="{{ program.description }}">{{ program.description }}</div>
-              {% endif %}
+              <div style="display: flex; align-items: center; gap: 8px;">
+                {% if program.total_topics > 0 %}
+                {% set pct = ((program.topics_with_content / program.total_topics) * 100) | round(0) | int %}
+                {% set circ = 62.83 %}
+                {% set dash = (pct * circ / 100) | round(2) %}
+                <svg width="34" height="34" viewBox="0 0 34 34" style="flex-shrink: 0;" title="{{ pct }}% content uploaded ({{ program.topics_with_content }}/{{ program.total_topics }} topics)">
+                  <circle cx="17" cy="17" r="10" fill="none" stroke="#e9ecef" stroke-width="3.5"/>
+                  <circle cx="17" cy="17" r="10" fill="none"
+                    stroke="{{ '#198754' if pct == 100 else ('#fd7e14' if pct >= 50 else '#dc3545') }}"
+                    stroke-width="3.5"
+                    stroke-dasharray="{{ dash }} {{ circ }}"
+                    stroke-linecap="round"
+                    transform="rotate(-90 17 17)"/>
+                  <text x="17" y="21" text-anchor="middle" font-size="7" fill="#495057" font-weight="700">{{ pct }}%</text>
+                </svg>
+                {% endif %}
+                <div>
+                  <div class="program-name">{{ program.program_name }}</div>
+                  {% if program.description %}
+                  <div class="description-preview" title="{{ program.description }}">{{ program.description }}</div>
+                  {% endif %}
+                </div>
+              </div>
             </a>
           </td>
           <td>
@@ -342,22 +361,12 @@
           </td>
           <td>
             <div class="actions-cell">
-              {% if session.get('role') == 'admin' %}
-              <a class="btn-sm-action btn-edit" href="{{ url_for('lms_admin.program_edit', program_id=program.id) }}" title="Edit Program">
-                ✏️ Edit
-              </a>
-              {% endif %}
               <a class="btn-sm-action btn-chapters" href="{{ url_for('lms_admin.program_view', program_id=program.id) }}" title="View Program">
                 👁️ View
               </a>
-              <a class="btn-sm-action btn-resources" href="#" title="View Resources">
-                📦 Resources
+              <a class="btn-sm-action btn-resources" href="{{ url_for('lms_admin.list_chapters', program_id=program.id) }}" title="Chapters">
+                📑 Chapters
               </a>
-              {% if session.get('role') == 'admin' %}
-              <button class="btn-sm-action btn-delete" onclick="deleteProgram(event, {{ program.id }})" title="Delete Program">
-                🗑️ Delete
-              </button>
-              {% endif %}
             </div>
           </td>
         </tr>

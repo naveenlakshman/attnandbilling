@@ -396,7 +396,7 @@
         <a href="{{ url_for('lms_admin.list_topics', chapter_id=data.chapter.id) }}">📝 Topics</a>
     </span>
     <span class="breadcrumb-item">
-        <a href="{{ url_for('lms_admin.topic_view', topic_id=data.topic.id) }}">{{ data.topic.topic_title }}</a>
+        <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=data.topic.id) }}">{{ data.topic.topic_title }}</a>
     </span>
     <span class="breadcrumb-item">📎 Attachments</span>
 </nav>
@@ -405,8 +405,8 @@
 <div class="page-header">
     <h1 class="page-title">📎 Topic Attachments</h1>
     <div class="header-actions">
-        <a href="{{ url_for('lms_admin.topic_view', topic_id=data.topic.id) }}" class="btn-add">
-            ← Back to Topic
+        <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=data.topic.id) }}" class="btn-add">
+            ← Back to Contents
         </a>
     </div>
 </div>

@@ -380,7 +380,7 @@
           </td>
           <td>
             <div class="topic-title">
-              <a href="{{ url_for('lms_admin.topic_view', topic_id=topic.id) }}" style="color: #212529; text-decoration: none;">
+              <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" style="color: #212529; text-decoration: none;">
                 {{ topic.topic_order }}. {{ topic.topic_title }}
               </a>
               {% if topic.is_preview %}
@@ -408,17 +408,14 @@
           </td>
           <td>
             <div class="topic-actions">
-              <a class="btn-action btn-edit" href="{{ url_for('lms_admin.topic_view', topic_id=topic.id) }}" title="View Topic">
-                👁️ View
+              <a class="btn-action btn-content" href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" title="Manage Content">
+                📦 Content
               </a>
               {% if session.get('role') == 'admin' %}
               <a class="btn-action btn-edit" href="{{ url_for('lms_admin.topic_edit', topic_id=topic.id) }}" title="Edit Topic">
                 ✏️ Edit
               </a>
               {% endif %}
-              <a class="btn-action btn-content" href="#" onclick="manageContent(event, {{ topic.id }});" title="Manage Content">
-                📦 Content
-              </a>
               {% if session.get('role') == 'admin' %}
               <button class="btn-action btn-delete" onclick="deleteTopic(event, {{ topic.id }})" title="Delete Topic">
                 🗑️ Delete

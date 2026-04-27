@@ -281,11 +281,8 @@
                     <h5 class="mb-0">🔗 Navigation</h5>
                 </div>
                 <div class="card-body">
-                    <a href="{{ url_for('lms_admin.topic_view', topic_id=content.topic_id) }}" class="btn btn-outline-primary btn-sm w-100 mb-2">
-                        ← Go to Topic
-                    </a>
-                    <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=content.topic_id) }}" class="btn btn-outline-secondary btn-sm w-100 mb-2">
-                        📑 All Contents
+                    <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=content.topic_id) }}" class="btn btn-outline-primary btn-sm w-100 mb-2">
+                        ← Back to Contents
                     </a>
                     <a href="{{ url_for('lms_admin.content_edit', content_id=content.id) }}" class="btn btn-primary btn-sm w-100">
                         ✏️ Edit Content

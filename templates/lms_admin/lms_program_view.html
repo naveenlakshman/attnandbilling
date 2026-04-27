@@ -477,6 +477,9 @@
         ✏️ Edit Program
       </a>
       {% endif %}
+      <a href="{{ url_for('lms_admin.list_chapters', program_id=summary.program.id) }}" class="btn-header btn-edit">
+        📑 Chapters
+      </a>
       <a href="{{ url_for('lms_admin.list_program_resources', program_id=summary.program.id) }}" class="btn-header btn-edit">
         📚 Resources
       </a>
@@ -519,6 +522,55 @@
     <div class="metric-value">{{ summary.resource_count }}</div>
   </div>
 </div>
+
+<!-- Content Coverage -->
+{% if summary.total_topics > 0 %}
+{% set video_pct = ((summary.topics_with_video / summary.total_topics) * 100) | round(0) | int %}
+{% set pdf_pct   = ((summary.topics_with_pdf   / summary.total_topics) * 100) | round(0) | int %}
+{% set dl_pct    = ((summary.topics_with_download / summary.total_topics) * 100) | round(0) | int %}
+<div class="section-card" style="margin-bottom: 20px;">
+  <div class="section-header" style="margin-bottom: 14px;">
+    <h3 class="section-title">📊 Content Coverage</h3>
+    <span style="font-size: 12px; color: #6c757d;">{{ summary.total_topics }} topics total</span>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+
+    <!-- Video -->
+    <div>
+      <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+        <span>&#x25B6; Video</span>
+        <span style="color: #6c757d;">{{ summary.topics_with_video }} / {{ summary.total_topics }}</span>
+      </div>
+      <div style="background: #e9ecef; border-radius: 6px; height: 10px; overflow: hidden;">
+        <div style="width: {{ video_pct }}%; background: {% if video_pct == 100 %}#198754{% elif video_pct >= 50 %}#fd7e14{% else %}#dc3545{% endif %}; height: 100%; border-radius: 6px; transition: width 0.4s;"></div>
+      </div>
+    </div>
+
+    <!-- PDF -->
+    <div>
+      <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+        <span>&#x1F4C4; PDF</span>
+        <span style="color: #6c757d;">{{ summary.topics_with_pdf }} / {{ summary.total_topics }}</span>
+      </div>
+      <div style="background: #e9ecef; border-radius: 6px; height: 10px; overflow: hidden;">
+        <div style="width: {{ pdf_pct }}%; background: {% if pdf_pct == 100 %}#198754{% elif pdf_pct >= 50 %}#fd7e14{% else %}#dc3545{% endif %}; height: 100%; border-radius: 6px; transition: width 0.4s;"></div>
+      </div>
+    </div>
+
+    <!-- Download -->
+    <div>
+      <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
+        <span>&#x2B07; Download</span>
+        <span style="color: #6c757d;">{{ summary.topics_with_download }} / {{ summary.total_topics }}</span>
+      </div>
+      <div style="background: #e9ecef; border-radius: 6px; height: 10px; overflow: hidden;">
+        <div style="width: {{ dl_pct }}%; background: {% if dl_pct == 100 %}#198754{% elif dl_pct >= 50 %}#fd7e14{% else %}#dc3545{% endif %}; height: 100%; border-radius: 6px; transition: width 0.4s;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endif %}
 
 <!-- Chapters Section -->
 <div class="section-card">

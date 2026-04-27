@@ -120,7 +120,7 @@ def list_programs():
     try:
         cur = conn.cursor()
         
-        # Get all programs with related information
+        # Get all programs with related information and content coverage
         cur.execute("""
             SELECT 
                 lp.id,
@@ -132,7 +132,13 @@ def list_programs():
                 lp.created_at,
                 lp.updated_at,
                 c.course_name,
-                COUNT(DISTINCT lc.id) as chapter_count
+                COUNT(DISTINCT lc.id) as chapter_count,
+                (SELECT COUNT(*) FROM lms_topics WHERE chapter_id IN
+                    (SELECT id FROM lms_chapters WHERE program_id = lp.id)) as total_topics,
+                (SELECT COUNT(DISTINCT lt.id) FROM lms_topics lt
+                    JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
+                    WHERE lt.chapter_id IN
+                    (SELECT id FROM lms_chapters WHERE program_id = lp.id)) as topics_with_content
             FROM lms_programs lp
             LEFT JOIN courses c ON lp.course_id = c.id
             LEFT JOIN lms_chapters lc ON lp.id = lc.program_id
@@ -489,7 +495,37 @@ def program_view(program_id):
             for t in cur.fetchall():
                 topics_by_chapter.setdefault(t['chapter_id'], []).append(dict(t))
         summary['topics_by_chapter'] = topics_by_chapter
-        
+
+        # Content coverage: count topics that have each content type
+        if total_topics > 0:
+            cur.execute("""
+                SELECT
+                    SUM(CASE WHEN EXISTS (
+                        SELECT 1 FROM lms_topic_contents
+                        WHERE topic_id = lt.id AND content_mode = 'youtube'
+                    ) THEN 1 ELSE 0 END) AS topics_with_video,
+                    SUM(CASE WHEN EXISTS (
+                        SELECT 1 FROM lms_topic_contents
+                        WHERE topic_id = lt.id AND content_mode = 'pdf'
+                    ) THEN 1 ELSE 0 END) AS topics_with_pdf,
+                    SUM(CASE WHEN EXISTS (
+                        SELECT 1 FROM lms_topic_contents
+                        WHERE topic_id = lt.id AND content_mode = 'download'
+                    ) THEN 1 ELSE 0 END) AS topics_with_download
+                FROM lms_topics lt
+                WHERE lt.chapter_id IN (
+                    SELECT id FROM lms_chapters WHERE program_id = ?
+                )
+            """, (program_id,))
+            coverage = cur.fetchone()
+            summary['topics_with_video'] = coverage['topics_with_video'] or 0
+            summary['topics_with_pdf'] = coverage['topics_with_pdf'] or 0
+            summary['topics_with_download'] = coverage['topics_with_download'] or 0
+        else:
+            summary['topics_with_video'] = 0
+            summary['topics_with_pdf'] = 0
+            summary['topics_with_download'] = 0
+
         return render_template('lms_program_view.html', summary=summary)
     finally:
         conn.close()
@@ -1138,141 +1174,6 @@ def delete_topic(topic_id):
         conn.close()
 
 
-@lms_admin_bp.route('/topic/<int:topic_id>/view', methods=['GET'])
-@login_required
-def topic_view(topic_id):
-    """View topic details with content"""
-    conn = get_conn()
-    try:
-        cur = conn.cursor()
-        
-        # Get topic, chapter and program details
-        cur.execute("""
-            SELECT 
-                lt.id,
-                lt.chapter_id,
-                lt.topic_title,
-                lt.topic_order,
-                lt.short_description,
-                lt.estimated_minutes,
-                lt.content_type,
-                lt.is_preview,
-                lt.is_active,
-                lt.created_at,
-                lt.updated_at,
-                lc.chapter_title,
-                lc.program_id,
-                lp.program_name
-            FROM lms_topics lt
-            JOIN lms_chapters lc ON lt.chapter_id = lc.id
-            JOIN lms_programs lp ON lc.program_id = lp.id
-            WHERE lt.id = ?
-        """, (topic_id,))
-        topic = cur.fetchone()
-        
-        if not topic:
-            flash('Topic not found.', 'danger')
-            return redirect(url_for('lms_admin.list_programs'))
-        
-        # Get all content items for this topic
-        cur.execute("""
-            SELECT 
-                id,
-                topic_id,
-                content_mode,
-                content_title,
-                external_url,
-                file_path,
-                content_body,
-                display_order,
-                created_at,
-                updated_at
-            FROM lms_topic_contents
-            WHERE topic_id = ?
-            ORDER BY display_order ASC
-        """, (topic_id,))
-        content_items = cur.fetchall()
-        
-        # Get content count
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_topic_contents
-            WHERE topic_id = ?
-        """, (topic_id,))
-        content_count = cur.fetchone()['count']
-        
-        # Get any associated tests (if any)
-        cur.execute("""
-            SELECT 
-                id,
-                test_title,
-                description,
-                total_marks,
-                pass_marks,
-                is_active,
-                created_at
-            FROM lms_mock_tests
-            WHERE topic_id = ?
-            ORDER BY created_at DESC
-        """, (topic_id,))
-        tests = cur.fetchall()
-        
-        # Get test count
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_mock_tests
-            WHERE topic_id = ?
-        """, (topic_id,))
-        test_count = cur.fetchone()['count']
-        
-        # Get recent activity for this topic
-        cur.execute("""
-            SELECT 
-                al.id,
-                al.action_type,
-                al.description,
-                al.created_at,
-                u.full_name
-            FROM activity_logs al
-            LEFT JOIN users u ON al.user_id = u.id
-            WHERE al.module_name = 'lms_topics' 
-            AND al.record_id = ?
-            ORDER BY al.created_at DESC
-            LIMIT 5
-        """, (topic_id,))
-        recent_activity = cur.fetchall()
-        
-        # Organize content by type
-        content_by_type = {}
-        for item in content_items:
-            content_mode = item['content_mode']
-            if content_mode not in content_by_type:
-                content_by_type[content_mode] = []
-            content_by_type[content_mode].append(item)
-        
-        data = {
-            'topic': topic,
-            'chapter': {
-                'id': topic['chapter_id'],
-                'chapter_title': topic['chapter_title']
-            },
-            'program': {
-                'id': topic['program_id'],
-                'program_name': topic['program_name']
-            },
-            'content_items': content_items,
-            'content_by_type': content_by_type,
-            'content_count': content_count,
-            'tests': tests,
-            'test_count': test_count,
-            'recent_activity': recent_activity
-        }
-        
-        return render_template('lms_topic_view.html', data=data)
-    finally:
-        conn.close()
-
-
 @lms_admin_bp.route('/topic/<int:topic_id>/contents', methods=['GET'])
 @login_required
 def list_topic_contents(topic_id):
@@ -1302,41 +1203,25 @@ def list_topic_contents(topic_id):
             flash('Topic not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
         
-        # Get all content items for this topic
-        cur.execute("""
-            SELECT 
-                id,
-                topic_id,
-                content_mode,
-                content_title,
-                external_url,
-                file_path,
-                content_body,
-                display_order,
-                created_at,
-                updated_at
-            FROM lms_topic_contents
-            WHERE topic_id = ?
-            ORDER BY display_order ASC
-        """, (topic_id,))
-        content_items = cur.fetchall()
-        
-        # Get total content count
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_topic_contents
-            WHERE topic_id = ?
-        """, (topic_id,))
-        total_content = cur.fetchone()['count']
-        
-        # Organize by content type
-        content_by_type = {}
-        for item in content_items:
-            ctype = item['content_mode']
-            if ctype not in content_by_type:
-                content_by_type[ctype] = []
-            content_by_type[ctype].append(item)
-        
+        # Fetch the first content item of each type (one-per-type system)
+        video_content = cur.execute("""
+            SELECT * FROM lms_topic_contents
+            WHERE topic_id = ? AND content_mode = 'youtube'
+            ORDER BY display_order ASC LIMIT 1
+        """, (topic_id,)).fetchone()
+
+        pdf_content = cur.execute("""
+            SELECT * FROM lms_topic_contents
+            WHERE topic_id = ? AND content_mode = 'pdf'
+            ORDER BY display_order ASC LIMIT 1
+        """, (topic_id,)).fetchone()
+
+        download_content = cur.execute("""
+            SELECT * FROM lms_topic_contents
+            WHERE topic_id = ? AND content_mode = 'download'
+            ORDER BY display_order ASC LIMIT 1
+        """, (topic_id,)).fetchone()
+
         data = {
             'program': {
                 'id': topic['program_id'],
@@ -1347,11 +1232,11 @@ def list_topic_contents(topic_id):
                 'chapter_title': topic['chapter_title']
             },
             'topic': topic,
-            'content_items': content_items,
-            'content_by_type': content_by_type,
-            'total_content': total_content
+            'video_content': video_content,
+            'pdf_content': pdf_content,
+            'download_content': download_content
         }
-        
+
         return render_template('lms_topic_contents.html', data=data)
     finally:
         conn.close()
@@ -1491,6 +1376,16 @@ def content_new(topic_id):
                     return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
                 file_path = result
 
+            # Enforce one-per-type: reject if this mode already exists for this topic
+            cur.execute(
+                "SELECT id FROM lms_topic_contents WHERE topic_id = ? AND content_mode = ?",
+                (topic_id, content_mode)
+            )
+            if cur.fetchone():
+                mode_labels = {'youtube': 'Video', 'pdf': 'PDF', 'download': 'Download File'}
+                flash(f'A {mode_labels.get(content_mode, content_mode)} is already set for this topic. Edit or remove it first.', 'danger')
+                return redirect(url_for('lms_admin.list_topic_contents', topic_id=topic_id))
+
             now = datetime.now().isoformat(timespec='seconds')
 
             try:
@@ -1543,7 +1438,12 @@ def content_new(topic_id):
             'chapter_title': topic['chapter_title']
         }
         
-        return render_template('lms_admin/lms_topic_content_form.html', program=program, chapter=chapter, topic=topic, content=None, next_order=next_order)
+        # Read preset type from query string (e.g. ?type=youtube)
+        preset_type = request.args.get('type', '')
+        if preset_type not in ['youtube', 'pdf', 'download']:
+            preset_type = ''
+
+        return render_template('lms_admin/lms_topic_content_form.html', program=program, chapter=chapter, topic=topic, content=None, next_order=next_order, preset_type=preset_type)
     finally:
         conn.close()
 

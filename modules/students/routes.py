@@ -402,6 +402,11 @@ def topic_view(topic_id):
             ORDER BY display_order
         """, (topic_id,)).fetchall()
 
+        # Extract single item of each type (one-per-type system)
+        video_content = next((c for c in contents if c['content_mode'] == 'youtube'), None)
+        pdf_content = next((c for c in contents if c['content_mode'] == 'pdf'), None)
+        download_content = next((c for c in contents if c['content_mode'] == 'download'), None)
+
         # Previous / next topic in same chapter
         all_topics = conn.execute("""
             SELECT id FROM lms_topics
@@ -462,6 +467,9 @@ def topic_view(topic_id):
     return render_template('students/topic.html',
                            topic=topic, contents=contents,
                            embed_urls=embed_urls,
+                           video_content=video_content,
+                           pdf_content=pdf_content,
+                           download_content=download_content,
                            prev_topic_id=prev_topic_id,
                            next_topic_id=next_topic_id,
                            chapters_sidebar=chapters_sidebar,

@@ -82,15 +82,20 @@
                                 required maxlength="255">
                         </div>
 
-                        <!-- Content Type -->
+                        {% set locked_type = content.content_mode if content else preset_type %}
+                        <!-- Content Type (locked — one per topic) -->
                         <div class="mb-3">
-                            <label for="content_mode" class="form-label">Content Type <span class="text-danger">*</span></label>
-                            <select class="form-select" id="content_mode" name="content_mode" required>
-                                <option value="">-- Select Type --</option>
-                                <option value="youtube" {% if content and content.content_mode == 'youtube' %}selected{% elif not content %}selected{% endif %}>▶️ YouTube Video</option>
-                                <option value="pdf"     {% if content and content.content_mode == 'pdf' %}selected{% endif %}>📕 PDF Document</option>
-                                <option value="download"{% if content and content.content_mode == 'download' %}selected{% endif %}>⬇️ Downloadable Assignment</option>
-                            </select>
+                            <label class="form-label">Content Type</label>
+                            <input type="hidden" name="content_mode" value="{{ locked_type }}">
+                            {% if locked_type == 'youtube' %}
+                            <div class="form-control bg-light" style="pointer-events:none;">▶️ YouTube Video</div>
+                            {% elif locked_type == 'pdf' %}
+                            <div class="form-control bg-light" style="pointer-events:none;">📕 PDF Document</div>
+                            {% elif locked_type == 'download' %}
+                            <div class="form-control bg-light" style="pointer-events:none;">⬇️ Downloadable Assignment</div>
+                            {% else %}
+                            <div class="alert alert-warning py-2">No content type specified. Please go back and use a slot button.</div>
+                            {% endif %}
                         </div>
 
                         <!-- YouTube URL -->
@@ -130,15 +135,7 @@
                                 placeholder="Optional notes or instructions for students">{{ content.content_body if content else '' }}</textarea>
                         </div>
 
-                        <!-- Display Order -->
-                        <div class="mb-4">
-                            <label for="display_order" class="form-label">Display Order <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control" id="display_order" name="display_order"
-                                min="1" max="999"
-                                value="{% if content %}{{ content.display_order }}{% else %}{{ next_order }}{% endif %}"
-                                required>
-                            <small class="text-muted">Lower numbers appear first.</small>
-                        </div>
+                        <input type="hidden" name="display_order" value="1">
 
                         <!-- Actions -->
                         <div class="d-flex gap-2">
@@ -185,33 +182,23 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        const select = document.getElementById('content_mode');
+        const lockedType = '{{ content.content_mode if content else preset_type }}';
 
-        function showSection() {
-            document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
-            const val = select.value;
-            if (val) {
-                const sec = document.getElementById('section-' + val);
-                if (sec) sec.style.display = 'block';
-            }
-        }
-
-        select.addEventListener('change', showSection);
-        showSection();
+        // Show only the locked section
+        document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
+        const sec = document.getElementById('section-' + lockedType);
+        if (sec) sec.style.display = 'block';
 
         document.getElementById('contentForm').addEventListener('submit', function (e) {
             const title = document.getElementById('title').value.trim();
             if (!title) { e.preventDefault(); alert('Content title is required.'); return; }
 
-            const type = select.value;
-            if (!type) { e.preventDefault(); alert('Please select a content type.'); return; }
-
-            if (type === 'youtube') {
+            if (lockedType === 'youtube') {
                 const url = document.getElementById('youtube_url').value.trim();
                 if (!url) { e.preventDefault(); alert('YouTube URL is required.'); return; }
             }
 
-            if (type === 'pdf') {
+            if (lockedType === 'pdf') {
                 const f = document.getElementById('pdf_file');
                 const isNew = !{{ 'true' if content else 'false' }};
                 if (isNew && (!f.files || !f.files.length)) {
@@ -219,7 +206,7 @@
                 }
             }
 
-            if (type === 'download') {
+            if (lockedType === 'download') {
                 const f = document.getElementById('download_file');
                 const isNew = !{{ 'true' if content else 'false' }};
                 if (isNew && (!f.files || !f.files.length)) {
