@@ -847,6 +847,9 @@ def init_db():
 
     add_column_if_not_exists(cur, "student_batches", "uses_own_laptop", "INTEGER NOT NULL DEFAULT 0")
 
+    # LMS rich text and interactive image support
+    add_column_if_not_exists(cur, "lms_topic_contents", "hotspots_json", "TEXT")
+
     # LMS topic progress tracking
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_topic_progress (

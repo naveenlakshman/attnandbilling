@@ -47,6 +47,9 @@ class Config:
     # Google Maps (Geocoding / Pincode lookup)
     GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")
 
+    # TinyMCE Rich Text Editor
+    TINYMCE_API_KEY = os.environ.get("TINYMCE_API_KEY", "no-api-key")
+
     # LMS File Uploads
     UPLOAD_FOLDER = UPLOAD_DIR
 

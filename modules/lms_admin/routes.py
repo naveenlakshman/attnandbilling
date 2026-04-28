@@ -2,31 +2,64 @@ from flask import render_template, request, jsonify, send_from_directory
 from . import lms_admin_bp
 from db import get_conn, log_activity
 from flask import session, redirect, url_for, flash
+from extensions import csrf
 from datetime import datetime
 import re
 import os
+import json
+import bleach
 from werkzeug.utils import secure_filename
 from config import Config
 from modules.core.utils import login_required, admin_required
+
+# ── Rich text sanitization config ──────────────────────────────────────────
+_BLEACH_TAGS = [
+    'p', 'br', 'strong', 'em', 'u', 's', 'ul', 'ol', 'li',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'blockquote', 'pre', 'code',
+    'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'div', 'span', 'hr', 'sub', 'sup',
+]
+def _BLEACH_ATTRS(tag, name, value):
+    """Allow standard attributes plus data-* on div (for embedded hotspot blocks)."""
+    if name in ('class', 'style'):
+        return True
+    if tag == 'a' and name in ('href', 'title', 'target'):
+        return True
+    if tag == 'img' and name in ('src', 'alt', 'width', 'height'):
+        return True
+    if tag in ('td', 'th') and name in ('colspan', 'rowspan'):
+        return True
+    if tag == 'div' and name.startswith('data-'):
+        return True
+    return False
+_ALLOWED_IMAGE_EXTS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+
+
+def sanitize_rich_text(html):
+    """Strip script tags and unsafe JS from editor HTML."""
+    return bleach.clean(html, tags=_BLEACH_TAGS, attributes=_BLEACH_ATTRS, strip=True)
 
 
 # File Upload Handler
 def upload_file(file_obj, content_type):
     """
     Save uploaded file to static/lms/<subdir>/ and return the Flask static path.
-    content_type: 'pdf' or 'download'
+    content_type: 'pdf', 'download', or 'interactive_image'
     Returns: (success: bool, path_or_error: str)
     """
     if not file_obj or file_obj.filename == '':
         return False, f"No file selected"
 
     allowed_exts = {
-        'pdf':      {'pdf'},
-        'download': {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'txt', 'ppt', 'pptx'},
+        'pdf':               {'pdf'},
+        'download':          {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'txt', 'ppt', 'pptx'},
+        'interactive_image': _ALLOWED_IMAGE_EXTS,
     }
     max_sizes = {
-        'pdf':      50 * 1024 * 1024,   # 50 MB
-        'download': 100 * 1024 * 1024,  # 100 MB
+        'pdf':               50 * 1024 * 1024,   # 50 MB
+        'download':          100 * 1024 * 1024,  # 100 MB
+        'interactive_image': 10 * 1024 * 1024,   # 10 MB
     }
 
     filename = secure_filename(file_obj.filename)
@@ -45,7 +78,13 @@ def upload_file(file_obj, content_type):
     if file_size > max_size:
         return False, f"File too large ({file_size/(1024*1024):.1f} MB). Max: {max_size/(1024*1024):.0f} MB"
 
-    subdir = 'pdfs' if content_type == 'pdf' else 'downloads'
+    if content_type == 'pdf':
+        subdir = 'pdfs'
+    elif content_type == 'interactive_image':
+        subdir = 'images'
+    else:
+        subdir = 'downloads'
+
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'static', 'lms', subdir))
     os.makedirs(base_dir, exist_ok=True)
 
@@ -55,7 +94,7 @@ def upload_file(file_obj, content_type):
 
     try:
         file_obj.save(full_path)
-        # Store as Flask static path: static/lms/pdfs/filename or static/lms/downloads/filename
+        # Store as Flask static path: static/lms/<subdir>/filename
         return True, f"static/lms/{subdir}/{unique_filename}"
     except Exception as e:
         return False, f"Error saving file: {str(e)}"
@@ -1212,9 +1251,9 @@ def list_topic_contents(topic_id):
             ORDER BY display_order ASC LIMIT 1
         """, (topic_id,)).fetchone()
 
-        pdf_content = cur.execute("""
+        lesson_content = cur.execute("""
             SELECT * FROM lms_topic_contents
-            WHERE topic_id = ? AND content_mode = 'pdf'
+            WHERE topic_id = ? AND content_mode IN ('pdf', 'rich_text', 'interactive_image')
             ORDER BY display_order ASC LIMIT 1
         """, (topic_id,)).fetchone()
 
@@ -1235,7 +1274,7 @@ def list_topic_contents(topic_id):
             },
             'topic': topic,
             'video_content': video_content,
-            'pdf_content': pdf_content,
+            'lesson_content': lesson_content,
             'download_content': download_content
         }
 
@@ -1352,7 +1391,7 @@ def content_new(topic_id):
                 flash('Content title is required.', 'danger')
                 return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
 
-            if content_mode not in ['youtube', 'pdf', 'download']:
+            if content_mode not in ['youtube', 'pdf', 'rich_text', 'download']:
                 content_mode = 'youtube'
 
             try:
@@ -1361,6 +1400,7 @@ def content_new(topic_id):
                 display_order = 1
 
             file_path = ''
+            hotspots_json = ''
 
             if content_mode == 'youtube':
                 if not external_url:
@@ -1378,13 +1418,26 @@ def content_new(topic_id):
                     return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
                 file_path = result
 
-            # Enforce one-per-type: reject if this mode already exists for this topic
-            cur.execute(
-                "SELECT id FROM lms_topic_contents WHERE topic_id = ? AND content_mode = ?",
-                (topic_id, content_mode)
-            )
+            elif content_mode == 'rich_text':
+                description = sanitize_rich_text(description)
+                if not description.strip():
+                    flash('Rich text content cannot be empty.', 'danger')
+                    return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
+
+            # Enforce one-per-type: lesson content slot covers pdf, rich_text
+            if content_mode in ('pdf', 'rich_text'):
+                cur.execute(
+                    "SELECT id FROM lms_topic_contents WHERE topic_id = ? AND content_mode IN ('pdf', 'rich_text', 'interactive_image')",
+                    (topic_id,)
+                )
+            else:
+                cur.execute(
+                    "SELECT id FROM lms_topic_contents WHERE topic_id = ? AND content_mode = ?",
+                    (topic_id, content_mode)
+                )
             if cur.fetchone():
-                mode_labels = {'youtube': 'Video', 'pdf': 'PDF', 'download': 'Download File'}
+                mode_labels = {'youtube': 'Video', 'pdf': 'PDF', 'rich_text': 'Rich Text Lesson',
+                               'interactive_image': 'Interactive Image', 'download': 'Download File'}
                 flash(f'A {mode_labels.get(content_mode, content_mode)} is already set for this topic. Edit or remove it first.', 'danger')
                 return redirect(url_for('lms_admin.list_topic_contents', topic_id=topic_id))
 
@@ -1394,12 +1447,12 @@ def content_new(topic_id):
                 cur.execute("""
                     INSERT INTO lms_topic_contents (
                         topic_id, content_title, content_mode, content_body,
-                        external_url, file_path, display_order, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        external_url, file_path, hotspots_json, display_order, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     topic_id, title, content_mode, description,
                     external_url if content_mode == 'youtube' else '',
-                    file_path, display_order, now, now
+                    file_path, hotspots_json, display_order, now, now
                 ))
 
                 content_id = cur.lastrowid
@@ -1442,7 +1495,7 @@ def content_new(topic_id):
         
         # Read preset type from query string (e.g. ?type=youtube)
         preset_type = request.args.get('type', '')
-        if preset_type not in ['youtube', 'pdf', 'download']:
+        if preset_type not in ['youtube', 'pdf', 'rich_text', 'interactive_image', 'download']:
             preset_type = ''
 
         return render_template('lms_admin/lms_topic_content_form.html', program=program, chapter=chapter, topic=topic, content=None, next_order=next_order, preset_type=preset_type)
@@ -1468,6 +1521,7 @@ def content_view(content_id):
                 ltc.external_url,
                 ltc.file_path,
                 ltc.content_body,
+                ltc.hotspots_json,
                 ltc.display_order,
                 ltc.created_at,
                 ltc.updated_at,
@@ -1567,6 +1621,87 @@ def serve_pdf(content_id):
         conn.close()
 
 
+# ── Inline Image Upload (for rich text hotspot embeds) ───────────────────────
+
+@lms_admin_bp.route('/inline_image/upload', methods=['POST'])
+@csrf.exempt
+@login_required
+def upload_inline_image():
+    """AJAX: receive an image file, save to static/lms/images/inline/, return URL."""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file provided'}), 400
+    file_obj = request.files['file']
+    if not file_obj or file_obj.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected'}), 400
+
+    filename = secure_filename(file_obj.filename)
+    if not filename:
+        return jsonify({'success': False, 'error': 'Invalid filename'}), 400
+
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+    if ext not in _ALLOWED_IMAGE_EXTS:
+        return jsonify({'success': False, 'error': f'File type .{ext} not allowed. Allowed: jpg, jpeg, png, gif, webp'}), 400
+
+    file_obj.seek(0, os.SEEK_END)
+    size = file_obj.tell()
+    file_obj.seek(0)
+    if size > 10 * 1024 * 1024:
+        return jsonify({'success': False, 'error': 'File too large (max 10 MB)'}), 400
+
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'static', 'lms', 'images', 'inline'))
+    os.makedirs(base_dir, exist_ok=True)
+
+    unique_name = datetime.now().strftime('%Y%m%d_%H%M%S_') + filename
+    try:
+        file_obj.save(os.path.join(base_dir, unique_name))
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    return jsonify({'success': True, 'filename': unique_name,
+                    'url': url_for('lms_admin.serve_inline_image', filename=unique_name)})
+
+
+@lms_admin_bp.route('/inline_image/<path:filename>', methods=['GET'])
+def serve_inline_image(filename):
+    """Serve inline hotspot images — accessible to both admins and students."""
+    if 'user_id' not in session and 'student_id' not in session:
+        return 'Unauthorised', 403
+    # Prevent path traversal
+    safe_name = os.path.basename(filename)
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'static', 'lms', 'images', 'inline'))
+    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+    mime_map = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+                'gif': 'image/gif', 'webp': 'image/webp'}
+    mimetype = mime_map.get(ext, 'image/jpeg')
+    resp = send_from_directory(base_dir, safe_name, mimetype=mimetype)
+    resp.headers['Cache-Control'] = 'no-store, no-cache'
+    return resp
+
+
+@lms_admin_bp.route('/content/<int:content_id>/image', methods=['GET'])
+@login_required
+def serve_image_admin(content_id):
+    """Serve interactive image for admin hotspot editor preview"""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT file_path FROM lms_topic_contents WHERE id = ? AND content_mode = 'interactive_image'", (content_id,))
+        row = cur.fetchone()
+        if not row or not row['file_path']:
+            return "Not found", 404
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        abs_path = os.path.join(base_dir, row['file_path'].replace('/', os.sep))
+        ext = abs_path.rsplit('.', 1)[-1].lower()
+        mime_map = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+                    'gif': 'image/gif', 'webp': 'image/webp'}
+        mimetype = mime_map.get(ext, 'image/jpeg')
+        resp = send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path), mimetype=mimetype)
+        resp.headers['Cache-Control'] = 'no-store, no-cache'
+        return resp
+    finally:
+        conn.close()
+
+
 @lms_admin_bp.route('/content/<int:content_id>/edit', methods=['GET', 'POST'])
 @login_required
 def content_edit(content_id):
@@ -1585,6 +1720,7 @@ def content_edit(content_id):
                 ltc.external_url,
                 ltc.file_path,
                 ltc.content_body,
+                ltc.hotspots_json,
                 ltc.display_order,
                 ltc.created_at,
                 ltc.updated_at,
@@ -1633,7 +1769,7 @@ def content_edit(content_id):
                 flash('Content title is required.', 'danger')
                 return redirect(url_for('lms_admin.content_edit', content_id=content_id))
 
-            if content_mode not in ['youtube', 'pdf', 'download']:
+            if content_mode not in ['youtube', 'pdf', 'rich_text', 'download']:
                 content_mode = 'youtube'
 
             try:
@@ -1641,11 +1777,14 @@ def content_edit(content_id):
             except ValueError:
                 display_order = 1
 
+            hotspots_json = content.get('hotspots_json', '') or ''
+
             if content_mode == 'youtube':
                 if not external_url:
                     flash('YouTube URL is required.', 'danger')
                     return redirect(url_for('lms_admin.content_edit', content_id=content_id))
                 file_path = ''
+                hotspots_json = ''
 
             elif content_mode in ['pdf', 'download']:
                 file_field = 'pdf_file' if content_mode == 'pdf' else 'download_file'
@@ -1664,6 +1803,16 @@ def content_edit(content_id):
                         return redirect(url_for('lms_admin.content_edit', content_id=content_id))
                     file_path = result
                 external_url = ''
+                hotspots_json = ''
+
+            elif content_mode == 'rich_text':
+                description = sanitize_rich_text(description)
+                if not description.strip():
+                    flash('Rich text content cannot be empty.', 'danger')
+                    return redirect(url_for('lms_admin.content_edit', content_id=content_id))
+                file_path = ''
+                external_url = ''
+                hotspots_json = ''
 
             now = datetime.now().isoformat(timespec='seconds')
 
@@ -1671,9 +1820,11 @@ def content_edit(content_id):
                 cur.execute("""
                     UPDATE lms_topic_contents
                     SET content_mode = ?, content_title = ?, external_url = ?,
-                        file_path = ?, content_body = ?, display_order = ?, updated_at = ?
+                        file_path = ?, content_body = ?, hotspots_json = ?,
+                        display_order = ?, updated_at = ?
                     WHERE id = ?
-                """, (content_mode, title, external_url, file_path, description, display_order, now, content_id))
+                """, (content_mode, title, external_url, file_path, description,
+                      hotspots_json, display_order, now, content_id))
 
                 conn.commit()
                 log_activity(

@@ -81,6 +81,14 @@ def create_app():
     app.jinja_env.filters['format_datetime'] = format_datetime
     app.jinja_env.filters['to_ist_time'] = to_ist_time
 
+    import json as _json
+    def _from_json_len(val):
+        try:
+            return len(_json.loads(val)) if val else 0
+        except Exception:
+            return 0
+    app.jinja_env.filters['from_json_len'] = _from_json_len
+
     @app.context_processor
     def inject_company():
         return {"company": get_company_profile()}

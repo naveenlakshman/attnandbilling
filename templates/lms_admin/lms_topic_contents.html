@@ -53,6 +53,7 @@
     transition: all 0.15s; white-space: nowrap;
   }
   .btn-set:hover { border-color: #0d6efd; background: #e8f0fe; color: #0d6efd; }
+  .btn-set-group { display: flex; gap: 8px; flex-wrap: wrap; }
 
   .slot-filled {
     display: flex; align-items: center; justify-content: space-between;
@@ -138,35 +139,53 @@
   </div>
 </div>
 
-{# SLOT 2: PDF #}
+{# SLOT 2: Lesson Content (PDF / Rich Text / Interactive Image) #}
 <div class="slot-card">
   <div class="slot-header">
-    <div class="slot-icon slot-icon-pdf">&#x1F4D5;</div>
+    <div class="slot-icon slot-icon-pdf">&#x1F4D6;</div>
     <div>
-      <div class="slot-label">PDF Document</div>
-      <div class="slot-sublabel">One PDF per topic &mdash; viewed in-browser</div>
+      <div class="slot-label">Lesson Content</div>
+      <div class="slot-sublabel">PDF or rich text lesson &mdash; one per topic</div>
     </div>
   </div>
   <div class="slot-body">
-    {% if data.pdf_content %}
+    {% if data.lesson_content %}
     <div class="slot-filled">
       <div class="slot-filled-info">
-        <div class="slot-filled-title">{{ data.pdf_content.content_title }}</div>
+        {% if data.lesson_content.content_mode == 'pdf' %}
+        <div class="slot-filled-title">&#x1F4D5; {{ data.lesson_content.content_title }}</div>
         <div class="slot-filled-meta">
-          &#x1F4C1; {{ data.pdf_content.file_path.split('/')[-1] if data.pdf_content.file_path else '&mdash;' }}
-          {% if data.pdf_content.content_body %} &middot; {{ data.pdf_content.content_body[:80] }}{% endif %}
+          &#x1F4C1; {{ data.lesson_content.file_path.split('/')[-1] if data.lesson_content.file_path else '&mdash;' }}
+          {% if data.lesson_content.content_body %} &middot; {{ data.lesson_content.content_body[:80] }}{% endif %}
         </div>
+        {% elif data.lesson_content.content_mode == 'rich_text' %}
+        <div class="slot-filled-title">&#x1F4DD; {{ data.lesson_content.content_title }}</div>
+        <div class="slot-filled-meta">Rich text lesson &middot;
+          {{ data.lesson_content.content_body | striptags | truncate(100) if data.lesson_content.content_body else '(no content)' }}
+        </div>
+        {% elif data.lesson_content.content_mode == 'interactive_image' %}
+        <div class="slot-filled-title">&#x1F5BC; {{ data.lesson_content.content_title }}</div>
+        <div class="slot-filled-meta">
+          Interactive image &middot; {{ data.lesson_content.file_path.split('/')[-1] if data.lesson_content.file_path else '&mdash;' }}
+          {% if data.lesson_content.hotspots_json %}
+            &middot; {{ data.lesson_content.hotspots_json | from_json_len }} hotspot(s)
+          {% endif %}
+        </div>
+        {% endif %}
       </div>
       <div class="slot-filled-actions">
-        <a href="{{ url_for('lms_admin.content_view', content_id=data.pdf_content.id) }}" class="btn-slot-action btn-slot-preview">&#x1F441; Preview</a>
-        <a href="{{ url_for('lms_admin.content_edit', content_id=data.pdf_content.id) }}" class="btn-slot-action btn-slot-edit">&#x270F; Edit</a>
-        <button class="btn-slot-action btn-slot-remove" onclick="removeContent({{ data.pdf_content.id }})">&#x1F5D1; Remove</button>
+        <a href="{{ url_for('lms_admin.content_view', content_id=data.lesson_content.id) }}" class="btn-slot-action btn-slot-preview">&#x1F441; Preview</a>
+        <a href="{{ url_for('lms_admin.content_edit', content_id=data.lesson_content.id) }}" class="btn-slot-action btn-slot-edit">&#x270F; Edit</a>
+        <button class="btn-slot-action btn-slot-remove" onclick="removeContent({{ data.lesson_content.id }})">&#x1F5D1; Remove</button>
       </div>
     </div>
     {% else %}
     <div class="slot-empty">
-      <div class="slot-empty-text">No PDF uploaded. Share notes, slides, or study material.</div>
-      <a href="{{ url_for('lms_admin.content_new', topic_id=data.topic.id) }}?type=pdf" class="btn-set">+ Upload PDF</a>
+      <div class="slot-empty-text">No lesson content yet. Choose a format:</div>
+      <div class="btn-set-group">
+        <a href="{{ url_for('lms_admin.content_new', topic_id=data.topic.id) }}?type=pdf" class="btn-set">&#x1F4D5; Upload PDF</a>
+        <a href="{{ url_for('lms_admin.content_new', topic_id=data.topic.id) }}?type=rich_text" class="btn-set">&#x1F4DD; Write Rich Text</a>
+      </div>
     </div>
     {% endif %}
   </div>

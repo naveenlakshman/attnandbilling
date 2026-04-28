@@ -91,6 +91,10 @@
                             <div class="form-control bg-light" style="pointer-events:none;">▶️ YouTube Video</div>
                             {% elif locked_type == 'pdf' %}
                             <div class="form-control bg-light" style="pointer-events:none;">📕 PDF Document</div>
+                            {% elif locked_type == 'rich_text' %}
+                            <div class="form-control bg-light" style="pointer-events:none;">📝 Rich Text Lesson</div>
+                            {% elif locked_type == 'interactive_image' %}
+                            <div class="form-control bg-light" style="pointer-events:none;">🖼️ Interactive Image</div>
                             {% elif locked_type == 'download' %}
                             <div class="form-control bg-light" style="pointer-events:none;">⬇️ Downloadable Assignment</div>
                             {% else %}
@@ -126,6 +130,13 @@
                             {% if content and content.content_mode == 'download' and content.file_path %}
                             <div class="mt-1 text-success small">📁 Current: {{ content.file_path.split('/')[-1] }} — upload a new file to replace it.</div>
                             {% endif %}
+                        </div>
+
+                        <!-- Rich Text Editor -->
+                        <div id="section-rich_text" class="content-section mb-3" style="display:none;">
+                            <label for="rich_text_body" class="form-label">Lesson Content <span class="text-danger">*</span></label>
+                            <textarea id="rich_text_body" name="content_body" rows="12" style="width:100%;">{{ content.content_body if content and content.content_mode == 'rich_text' else '' }}</textarea>
+                            <small class="text-muted">Use the editor toolbar to format text, add lists, headings, etc.</small>
                         </div>
 
                         <!-- Notes (optional for all types) -->
@@ -172,6 +183,8 @@
                     <small class="text-muted">
                         <div class="mb-1"><strong>▶️ YouTube:</strong> Embedded video from YouTube (unlisted OK)</div>
                         <div class="mb-1"><strong>📕 PDF:</strong> Document students can view/download</div>
+                        <div class="mb-1"><strong>📝 Rich Text:</strong> Word-like formatted lesson content</div>
+                        <div class="mb-1"><strong>🖼️ Interactive Image:</strong> Screenshot with clickable hotspots</div>
                         <div><strong>⬇️ Download:</strong> Assignment file (ZIP, DOCX, XLSX, etc.)</div>
                     </small>
                 </div>
@@ -180,15 +193,283 @@
     </div>
 </div>
 
+<script src="https://cdn.tiny.cloud/1/{{ config['TINYMCE_API_KEY'] }}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const lockedType = '{{ content.content_mode if content else preset_type }}';
+        const isEdit = {{ 'true' if content else 'false' }};
 
-        // Show only the locked section
+        // Show only the relevant content section
         document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
         const sec = document.getElementById('section-' + lockedType);
         if (sec) sec.style.display = 'block';
 
+        // ── TinyMCE ───────────────────────────────────────────────────────
+        if (lockedType === 'rich_text') {
+            tinymce.init({
+                selector: '#rich_text_body',
+                plugins: 'lists link image table code wordcount fullscreen autoresize',
+                toolbar: 'undo redo | formatselect | bold italic underline strikethrough | alignleft aligncenter alignright | bullist numlist | link image | table | code | fullscreen | insertHotspotImage',
+                min_height: 400,
+                max_height: 800,
+                autoresize_bottom_margin: 24,
+                resize: true,
+                menubar: false,
+                branding: false,
+                promotion: false,
+                convert_urls: false,
+                setup: function(editor) {
+                    editor.ui.registry.addButton('insertHotspotImage', {
+                        text: '🖼 Hotspot',
+                        tooltip: 'Insert interactive image with clickable hotspot dots',
+                        onAction: function() { openHotspotImageModal(editor); }
+                    });
+                }
+            });
+        }
+
+        // ── Inline Hotspot Image Modal ────────────────────────────────────
+        function openHotspotImageModal(editor) {
+            var inlineHotspots = [];
+            var inlineImageUrl = null;
+
+            // Build modal HTML
+            var overlay = document.createElement('div');
+            overlay.id = 'hs-inline-overlay';
+            Object.assign(overlay.style, {
+                position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
+                background: 'rgba(0,0,0,0.6)', zIndex: '99999',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '16px', boxSizing: 'border-box',
+            });
+            overlay.innerHTML = `
+              <div style="background:#fff;border-radius:12px;width:100%;max-width:780px;
+                          max-height:92vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.3);
+                          display:flex;flex-direction:column;">
+                <!-- Header -->
+                <div style="display:flex;align-items:center;justify-content:space-between;
+                             padding:16px 20px;border-bottom:1px solid #e9ecef;flex-shrink:0;">
+                  <h5 style="margin:0;font-size:16px;font-weight:700;">🖼 Insert Interactive Hotspot Image</h5>
+                  <button id="hs-modal-close" style="border:none;background:none;font-size:22px;
+                          cursor:pointer;color:#6c757d;line-height:1;padding:0 4px;">✕</button>
+                </div>
+                <!-- Step 1: Upload -->
+                <div id="hs-step-upload" style="padding:20px;">
+                  <p style="margin:0 0 12px;font-size:14px;color:#495057;">
+                    Step 1 — Upload an image (JPG, PNG, WebP, GIF — max 10 MB)
+                  </p>
+                  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <input type="file" id="hs-file-input" accept="image/*"
+                           style="flex:1;min-width:0;border:1px solid #dee2e6;
+                                  border-radius:6px;padding:8px;font-size:14px;">
+                    <button id="hs-upload-btn" style="white-space:nowrap;padding:8px 18px;
+                            background:#0d6efd;color:#fff;border:none;border-radius:6px;
+                            font-size:14px;cursor:pointer;">Upload Image</button>
+                  </div>
+                  <div id="hs-upload-error" style="color:#dc3545;font-size:13px;margin-top:8px;display:none;"></div>
+                </div>
+                <!-- Step 2: Hotspot editor (hidden until upload) -->
+                <div id="hs-step-editor" style="display:none;padding:0 20px 20px;">
+                  <p style="margin:0 0 10px;font-size:14px;color:#495057;">
+                    Step 2 — Click on the image to place numbered red dots, then add a title + description for each.
+                  </p>
+                  <div id="hs-img-wrap" style="position:relative;display:inline-block;width:100%;
+                       cursor:crosshair;border:2px dashed #0d6efd;border-radius:8px;overflow:hidden;">
+                    <img id="hs-preview-img" style="width:100%;height:auto;display:block;" draggable="false">
+                  </div>
+                  <!-- Hotspot form panel -->
+                  <div id="hs-dot-form" style="display:none;margin-top:12px;padding:14px;
+                       background:#f8f9fa;border-radius:8px;border:1px solid #dee2e6;">
+                    <p style="margin:0 0 8px;font-weight:600;font-size:14px;">New Hotspot</p>
+                    <input type="text" id="hs-dot-title" placeholder="Title (required)"
+                           style="width:100%;padding:8px;border:1px solid #dee2e6;border-radius:6px;
+                                  font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+                    <textarea id="hs-dot-desc" placeholder="Description (optional)" rows="3"
+                              style="width:100%;padding:8px;border:1px solid #dee2e6;border-radius:6px;
+                                     font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:10px;">
+                      <button id="hs-dot-save" style="padding:7px 18px;background:#198754;color:#fff;
+                              border:none;border-radius:6px;font-size:14px;cursor:pointer;">Save Hotspot</button>
+                      <button id="hs-dot-cancel" style="padding:7px 14px;background:#6c757d;color:#fff;
+                              border:none;border-radius:6px;font-size:14px;cursor:pointer;">Cancel</button>
+                    </div>
+                  </div>
+                  <!-- Saved hotspot list -->
+                  <div id="hs-saved-list" style="margin-top:12px;font-size:13px;"></div>
+                </div>
+                <!-- Footer -->
+                <div id="hs-footer" style="display:none;padding:14px 20px;border-top:1px solid #e9ecef;
+                     display:none;gap:10px;justify-content:flex-end;flex-shrink:0;">
+                  <button id="hs-insert-btn" style="padding:9px 24px;background:#0d6efd;color:#fff;
+                          border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;">
+                    Insert into Editor
+                  </button>
+                  <button id="hs-cancel-btn" style="padding:9px 16px;background:#6c757d;color:#fff;
+                          border:none;border-radius:6px;font-size:14px;cursor:pointer;">Cancel</button>
+                </div>
+              </div>`;
+
+            document.body.appendChild(overlay);
+
+            // Helper: pending dot state
+            var pendingInlineDot = null;
+            var pendingInlinePct = null;
+
+            function closModal() {
+                overlay.remove();
+            }
+
+            document.getElementById('hs-modal-close').addEventListener('click', closModal);
+            document.getElementById('hs-cancel-btn').addEventListener('click', closModal);
+            overlay.addEventListener('click', function(e){ if(e.target === overlay) closModal(); });
+
+            // Upload handler
+            document.getElementById('hs-upload-btn').addEventListener('click', function() {
+                var file = document.getElementById('hs-file-input').files[0];
+                var errEl = document.getElementById('hs-upload-error');
+                errEl.style.display = 'none';
+                if (!file) { errEl.textContent = 'Please select an image file.'; errEl.style.display = 'block'; return; }
+
+                var formData = new FormData();
+                formData.append('file', file);
+                var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                if (csrfMeta) formData.append('csrf_token', csrfMeta.getAttribute('content'));
+                this.disabled = true;
+                this.textContent = 'Uploading…';
+                var btn = this;
+
+                fetch('{{ url_for("lms_admin.upload_inline_image") }}', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function(r){ return r.json(); })
+                .then(function(data) {
+                    btn.disabled = false; btn.textContent = 'Upload Image';
+                    if (!data.success) { errEl.textContent = data.error || 'Upload failed.'; errEl.style.display = 'block'; return; }
+                    inlineImageUrl = data.url;
+                    document.getElementById('hs-preview-img').src = data.url;
+                    document.getElementById('hs-step-editor').style.display = 'block';
+                    var footer = document.getElementById('hs-footer');
+                    footer.style.display = 'flex';
+                    bindImageClick();
+                })
+                .catch(function(){ btn.disabled = false; btn.textContent = 'Upload Image'; errEl.textContent = 'Upload failed. Try again.'; errEl.style.display = 'block'; });
+            });
+
+            function bindImageClick() {
+                var wrap = document.getElementById('hs-img-wrap');
+                wrap.addEventListener('click', function(e) {
+                    if (e.target.classList.contains('hs-inline-dot')) return;
+                    if (document.getElementById('hs-dot-form').style.display !== 'none') return;
+                    var rect = wrap.getBoundingClientRect();
+                    var xPct = parseFloat(((e.clientX - rect.left) / rect.width  * 100).toFixed(2));
+                    var yPct = parseFloat(((e.clientY - rect.top)  / rect.height * 100).toFixed(2));
+                    pendingInlinePct = { x: xPct, y: yPct };
+                    placePendingInlineDot(xPct, yPct);
+                    document.getElementById('hs-dot-title').value = '';
+                    document.getElementById('hs-dot-desc').value  = '';
+                    document.getElementById('hs-dot-form').style.display = 'block';
+                    document.getElementById('hs-dot-title').focus();
+                });
+            }
+
+            function placePendingInlineDot(x, y) {
+                if (pendingInlineDot) pendingInlineDot.remove();
+                pendingInlineDot = makeInlineDot(x, y, inlineHotspots.length, true);
+                document.getElementById('hs-img-wrap').appendChild(pendingInlineDot);
+            }
+
+            function makeInlineDot(x, y, idx, isPending) {
+                var d = document.createElement('div');
+                d.className = 'hs-inline-dot';
+                Object.assign(d.style, {
+                    position: 'absolute', left: x + '%', top: y + '%',
+                    transform: 'translate(-50%,-50%)',
+                    width: '20px', height: '20px', borderRadius: '50%',
+                    background: isPending ? '#ff6666' : '#e02020',
+                    border: '2px solid #fff',
+                    boxShadow: '0 0 0 2px rgba(0,0,0,0.25)',
+                    cursor: isPending ? 'default' : 'pointer',
+                    zIndex: '10', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', fontSize: '10px', color: '#fff', fontWeight: '700',
+                });
+                if (!isPending) d.textContent = idx + 1;
+                return d;
+            }
+
+            function renderInlineDots() {
+                document.querySelectorAll('#hs-img-wrap .hs-inline-dot').forEach(function(d){ d.remove(); });
+                inlineHotspots.forEach(function(hs, i) {
+                    var d = makeInlineDot(hs.x, hs.y, i, false);
+                    d.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        if (confirm('Delete hotspot "' + hs.title + '"?')) {
+                            inlineHotspots.splice(i, 1);
+                            renderInlineDots();
+                            renderInlineList();
+                        }
+                    });
+                    document.getElementById('hs-img-wrap').appendChild(d);
+                });
+                if (pendingInlineDot) document.getElementById('hs-img-wrap').appendChild(pendingInlineDot);
+            }
+
+            document.getElementById('hs-dot-save').addEventListener('click', function() {
+                var t = document.getElementById('hs-dot-title').value.trim();
+                if (!t) { alert('Please enter a hotspot title.'); return; }
+                if (!pendingInlinePct) return;
+                inlineHotspots.push({ x: pendingInlinePct.x, y: pendingInlinePct.y, title: t,
+                                      description: document.getElementById('hs-dot-desc').value.trim() });
+                document.getElementById('hs-dot-form').style.display = 'none';
+                if (pendingInlineDot) { pendingInlineDot.remove(); pendingInlineDot = null; }
+                pendingInlinePct = null;
+                renderInlineDots();
+                renderInlineList();
+            });
+
+            document.getElementById('hs-dot-cancel').addEventListener('click', function() {
+                document.getElementById('hs-dot-form').style.display = 'none';
+                if (pendingInlineDot) { pendingInlineDot.remove(); pendingInlineDot = null; }
+                pendingInlinePct = null;
+            });
+
+            function renderInlineList() {
+                var el = document.getElementById('hs-saved-list');
+                if (inlineHotspots.length === 0) { el.innerHTML = ''; return; }
+                var html = '<p style="color:#6c757d;margin:0 0 6px;">' + inlineHotspots.length + ' hotspot(s) added:</p><ul style="margin:0;padding-left:20px;">';
+                inlineHotspots.forEach(function(hs, i) {
+                    html += '<li><strong>' + escH(hs.title) + '</strong>'
+                          + (hs.description ? ' — ' + escH(hs.description.substring(0,80)) : '') + '</li>';
+                });
+                html += '</ul>';
+                el.innerHTML = html;
+            }
+
+            function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+            // Insert into editor
+            document.getElementById('hs-insert-btn').addEventListener('click', function() {
+                if (!inlineImageUrl) { alert('Please upload an image first.'); return; }
+                var countLabel = inlineHotspots.length > 0
+                    ? '🔴 ' + inlineHotspots.length + ' hotspot(s) — students will see clickable dots'
+                    : '(no hotspots — image will display without dots)';
+                var hsJson = JSON.stringify(inlineHotspots).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026').replace(/'/g,'\\u0027');
+                var html = '<div class="lms-hotspot-embed" contenteditable="false"'
+                         + ' data-src="' + inlineImageUrl + '"'
+                         + ' data-hotspots=\'' + hsJson + '\''
+                         + ' style="position:relative;display:block;width:100%;margin:16px 0;line-height:0;">'
+                         + '<img src="' + inlineImageUrl + '" alt="Interactive image"'
+                         + ' style="width:100%;border-radius:8px;border:1px solid #dee2e6;">'
+                         + '<span class="lms-hs-badge" style="display:block;background:#fff3cd;'
+                         + 'border:1px solid #ffc107;border-radius:4px;padding:4px 10px;margin-top:6px;'
+                         + 'font-size:13px;line-height:1.4;color:#856404;">' + countLabel + '</span>'
+                         + '</div><p></p>';
+                editor.insertContent(html);
+                closModal();
+            });
+        }
+
+        // ── Form validation ───────────────────────────────────────────────
         document.getElementById('contentForm').addEventListener('submit', function (e) {
             const title = document.getElementById('title').value.trim();
             if (!title) { e.preventDefault(); alert('Content title is required.'); return; }
@@ -200,18 +481,25 @@
 
             if (lockedType === 'pdf') {
                 const f = document.getElementById('pdf_file');
-                const isNew = !{{ 'true' if content else 'false' }};
-                if (isNew && (!f.files || !f.files.length)) {
+                if (!isEdit && (!f.files || !f.files.length)) {
                     e.preventDefault(); alert('Please select a PDF file.'); return;
                 }
             }
 
             if (lockedType === 'download') {
                 const f = document.getElementById('download_file');
-                const isNew = !{{ 'true' if content else 'false' }};
-                if (isNew && (!f.files || !f.files.length)) {
+                if (!isEdit && (!f.files || !f.files.length)) {
                     e.preventDefault(); alert('Please select a file to upload.'); return;
                 }
+            }
+
+            if (lockedType === 'rich_text') {
+                // Trigger TinyMCE to sync content to textarea before submit
+                if (window.tinymce && tinymce.get('rich_text_body')) {
+                    tinymce.get('rich_text_body').save();
+                }
+                const body = document.getElementById('rich_text_body').value.trim();
+                if (!body) { e.preventDefault(); alert('Rich text content cannot be empty.'); return; }
             }
         });
     });

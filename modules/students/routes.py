@@ -404,7 +404,7 @@ def topic_view(topic_id):
 
         # Extract single item of each type (one-per-type system)
         video_content = next((c for c in contents if c['content_mode'] == 'youtube'), None)
-        pdf_content = next((c for c in contents if c['content_mode'] == 'pdf'), None)
+        lesson_content = next((c for c in contents if c['content_mode'] in ('pdf', 'rich_text', 'interactive_image')), None)
         download_content = next((c for c in contents if c['content_mode'] == 'download'), None)
 
         # Previous / next topic in same chapter
@@ -468,7 +468,7 @@ def topic_view(topic_id):
                            topic=topic, contents=contents,
                            embed_urls=embed_urls,
                            video_content=video_content,
-                           pdf_content=pdf_content,
+                           lesson_content=lesson_content,
                            download_content=download_content,
                            prev_topic_id=prev_topic_id,
                            next_topic_id=next_topic_id,
@@ -530,6 +530,36 @@ def serve_pdf(content_id):
         resp = send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path),
                                    mimetype='application/pdf')
         resp.headers['Content-Disposition'] = 'inline'
+        resp.headers['Cache-Control'] = 'no-store, no-cache'
+        return resp
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Serve protected interactive image
+# ---------------------------------------------------------------------------
+@students_bp.route('/content/<int:content_id>/image')
+@student_login_required
+def serve_image(content_id):
+    import os
+    from flask import send_from_directory
+    conn = get_conn()
+    try:
+        row = conn.execute(
+            "SELECT file_path FROM lms_topic_contents WHERE id = ? AND content_mode = 'interactive_image'",
+            (content_id,)
+        ).fetchone()
+        if not row or not row['file_path']:
+            return 'Not found', 404
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        abs_path = os.path.join(base_dir, row['file_path'].replace('/', os.sep))
+        ext = abs_path.rsplit('.', 1)[-1].lower()
+        mime_map = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+                    'gif': 'image/gif', 'webp': 'image/webp'}
+        mimetype = mime_map.get(ext, 'image/jpeg')
+        resp = send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path),
+                                   mimetype=mimetype)
         resp.headers['Cache-Control'] = 'no-store, no-cache'
         return resp
     finally:
