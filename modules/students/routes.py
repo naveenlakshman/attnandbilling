@@ -20,6 +20,48 @@ def student_login_required(f):
     return decorated
 
 
+def _is_demo():
+    """Return True when the current session is a demo (read-only) session."""
+    return bool(session.get('demo_mode'))
+
+
+def _has_program_access(conn, program_id, student_id):
+    """Return True if the student is enrolled/has access to program_id.
+    Always returns True in demo mode."""
+    if _is_demo():
+        return True
+    return conn.execute("""
+        SELECT 1 FROM lms_programs lp
+        WHERE lp.id = ? AND lp.is_active = 1
+        AND (
+            EXISTS (
+                SELECT 1 FROM lms_student_program_access spa
+                WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 1
+                  AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+            )
+            OR EXISTS (
+                SELECT 1 FROM lms_batch_program_access bpa
+                JOIN student_batches sb ON bpa.batch_id = sb.batch_id
+                WHERE sb.student_id = ? AND bpa.program_id = lp.id AND bpa.is_active = 1
+                  AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
+            )
+            OR EXISTS (
+                SELECT 1 FROM invoices i
+                JOIN invoice_items ii ON ii.invoice_id = i.id
+                WHERE i.student_id = ? AND ii.course_id = lp.course_id
+                  AND lp.course_id IS NOT NULL
+            )
+            OR EXISTS (
+                SELECT 1 FROM invoices i
+                JOIN invoice_items ii ON ii.invoice_id = i.id
+                JOIN lms_course_program_map cpm
+                     ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
+                WHERE i.student_id = ?
+            )
+        )
+    """, (program_id, student_id, student_id, student_id, student_id)).fetchone()
+
+
 def _youtube_embed(url):
     """Convert any YouTube URL to embed URL."""
     if not url:
@@ -79,9 +121,13 @@ def login():
 
 @students_bp.route('/logout')
 def logout():
+    was_demo = session.get('demo_mode')
     session.pop('student_id', None)
     session.pop('student_name', None)
     session.pop('student_code', None)
+    session.pop('demo_mode', None)
+    if was_demo:
+        return redirect(url_for('lms_admin.dashboard'))
     return redirect(url_for('students.login'))
 
 
@@ -97,79 +143,95 @@ def dashboard():
     try:
         company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
 
-        # Programs accessible via:
-        # 1. Direct lms_student_program_access record
-        # 2. Batch membership + lms_batch_program_access
-        # 3. Invoice for the course (invoice_items → course_id → lms_programs.course_id)
-        programs = conn.execute("""
-            SELECT DISTINCT
-                lp.id, lp.program_name, lp.description,
-                (
-                    SELECT COUNT(*) FROM lms_chapters lc WHERE lc.program_id = lp.id AND lc.is_active = 1
-                ) AS chapter_count,
-                (
-                    SELECT COUNT(*) FROM lms_topics lt
-                    JOIN lms_chapters lc2 ON lt.chapter_id = lc2.id
-                    WHERE lc2.program_id = lp.id AND lt.is_active = 1
-                ) AS topic_count,
-                (
-                    SELECT COUNT(*) FROM lms_topic_progress tp2
-                    JOIN lms_topics lt2 ON tp2.topic_id = lt2.id
-                    JOIN lms_chapters lc3 ON lt2.chapter_id = lc3.id
-                    WHERE lc3.program_id = lp.id AND tp2.student_id = ? AND tp2.is_completed = 1
-                ) AS completed_count,
-                (
-                    SELECT lt3.id FROM lms_topic_progress tp3
-                    JOIN lms_topics lt3 ON tp3.topic_id = lt3.id
-                    JOIN lms_chapters lc4 ON lt3.chapter_id = lc4.id
-                    WHERE lc4.program_id = lp.id AND tp3.student_id = ?
-                    ORDER BY tp3.completed_at DESC LIMIT 1
-                ) AS last_topic_id,
-                (
-                    SELECT lt4.id FROM lms_topics lt4
-                    JOIN lms_chapters lc5 ON lt4.chapter_id = lc5.id
-                    WHERE lc5.program_id = lp.id AND lc5.is_active = 1 AND lt4.is_active = 1
-                    ORDER BY lc5.chapter_order, lt4.topic_order LIMIT 1
-                ) AS first_topic_id,
-                (
-                    SELECT MIN(cpm_ord.display_order)
-                    FROM lms_course_program_map cpm_ord
-                    JOIN invoice_items ii_ord ON cpm_ord.course_id = ii_ord.course_id
-                    JOIN invoices i_ord ON ii_ord.invoice_id = i_ord.id
-                    WHERE cpm_ord.program_id = lp.id AND i_ord.student_id = ?
-                ) AS map_order
-            FROM lms_programs lp
-            WHERE lp.is_active = 1
-            AND (
-                EXISTS (
-                    SELECT 1 FROM lms_student_program_access spa
-                    WHERE spa.student_id = ? AND spa.program_id = lp.id
-                      AND spa.is_active = 1
-                      AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+        if _is_demo():
+            # Demo mode: show ALL active programs (no enrollment check)
+            programs = conn.execute("""
+                SELECT DISTINCT
+                    lp.id, lp.program_name, lp.description,
+                    (SELECT COUNT(*) FROM lms_chapters lc WHERE lc.program_id = lp.id AND lc.is_active = 1) AS chapter_count,
+                    (SELECT COUNT(*) FROM lms_topics lt JOIN lms_chapters lc2 ON lt.chapter_id = lc2.id
+                     WHERE lc2.program_id = lp.id AND lt.is_active = 1) AS topic_count,
+                    0 AS completed_count,
+                    NULL AS last_topic_id,
+                    (SELECT lt4.id FROM lms_topics lt4 JOIN lms_chapters lc5 ON lt4.chapter_id = lc5.id
+                     WHERE lc5.program_id = lp.id AND lc5.is_active = 1 AND lt4.is_active = 1
+                     ORDER BY lc5.chapter_order, lt4.topic_order LIMIT 1) AS first_topic_id,
+                    NULL AS map_order
+                FROM lms_programs lp
+                WHERE lp.is_active = 1
+                ORDER BY lp.program_name
+            """).fetchall()
+        else:
+            # Normal mode: only programs the student is enrolled in
+            programs = conn.execute("""
+                SELECT DISTINCT
+                    lp.id, lp.program_name, lp.description,
+                    (
+                        SELECT COUNT(*) FROM lms_chapters lc WHERE lc.program_id = lp.id AND lc.is_active = 1
+                    ) AS chapter_count,
+                    (
+                        SELECT COUNT(*) FROM lms_topics lt
+                        JOIN lms_chapters lc2 ON lt.chapter_id = lc2.id
+                        WHERE lc2.program_id = lp.id AND lt.is_active = 1
+                    ) AS topic_count,
+                    (
+                        SELECT COUNT(*) FROM lms_topic_progress tp2
+                        JOIN lms_topics lt2 ON tp2.topic_id = lt2.id
+                        JOIN lms_chapters lc3 ON lt2.chapter_id = lc3.id
+                        WHERE lc3.program_id = lp.id AND tp2.student_id = ? AND tp2.is_completed = 1
+                    ) AS completed_count,
+                    (
+                        SELECT lt3.id FROM lms_topic_progress tp3
+                        JOIN lms_topics lt3 ON tp3.topic_id = lt3.id
+                        JOIN lms_chapters lc4 ON lt3.chapter_id = lc4.id
+                        WHERE lc4.program_id = lp.id AND tp3.student_id = ?
+                        ORDER BY tp3.completed_at DESC LIMIT 1
+                    ) AS last_topic_id,
+                    (
+                        SELECT lt4.id FROM lms_topics lt4
+                        JOIN lms_chapters lc5 ON lt4.chapter_id = lc5.id
+                        WHERE lc5.program_id = lp.id AND lc5.is_active = 1 AND lt4.is_active = 1
+                        ORDER BY lc5.chapter_order, lt4.topic_order LIMIT 1
+                    ) AS first_topic_id,
+                    (
+                        SELECT MIN(cpm_ord.display_order)
+                        FROM lms_course_program_map cpm_ord
+                        JOIN invoice_items ii_ord ON cpm_ord.course_id = ii_ord.course_id
+                        JOIN invoices i_ord ON ii_ord.invoice_id = i_ord.id
+                        WHERE cpm_ord.program_id = lp.id AND i_ord.student_id = ?
+                    ) AS map_order
+                FROM lms_programs lp
+                WHERE lp.is_active = 1
+                AND (
+                    EXISTS (
+                        SELECT 1 FROM lms_student_program_access spa
+                        WHERE spa.student_id = ? AND spa.program_id = lp.id
+                          AND spa.is_active = 1
+                          AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM lms_batch_program_access bpa
+                        JOIN student_batches sb ON bpa.batch_id = sb.batch_id
+                        WHERE sb.student_id = ? AND bpa.program_id = lp.id
+                          AND bpa.is_active = 1
+                          AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM invoices i
+                        JOIN invoice_items ii ON ii.invoice_id = i.id
+                        WHERE i.student_id = ? AND ii.course_id = lp.course_id
+                          AND lp.course_id IS NOT NULL
+                    )
+                    OR EXISTS (
+                        SELECT 1 FROM invoices i
+                        JOIN invoice_items ii ON ii.invoice_id = i.id
+                        JOIN lms_course_program_map cpm
+                             ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
+                        WHERE i.student_id = ?
+                    )
                 )
-                OR EXISTS (
-                    SELECT 1 FROM lms_batch_program_access bpa
-                    JOIN student_batches sb ON bpa.batch_id = sb.batch_id
-                    WHERE sb.student_id = ? AND bpa.program_id = lp.id
-                      AND bpa.is_active = 1
-                      AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1 FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    WHERE i.student_id = ? AND ii.course_id = lp.course_id
-                      AND lp.course_id IS NOT NULL
-                )
-                OR EXISTS (
-                    SELECT 1 FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    JOIN lms_course_program_map cpm
-                         ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
-                    WHERE i.student_id = ?
-                )
-            )
-            ORDER BY CASE WHEN map_order IS NULL THEN 1 ELSE 0 END, map_order, lp.program_name
-        """, (student_id, student_id, student_id, student_id, student_id, student_id, student_id)).fetchall()
+                ORDER BY CASE WHEN map_order IS NULL THEN 1 ELSE 0 END, map_order, lp.program_name
+            """, (student_id, student_id, student_id, student_id, student_id, student_id, student_id)).fetchall()
 
     finally:
         conn.close()
@@ -190,36 +252,7 @@ def program_view(program_id):
         company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
 
         # Verify access
-        access = conn.execute("""
-            SELECT 1 FROM lms_programs lp
-            WHERE lp.id = ? AND lp.is_active = 1
-            AND (
-                EXISTS (
-                    SELECT 1 FROM lms_student_program_access spa
-                    WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 1
-                      AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1 FROM lms_batch_program_access bpa
-                    JOIN student_batches sb ON bpa.batch_id = sb.batch_id
-                    WHERE sb.student_id = ? AND bpa.program_id = lp.id AND bpa.is_active = 1
-                      AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1 FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    WHERE i.student_id = ? AND ii.course_id = lp.course_id
-                      AND lp.course_id IS NOT NULL
-                )
-                OR EXISTS (
-                    SELECT 1 FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    JOIN lms_course_program_map cpm
-                         ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
-                    WHERE i.student_id = ?
-                )
-            )
-        """, (program_id, student_id, student_id, student_id, student_id)).fetchone()
+        access = _has_program_access(conn, program_id, student_id)
 
         if not access:
             flash('You do not have access to this program.', 'danger')
@@ -283,36 +316,7 @@ def chapter_view(chapter_id):
             return redirect(url_for('students.dashboard'))
 
         # Verify program access
-        access = conn.execute("""
-            SELECT 1 FROM lms_programs lp
-            WHERE lp.id = ? AND lp.is_active = 1
-            AND (
-                EXISTS (
-                    SELECT 1 FROM lms_student_program_access spa
-                    WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 1
-                      AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1 FROM lms_batch_program_access bpa
-                    JOIN student_batches sb ON bpa.batch_id = sb.batch_id
-                    WHERE sb.student_id = ? AND bpa.program_id = lp.id AND bpa.is_active = 1
-                      AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1 FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    WHERE i.student_id = ? AND ii.course_id = lp.course_id
-                      AND lp.course_id IS NOT NULL
-                )
-                OR EXISTS (
-                    SELECT 1 FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    JOIN lms_course_program_map cpm
-                         ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
-                    WHERE i.student_id = ?
-                )
-            )
-        """, (chapter['program_id'], student_id, student_id, student_id, student_id)).fetchone()
+        access = _has_program_access(conn, chapter['program_id'], student_id)
 
         if not access:
             flash('You do not have access to this program.', 'danger')
@@ -361,36 +365,7 @@ def topic_view(topic_id):
             return redirect(url_for('students.dashboard'))
 
         # Verify program access
-        access = conn.execute("""
-            SELECT 1 FROM lms_programs lp
-            WHERE lp.id = ? AND lp.is_active = 1
-            AND (
-                EXISTS (
-                    SELECT 1 FROM lms_student_program_access spa
-                    WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 1
-                      AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1 FROM lms_batch_program_access bpa
-                    JOIN student_batches sb ON bpa.batch_id = sb.batch_id
-                    WHERE sb.student_id = ? AND bpa.program_id = lp.id AND bpa.is_active = 1
-                      AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1 FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    WHERE i.student_id = ? AND ii.course_id = lp.course_id
-                      AND lp.course_id IS NOT NULL
-                )
-                OR EXISTS (
-                    SELECT 1 FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    JOIN lms_course_program_map cpm
-                         ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
-                    WHERE i.student_id = ?
-                )
-            )
-        """, (topic['program_id'], student_id, student_id, student_id, student_id)).fetchone()
+        access = _has_program_access(conn, topic['program_id'], student_id)
 
         if not access:
             flash('You do not have access to this program.', 'danger')
@@ -487,6 +462,8 @@ def topic_view(topic_id):
 @student_login_required
 def mark_complete(topic_id):
     from flask import jsonify
+    if _is_demo():
+        return jsonify({'status': 'demo', 'message': 'Read-only in demo mode'})
     student_id = session['student_id']
     action = request.form.get('action', 'complete')  # 'complete' or 'incomplete'
     conn = get_conn()

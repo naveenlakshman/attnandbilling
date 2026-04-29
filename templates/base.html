@@ -347,6 +347,12 @@
         📚 LMS Module
       </a>
 
+      <a class="nav-link" href="{{ url_for('lms_admin.launch_demo') }}"
+         style="color:#ffc107;font-weight:600;"
+         title="Open student portal in read-only demo mode">
+        🎓 Student Demo View
+      </a>
+
       {% if session.get('role') == 'admin' %}
       <hr>
         <a class="nav-link {% if request.endpoint in ['core.users', 'core.user_new', 'core.user_edit'] %}active{% endif %}"

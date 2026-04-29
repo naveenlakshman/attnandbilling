@@ -102,6 +102,29 @@ def upload_file(file_obj, content_type):
         return False, f"Error saving file: {str(e)}"
 
 
+# ── Demo Mode ──────────────────────────────────────────────────────────────
+@lms_admin_bp.route('/demo/launch')
+@login_required
+def launch_demo():
+    """Start a read-only demo session in the student portal (admin only)."""
+    # Preserve admin session keys; inject a demo student identity
+    session['student_id']   = 0          # sentinel: 0 means demo (never a real student pk)
+    session['student_name'] = 'Demo Student'
+    session['student_code'] = 'DEMO'
+    session['demo_mode']    = True
+    log_activity(session.get('user_id'), session.get('branch_id'), 'launch_demo', 'lms', None, f"{session.get('role','user').title()} launched demo student view")
+    flash('Demo mode active — you are viewing the student portal in read-only mode.', 'info')
+    return redirect(url_for('students.dashboard'))
+
+
+@lms_admin_bp.route('/demo/exit')
+def exit_demo():
+    """End demo session and return to LMS admin."""
+    for key in ('student_id', 'student_name', 'student_code', 'demo_mode'):
+        session.pop(key, None)
+    return redirect(url_for('lms_admin.dashboard'))
+
+
 @lms_admin_bp.route('/dashboard', methods=['GET'])
 @login_required
 def dashboard():
