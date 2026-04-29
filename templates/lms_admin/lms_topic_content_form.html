@@ -278,6 +278,29 @@
                 branding: false,
                 promotion: false,
                 convert_urls: false,
+                /* Preserve data-*, style, width, height, contenteditable on save */
+                extended_valid_elements: 'div[*],img[*],span[*]',
+                object_resizing: 'img,table',
+                /* Editor CSS — no !important so TinyMCE inline attrs are respected */
+                content_style: [
+                    '.lms-hotspot-embed {',
+                    '  position: relative;',
+                    '  display: block;',
+                    '  max-width: 100%;',        /* caps at editor width; inline width from resize takes priority */
+                    '  margin: 16px 0;',
+                    '  line-height: 0;',
+                    '  box-sizing: border-box;',
+                    '}',
+                    '.lms-hotspot-embed img {',
+                    '  display: block;',
+                    '  width: 100%;',             /* fills wrapper; no !important — TinyMCE can override if needed */
+                    '  height: auto;',            /* no !important — TinyMCE may write height during resize */
+                    '  border-radius: 8px;',
+                    '  border: 1px solid #dee2e6;',
+                    '}',
+                    '.lms-hs-badge { display: block; }',
+                    'img { max-width: 100%; }',  /* just prevent plain images from overflowing */
+                ].join(' '),
                 setup: function(editor) {
                     editor.ui.registry.addButton('saveContent', {
                         text: '💾 Save',
@@ -333,6 +356,95 @@
                                 return 'You have unsaved changes. Are you sure you want to leave?';
                             }
                         };
+                    });
+
+                    // ── Custom resize handle for hotspot embed wrappers ───
+                    // TinyMCE object_resizing only works for img/table — not custom divs.
+                    // We inject a drag handle and strip it before saving via data-mce-bogus.
+                    //
+                    // Two critical fixes vs the previous attempt:
+                    //  1. Use native handle.addEventListener (not editor.dom.bind) — because
+                    //     mousedown does NOT propagate out of contenteditable="false" blocks
+                    //     through TinyMCE's event wrapper.
+                    //  2. _hsDragging flag prevents NodeChange from destroying the handle
+                    //     mid-drag (NodeChange fires when TinyMCE repositions the selection).
+
+                    var _hsDragging = false;
+
+                    function _hsRemoveHandle() {
+                        if (_hsDragging) return; // never remove while a drag is in progress
+                        var doc = editor.getDoc();
+                        if (!doc) return;
+                        doc.querySelectorAll('[data-lms-handle="resize"]').forEach(function(h) {
+                            if (h.parentNode) h.parentNode.removeChild(h);
+                        });
+                    }
+
+                    function _hsInjectHandle(embed) {
+                        // Skip if this embed already has a handle (avoids flicker on NodeChange)
+                        if (embed.querySelector('[data-lms-handle="resize"]')) return;
+                        _hsRemoveHandle();
+                        var doc = editor.getDoc();
+                        var handle = doc.createElement('div');
+                        handle.setAttribute('data-mce-bogus', 'all'); // TinyMCE strips on save
+                        handle.setAttribute('data-lms-handle', 'resize');
+                        handle.title = 'Drag to resize image';
+                        handle.style.cssText = [
+                            'position:absolute', 'bottom:6px', 'right:6px',
+                            'width:28px', 'height:28px',
+                            'background:#0d6efd', 'border-radius:5px',
+                            'cursor:se-resize', 'z-index:9999',
+                            'display:flex', 'align-items:center', 'justify-content:center',
+                            'font-size:16px', 'color:#fff', 'line-height:1',
+                            'user-select:none', '-webkit-user-select:none',
+                            'box-shadow:0 2px 6px rgba(0,0,0,0.45)',
+                        ].join(';');
+                        handle.textContent = '\u2922'; // ⤢
+                        embed.appendChild(handle);
+
+                        // Must use native addEventListener — editor.dom.bind does not
+                        // receive events on children of contenteditable="false" blocks.
+                        handle.addEventListener('mousedown', function(e) {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            _hsDragging = true;
+
+                            var startX = e.clientX;
+                            var startW = embed.offsetWidth;
+                            var maxW   = editor.getBody().offsetWidth;
+                            var edDoc  = editor.getDoc();
+
+                            function onMove(ev) {
+                                var newW = Math.max(120, Math.min(maxW, startW + (ev.clientX - startX)));
+                                embed.style.width = newW + 'px';
+                            }
+                            function onUp() {
+                                _hsDragging = false;
+                                edDoc.removeEventListener('mousemove', onMove);
+                                edDoc.removeEventListener('mouseup',   onUp);
+                                editor.fire('change');
+                            }
+                            edDoc.addEventListener('mousemove', onMove);
+                            edDoc.addEventListener('mouseup',   onUp);
+                        });
+                    }
+
+                    editor.on('NodeChange', function(e) {
+                        var node  = e.element;
+                        var embed = (node.classList && node.classList.contains('lms-hotspot-embed'))
+                            ? node
+                            : editor.dom.getParent(node, '.lms-hotspot-embed');
+                        if (embed) {
+                            _hsInjectHandle(embed);
+                        } else {
+                            _hsRemoveHandle();
+                        }
+                    });
+
+                    // Strip handle before TinyMCE serializes — double safety net
+                    editor.on('BeforeGetContent', function() {
+                        _hsDragging = false; // reset flag so removal is allowed
+                        _hsRemoveHandle();
                     });
                 }
             });
