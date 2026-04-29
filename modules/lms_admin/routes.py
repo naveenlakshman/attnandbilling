@@ -32,6 +32,8 @@ def _BLEACH_ATTRS(tag, name, value):
         return True
     if tag == 'div' and name.startswith('data-'):
         return True
+    if tag == 'div' and name == 'contenteditable':
+        return True
     return False
 _ALLOWED_IMAGE_EXTS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 
@@ -1387,6 +1389,10 @@ def content_new(topic_id):
             display_order = request.form.get('display_order', '1')
             external_url = request.form.get('external_url', '').strip()
 
+            # For rich_text, auto-use topic title if form didn't supply one
+            if content_mode == 'rich_text' and not title:
+                title = topic['topic_title']
+
             if not title:
                 flash('Content title is required.', 'danger')
                 return redirect(url_for('lms_admin.content_new', topic_id=topic_id))
@@ -1765,6 +1771,10 @@ def content_edit(content_id):
             external_url = request.form.get('external_url', '').strip()
             file_path = content['file_path']  # keep existing by default
 
+            # For rich_text, auto-use topic title if form didn't supply one
+            if content_mode == 'rich_text' and not title:
+                title = topic['topic_title']
+
             if not title:
                 flash('Content title is required.', 'danger')
                 return redirect(url_for('lms_admin.content_edit', content_id=content_id))
@@ -1777,7 +1787,7 @@ def content_edit(content_id):
             except ValueError:
                 display_order = 1
 
-            hotspots_json = content.get('hotspots_json', '') or ''
+            hotspots_json = content['hotspots_json'] or '' if content['hotspots_json'] else ''
 
             if content_mode == 'youtube':
                 if not external_url:

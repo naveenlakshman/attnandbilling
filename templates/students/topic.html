@@ -8,6 +8,35 @@
   .main-content { padding: 0 !important; }
   .topbar { margin: 0 !important; border-radius: 0; position: sticky; top: 0; z-index: 200; }
 
+  /* Hotspot embed responsive fix */
+  .rich-text-content { overflow: hidden; }
+  .rich-text-content h1 { font-size: 1.9em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.2; }
+  .rich-text-content h2 { font-size: 1.55em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.25; }
+  .rich-text-content h3 { font-size: 1.25em; font-weight: 600; margin: 0.55em 0 0.25em; line-height: 1.3; }
+  .rich-text-content h4 { font-size: 1.05em; font-weight: 600; margin: 0.5em 0 0.2em; line-height: 1.35; }
+  .lms-hotspot-embed {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden;
+    margin: 16px 0;
+    line-height: 0;
+    box-sizing: border-box;
+  }
+  .lms-hotspot-embed img {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+  }
+  .lms-rt-dot {
+    position: absolute !important;
+    z-index: 10 !important;
+  }
+
   .lms-layout {
     display: flex;
     height: calc(100vh - 57px);
@@ -514,8 +543,10 @@ function activateLmsHotspots() {
 
     // Make container position:relative
     embed.style.position = 'relative';
-    embed.style.display   = 'inline-block';
+    embed.style.display   = 'block';
     embed.style.width     = '100%';
+    embed.style.maxWidth  = '100%';
+    embed.style.overflow  = 'hidden';
     embed.style.lineHeight = '0';
 
     var img = embed.querySelector('img');
@@ -523,6 +554,10 @@ function activateLmsHotspots() {
     // Fix TinyMCE URL rewriting — always use the absolute data-src URL
     var correctSrc = embed.getAttribute('data-src');
     if (correctSrc) img.src = correctSrc;
+    img.style.width = '100%';
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.style.display = 'block';
     try { hotspots = JSON.parse(embed.getAttribute('data-hotspots') || '[]'); } catch(e) {}
     if (!hotspots.length) return;
 

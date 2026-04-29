@@ -9,6 +9,7 @@
 {% endblock %}
 
 {% block content %}
+{% set locked_type = content.content_mode if content else preset_type %}
 <div class="container-fluid py-4">
     <!-- Breadcrumb Navigation -->
     <nav aria-label="breadcrumb" class="mb-4">
@@ -51,9 +52,9 @@
                 <div>
                     <h1 class="h2 mb-1">
                         {% if content %}
-                            ✏️ Edit Content
+                            {% if locked_type == 'rich_text' %}✏️ Edit Lesson{% else %}✏️ Edit Content{% endif %}
                         {% else %}
-                            ➕ Add Content Block
+                            {% if locked_type == 'rich_text' %}📝 Write Lesson{% else %}➕ Add Content Block{% endif %}
                         {% endif %}
                     </h1>
                     <p class="text-muted mb-0">Topic: <strong>{{ topic.topic_title }}</strong> → Chapter: <strong>{{ chapter.chapter_title }}</strong></p>
@@ -67,12 +68,13 @@
 
     <!-- Form Container -->
     <div class="row">
-        <div class="col-lg-8">
+        <div class="{% if locked_type == 'rich_text' %}col-12{% else %}col-lg-8{% endif %}">
             <div class="card shadow-sm">
                 <div class="card-body p-4">
                     <form method="POST" id="contentForm" enctype="multipart/form-data">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
+                        {% if locked_type != 'rich_text' %}
                         <!-- Title -->
                         <div class="mb-3">
                             <label for="title" class="form-label">Content Title <span class="text-danger">*</span></label>
@@ -81,18 +83,20 @@
                                 value="{{ content.content_title if content else '' }}"
                                 required maxlength="255">
                         </div>
+                        {% else %}
+                        <input type="hidden" name="title" value="{{ topic.topic_title }}">
+                        {% endif %}
 
                         {% set locked_type = content.content_mode if content else preset_type %}
                         <!-- Content Type (locked — one per topic) -->
+                        <input type="hidden" name="content_mode" value="{{ locked_type }}">
+                        {% if locked_type != 'rich_text' %}
                         <div class="mb-3">
                             <label class="form-label">Content Type</label>
-                            <input type="hidden" name="content_mode" value="{{ locked_type }}">
                             {% if locked_type == 'youtube' %}
                             <div class="form-control bg-light" style="pointer-events:none;">▶️ YouTube Video</div>
                             {% elif locked_type == 'pdf' %}
                             <div class="form-control bg-light" style="pointer-events:none;">📕 PDF Document</div>
-                            {% elif locked_type == 'rich_text' %}
-                            <div class="form-control bg-light" style="pointer-events:none;">📝 Rich Text Lesson</div>
                             {% elif locked_type == 'interactive_image' %}
                             <div class="form-control bg-light" style="pointer-events:none;">🖼️ Interactive Image</div>
                             {% elif locked_type == 'download' %}
@@ -101,6 +105,7 @@
                             <div class="alert alert-warning py-2">No content type specified. Please go back and use a slot button.</div>
                             {% endif %}
                         </div>
+                        {% endif %}
 
                         <!-- YouTube URL -->
                         <div id="section-youtube" class="content-section mb-3" style="display:none;">
@@ -139,12 +144,14 @@
                             <small class="text-muted">Use the editor toolbar to format text, add lists, headings, etc.</small>
                         </div>
 
+                        {% if locked_type != 'rich_text' %}
                         <!-- Notes (optional for all types) -->
                         <div class="mb-3">
                             <label for="content_body" class="form-label">Notes <small class="text-muted">(optional)</small></label>
                             <textarea class="form-control" id="content_body" name="content_body" rows="3"
                                 placeholder="Optional notes or instructions for students">{{ content.content_body if content else '' }}</textarea>
                         </div>
+                        {% endif %}
 
                         <input type="hidden" name="display_order" value="1">
 
@@ -162,6 +169,7 @@
             </div>
         </div>
 
+        {% if locked_type != 'rich_text' %}
         <!-- Sidebar -->
         <div class="col-lg-4">
             <div class="card shadow-sm bg-light">
@@ -190,6 +198,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
     </div>
 </div>
 
@@ -204,12 +213,63 @@
         const sec = document.getElementById('section-' + lockedType);
         if (sec) sec.style.display = 'block';
 
+        // ── Draft auto-save (localStorage) ───────────────────────────────
+        const DRAFT_KEY = 'lms_draft__' + window.location.pathname + window.location.search;
+        let _autoSaveTimer = null;
+        let _formSubmitting = false;
+
+        function saveDraft(content) {
+            try {
+                localStorage.setItem(DRAFT_KEY, JSON.stringify({
+                    ts: Date.now(),
+                    content: content
+                }));
+            } catch(e) { /* storage full or blocked */ }
+        }
+
+        function loadDraft() {
+            try {
+                var raw = localStorage.getItem(DRAFT_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch(e) { return null; }
+        }
+
+        function clearDraft() {
+            try { localStorage.removeItem(DRAFT_KEY); } catch(e) {}
+        }
+
+        function showRestoreBanner(editor, draftContent) {
+            var wrapper = document.getElementById('rich_text_body').closest('.mb-3') ||
+                          document.getElementById('rich_text_body').parentElement;
+            var banner = document.createElement('div');
+            banner.id = 'draft-restore-banner';
+            banner.style.cssText = 'background:#fff3cd;border:1px solid #ffc107;border-radius:6px;' +
+                'padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+            banner.innerHTML =
+                '<span style="flex:1;font-size:0.9rem;">&#128221; <strong>Unsaved draft found</strong> ' +
+                '&mdash; restore your last unsaved changes?</span>' +
+                '<button type="button" id="draft-restore-btn" class="btn btn-sm btn-warning">Restore</button>' +
+                '<button type="button" id="draft-discard-btn" class="btn btn-sm btn-outline-secondary">Discard</button>';
+            wrapper.insertBefore(banner, wrapper.firstChild);
+
+            document.getElementById('draft-restore-btn').addEventListener('click', function() {
+                editor.setContent(draftContent);
+                editor.setDirty(true);
+                banner.remove();
+            });
+            document.getElementById('draft-discard-btn').addEventListener('click', function() {
+                clearDraft();
+                banner.remove();
+            });
+        }
+
         // ── TinyMCE ───────────────────────────────────────────────────────
         if (lockedType === 'rich_text') {
             tinymce.init({
                 selector: '#rich_text_body',
                 plugins: 'lists link image table code wordcount fullscreen autoresize',
-                toolbar: 'undo redo | formatselect | bold italic underline strikethrough | alignleft aligncenter alignright | bullist numlist | link image | table | code | fullscreen | insertHotspotImage',
+                toolbar: 'undo redo | blocks | bold italic underline strikethrough | alignleft aligncenter alignright | bullist numlist | link image | table | code | fullscreen | insertHotspotImage | saveContent',
+                block_formats: 'Paragraph=p; Heading 1=h1; Heading 2=h2; Heading 3=h3; Heading 4=h4',
                 min_height: 400,
                 max_height: 800,
                 autoresize_bottom_margin: 24,
@@ -219,19 +279,70 @@
                 promotion: false,
                 convert_urls: false,
                 setup: function(editor) {
+                    editor.ui.registry.addButton('saveContent', {
+                        text: '💾 Save',
+                        tooltip: 'Save content',
+                        onAction: function() {
+                            editor.save();
+                            document.getElementById('contentForm').requestSubmit();
+                        }
+                    });
                     editor.ui.registry.addButton('insertHotspotImage', {
                         text: '🖼 Hotspot',
-                        tooltip: 'Insert interactive image with clickable hotspot dots',
-                        onAction: function() { openHotspotImageModal(editor); }
+                        tooltip: 'Insert or edit interactive hotspot image',
+                        onAction: function() {
+                            var node = editor.selection.getNode();
+                            var embedNode = null;
+                            if (node) {
+                                embedNode = (node.classList && node.classList.contains('lms-hotspot-embed'))
+                                    ? node : editor.dom.getParent(node, '.lms-hotspot-embed');
+                            }
+                            openHotspotImageModal(editor, embedNode || null);
+                        }
+                    });
+
+                    // ── Draft restore check on init ───────────────────────
+                    editor.on('init', function() {
+                        var draft = loadDraft();
+                        var currentContent = editor.getContent();
+                        if (draft && draft.content && draft.content !== currentContent) {
+                            showRestoreBanner(editor, draft.content);
+                        }
+
+                        // Auto-save every 30 seconds while editor is dirty
+                        _autoSaveTimer = setInterval(function() {
+                            if (editor.isDirty()) {
+                                saveDraft(editor.getContent());
+                            }
+                        }, 30000);
+                    });
+
+                    // Also save draft on every content change (debounced 5s)
+                    var _changeDebounce = null;
+                    editor.on('input change', function() {
+                        clearTimeout(_changeDebounce);
+                        _changeDebounce = setTimeout(function() {
+                            saveDraft(editor.getContent());
+                        }, 5000);
+                    });
+
+                    // Warn on page leave if editor is dirty
+                    editor.on('dirty', function() {
+                        window.onbeforeunload = function() {
+                            if (!_formSubmitting && editor.isDirty()) {
+                                return 'You have unsaved changes. Are you sure you want to leave?';
+                            }
+                        };
                     });
                 }
             });
         }
 
         // ── Inline Hotspot Image Modal ────────────────────────────────────
-        function openHotspotImageModal(editor) {
+        function openHotspotImageModal(editor, existingEmbed) {
             var inlineHotspots = [];
             var inlineImageUrl = null;
+            var editMode = !!existingEmbed;
 
             // Build modal HTML
             var overlay = document.createElement('div');
@@ -249,13 +360,13 @@
                 <!-- Header -->
                 <div style="display:flex;align-items:center;justify-content:space-between;
                              padding:16px 20px;border-bottom:1px solid #e9ecef;flex-shrink:0;">
-                  <h5 style="margin:0;font-size:16px;font-weight:700;">🖼 Insert Interactive Hotspot Image</h5>
+                  <h5 id="hs-modal-title" style="margin:0;font-size:16px;font-weight:700;">🖼 Insert Interactive Hotspot Image</h5>
                   <button id="hs-modal-close" style="border:none;background:none;font-size:22px;
                           cursor:pointer;color:#6c757d;line-height:1;padding:0 4px;">✕</button>
                 </div>
                 <!-- Step 1: Upload -->
                 <div id="hs-step-upload" style="padding:20px;">
-                  <p style="margin:0 0 12px;font-size:14px;color:#495057;">
+                  <p id="hs-step1-label" style="margin:0 0 12px;font-size:14px;color:#495057;">
                     Step 1 — Upload an image (JPG, PNG, WebP, GIF — max 10 MB)
                   </p>
                   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -314,6 +425,7 @@
             // Helper: pending dot state
             var pendingInlineDot = null;
             var pendingInlinePct = null;
+            var imageClickBound = false;
 
             function closModal() {
                 overlay.remove();
@@ -357,6 +469,8 @@
             });
 
             function bindImageClick() {
+                if (imageClickBound) return;
+                imageClickBound = true;
                 var wrap = document.getElementById('hs-img-wrap');
                 wrap.addEventListener('click', function(e) {
                     if (e.target.classList.contains('hs-inline-dot')) return;
@@ -463,10 +577,33 @@
                          + '<span class="lms-hs-badge" style="display:block;background:#fff3cd;'
                          + 'border:1px solid #ffc107;border-radius:4px;padding:4px 10px;margin-top:6px;'
                          + 'font-size:13px;line-height:1.4;color:#856404;">' + countLabel + '</span>'
-                         + '</div><p></p>';
-                editor.insertContent(html);
+                         + '</div>';
+                if (editMode && existingEmbed) {
+                    editor.dom.setOuterHTML(existingEmbed, html);
+                } else {
+                    editor.insertContent(html + '<p></p>');
+                }
                 closModal();
             });
+
+            // ── Edit mode: pre-load existing image and hotspots ──────────
+            if (editMode) {
+                document.getElementById('hs-modal-title').textContent = '✏️ Edit Hotspot Image';
+                document.getElementById('hs-step1-label').textContent = 'Upload a replacement image (optional — leave blank to keep the current image)';
+                inlineImageUrl = existingEmbed.getAttribute('data-src');
+                document.getElementById('hs-preview-img').src = inlineImageUrl;
+                document.getElementById('hs-step-editor').style.display = 'block';
+                document.getElementById('hs-footer').style.display = 'flex';
+                document.getElementById('hs-insert-btn').textContent = 'Update in Editor';
+                try { inlineHotspots = JSON.parse(existingEmbed.getAttribute('data-hotspots') || '[]'); } catch(e) { inlineHotspots = []; }
+                bindImageClick();
+                var prevImg = document.getElementById('hs-preview-img');
+                if (prevImg.complete && prevImg.naturalWidth > 0) {
+                    renderInlineDots(); renderInlineList();
+                } else {
+                    prevImg.onload = function() { renderInlineDots(); renderInlineList(); };
+                }
+            }
         }
 
         // ── Form validation ───────────────────────────────────────────────
@@ -501,6 +638,12 @@
                 const body = document.getElementById('rich_text_body').value.trim();
                 if (!body) { e.preventDefault(); alert('Rich text content cannot be empty.'); return; }
             }
+
+            // ── Clear draft and suppress beforeunload on successful submit ──
+            _formSubmitting = true;
+            window.onbeforeunload = null;
+            clearDraft();
+            if (_autoSaveTimer) clearInterval(_autoSaveTimer);
         });
     });
 </script>
