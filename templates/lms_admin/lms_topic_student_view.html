@@ -660,27 +660,88 @@ function completeAndNext() {
 
 /* Activate embedded hotspot images inside rich text content */
 function activateLmsHotspots() {
-    var modal = document.getElementById('lms-hs-popup');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'lms-hs-popup';
-        Object.assign(modal.style, {
-            display:'none', position:'fixed', top:'0', left:'0', width:'100%', height:'100%',
-            background:'rgba(0,0,0,0.5)', zIndex:'99998',
-            alignItems:'center', justifyContent:'center', padding:'16px', boxSizing:'border-box',
-        });
-        modal.innerHTML = '<div style="background:#fff;border-radius:12px;padding:28px 24px;'
-            + 'max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.3);'
-            + 'position:relative;max-height:90vh;overflow-y:auto;">'
-            + '<button id="lms-hs-popup-close" style="position:absolute;top:12px;right:16px;'
-            + 'border:none;background:none;font-size:22px;cursor:pointer;color:#6c757d;line-height:1;">\u2715</button>'
-            + '<h5 id="lms-hs-popup-title" style="margin:0 0 12px;color:#1a1a2e;padding-right:28px;"></h5>'
-            + '<p id="lms-hs-popup-desc" style="margin:0;color:#495057;font-size:14px;line-height:1.7;"></p>'
-            + '</div>';
-        document.body.appendChild(modal);
-        document.getElementById('lms-hs-popup-close').addEventListener('click', function(){ modal.style.display = 'none'; });
-        modal.addEventListener('click', function(e){ if(e.target === modal) modal.style.display = 'none'; });
+    (function() {
+        if (document.getElementById('lms-hs-tip-style')) return;
+        var s = document.createElement('style');
+        s.id = 'lms-hs-tip-style';
+        s.textContent = [
+            '.lms-hs-tip{position:absolute;z-index:100;background:#fff;border-radius:10px;',
+            'padding:12px 14px;min-width:160px;max-width:240px;',
+            'box-shadow:0 4px 20px rgba(0,0,0,0.18);pointer-events:none;',
+            'opacity:0;transform:translateY(6px);',
+            'transition:opacity 0.18s ease,transform 0.18s ease;',
+            'line-height:1.4;font-size:13px;}',
+            '.lms-hs-tip.visible{opacity:1;transform:translateY(0);}',
+            '.lms-hs-tip-title{font-weight:700;color:#1a1a2e;margin-bottom:4px;font-size:13px;}',
+            '.lms-hs-tip-desc{color:#555;font-size:12px;line-height:1.5;margin:0;}',
+            '.lms-hs-tip::after{content:"";position:absolute;border:7px solid transparent;}',
+            '.lms-hs-tip.arrow-down::after{top:100%;left:50%;transform:translateX(-50%);border-top-color:#fff;}',
+            '.lms-hs-tip.arrow-up::after{bottom:100%;left:50%;transform:translateX(-50%);border-bottom-color:#fff;}',
+            '.lms-rt-dot{transition:transform 0.15s!important;}',
+            '.lms-rt-dot.active{transform:translate(-50%,-50%) scale(1.25)!important;}'
+        ].join('');
+        document.head.appendChild(s);
+    })();
+
+    var tip = document.getElementById('lms-hs-tip');
+    if (!tip) {
+        tip = document.createElement('div');
+        tip.id = 'lms-hs-tip';
+        tip.className = 'lms-hs-tip';
+        tip.innerHTML = '<div class="lms-hs-tip-title" id="lms-hs-tip-title"></div>'
+                      + '<p class="lms-hs-tip-desc" id="lms-hs-tip-desc"></p>';
+        document.body.appendChild(tip);
     }
+    var _activeDot = null;
+
+    function hideTooltip() {
+        tip.classList.remove('visible');
+        if (_activeDot) { _activeDot.classList.remove('active'); _activeDot = null; }
+    }
+
+    function showTooltip(dot, title, desc) {
+        document.getElementById('lms-hs-tip-title').textContent = title || '';
+        var descEl = document.getElementById('lms-hs-tip-desc');
+        descEl.textContent = desc || '';
+        descEl.style.display = desc ? '' : 'none';
+
+        tip.style.visibility = 'hidden';
+        tip.style.left = '-9999px'; tip.style.top = '-9999px';
+        tip.classList.add('visible');
+        tip.style.visibility = '';
+
+        var dotRect  = dot.getBoundingClientRect();
+        var tipW     = tip.offsetWidth;
+        var tipH     = tip.offsetHeight;
+        var vw       = window.innerWidth;
+        var vh       = window.innerHeight;
+        var ARROW    = 10;
+        var GAP      = 8;
+
+        var spaceAbove = dotRect.top;
+        var spaceBelow = vh - dotRect.bottom;
+        var showAbove  = spaceAbove >= tipH + ARROW || spaceAbove >= spaceBelow;
+
+        var top;
+        if (showAbove) {
+            top = dotRect.top - tipH - ARROW + window.scrollY;
+            tip.classList.remove('arrow-up'); tip.classList.add('arrow-down');
+        } else {
+            top = dotRect.bottom + ARROW + window.scrollY;
+            tip.classList.remove('arrow-down'); tip.classList.add('arrow-up');
+        }
+
+        var dotCenterX = dotRect.left + dotRect.width / 2;
+        var left = dotCenterX - tipW / 2 + window.scrollX;
+        left = Math.max(GAP + window.scrollX, Math.min(left, vw - tipW - GAP + window.scrollX));
+        tip.style.left = left + 'px'; tip.style.top = top + 'px';
+        tip.style.position = 'absolute';
+
+        if (_activeDot && _activeDot !== dot) _activeDot.classList.remove('active');
+        _activeDot = dot;
+        dot.classList.add('active');
+    }
+
     document.querySelectorAll('.lms-hotspot-embed').forEach(function(embed) {
         if (embed.dataset.activated) return;
         embed.dataset.activated = '1';
@@ -694,15 +755,18 @@ function activateLmsHotspots() {
         embed.style.lineHeight = '0';
         var img = embed.querySelector('img');
         if (!img) return;
-        // Fix TinyMCE URL rewriting — always use the absolute data-src URL
         var correctSrc = embed.getAttribute('data-src');
         if (correctSrc) img.src = correctSrc;
-        img.style.width = '100%';
-        img.style.maxWidth = '100%';
-        img.style.height = 'auto';
-        img.style.display = 'block';
+        img.style.width = '100%'; img.style.maxWidth = '100%';
+        img.style.height = 'auto'; img.style.display = 'block';
+        var hotspots = [];
         try { hotspots = JSON.parse(embed.getAttribute('data-hotspots') || '[]'); } catch(e) {}
         if (!hotspots.length) return;
+
+        document.addEventListener('click', function(e) {
+            if (!embed.contains(e.target)) hideTooltip();
+        });
+
         function renderHsDots() {
             embed.querySelectorAll('.lms-rt-dot').forEach(function(d){ d.remove(); });
             hotspots.forEach(function(hs, i) {
@@ -711,22 +775,22 @@ function activateLmsHotspots() {
                 Object.assign(d.style, {
                     position:'absolute', left:hs.x+'%', top:hs.y+'%',
                     transform:'translate(-50%,-50%)',
-                    width:'24px', height:'24px', borderRadius:'50%',
-                    background:'#e02020', border:'3px solid #fff',
-                    boxShadow:'0 2px 8px rgba(0,0,0,0.35)',
+                    width:'22px', height:'22px', borderRadius:'50%',
+                    background:'rgba(255,255,255,0.92)',
+                    border:'2.5px solid #3d5a99',
+                    boxShadow:'0 2px 8px rgba(0,0,0,0.28)',
                     cursor:'pointer', zIndex:'10',
                     display:'flex', alignItems:'center', justifyContent:'center',
-                    fontSize:'11px', color:'#fff', fontWeight:'700',
-                    transition:'transform 0.15s', lineHeight:'1',
+                    fontSize:'11px', color:'#3d5a99', fontWeight:'700',
+                    lineHeight:'1',
                 });
-                d.textContent = i + 1;
-                d.addEventListener('mouseenter', function(){ this.style.transform='translate(-50%,-50%) scale(1.2)'; });
-                d.addEventListener('mouseleave', function(){ this.style.transform='translate(-50%,-50%) scale(1)'; });
+                d.textContent = '+';
+                d.addEventListener('mouseenter', function(){ if(_activeDot !== d) this.style.transform='translate(-50%,-50%) scale(1.15)'; });
+                d.addEventListener('mouseleave', function(){ if(_activeDot !== d) this.style.transform='translate(-50%,-50%)'; });
                 d.addEventListener('click', function(e) {
                     e.stopPropagation();
-                    document.getElementById('lms-hs-popup-title').textContent = hs.title || '';
-                    document.getElementById('lms-hs-popup-desc').textContent  = hs.description || '';
-                    modal.style.display = 'flex';
+                    if (_activeDot === d) { hideTooltip(); return; }
+                    showTooltip(d, hs.title, hs.description);
                 });
                 embed.appendChild(d);
             });
