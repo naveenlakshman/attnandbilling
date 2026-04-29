@@ -8,6 +8,7 @@ import re
 import os
 import json
 import bleach
+from bleach.css_sanitizer import CSSSanitizer
 from werkzeug.utils import secure_filename
 from config import Config
 from modules.core.utils import login_required, admin_required
@@ -17,7 +18,8 @@ _BLEACH_TAGS = [
     'p', 'br', 'strong', 'em', 'u', 's', 'ul', 'ol', 'li',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     'blockquote', 'pre', 'code',
-    'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'a', 'img',
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col', 'caption',
     'div', 'span', 'hr', 'sub', 'sup',
 ]
 def _BLEACH_ATTRS(tag, name, value):
@@ -28,19 +30,61 @@ def _BLEACH_ATTRS(tag, name, value):
         return True
     if tag == 'img' and name in ('src', 'alt', 'width', 'height'):
         return True
-    if tag in ('td', 'th') and name in ('colspan', 'rowspan'):
+    if tag in ('td', 'th') and name in ('colspan', 'rowspan', 'width', 'height', 'align', 'valign', 'bgcolor'):
+        return True
+    # Allow deprecated-but-harmless table presentation attributes for backward compatibility
+    # (browsers render these; new content uses table_style_by_css instead)
+    if tag == 'table' and name in ('border', 'bordercolor', 'cellpadding', 'cellspacing', 'width', 'height', 'align', 'bgcolor', 'summary'):
+        return True
+    if tag == 'tr' and name in ('align', 'valign', 'bgcolor', 'height'):
+        return True
+    if tag in ('col', 'colgroup') and name in ('span', 'width', 'align', 'valign'):
         return True
     if tag == 'div' and name.startswith('data-'):
         return True
     if tag == 'div' and name == 'contenteditable':
         return True
     return False
+
+# bleach 6.x requires an explicit CSSSanitizer when style attributes are allowed.
+# Without it, bleach silently drops ALL style="..." attributes — the behaviour that
+# was causing table background/border colours to disappear after save.
+_CSS_SANITIZER = CSSSanitizer(allowed_css_properties=[
+    # Text
+    'color', 'background-color',
+    'font-size', 'font-weight', 'font-style', 'font-family', 'font-variant',
+    'text-align', 'text-decoration', 'text-indent', 'text-transform',
+    'line-height', 'letter-spacing', 'word-spacing', 'white-space',
+    'vertical-align',
+    # Box model
+    'width', 'height', 'min-width', 'max-width', 'min-height', 'max-height',
+    'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+    'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+    # Borders
+    'border', 'border-top', 'border-right', 'border-bottom', 'border-left',
+    'border-color', 'border-style', 'border-width',
+    'border-collapse', 'border-spacing',
+    'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color',
+    'border-top-style', 'border-right-style', 'border-bottom-style', 'border-left-style',
+    'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
+    'border-radius',
+    # Layout (safe subset — no position/z-index)
+    'display', 'float', 'clear', 'overflow',
+    'list-style-type', 'caption-side',
+])
+
 _ALLOWED_IMAGE_EXTS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 
 
 def sanitize_rich_text(html):
-    """Strip script tags and unsafe JS from editor HTML."""
-    return bleach.clean(html, tags=_BLEACH_TAGS, attributes=_BLEACH_ATTRS, strip=True)
+    """Strip script tags and unsafe JS from editor HTML while preserving safe CSS."""
+    return bleach.clean(
+        html,
+        tags=_BLEACH_TAGS,
+        attributes=_BLEACH_ATTRS,
+        css_sanitizer=_CSS_SANITIZER,
+        strip=True,
+    )
 
 
 # File Upload Handler

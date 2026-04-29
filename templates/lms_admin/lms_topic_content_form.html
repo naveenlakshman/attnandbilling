@@ -207,6 +207,10 @@
     document.addEventListener('DOMContentLoaded', function () {
         const lockedType = '{{ content.content_mode if content else preset_type }}';
         const isEdit = {{ 'true' if content else 'false' }};
+        // Capture the raw textarea value BEFORE TinyMCE processes it.
+        // Used to detect stale drafts whose content already matches what was saved.
+        const _rawSavedContent = document.getElementById('rich_text_body')
+            ? document.getElementById('rich_text_body').value : '';
 
         // Show only the relevant content section
         document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
@@ -214,9 +218,17 @@
         if (sec) sec.style.display = 'block';
 
         // ── Draft auto-save (localStorage) ───────────────────────────────
-        const DRAFT_KEY = 'lms_draft__' + window.location.pathname + window.location.search;
+        // Use a content-ID-based key so drafts don't bleed between different content items.
+        // Edit mode: keyed by content.id; New mode: keyed by topic.id + type.
+        const DRAFT_KEY = isEdit
+            ? 'lms_rte_draft_c{{ content.id if content else "" }}'
+            : 'lms_rte_draft_t{{ topic.id }}_{{ preset_type if preset_type else "rich_text" }}';
         let _autoSaveTimer = null;
         let _formSubmitting = false;
+        // Declared at outer scope so the form submit handler can clearTimeout() it.
+        // Previously declared with 'var' inside setup() — wrong scope, caused
+        // ReferenceError in submit handler, silently preventing clearDraft() from running.
+        let _changeDebounce = null;
 
         function saveDraft(content) {
             try {
@@ -278,8 +290,12 @@
                 branding: false,
                 promotion: false,
                 convert_urls: false,
-                /* Preserve data-*, style, width, height, contenteditable on save */
-                extended_valid_elements: 'div[*],img[*],span[*]',
+                /* Preserve ALL attributes on div/img/span and all table-related elements.
+                   This is critical for table border styles set via Table Properties dialog. */
+                extended_valid_elements: 'div[*],img[*],span[*],table[*],thead[*],tbody[*],tfoot[*],tr[*],th[*],td[*],col[*],colgroup[*]',
+                /* Use CSS for table styling (border, width, etc.) instead of deprecated HTML attributes.
+                   Ensures border-color, border-width etc. are stored as inline style and survive bleach. */
+                table_style_by_css: true,
                 object_resizing: 'img,table',
                 /* Editor CSS — no !important so TinyMCE inline attrs are respected */
                 content_style: [
@@ -306,7 +322,7 @@
                         text: '💾 Save',
                         tooltip: 'Save content',
                         onAction: function() {
-                            editor.save();
+                            if (window.tinymce) tinymce.triggerSave();
                             document.getElementById('contentForm').requestSubmit();
                         }
                     });
@@ -328,8 +344,18 @@
                     editor.on('init', function() {
                         var draft = loadDraft();
                         var currentContent = editor.getContent();
-                        if (draft && draft.content && draft.content !== currentContent) {
-                            showRestoreBanner(editor, draft.content);
+                        if (draft && draft.content) {
+                            // If draft content matches what's already saved in the DB
+                            // (e.g., draft was re-saved during a slow server round-trip),
+                            // discard it silently — nothing has actually changed.
+                            var draftTrimmed = draft.content.replace(/\s+/g, ' ').trim();
+                            var savedTrimmed = _rawSavedContent.replace(/\s+/g, ' ').trim();
+                            var currentTrimmed = currentContent.replace(/\s+/g, ' ').trim();
+                            if (draftTrimmed === savedTrimmed || draftTrimmed === currentTrimmed) {
+                                clearDraft();
+                            } else {
+                                showRestoreBanner(editor, draft.content);
+                            }
                         }
 
                         // Auto-save every 30 seconds while editor is dirty
@@ -341,7 +367,6 @@
                     });
 
                     // Also save draft on every content change (debounced 5s)
-                    var _changeDebounce = null;
                     editor.on('input change', function() {
                         clearTimeout(_changeDebounce);
                         _changeDebounce = setTimeout(function() {
@@ -743,10 +768,9 @@
             }
 
             if (lockedType === 'rich_text') {
-                // Trigger TinyMCE to sync content to textarea before submit
-                if (window.tinymce && tinymce.get('rich_text_body')) {
-                    tinymce.get('rich_text_body').save();
-                }
+                // Sync ALL TinyMCE instances to their underlying textarea before submit.
+                // triggerSave() is the canonical API; more reliable than .save() on a named instance.
+                if (window.tinymce) tinymce.triggerSave();
                 const body = document.getElementById('rich_text_body').value.trim();
                 if (!body) { e.preventDefault(); alert('Rich text content cannot be empty.'); return; }
             }
@@ -754,6 +778,10 @@
             // ── Clear draft and suppress beforeunload on successful submit ──
             _formSubmitting = true;
             window.onbeforeunload = null;
+            // Clear the debounce timer BEFORE clearDraft() to prevent a slow server
+            // response allowing the 5s debounce to fire and re-save the draft after
+            // clearDraft() was called (race condition fix).
+            if (_changeDebounce) clearTimeout(_changeDebounce);
             clearDraft();
             if (_autoSaveTimer) clearInterval(_autoSaveTimer);
         });

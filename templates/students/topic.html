@@ -2,6 +2,19 @@
 {% block title %}{{ topic.topic_title }}{% endblock %}
 {% block page_title %}{{ topic.program_name }}{% endblock %}
 
+{% block topbar_extra %}
+<div class="lms-view-controls">
+  <button class="btn-lms-ctrl" id="btnTopics" onclick="toggleTopicsPanel()" title="Show/Hide topics list">
+    <span id="btnTopicsIcon">📋</span>
+    <span id="btnTopicsLabel">Topics</span>
+  </button>
+  <button class="btn-lms-ctrl" id="btnFocus" onclick="toggleFocusMode()" title="Focus Mode: hide all sidebars">
+    <span>🎯</span>
+    <span id="btnFocusLabel">Focus</span>
+  </button>
+</div>
+{% endblock %}
+
 {% block extra_css %}
 <style>
   /* Override base layout for full-width LMS view */
@@ -10,6 +23,12 @@
 
   /* Hotspot embed responsive fix */
   .rich-text-content { overflow: hidden; }
+  /* Table defaults: ensures borders/padding are visible even for content saved before
+     table_style_by_css was enabled. Inline styles from new content override these. */
+  .rich-text-content table { border-collapse: collapse; max-width: 100%; margin: 12px 0; }
+  .rich-text-content table td,
+  .rich-text-content table th { border: 1px solid #dee2e6; padding: 6px 12px; vertical-align: top; }
+  .rich-text-content table th { background: #f8f9fa; font-weight: 600; }
   .rich-text-content h1 { font-size: 1.9em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.2; }
   .rich-text-content h2 { font-size: 1.55em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.25; }
   .rich-text-content h3 { font-size: 1.25em; font-weight: 600; margin: 0.55em 0 0.25em; line-height: 1.3; }
@@ -137,6 +156,10 @@
     width: 320px; flex-shrink: 0;
     background: #fff; border-left: 1px solid #e9ecef;
     overflow-y: auto; display: flex; flex-direction: column;
+    transition: width 0.25s ease, opacity 0.25s ease;
+  }
+  .lms-sidebar.panel-hidden {
+    width: 0; overflow: hidden; opacity: 0; border-left: none;
   }
   .sidebar-header {
     padding: 16px 16px 10px;
@@ -188,6 +211,27 @@
   /* IP protection */
   .content-block { user-select: none; -webkit-user-select: none; }
   @media print { body * { visibility: hidden !important; } }
+
+  /* ── LMS view controls (Topics toggle + Focus Mode) ── */
+  .lms-view-controls {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .btn-lms-ctrl {
+    background: #f8f9fa; border: 1px solid #dee2e6; color: #495057;
+    padding: 5px 13px; border-radius: 6px; font-size: 12px; font-weight: 500;
+    cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .btn-lms-ctrl:hover { background: #e9ecef; color: #212529; }
+  .btn-lms-ctrl.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+
+  /* Focus mode: hide left sidebar shift while in focus */
+  body.focus-mode .main-content { margin-left: 0 !important; }
+
+  @media (max-width: 768px) {
+    .lms-sidebar { width: 0; overflow: hidden; opacity: 0; border-left: none; }
+    .lms-sidebar.mobile-panel-open { width: 100% !important; opacity: 1 !important; border-left: 1px solid #e9ecef; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 400; }
+  }
 </style>
 {% endblock %}
 
@@ -360,7 +404,7 @@
   </div>
 
   <!-- ── Right: Sidebar ── -->
-  <div class="lms-sidebar">
+  <div class="lms-sidebar" id="topicsSidebar">
     <div class="sidebar-header">
       <div class="sidebar-program-name">{{ topic.program_name }}</div>
       <div class="progress-bar-wrap">
@@ -691,7 +735,8 @@ function toggleComplete() {
   fetch('/student/topic/' + topicId + '/complete', {
     method: 'POST', body: formData
   }).then(function(r){ return r.json(); }).then(function(data){
-    if(data.status === 'ok') {
+    if(data.status === 'ok' || data.status === 'demo') {
+      if (data.status === 'demo') return; // read-only demo — no UI change needed
       isCompleted = (action === 'complete');
       var btn = document.getElementById('completeBtn');
       if(isCompleted) {
@@ -719,5 +764,121 @@ function toggleComplete() {
     }
   });
 }
+
+/* ── Topics Panel Toggle ──────────────────────────────────────── */
+var _isMobileLms = function(){ return window.innerWidth <= 768; };
+
+function _updateTopicsBtn(hidden) {
+  var btn = document.getElementById('btnTopics');
+  var label = document.getElementById('btnTopicsLabel');
+  if (!btn) return;
+  if (hidden) {
+    btn.classList.remove('active');
+    label.textContent = 'Topics';
+  } else {
+    btn.classList.add('active');
+    label.textContent = 'Topics';
+  }
+}
+
+function toggleTopicsPanel() {
+  if (_isMobileLms()) {
+    // Mobile: show as overlay drawer
+    var sb = document.getElementById('topicsSidebar');
+    sb.classList.toggle('mobile-panel-open');
+    return;
+  }
+  var sb = document.getElementById('topicsSidebar');
+  var hidden = sb.classList.toggle('panel-hidden');
+  _updateTopicsBtn(hidden);
+  // exit focus mode if we're showing topics manually
+  if (!hidden && document.body.classList.contains('focus-mode')) {
+    document.body.classList.remove('focus-mode');
+    document.getElementById('btnFocus').classList.remove('active');
+    document.getElementById('btnFocusLabel').textContent = 'Focus';
+    localStorage.setItem('lms_focus', '0');
+    // restore left sidebar if it was on
+    _restoreLeftSidebar();
+  }
+  localStorage.setItem('lms_topics_hidden', hidden ? '1' : '0');
+}
+
+/* ── Focus Mode ───────────────────────────────────────────────── */
+var _savedSbCollapsed = null;
+
+function _restoreLeftSidebar() {
+  var sb = document.getElementById('mainSidebar');
+  var mc = document.getElementById('mainContent');
+  if (!sb || !mc) return;
+  if (_savedSbCollapsed === true) {
+    sb.classList.add('collapsed');
+    mc.classList.add('sidebar-collapsed');
+  } else if (_savedSbCollapsed === false) {
+    sb.classList.remove('collapsed');
+    mc.classList.remove('sidebar-collapsed');
+  }
+  _savedSbCollapsed = null;
+}
+
+function toggleFocusMode() {
+  var isFocus = document.body.classList.toggle('focus-mode');
+  var btn = document.getElementById('btnFocus');
+  var label = document.getElementById('btnFocusLabel');
+  var sb = document.getElementById('mainSidebar');
+  var mc = document.getElementById('mainContent');
+  var topicsSb = document.getElementById('topicsSidebar');
+
+  if (isFocus) {
+    btn.classList.add('active');
+    label.textContent = 'Exit Focus';
+    // hide right topics panel
+    topicsSb.classList.add('panel-hidden');
+    _updateTopicsBtn(true);
+    localStorage.setItem('lms_topics_hidden', '1');
+    // hide left sidebar
+    if (sb && mc) {
+      _savedSbCollapsed = sb.classList.contains('collapsed');
+      sb.classList.add('collapsed');
+      mc.classList.add('sidebar-collapsed');
+    }
+  } else {
+    btn.classList.remove('active');
+    label.textContent = 'Focus';
+    // show right topics panel
+    topicsSb.classList.remove('panel-hidden');
+    _updateTopicsBtn(false);
+    localStorage.setItem('lms_topics_hidden', '0');
+    // restore left sidebar
+    if (sb && mc) _restoreLeftSidebar();
+  }
+  localStorage.setItem('lms_focus', isFocus ? '1' : '0');
+}
+
+/* ── Restore panel states on load ───────────────────────────────── */
+(function(){
+  var topicsSb = document.getElementById('topicsSidebar');
+  if (!topicsSb) return;
+
+  var focusOn = localStorage.getItem('lms_focus') === '1';
+  var topicsHidden = localStorage.getItem('lms_topics_hidden') === '1';
+
+  if (focusOn) {
+    document.body.classList.add('focus-mode');
+    topicsSb.classList.add('panel-hidden');
+    _updateTopicsBtn(true);
+    var btnF = document.getElementById('btnFocus');
+    if (btnF) { btnF.classList.add('active'); document.getElementById('btnFocusLabel').textContent = 'Exit Focus'; }
+    // collapse left sidebar
+    var sb = document.getElementById('mainSidebar');
+    var mc = document.getElementById('mainContent');
+    if (sb && mc) { sb.classList.add('collapsed'); mc.classList.add('sidebar-collapsed'); }
+  } else if (topicsHidden) {
+    topicsSb.classList.add('panel-hidden');
+    _updateTopicsBtn(true);
+  } else {
+    // default: show topics panel
+    _updateTopicsBtn(false);
+  }
+})();
 </script>
 {% endblock %}
