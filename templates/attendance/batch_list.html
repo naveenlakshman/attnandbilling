@@ -1,6 +1,6 @@
-{% extends "attendance/base.html" %}
+﻿{% extends "attendance/base.html" %}
 
-{% block title %}Batch Management - Global IT ERP{% endblock %}
+{% block title %}Batch Management - {{ company.company_short_name }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -18,8 +18,14 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 
+  .batch-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .batch-table table {
     margin-bottom: 0;
+    min-width: 700px;
   }
 
   .batch-table thead {
@@ -28,16 +34,23 @@
   }
 
   .batch-table th {
-    padding: 14px 16px;
+    padding: 12px 12px;
     font-weight: 600;
     color: #212529;
     vertical-align: middle;
+    white-space: nowrap;
   }
 
   .batch-table td {
-    padding: 12px 16px;
+    padding: 10px 12px;
     vertical-align: middle;
     border-bottom: 1px solid #dee2e6;
+  }
+
+  .batch-actions {
+    display: flex;
+    gap: 6px;
+    white-space: nowrap;
   }
 
   .batch-table tbody tr:hover {
@@ -95,22 +108,127 @@
     margin-bottom: 12px;
   }
 
-  .batch-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .batch-actions .btn {
-    padding: 6px 12px;
-    font-size: 0.85rem;
-  }
-
   .student-count {
     background: #e7f3ff;
     padding: 4px 8px;
     border-radius: 4px;
     color: #0c5460;
     font-weight: 600;
+  }
+
+  .batch-table tbody tr.running-now {
+    background: #f0fff4 !important;
+    border-left: 4px solid #28a745;
+  }
+
+  .live-badge {
+    display: inline-block;
+    background: #dc3545;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+    animation: pulse-badge 1.5s infinite;
+    vertical-align: middle;
+    margin-left: 4px;
+  }
+
+  @keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.5; }
+  }
+
+  /* ── Mobile batch cards ── */
+  .mobile-batch-list { display: none; }
+  .batch-card-m {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 14px;
+    text-decoration: none;
+    color: inherit;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    display: block;
+  }
+  .batch-card-m:active { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .batch-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .batch-card-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: #0d6efd;
+    line-height: 1.3;
+  }
+  .batch-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #6b7280;
+    align-items: center;
+  }
+  .batch-card-meta .meta-pill {
+    background: #f3f4f6;
+    border-radius: 20px;
+    padding: 3px 9px;
+    font-size: 11px;
+    color: #374151;
+  }
+  .batch-card-running {
+    border-left: 3px solid #28a745;
+    background: #f0fff4;
+  }
+
+  /* ── Filter card ── */
+  .filter-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .filter-row .filter-group {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 130px;
+  }
+  .filter-row label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #6b7280;
+    margin-bottom: 4px;
+  }
+
+  @media (max-width: 768px) {
+    /* Compact header */
+    .batch-header { margin-bottom: 14px; }
+    .batch-header h1 { font-size: 1.2rem; margin-bottom: 0 !important; }
+    .batch-header .text-muted { display: none; }
+    .batch-header .btn { font-size: 12px; padding: 8px 12px; }
+    /* Hide table, show cards */
+    .batch-table { display: none; }
+    .mobile-batch-list { display: flex; flex-direction: column; gap: 10px; }
+    /* Filters: 2-column grid side by side */
+    .filter-card { padding: 10px 12px; margin-bottom: 14px; }
+    .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
+    .filter-row .filter-group { min-width: 0; }
+    .filter-row > div:last-child { grid-column: span 2; text-align: right; }
+    .filter-row label { font-size: 10px; margin-bottom: 3px; }
+    .filter-row .form-select { font-size: 13px; padding: 6px 10px; }
+    .filter-row .btn { font-size: 12px; padding: 6px 14px; }
+    /* Compact batch cards */
+    .batch-card-m { padding: 11px 12px; }
+    .mobile-batch-list { gap: 8px; }
   }
 </style>
 {% endblock %}
@@ -131,39 +249,92 @@
 
   <!-- Filters -->
   <div class="filter-card">
-    <form method="GET" class="row g-3">
-      <div class="col-md-4">
-        <label for="status" class="form-label">Status</label>
-        <select class="form-select" id="status" name="status">
-          <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Status</option>
-          <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
-          <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
-          <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancelled</option>
-        </select>
-      </div>
-      {% if branches %}
-      <div class="col-md-4">
-        <label for="branch_id" class="form-label">Branch</label>
-        <select class="form-select" id="branch_id" name="branch_id">
-          <option value="">All Branches</option>
-          {% for branch in branches %}
-          <option value="{{ branch.id }}" {% if branch_filter == branch.id|string %}selected{% endif %}>
-            {{ branch.branch_name }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      {% endif %}
-      <div class="col-md-4 d-flex align-items-end gap-2">
-        <button type="submit" class="btn btn-outline-primary">🔍 Filter</button>
-        <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-secondary">Reset</a>
+    <form method="GET" id="filterForm">
+      <div class="filter-row">
+        <div class="filter-group">
+          <label for="status">Status</label>
+          <select class="form-select" id="status" name="status">
+            <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Status</option>
+            <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+            <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+            <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancelled</option>
+          </select>
+        </div>
+        {% if branches %}
+        <div class="filter-group">
+          <label for="branch_id">Branch</label>
+          <select class="form-select" id="branch_id" name="branch_id">
+            <option value="">All Branches</option>
+            {% for branch in branches %}
+            <option value="{{ branch.id }}" {% if branch_filter == branch.id|string %}selected{% endif %}>
+              {{ branch.branch_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        {% if available_trainers|length > 1 %}
+        <div class="filter-group">
+          <label for="trainer_id">Trainer</label>
+          <select class="form-select" id="trainer_id" name="trainer_id">
+            <option value="">All Trainers</option>
+            {% for trainer in available_trainers %}
+            <option value="{{ trainer.id }}" {% if trainer_filter == trainer.id|string %}selected{% endif %}>
+              {{ trainer.full_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div style="display:flex; align-items:flex-end; gap:8px;">
+          <button type="submit" class="btn btn-primary" style="white-space:nowrap;">🔍 Filter</button>
+          <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-secondary" style="white-space:nowrap;">↺ Reset</a>
+        </div>
       </div>
     </form>
   </div>
 
   <!-- Batches Table -->
+  <!-- Mobile batch cards (hidden on desktop) -->
+  <div class="mobile-batch-list">
+    {% if batches|length > 0 %}
+      {% for batch in batches %}
+      <a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}"
+         class="batch-card-m{% if batch.start_time and batch.end_time %} js-batch-card{% endif %}"
+         data-start="{{ batch.start_time or '' }}"
+         data-end="{{ batch.end_time or '' }}">
+        <div class="batch-card-top">
+          <div class="batch-card-name">
+            {{ batch.batch_name }}
+            <span class="live-badge d-none">● LIVE</span>
+          </div>
+          <span class="status-badge {{ batch.status }}" style="flex-shrink:0; font-size:11px; padding:3px 9px;">
+            {% if batch.status == 'active' %}✓ Active
+            {% elif batch.status == 'completed' %}✓ Completed
+            {% else %}✗ Cancelled{% endif %}
+          </span>
+        </div>
+        <div class="batch-card-meta">
+          {% if batch.course_name %}<span class="meta-pill">📖 {{ batch.course_name }}</span>{% endif %}
+          {% if batch.trainer_name %}<span class="meta-pill">👨‍🏫 {{ batch.trainer_name }}</span>{% endif %}
+          {% if batch.branch_name %}<span class="meta-pill">🏢 {{ batch.branch_name }}</span>{% endif %}
+          {% if batch.start_time %}<span class="meta-pill">🕐 {{ batch.start_time }} – {{ batch.end_time }}</span>{% endif %}
+          {% if batch.start_date %}<span class="meta-pill">📅 {{ batch.start_date }}</span>{% endif %}
+          <span class="meta-pill" style="background:#e7f3ff; color:#0c5460;">👥 {{ batch.student_count }} students</span>
+        </div>
+      </a>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon">📭</div>
+        <p class="mb-0">No batches found</p>
+      </div>
+    {% endif %}
+  </div>
+
   {% if batches|length > 0 %}
   <div class="batch-table">
+    <div class="batch-table-scroll">
     <table class="table">
       <thead>
         <tr>
@@ -171,8 +342,7 @@
           <th>Course</th>
           <th>Branch</th>
           <th>Trainer</th>
-          <th>Dates</th>
-          <th>Time</th>
+          <th>Schedule</th>
           <th>Students</th>
           <th>Status</th>
           <th>Actions</th>
@@ -180,11 +350,12 @@
       </thead>
       <tbody>
         {% for batch in batches %}
-        <tr>
+        <tr data-start="{{ batch.start_time or '' }}" data-end="{{ batch.end_time or '' }}">
           <td>
             <a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}" class="batch-name">
               {{ batch.batch_name }}
             </a>
+            {% if batch.start_time %}<span class="live-badge d-none">● LIVE</span>{% endif %}
           </td>
           <td>
             {% if batch.course_name %}
@@ -201,18 +372,15 @@
             <span class="text-muted">-</span>
             {% endif %}
           </td>
-          <td>
+          <td style="white-space: nowrap; font-size: 12px;">
             {% if batch.start_date %}
-            {{ batch.start_date }} to {{ batch.end_date or '...' }}
-            {% else %}
-            <span class="text-muted">Ongoing</span>
+            <div>📅 {{ batch.start_date }}{% if batch.end_date %} – {{ batch.end_date }}{% endif %}</div>
             {% endif %}
-          </td>
-          <td>
             {% if batch.start_time %}
-            {{ batch.start_time }} - {{ batch.end_time }}
-            {% else %}
-            <span class="text-muted">-</span>
+            <div>🕐 {{ batch.start_time }} – {{ batch.end_time }}</div>
+            {% endif %}
+            {% if not batch.start_date and not batch.start_time %}
+            <span class="text-muted">Ongoing</span>
             {% endif %}
           </td>
           <td>
@@ -249,6 +417,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% else %}
   <div class="batch-table">
@@ -262,5 +431,49 @@
   </div>
   {% endif %}
 
-</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  // ── Auto-submit filters on change ──
+  const form = document.getElementById('filterForm');
+  if (form) {
+    form.querySelectorAll('select').forEach(function(sel) {
+      sel.addEventListener('change', function() { form.submit(); });
+    });
+  }
+
+  // ── Live batch highlighting ──
+  function nowHHMM() {
+    const d = new Date();
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function highlightRunning() {
+    const now = nowHHMM();
+    // Desktop table rows
+    document.querySelectorAll('.batch-table tbody tr[data-start]').forEach(function (row) {
+      const start = row.dataset.start;
+      const end   = row.dataset.end;
+      const isLive = start && end && now >= start && now < end;
+      row.classList.toggle('running-now', isLive);
+      const badge = row.querySelector('.live-badge');
+      if (badge) badge.classList.toggle('d-none', !isLive);
+    });
+    // Mobile cards
+    document.querySelectorAll('.batch-card-m[data-start]').forEach(function (card) {
+      const start = card.dataset.start;
+      const end   = card.dataset.end;
+      const isLive = start && end && now >= start && now < end;
+      card.classList.toggle('batch-card-running', isLive);
+      const badge = card.querySelector('.live-badge');
+      if (badge) badge.classList.toggle('d-none', !isLive);
+    });
+  }
+
+  highlightRunning();
+  setInterval(highlightRunning, 60000);
+})();
+</script>
 {% endblock %}

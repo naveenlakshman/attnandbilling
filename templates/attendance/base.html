@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Global IT ERP - Attendance{% endblock %}</title>
+  <title>{% block title %}{{ company.company_short_name }} - Attendance{% endblock %}</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
   {% block extra_css %}{% endblock %}
@@ -31,6 +31,13 @@
       position: sticky;
       top: 0;
       flex-shrink: 0;
+    }
+
+    @media (max-width: 991.98px) {
+      .sidebar {
+        min-height: unset;
+        position: fixed;
+      }
     }
 
     .sidebar .nav-link {
@@ -64,6 +71,12 @@
       position: sticky;
       top: 0;
       z-index: 1000;
+      background: #fff;
+      border-bottom: 1px solid #dee2e6;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
 
     .content-wrap {
@@ -75,15 +88,160 @@
       font-size: 0.7rem;
       margin-left: 4px;
     }
+
+    /* ===== MOBILE BOTTOM NAV ===== */
+    .mobile-bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-top: 1px solid #dee2e6;
+      z-index: 1030;
+      padding: 4px 0 env(safe-area-inset-bottom, 4px);
+      box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+    }
+    .mobile-bottom-nav a {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      text-decoration: none;
+      color: #6c757d;
+      font-size: 10px;
+      padding: 4px 2px;
+      border-radius: 8px;
+      transition: color .15s;
+    }
+    .mobile-bottom-nav a .nav-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+    .mobile-bottom-nav a.active,
+    .mobile-bottom-nav a:hover {
+      color: #0d6efd;
+    }
+    .mobile-bottom-nav .fab-btn {
+      color: #fff;
+      background: #0d6efd;
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin-top: -12px;
+      box-shadow: 0 2px 8px rgba(13,110,253,.4);
+      flex: none;
+      padding: 0;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 26px;
+      line-height: 1;
+      transition: background .15s;
+    }
+    .mobile-bottom-nav .fab-btn:hover { background: #0a58ca; color: #fff; }
+
+    /* FAB quick-create menu */
+    .fab-menu-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1025;
+      background: rgba(0,0,0,.35);
+      backdrop-filter: blur(2px);
+    }
+    .fab-menu-overlay.show { display: block; }
+    .fab-menu {
+      position: fixed;
+      bottom: 72px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      z-index: 1035;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .18s, transform .18s;
+    }
+    .fab-menu.show {
+      pointer-events: auto;
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .fab-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      border-radius: 30px;
+      padding: 10px 20px 10px 14px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      text-decoration: none;
+      color: #1f2937;
+      font-weight: 600;
+      font-size: 14px;
+      white-space: nowrap;
+      min-width: 200px;
+    }
+    .fab-menu-item:hover { background: #f0f4ff; color: #0d6efd; }
+    .fab-menu-item .fmi-icon {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .fab-menu-label {
+      font-size: 10px;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    @media (max-width: 991.98px) {
+      .mobile-bottom-nav { display: flex; }
+      .container-fluid { padding-bottom: 72px; }
+    }
   </style>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+      document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function(form) {
+        if (!form.querySelector('input[name="csrf_token"]')) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'csrf_token';
+          input.value = token;
+          form.appendChild(input);
+        }
+      });
+    });
+  </script>
 </head>
 <body>
 
 <div class="d-flex">
   <!-- Sidebar -->
-  <aside class="sidebar p-3">
-    <div class="mb-4">
-      <div class="fw-bold text-dark">Global IT Education</div>
+  <div class="sidebar offcanvas-lg offcanvas-start" id="mainSidebar" tabindex="-1">
+    <div class="offcanvas-header border-bottom d-lg-none">
+      <h6 class="offcanvas-title fw-bold mb-0">{{ company.company_name }}</h6>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#mainSidebar" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body p-3 d-lg-flex flex-column">
+    <div class="mb-4 d-none d-lg-block">
+      {% if company.logo_filename %}
+        <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+             alt="{{ company.company_name }}" style="max-height:44px; max-width:180px; margin-bottom:4px;">
+        <br>
+      {% endif %}
+      <div class="fw-bold text-dark">{{ company.company_name }}</div>
       <div class="text-muted small">Attendance Module</div>
       <hr class="my-2">
     </div>
@@ -112,6 +270,13 @@
         ✓ Mark Attendance
       </a>
 
+      <!-- Attendance Pattern -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'attendance.attendance_pattern' else '' }}"
+        href="{{ url_for('attendance.attendance_pattern') }}">
+        🟩 Attendance Pattern
+      </a>
+
       <div class="section-title mt-3">🎓 Batch Management</div>
 
       <!-- Batch Management -->
@@ -126,6 +291,13 @@
         class="nav-link {{ 'active' if request.endpoint == 'attendance.create_batch' else '' }}"
         href="{{ url_for('attendance.create_batch') }}">
         ➕ Create Batch
+      </a>
+
+      <!-- Batch Planner -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'attendance.batch_planner' else '' }}"
+        href="{{ url_for('attendance.batch_planner') }}">
+        🗓️ Batch Planner
       </a>
 
       <div class="section-title mt-3">📈 Reports & Analytics</div>
@@ -167,10 +339,24 @@
         ← Back to ERP
       </a>
     </nav>
-  </aside>
+    </div>
+  </div>
 
   <!-- Main Content Area -->
   <div class="content-wrap">
+    <div class="topbar no-print">
+      <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+        <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainSidebar" aria-controls="mainSidebar" aria-label="Menu">☰</button>
+        <span class="fw-semibold" style="white-space:nowrap;">{{ company.company_short_name }} – Attendance</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+        <div class="small text-muted d-none d-sm-block">
+          Logged in: <strong>{{ session.get('username', 'User') }}</strong>
+          <span class="d-none d-md-inline">({{ session.get('role', 'staff') }})</span>
+        </div>
+        <a href="{{ url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary" title="Back to Main Dashboard">🏠 Home</a>
+      </div>
+    </div>
     
     <div class="container-fluid">
       {% block content %}{% endblock %}
@@ -178,7 +364,61 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- FAB overlay + pop-up menu -->
+<div class="fab-menu-overlay" id="attFabOverlay"></div>
+<div class="fab-menu" id="attFabMenu">
+  <div class="fab-menu-label">Quick Actions</div>
+  <a href="{{ url_for('attendance.mark_attendance') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dcfce7;">✓</span>
+    Mark Attendance
+  </a>
+  <a href="{{ url_for('attendance.create_batch') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dbeafe;">📚</span>
+    Create Batch
+  </a>
+  <a href="{{ url_for('attendance.daily_report') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#fef9c3;">📅</span>
+    Daily Report
+  </a>
+</div>
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+  <a href="{{ url_for('attendance.dashboard') }}" class="{{ 'active' if request.endpoint == 'attendance.dashboard' else '' }}">
+    <span class="nav-icon">📊</span>
+    <span>Dashboard</span>
+  </a>
+  <a href="{{ url_for('attendance.list_batches') }}" class="{{ 'active' if request.endpoint in ['attendance.list_batches', 'attendance.batch_detail', 'attendance.create_batch'] else '' }}">
+    <span class="nav-icon">📚</span>
+    <span>Batches</span>
+  </a>
+  <a href="#" class="fab-btn" id="attFabToggle" title="Quick Actions" role="button" aria-label="Quick actions menu" aria-expanded="false">
+    &#10003;
+  </a>
+  <a href="{{ url_for('attendance.daily_report') }}" class="{{ 'active' if request.endpoint == 'attendance.daily_report' else '' }}">
+    <span class="nav-icon">📅</span>
+    <span>Report</span>
+  </a>
+  <a href="{{ url_for('attendance.defaulters') }}" class="{{ 'active' if request.endpoint == 'attendance.defaulters' else '' }}">
+    <span class="nav-icon">⚠️</span>
+    <span>Defaulters</span>
+  </a>
+</nav>
+
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+<script>
+  (function() {
+    var toggle  = document.getElementById('attFabToggle');
+    var menu    = document.getElementById('attFabMenu');
+    var overlay = document.getElementById('attFabOverlay');
+    if (!toggle) return;
+    function openMenu()  { menu.classList.add('show'); overlay.classList.add('show'); toggle.setAttribute('aria-expanded','true'); toggle.style.background='#0a58ca'; }
+    function closeMenu() { menu.classList.remove('show'); overlay.classList.remove('show'); toggle.setAttribute('aria-expanded','false'); toggle.style.background=''; }
+    toggle.addEventListener('click', function(e) { e.preventDefault(); menu.classList.contains('show') ? closeMenu() : openMenu(); });
+    overlay.addEventListener('click', closeMenu);
+    menu.querySelectorAll('.fab-menu-item').forEach(function(el) { el.addEventListener('click', closeMenu); });
+  })();
+</script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

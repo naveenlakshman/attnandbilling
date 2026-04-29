@@ -1,425 +1,352 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
-{% block title %}Global IT ERP - Invoices{% endblock %}
+{% block title %}{{ company.company_short_name }} - Invoices{% endblock %}
 
 {% block content %}
 
 <style>
-  .invoice-page-actions {
+  /* â”€â”€ Page layout â”€â”€ */
+  .inv-page { max-width: 1100px; margin: 0 auto; }
+
+  .page-top {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
+    margin-bottom: 14px;
+    gap: 8px;
+  }
+  .page-top h2 { margin: 0; font-size: 22px; font-weight: 700; color: #1a1a2e; }
+
+  /* â”€â”€ Dashboard â”€â”€ */
+  .dash-card {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
   }
 
-  .invoice-page-actions h2 {
-    margin: 0;
-    font-size: 28px;
+  /* Tab buttons */
+  .tab-bar { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tab-btn {
+    padding: 6px 14px;
+    border: 1.5px solid #dee2e6;
+    border-radius: 20px;
+    background: #fff;
+    color: #555;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tab-btn.active {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
   }
 
-  .invoice-action-buttons {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .invoice-stats-grid {
+  /* Stat grid */
+  .stat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
   }
-
-  .invoice-search-card {
-    margin-top: 20px;
-    margin-bottom: 20px;
-  }
-
-  .invoice-search-form {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  .invoice-search-form input {
-    flex: 1;
-    min-width: 260px;
+  .stat-tile {
+    border-radius: 8px;
     padding: 10px 12px;
-    border: 1px solid #ced4da;
-    border-radius: 6px;
+    color: #fff;
+  }
+  .stat-tile .s-label { font-size: 11px; opacity: 0.88; margin-bottom: 3px; }
+  .stat-tile .s-val { font-size: 20px; font-weight: 700; line-height: 1.1; }
+  .stat-tile .s-val.money { font-size: 14px; }
+
+  /* Overall tiles are muted */
+  .stat-tile.muted { background: #f0f4ff !important; }
+  .stat-tile.muted .s-label { color: #666; }
+  .stat-tile.muted .s-val { color: #1a1a2e; font-size: 18px; }
+  .stat-tile.muted .s-val.money { font-size: 13px; }
+
+  /* Colours */
+  .c-blue   { background: linear-gradient(135deg, #3498db, #2980b9); }
+  .c-green  { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+  .c-orange { background: linear-gradient(135deg, #f39c12, #d68910); }
+  .c-red    { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+  .c-purple { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+  .c-teal   { background: linear-gradient(135deg, #1abc9c, #16a085); }
+
+  /* â”€â”€ Search â”€â”€ */
+  .search-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .search-row input {
+    flex: 1;
+    min-width: 200px;
+    padding: 9px 12px;
+    border: 1.5px solid #ced4da;
+    border-radius: 8px;
     font-size: 14px;
   }
-
-  .invoice-search-form input:focus {
+  .search-row input:focus {
     outline: none;
     border-color: #0d6efd;
-    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.1);
   }
+  .search-row .btn { padding: 9px 16px; border-radius: 8px; font-size: 14px; }
 
-  .invoice-table {
-    border-collapse: collapse;
+  /* â”€â”€ Table â”€â”€ */
+  .table-wrap {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
   }
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-  .invoice-table thead tr {
-    background-color: #f5f6f7;
-  }
-
+  .invoice-table { border-collapse: collapse; width: 100%; }
+  .invoice-table thead tr { background: #f5f6f8; }
   .invoice-table th {
-    padding: 10px 8px;
+    padding: 10px 10px;
     text-align: left;
     font-weight: 600;
-    font-size: 13px;
-    color: #333;
-    border: 1px solid #ddd;
-  }
-
-  .invoice-table th.sortable {
-    cursor: pointer;
-    user-select: none;
-    position: relative;
-  }
-
-  .invoice-table th.sortable:hover {
-    background-color: #e8e9ea;
-  }
-
-  .invoice-table th.sortable::after {
-    content: ' ↕';
-    color: #999;
     font-size: 12px;
+    color: #444;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
   }
-
-  .invoice-table th.sorted-asc::after {
-    content: ' ↑';
-    color: #0056b3;
-    font-weight: bold;
-  }
-
-  .invoice-table th.sorted-desc::after {
-    content: ' ↓';
-    color: #0056b3;
-    font-weight: bold;
-  }
+  .invoice-table th.sortable { cursor: pointer; user-select: none; }
+  .invoice-table th.sortable:hover { background: #e8e9ea; }
+  .invoice-table th.sortable::after { content: ' â†•'; color: #bbb; font-size: 11px; }
+  .invoice-table th.sorted-asc::after { content: ' â†‘'; color: #0056b3; font-weight: bold; }
+  .invoice-table th.sorted-desc::after { content: ' â†“'; color: #0056b3; font-weight: bold; }
 
   .invoice-table td {
-    padding: 10px 8px;
-    border: 1px solid #ddd;
+    padding: 9px 10px;
+    border-bottom: 1px solid #f0f0f0;
     font-size: 13px;
     vertical-align: middle;
   }
-
-  .invoice-table tbody tr:hover {
-    background-color: #f9f9f9;
-  }
+  .invoice-table tbody tr:last-child td { border-bottom: none; }
+  .invoice-table tbody tr:hover { background: #f8fbff; }
 
   .status-badge {
-    padding: 4px 8px;
-    border-radius: 4px;
+    padding: 3px 8px;
+    border-radius: 12px;
     font-size: 11px;
     font-weight: 600;
     display: inline-block;
     text-transform: capitalize;
     white-space: nowrap;
   }
+  .status-paid             { background: #d4edda; color: #155724; }
+  .status-partially-paid   { background: #fff3cd; color: #856404; }
+  .status-unpaid           { background: #f8d7da; color: #721c24; }
+  .status-write-off        { background: #d1ecf1; color: #0c5460; }
+  .status-partially-written-off { background: #fce8d5; color: #7a3e00; }
 
-  .status-paid {
-    background-color: #d4edda;
-    color: #155724;
+  .invoice-empty { padding: 40px; text-align: center; color: #999; }
+
+  /* â”€â”€ Mobile card view for table (< 600px) â”€â”€ */
+  @media (max-width: 599px) {
+    .invoice-table thead { display: none; }
+    .invoice-table, .invoice-table tbody { display: block; }
+    .invoice-table tr {
+      display: block;
+      border-bottom: 1px solid #dee2e6;
+      padding: 10px 12px;
+    }
+    .invoice-table tr:last-child { border-bottom: none; }
+    .invoice-table td {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: none;
+      padding: 3px 0;
+      font-size: 13px;
+    }
+    .invoice-table td::before {
+      content: attr(data-label);
+      font-weight: 600;
+      color: #555;
+      font-size: 12px;
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+    /* Hide SL No and Action label on mobile cards */
+    .invoice-table td.td-sl,
+    .invoice-table td.td-action { display: none; }
+    /* Invoice number as card heading */
+    .invoice-table td.td-invno {
+      font-size: 14px;
+      font-weight: 700;
+      padding-bottom: 5px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .invoice-table td.td-invno::before { display: none; }
+    .invoice-table td.td-invno a { font-size: 15px; }
   }
 
-  .status-partially-paid {
-    background-color: #fff3cd;
-    color: #856404;
+  /* â”€â”€ Responsive tweaks â”€â”€ */
+  @media (max-width: 768px) {
+    .page-top h2 { font-size: 18px; }
+    .stat-grid { gap: 6px; }
+    .stat-tile { padding: 8px 10px; }
+    .stat-tile .s-val { font-size: 17px; }
+    .stat-tile .s-val.money { font-size: 12px; }
   }
 
-  .status-unpaid {
-    background-color: #f8d7da;
-    color: #721c24;
-  }
-
-  .invoice-empty {
-    padding: 40px;
-    text-align: center;
-    color: #999;
-  }
-
-  .invoice-empty p {
-    margin: 0;
+  @media (max-width: 400px) {
+    .stat-tile .s-label { font-size: 10px; }
+    .stat-tile .s-val { font-size: 15px; }
   }
 </style>
 
-<div class="invoice-page-actions">
-  <h2>Invoices</h2>
+<div class="inv-page">
 
-  <div class="invoice-action-buttons">
-    <a class="btn btn-primary" href="{{ url_for('billing.invoice_new') }}">
-      Create Invoice
-    </a>
-  </div>
+<div class="page-top">
+  <h2>Invoices</h2>
+  <a class="btn btn-primary" href="{{ url_for('billing.invoice_new') }}" style="border-radius:8px;font-size:14px;padding:8px 16px;">+ Create Invoice</a>
 </div>
 
 {% if session.get('role') == 'admin' %}
-<div style="margin-bottom: 25px;">
-  <h3 style="margin-top: 0; margin-bottom: 15px; color: #333;">📊 Invoice Dashboard</h3>
+<div class="dash-card">
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tabToday"   onclick="switchTab('today')"> Today</button>
+    <button class="tab-btn"        id="tabMonth"   onclick="switchTab('month')"> This Month</button>
+    <button class="tab-btn"        id="tabOverall" onclick="switchTab('overall')"> Overall</button>
+  </div>
 
-  <div style="margin-bottom: 20px;">
-    <!-- Toggle Buttons -->
-    <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
-      <button 
-        id="btnToday" 
-        onclick="toggleStatsView('today')" 
-        style="padding: 8px 16px; border: 2px solid #3498db; background-color: #3498db; color: white; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;"
-      >
-        📅 Today
-      </button>
-      <button 
-        id="btnMonth" 
-        onclick="toggleStatsView('month')" 
-        style="padding: 8px 16px; border: 2px solid #95a5a6; background-color: white; color: #333; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;"
-      >
-        📆 This Month
-      </button>
-    </div>
-
-    <!-- Today Stats -->
-    <div id="todayStats" style="display: block;">
-      <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">Today</h4>
-      <div class="invoice-stats-grid">
-        <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Invoices</div>
-          <div style="font-size: 24px; font-weight: bold;">{{ today_stats.total_invoices or 0 }}</div>
-        </div>
-
-        <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
-          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.total_amount or 0) }}</div>
-        </div>
-
-        <div style="background: linear-gradient(135deg, #f39c12 0%, #d68910 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Paid</div>
-          <div style="font-size: 20px; font-weight: bold;">{{ today_stats.paid_count or 0 }}</div>
-        </div>
-
-        <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Partially Paid</div>
-          <div style="font-size: 20px; font-weight: bold;">{{ today_stats.partially_paid_count or 0 }}</div>
-        </div>
-
-        <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Unpaid</div>
-          <div style="font-size: 20px; font-weight: bold;">{{ today_stats.unpaid_count or 0 }}</div>
-        </div>
-
-        <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Outstanding</div>
-          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(today_stats.outstanding_amount or 0) }}</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Month Stats -->
-    <div id="monthStats" style="display: none;">
-      <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">This Month</h4>
-      <div class="invoice-stats-grid">
-        <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Invoices</div>
-          <div style="font-size: 24px; font-weight: bold;">{{ month_stats.total_invoices or 0 }}</div>
-        </div>
-
-        <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
-          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(month_stats.total_amount or 0) }}</div>
-        </div>
-
-        <div style="background: linear-gradient(135deg, #f39c12 0%, #d68910 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Paid</div>
-          <div style="font-size: 20px; font-weight: bold;">{{ month_stats.paid_count or 0 }}</div>
-        </div>
-
-        <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Partially Paid</div>
-          <div style="font-size: 20px; font-weight: bold;">{{ month_stats.partially_paid_count or 0 }}</div>
-        </div>
-
-        <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Unpaid</div>
-          <div style="font-size: 20px; font-weight: bold;">{{ month_stats.unpaid_count or 0 }}</div>
-        </div>
-
-        <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Outstanding</div>
-          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(month_stats.outstanding_amount or 0) }}</div>
-        </div>
-      </div>
+  <!-- Today -->
+  <div id="panelToday">
+    <div class="stat-grid">
+      <div class="stat-tile c-blue"><div class="s-label">Invoices</div><div class="s-val">{{ today_stats.total_invoices or 0 }}</div></div>
+      <div class="stat-tile c-green"><div class="s-label">Amount</div><div class="s-val money">&#8377;{{ "%.0f"|format(today_stats.total_amount or 0) }}</div></div>
+      <div class="stat-tile c-orange"><div class="s-label">Paid</div><div class="s-val">{{ today_stats.paid_count or 0 }}</div></div>
+      <div class="stat-tile c-red"><div class="s-label">Part. Paid</div><div class="s-val">{{ today_stats.partially_paid_count or 0 }}</div></div>
+      <div class="stat-tile c-purple"><div class="s-label">Unpaid</div><div class="s-val">{{ today_stats.unpaid_count or 0 }}</div></div>
+      <div class="stat-tile c-teal"><div class="s-label">Outstanding</div><div class="s-val money">&#8377;{{ "%.0f"|format(today_stats.outstanding_amount or 0) }}</div></div>
     </div>
   </div>
 
-  <div>
-    <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">Overall Statistics</h4>
-    <div class="invoice-stats-grid">
-      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #3498db;">
-        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Total Invoices</div>
-        <div style="font-size: 24px; font-weight: bold; color: #2c3e50;">{{ overall_stats.total_all_invoices or 0 }}</div>
-      </div>
+  <!-- This Month -->
+  <div id="panelMonth" style="display:none;">
+    <div class="stat-grid">
+      <div class="stat-tile c-blue"><div class="s-label">Invoices</div><div class="s-val">{{ month_stats.total_invoices or 0 }}</div></div>
+      <div class="stat-tile c-green"><div class="s-label">Amount</div><div class="s-val money">&#8377;{{ "%.0f"|format(month_stats.total_amount or 0) }}</div></div>
+      <div class="stat-tile c-orange"><div class="s-label">Paid</div><div class="s-val">{{ month_stats.paid_count or 0 }}</div></div>
+      <div class="stat-tile c-red"><div class="s-label">Part. Paid</div><div class="s-val">{{ month_stats.partially_paid_count or 0 }}</div></div>
+      <div class="stat-tile c-purple"><div class="s-label">Unpaid</div><div class="s-val">{{ month_stats.unpaid_count or 0 }}</div></div>
+      <div class="stat-tile c-teal"><div class="s-label">Outstanding</div><div class="s-val money">&#8377;{{ "%.0f"|format(month_stats.outstanding_amount or 0) }}</div></div>
+    </div>
+  </div>
 
-      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #2ecc71;">
-        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Total Amount</div>
-        <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">₹ {{ "%.2f"|format(overall_stats.total_all_amount or 0) }}</div>
-      </div>
-
-      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #f39c12;">
-        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Paid</div>
-        <div style="font-size: 20px; font-weight: bold; color: #2c3e50;">{{ overall_stats.all_paid_count or 0 }}</div>
-      </div>
-
-      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #e74c3c;">
-        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Partially Paid</div>
-        <div style="font-size: 20px; font-weight: bold; color: #2c3e50;">{{ overall_stats.all_partially_paid_count or 0 }}</div>
-      </div>
-
-      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #9b59b6;">
-        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Unpaid</div>
-        <div style="font-size: 20px; font-weight: bold; color: #2c3e50;">{{ overall_stats.all_unpaid_count or 0 }}</div>
-      </div>
-
-      <div style="background: #ecf0f1; padding: 15px; border-radius: 6px; border-left: 4px solid #1abc9c;">
-        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 6px;">Outstanding</div>
-        <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">₹ {{ "%.2f"|format(overall_stats.all_outstanding_amount or 0) }}</div>
-      </div>
+  <!-- Overall -->
+  <div id="panelOverall" style="display:none;">
+    <div class="stat-grid">
+      <div class="stat-tile muted c-blue"><div class="s-label">Invoices</div><div class="s-val">{{ overall_stats.total_all_invoices or 0 }}</div></div>
+      <div class="stat-tile muted c-green"><div class="s-label">Amount</div><div class="s-val money">&#8377;{{ "%.0f"|format(overall_stats.total_all_amount or 0) }}</div></div>
+      <div class="stat-tile muted c-orange"><div class="s-label">Paid</div><div class="s-val">{{ overall_stats.all_paid_count or 0 }}</div></div>
+      <div class="stat-tile muted c-red"><div class="s-label">Part. Paid</div><div class="s-val">{{ overall_stats.all_partially_paid_count or 0 }}</div></div>
+      <div class="stat-tile muted c-purple"><div class="s-label">Unpaid</div><div class="s-val">{{ overall_stats.all_unpaid_count or 0 }}</div></div>
+      <div class="stat-tile muted c-teal"><div class="s-label">Outstanding</div><div class="s-val money">&#8377;{{ "%.0f"|format(overall_stats.all_outstanding_amount or 0) }}</div></div>
     </div>
   </div>
 </div>
 {% endif %}
 
-<div class="card invoice-search-card">
-  <form method="get" class="invoice-search-form">
-    <input
-      type="text"
-      name="search"
-      value="{{ search or '' }}"
-      placeholder="Search by invoice no, student name, or student code"
-    >
-    <button type="submit" class="btn btn-primary">Search</button>
+<!-- Search -->
+<form method="get" class="search-row">
+  <input type="text" name="search" value="{{ search or '' }}" placeholder="Search by bill no, student name or codeâ€¦">
+  <button type="submit" class="btn btn-primary">Search</button>
+  {% if search %}<a href="{{ url_for('billing.invoices') }}" class="btn btn-outline-secondary">Clear</a>{% endif %}
+</form>
 
-    {% if search %}
-    <a href="{{ url_for('billing.invoices') }}" class="btn btn-secondary">Clear</a>
-    {% endif %}
-  </form>
-</div>
-
-<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
+<!-- Table -->
+<div class="table-wrap">
   {% if invoices %}
-    <table border="1" width="100%" cellpadding="10" class="invoice-table">
-      <thead>
-        <tr>
-          <th style="width: 70px;">SL No</th>
-          <th style="width: 120px;" class="sortable" data-sort-key="invoice_no">Invoice No</th>
-          <th class="sortable" data-sort-key="student">Student</th>
-          <th style="width: 120px;" class="sortable" data-sort-key="date">Date</th>
-          <th style="width: 130px;" class="sortable" data-sort-key="total">Total</th>
-          <th style="width: 130px;" class="sortable" data-sort-key="paid">Paid</th>
-          <th style="width: 130px;" class="sortable" data-sort-key="balance">Balance</th>
-          <th style="width: 120px;" class="sortable" data-sort-key="status">Status</th>
-          <th style="width: 100px;">Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for inv in invoices %}
-        {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
-        <tr>
-          <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
+  <div class="table-scroll">
+  <table class="invoice-table">
+    <thead>
+      <tr>
+        <th style="width:44px;">#</th>
+        <th style="width:110px;" class="sortable" data-sort-key="invoice_no">Bill No</th>
+        <th class="sortable" data-sort-key="student">Student</th>
+        <th style="width:100px;" class="sortable" data-sort-key="date">Date</th>
+        <th style="width:110px;" class="sortable" data-sort-key="total">Total</th>
+        <th style="width:110px;" class="sortable" data-sort-key="paid">Paid</th>
+        <th style="width:110px;" class="sortable" data-sort-key="balance">Balance</th>
+        <th style="width:110px;" class="sortable" data-sort-key="status">Status</th>
+        <th style="width:70px;">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in invoices %}
+      {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
+      <tr>
+        <td class="td-sl" style="text-align:center;color:#999;font-size:12px;">{{ loop.index }}</td>
 
-          <td data-sort-key="invoice_no" data-sort-value="{{ inv.invoice_no }}">
-            <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="text-decoration: none; font-weight: 600; color: #0066cc;">
-              {{ inv.invoice_no }}
-            </a>
-          </td>
+        <td class="td-invno" data-label="Bill No" data-sort-key="invoice_no" data-sort-value="{{ inv.invoice_no }}">
+          <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="text-decoration:none;font-weight:600;color:#0066cc;">{{ inv.invoice_no }}</a>
+        </td>
 
-          <td data-sort-key="student" data-sort-value="{{ inv.student_code }} {{ inv.full_name }}">
-            <a href="{{ url_for('billing.student_profile', student_id=inv.student_id) }}" style="text-decoration: none;">
-              {{ inv.student_code }} - {{ inv.full_name }}
-            </a>
-          </td>
+        <td data-label="Student" data-sort-key="student" data-sort-value="{{ inv.student_code }} {{ inv.full_name }}">
+          <a href="{{ url_for('billing.student_profile', student_id=inv.student_id) }}" style="text-decoration:none;color:#333;">{{ inv.student_code }} - {{ inv.full_name }}</a>
+        </td>
 
-          <td data-sort-key="date" data-sort-value="{{ inv.invoice_date }}">{{ inv.invoice_date }}</td>
+        <td data-label="Date" data-sort-key="date" data-sort-value="{{ inv.invoice_date }}">{{ inv.invoice_date }}</td>
 
-          <td data-sort-key="total" data-sort-value="{{ inv.total_amount or 0 }}">₹ {{ "%.2f"|format(inv.total_amount or 0) }}</td>
+        <td data-label="Total" data-sort-key="total" data-sort-value="{{ inv.total_amount or 0 }}">&#8377; {{ "%.2f"|format(inv.total_amount or 0) }}</td>
 
-          <td style="color: green;" data-sort-key="paid" data-sort-value="{{ inv.paid_amount or 0 }}">
-            ₹ {{ "%.2f"|format(inv.paid_amount or 0) }}
-          </td>
+        <td data-label="Paid" style="color:#27ae60;" data-sort-key="paid" data-sort-value="{{ inv.paid_amount or 0 }}">&#8377; {{ "%.2f"|format(inv.paid_amount or 0) }}</td>
 
-          <td style="color: #c0392b;" data-sort-key="balance" data-sort-value="{{ balance }}">
-            ₹ {{ "%.2f"|format(balance) }}
-          </td>
+        <td data-label="Balance" style="color:#c0392b;" data-sort-key="balance" data-sort-value="{{ balance }}">&#8377; {{ "%.2f"|format(balance) }}</td>
 
-          <td data-sort-key="status" data-sort-value="{{ inv.status or '' }}">
-            <span class="status-badge
-              {% if inv.status == 'paid' %}status-paid
-              {% elif inv.status == 'partially_paid' %}status-partially-paid
-              {% else %}status-unpaid{% endif %}">
-              {{ inv.status.replace('_', ' ') if inv.status else '—' }}
-            </span>
-          </td>
+        <td data-label="Status" data-sort-key="status" data-sort-value="{{ inv.status or '' }}">
+          <span class="status-badge
+            {% if inv.status == 'paid' %}status-paid
+            {% elif inv.status == 'partially_paid' %}status-partially-paid
+            {% elif inv.status == 'write_off' %}status-write-off
+            {% elif inv.status == 'partially_written_off' %}status-partially-written-off
+            {% else %}status-unpaid{% endif %}">
+            {{ inv.status.replace('_', ' ') if inv.status else 'â€”' }}
+          </span>
+        </td>
 
-          <td>
-            <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="color: #0066cc;">View</a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        <td class="td-action">
+          <a href="{{ url_for('billing.invoice_view', invoice_id=inv.id) }}" style="color:#0066cc;font-weight:500;">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
   {% else %}
-    <div class="invoice-empty">
-      <p style="font-size: 15px;">🧾 No invoices found.</p>
-      <p style="font-size: 12px; margin-top: 8px;">Try a different search or create an invoice later.</p>
-    </div>
+  <div class="invoice-empty">
+    <p style="font-size:15px;">ðŸ§¾ No invoices found.</p>
+    <p style="font-size:12px;margin-top:8px;">Try a different search or create a new invoice.</p>
+  </div>
   {% endif %}
 </div>
 
-<script>
-function toggleStatsView(view) {
-  const todayStats = document.getElementById('todayStats');
-  const monthStats = document.getElementById('monthStats');
-  const btnToday = document.getElementById('btnToday');
-  const btnMonth = document.getElementById('btnMonth');
+</div><!-- end inv-page -->
 
-  if (view === 'today') {
-    // Show today stats
-    todayStats.style.display = 'block';
-    monthStats.style.display = 'none';
-    
-    // Update button styles
-    btnToday.style.backgroundColor = '#3498db';
-    btnToday.style.borderColor = '#3498db';
-    btnToday.style.color = 'white';
-    
-    btnMonth.style.backgroundColor = 'white';
-    btnMonth.style.borderColor = '#95a5a6';
-    btnMonth.style.color = '#333';
-  } else if (view === 'month') {
-    // Show month stats
-    todayStats.style.display = 'none';
-    monthStats.style.display = 'block';
-    
-    // Update button styles
-    btnToday.style.backgroundColor = 'white';
-    btnToday.style.borderColor = '#95a5a6';
-    btnToday.style.color = '#333';
-    
-    btnMonth.style.backgroundColor = '#3498db';
-    btnMonth.style.borderColor = '#3498db';
-    btnMonth.style.color = 'white';
-  }
+<script>
+function switchTab(tab) {
+  ['today','month','overall'].forEach(t => {
+    document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1)).style.display = t === tab ? 'block' : 'none';
+    document.getElementById('tab'   + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
+  });
 }
 
-// Table Sorting Functionality
+// Table sorting
 document.addEventListener('DOMContentLoaded', function() {
   const table = document.querySelector('.invoice-table');
   if (!table) return;
-
   const headers = table.querySelectorAll('th.sortable');
   let currentSort = { column: null, direction: 'asc' };
 
@@ -429,71 +356,39 @@ document.addEventListener('DOMContentLoaded', function() {
       const tbody = table.querySelector('tbody');
       const rows = Array.from(tbody.querySelectorAll('tr'));
 
-      // Determine sort direction
       if (currentSort.column === sortKey) {
         currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
       } else {
         currentSort.direction = 'asc';
-        // Remove sorted class from all headers
-        headers.forEach(h => {
-          h.classList.remove('sorted-asc', 'sorted-desc');
-        });
+        headers.forEach(h => h.classList.remove('sorted-asc', 'sorted-desc'));
       }
-
-      // Add sorted class to current header
       this.classList.remove('sorted-asc', 'sorted-desc');
       this.classList.add('sorted-' + currentSort.direction);
-
       currentSort.column = sortKey;
 
-      // Sort rows using the data-sort-key attribute on cells
       rows.sort((a, b) => {
-        // Find cells with matching data-sort-key
         const aCell = a.querySelector(`td[data-sort-key="${sortKey}"]`);
         const bCell = b.querySelector(`td[data-sort-key="${sortKey}"]`);
-
         if (!aCell || !bCell) return 0;
 
-        let aData = aCell.getAttribute('data-sort-value') || aCell.textContent;
-        let bData = bCell.getAttribute('data-sort-value') || bCell.textContent;
+        let aData = (aCell.getAttribute('data-sort-value') || aCell.textContent).trim();
+        let bData = (bCell.getAttribute('data-sort-value') || bCell.textContent).trim();
 
-        // Trim and clean
-        aData = aData.toString().trim();
-        bData = bData.toString().trim();
-
-        // Handle date column - convert to numeric timestamp for proper comparison
         if (sortKey === 'date') {
-          const aDate = new Date(aData).getTime();
-          const bDate = new Date(bData).getTime();
-          if (!isNaN(aDate) && !isNaN(bDate)) {
-            return currentSort.direction === 'asc' ? aDate - bDate : bDate - aDate;
-          }
+          const aD = new Date(aData).getTime(), bD = new Date(bData).getTime();
+          if (!isNaN(aD) && !isNaN(bD)) return currentSort.direction === 'asc' ? aD - bD : bD - aD;
         }
-
-        // Remove currency symbols for amount/paid/balance sorting
-        if (sortKey === 'total' || sortKey === 'paid' || sortKey === 'balance') {
-          aData = aData.replace(/[₹ ,]/g, '');
-          bData = bData.replace(/[₹ ,]/g, '');
-        }
-
-        // Try to parse as numbers
-        const aNum = parseFloat(aData);
-        const bNum = parseFloat(bData);
-
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-          return currentSort.direction === 'asc' ? aNum - bNum : bNum - aNum;
-        }
-
-        // Default string comparison
-        const comparison = aData.localeCompare(bData);
-        return currentSort.direction === 'asc' ? comparison : -comparison;
+        const aNum = parseFloat(aData), bNum = parseFloat(bData);
+        if (!isNaN(aNum) && !isNaN(bNum)) return currentSort.direction === 'asc' ? aNum - bNum : bNum - aNum;
+        const cmp = aData.localeCompare(bData);
+        return currentSort.direction === 'asc' ? cmp : -cmp;
       });
 
-      // Re-append sorted rows
       rows.forEach(row => tbody.appendChild(row));
     });
   });
 });
 </script>
+
 
 {% endblock %}

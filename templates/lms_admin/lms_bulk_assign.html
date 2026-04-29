@@ -1,0 +1,398 @@
+{% extends "lms_admin/base.html" %}
+
+{% block page_title %}Bulk Assign Programs to Batch{% endblock %}
+
+{% block content %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid #0d6efd;
+        padding-bottom: 1rem;
+    }
+    .page-title { font-size: 1.75rem; font-weight: 700; color: #333; margin: 0; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 320px; gap: 1.5rem; }
+
+    .form-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+    }
+    .form-section { margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid #eee; }
+    .form-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .section-label {
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: #333;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .form-group { margin-bottom: 1rem; }
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: #444;
+        margin-bottom: 0.375rem;
+    }
+    .form-group select,
+    .form-group input[type="date"] {
+        width: 100%;
+        padding: 0.5625rem 0.875rem;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+    }
+    .form-group select:focus,
+    .form-group input:focus {
+        outline: none;
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
+    }
+    .required { color: #dc3545; }
+    .help-text { font-size: 0.78rem; color: #888; margin-top: 0.25rem; }
+
+    /* Program checkboxes */
+    .program-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.5rem;
+    }
+    .prog-check-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.15s;
+        background: #fafafa;
+    }
+    .prog-check-item:hover { border-color: #0d6efd; background: #e7f3ff; }
+    .prog-check-item.selected { border-color: #0d6efd; background: #e7f3ff; font-weight: 600; }
+    .prog-check-item input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+
+    /* Mapping hint banner */
+    .mapping-hint {
+        background: #e8f5e9;
+        border: 1px solid #a5d6a7;
+        border-radius: 0.375rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+        font-size: 0.875rem;
+        color: #1b5e20;
+        display: none;
+    }
+    .mapping-hint strong { display: block; margin-bottom: 0.25rem; }
+    .btn-auto-select {
+        background: #2e7d32;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 0.3rem 0.75rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 0.4rem;
+        transition: background 0.2s;
+    }
+    .btn-auto-select:hover { background: #1b5e20; }
+
+    .no-mapping-hint {
+        background: #fff3e0;
+        border: 1px solid #ffcc80;
+        border-radius: 0.375rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+        font-size: 0.875rem;
+        color: #e65100;
+        display: none;
+    }
+
+    .btn-submit {
+        background: linear-gradient(135deg, #28a745, #218838);
+        color: #fff;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.7rem 2rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-submit:hover {
+        background: linear-gradient(135deg, #218838, #1e7e34);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(40,167,69,.35);
+    }
+    .btn-cancel {
+        background: #6c757d;
+        color: #fff;
+        border: none;
+        border-radius: 0.375rem;
+        padding: 0.7rem 1.5rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    .btn-cancel:hover { background: #5a6268; color: #fff; text-decoration: none; }
+
+    /* Sidebar help card */
+    .help-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 0.5rem;
+        padding: 1.25rem;
+        position: sticky;
+        top: 1rem;
+    }
+    .help-card-title {
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: #333;
+        margin-bottom: 0.75rem;
+        border-bottom: 2px solid #0d6efd;
+        padding-bottom: 0.5rem;
+    }
+    .help-card ul { padding-left: 1.25rem; margin: 0; }
+    .help-card li { margin-bottom: 0.4rem; font-size: 0.85rem; color: #555; }
+    .step-list { counter-reset: step; padding: 0; list-style: none; }
+    .step-list li {
+        counter-increment: step;
+        padding: 0.5rem 0.5rem 0.5rem 2rem;
+        position: relative;
+        font-size: 0.85rem;
+        color: #333;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .step-list li:last-child { border-bottom: none; }
+    .step-list li::before {
+        content: counter(step);
+        position: absolute;
+        left: 0;
+        top: 0.5rem;
+        background: #0d6efd;
+        color: #fff;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        text-align: center;
+        line-height: 20px;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+
+    @media (max-width: 900px) {
+        .two-col { grid-template-columns: 1fr; }
+        .help-card { position: static; }
+    }
+</style>
+
+<!-- Breadcrumb -->
+<nav style="font-size:0.875rem; margin-bottom:1rem;">
+    <a href="{{ url_for('lms_admin.list_batch_programs') }}">🎓 Batch Access</a> →
+    <strong>⚡ Bulk Assign Programs</strong>
+</nav>
+
+<!-- Header -->
+<div class="page-header">
+    <h1 class="page-title">⚡ Bulk Assign Programs to Batch</h1>
+    <a href="{{ url_for('lms_admin.list_batch_programs') }}" class="btn-cancel">← Cancel</a>
+</div>
+
+<div class="two-col">
+    <!-- Form -->
+    <div class="form-card">
+        <form method="POST" id="bulkAssignForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <!-- Batch Selection -->
+            <div class="form-section">
+                <div class="section-label">🎓 Select Batch</div>
+
+                <div class="form-group">
+                    <label for="batch_id">Student Batch <span class="required">*</span></label>
+                    <select id="batch_id" name="batch_id" required>
+                        <option value="">-- Select Batch --</option>
+                        {% for batch in batches %}
+                        <option value="{{ batch.id }}">{{ batch.batch_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="help-text">Choose the batch to assign LMS program access to.</span>
+                </div>
+            </div>
+
+            <!-- Programs Selection -->
+            <div class="form-section">
+                <div class="section-label">📖 Select LMS Programs</div>
+
+                <!-- Mapping hint (shown via JS when a batch with mapped course is selected) -->
+                <div class="mapping-hint" id="mappingHint">
+                    <strong>🔗 Course mapping found!</strong>
+                    <span id="mappingHintText"></span>
+                    <br>
+                    <button type="button" class="btn-auto-select" id="autoSelectBtn">
+                        ✔ Auto-select mapped programs
+                    </button>
+                </div>
+
+                <div class="no-mapping-hint" id="noMappingHint">
+                    ℹ️ No course mapping configured for this batch's course.
+                    You can manually select programs below, or
+                    <a href="{{ url_for('lms_admin.list_course_mappings') }}">configure a mapping first</a>.
+                </div>
+
+                <div class="program-grid" id="programGrid">
+                    {% for prog in all_programs %}
+                    <label class="prog-check-item" id="prog-label-{{ prog.id }}">
+                        <input type="checkbox" name="program_ids" value="{{ prog.id }}"
+                               onchange="updateLabel({{ prog.id }})">
+                        {{ prog.program_name }}
+                    </label>
+                    {% endfor %}
+                </div>
+                <span class="help-text" style="margin-top:0.5rem; display:block;">
+                    Tick all programs you want to assign to this batch. Already-assigned programs will be skipped automatically.
+                </span>
+            </div>
+
+            <!-- Access Dates -->
+            <div class="form-section">
+                <div class="section-label">📅 Access Period</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label for="access_start_date">Start Date <span class="required">*</span></label>
+                        <input type="date" id="access_start_date" name="access_start_date"
+                               value="{{ today }}" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label for="access_end_date">End Date</label>
+                        <input type="date" id="access_end_date" name="access_end_date">
+                        <span class="help-text">Leave blank for no expiry.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active toggle -->
+            <div class="form-section">
+                <div class="section-label">🔘 Access Status</div>
+                <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.9rem;">
+                    <input type="checkbox" name="is_active" checked style="width:16px;height:16px;">
+                    Enable access immediately
+                </label>
+            </div>
+
+            <!-- Actions -->
+            <div style="display:flex; gap:1rem; padding-top:1rem;">
+                <button type="submit" class="btn-submit" id="submitBtn">
+                    ⚡ Assign Selected Programs
+                </button>
+                <a href="{{ url_for('lms_admin.list_batch_programs') }}" class="btn-cancel">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Sidebar -->
+    <div>
+        <div class="help-card">
+            <div class="help-card-title">ℹ️ How it works</div>
+            <ol class="step-list">
+                <li>Select the student batch (e.g. <em>DFA Batch 1</em>).</li>
+                <li>If the batch's course has a mapping configured, the mapped programs are suggested automatically.</li>
+                <li>Click <strong>Auto-select mapped programs</strong> to tick them all at once.</li>
+                <li>Set the access start date (and optionally an end date).</li>
+                <li>Click <strong>Assign</strong> — already-assigned programs are skipped safely.</li>
+            </ol>
+            <hr style="margin: 1rem 0;">
+            <div style="font-size:0.85rem; color:#666;">
+                <strong>Course Mapping not set up yet?</strong><br>
+                <a href="{{ url_for('lms_admin.list_course_mappings') }}">Configure course mappings →</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Mapped programs data — fetched per batch's course via API
+    let mappedProgramIds = [];
+
+    document.getElementById('batch_id').addEventListener('change', function () {
+        const batchId = this.value;
+        const mappingHint = document.getElementById('mappingHint');
+        const noMappingHint = document.getElementById('noMappingHint');
+        mappingHint.style.display = 'none';
+        noMappingHint.style.display = 'none';
+        mappedProgramIds = [];
+
+        if (!batchId) return;
+
+        // Fetch the course_id for this batch, then programs for that course
+        fetch(`/lms/course-mapping/api/batch-course/${batchId}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.course_id) {
+                    return fetch(`/lms/course-mapping/api/programs-for-course/${data.course_id}`)
+                        .then(r => r.json())
+                        .then(d => ({ course_name: data.course_name, programs: d.programs }));
+                }
+                return { course_name: null, programs: [] };
+            })
+            .then(({ course_name, programs }) => {
+                if (programs && programs.length > 0) {
+                    mappedProgramIds = programs.map(p => p.id);
+                    const names = programs.map(p => p.program_name).join(', ');
+                    document.getElementById('mappingHintText').textContent =
+                        ` This batch's course (${course_name}) maps to: ${names}.`;
+                    mappingHint.style.display = 'block';
+                } else if (course_name) {
+                    noMappingHint.style.display = 'block';
+                }
+            })
+            .catch(() => {});
+    });
+
+    document.getElementById('autoSelectBtn').addEventListener('click', function () {
+        // Uncheck all first
+        document.querySelectorAll('#programGrid input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+            updateLabelByEl(cb);
+        });
+        // Check mapped ones
+        mappedProgramIds.forEach(id => {
+            const cb = document.querySelector(`#programGrid input[value="${id}"]`);
+            if (cb) {
+                cb.checked = true;
+                updateLabelByEl(cb);
+            }
+        });
+    });
+
+    function updateLabel(progId) {
+        const cb = document.querySelector(`#programGrid input[value="${progId}"]`);
+        updateLabelByEl(cb);
+    }
+
+    function updateLabelByEl(cb) {
+        if (!cb) return;
+        const label = cb.closest('label');
+        if (cb.checked) {
+            label.classList.add('selected');
+        } else {
+            label.classList.remove('selected');
+        }
+    }
+</script>
+{% endblock %}

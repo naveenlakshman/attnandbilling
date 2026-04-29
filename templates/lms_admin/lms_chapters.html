@@ -324,9 +324,11 @@
     <h2>📑 Chapters</h2>
   </div>
   <div class="header-actions">
+    {% if session.get('role') == 'admin' %}
     <a href="{{ url_for('lms_admin.chapter_new', program_id=data.program.id) }}" class="btn-add">
       + Add Chapter
     </a>
+    {% endif %}
     <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}" class="btn-back">
       ← Back to Program
     </a>
@@ -362,6 +364,15 @@
             {% if chapter.description %}
             <div class="chapter-description" title="{{ chapter.description }}">{{ chapter.description }}</div>
             {% endif %}
+            {% if chapter.topic_count > 0 %}
+            {% set cpct = ((chapter.topics_with_content / chapter.topic_count) * 100) | round(0) | int %}
+            <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+              <div style="flex: 1; max-width: 180px; background: #e9ecef; border-radius: 4px; height: 6px; overflow: hidden;">
+                <div style="width: {{ cpct }}%; height: 100%; border-radius: 4px; background: {{ '#198754' if cpct == 100 else ('#fd7e14' if cpct >= 50 else '#dc3545') }};"></div>
+              </div>
+              <span style="font-size: 11px; color: #6c757d; white-space: nowrap;">{{ chapter.topics_with_content }}/{{ chapter.topic_count }} content</span>
+            </div>
+            {% endif %}
           </td>
           <td>
             <span class="topics-badge">📝 {{ chapter.topic_count }} {{ 'Topic' if chapter.topic_count == 1 else 'Topics' }}</span>
@@ -373,15 +384,19 @@
           </td>
           <td>
             <div class="chapter-actions">
+              {% if session.get('role') == 'admin' %}
               <a class="btn-action btn-edit" href="{{ url_for('lms_admin.chapter_edit', chapter_id=chapter.id) }}" title="Edit Chapter">
                 ✏️ Edit
               </a>
+              {% endif %}
               <a class="btn-action btn-topics" href="#" onclick="manageTopics(event, {{ chapter.id }});" title="Manage Topics">
                 📝 Topics
               </a>
+              {% if session.get('role') == 'admin' %}
               <button class="btn-action btn-delete" onclick="deleteChapter(event, {{ chapter.id }})" title="Delete Chapter">
                 🗑️ Delete
               </button>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -393,7 +408,9 @@
       <div class="empty-state-icon">📑</div>
       <div class="empty-state-title">No Chapters Yet</div>
       <div class="empty-state-text">Start building your learning program by creating your first chapter.</div>
+      {% if session.get('role') == 'admin' %}
       <a href="{{ url_for('lms_admin.chapter_new', program_id=data.program.id) }}" class="btn-add">+ Add Your First Chapter</a>
+      {% endif %}
     </div>
   {% endif %}
 </div>
@@ -406,6 +423,11 @@
       const form = document.createElement('form');
       form.method = 'POST';
       form.action = '/lms_admin/chapter/' + chapterId + '/delete';
+      const csrf = document.createElement('input');
+      csrf.type = 'hidden';
+      csrf.name = 'csrf_token';
+      csrf.value = '{{ csrf_token() }}';
+      form.appendChild(csrf);
       document.body.appendChild(form);
       form.submit();
     }

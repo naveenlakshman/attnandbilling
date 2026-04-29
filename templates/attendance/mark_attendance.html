@@ -1,6 +1,6 @@
-{% extends "attendance/base.html" %}
+﻿{% extends "attendance/base.html" %}
 
-{% block title %}Mark Attendance - Global IT ERP{% endblock %}
+{% block title %}Mark Attendance - {{ company.company_short_name }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -246,6 +246,99 @@
     outline: none;
   }
 
+  /* Payment due indicators */
+  .due-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    margin-top: 4px;
+    white-space: nowrap;
+  }
+
+  .due-badge-overdue {
+    background: #f8d7da;
+    color: #842029;
+    border: 1px solid #f5c2c7;
+  }
+
+  .due-badge-upcoming {
+    background: #fff3cd;
+    color: #664d03;
+    border: 1px solid #ffecb5;
+  }
+
+  .students-table tbody tr.row-overdue {
+    background: #fff5f5 !important;
+  }
+
+  .students-table tbody tr.row-upcoming {
+    background: #fffdf0 !important;
+  }
+
+  /* Last 7 days history cells */
+  .hist-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .hist-cells {
+    display: flex;
+    gap: 3px;
+  }
+
+  .hist-cell {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: inline-block;
+    flex-shrink: 0;
+    cursor: default;
+  }
+
+  .hist-present { background: #28a745; }
+  .hist-absent  { background: #dc3545; }
+  .hist-late    { background: #ffc107; }
+  .hist-leave   { background: #0dcaf0; }
+  .hist-none    { background: #e9ecef; border: 1px solid #dee2e6; }
+
+  .hist-labels {
+    display: flex;
+    gap: 3px;
+  }
+
+  .hist-label {
+    font-size: 0.62rem;
+    color: #adb5bd;
+    width: 20px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .hist-legend {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-top: 10px;
+  }
+
+  .hist-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .hist-legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    display: inline-block;
+  }
+
   .form-actions {
     display: flex;
     gap: 12px;
@@ -342,38 +435,139 @@
   }
 
   @media (max-width: 768px) {
-    .filter-row {
-      grid-template-columns: 1fr;
-    }
+    .filter-row { grid-template-columns: 1fr 1fr; }
+    .filter-row > div:last-child { grid-column: 1 / -1; }
 
     .attendance-header {
       flex-direction: column;
-      align-items: start;
+      align-items: stretch;
+      gap: 12px;
+    }
+    .batch-details { flex-direction: column; gap: 4px; }
+
+    .quick-actions { flex-direction: row; }
+    .quick-action-btn { flex: 1; text-align: center; }
+
+    .form-actions { flex-direction: column; }
+    .form-actions .btn-save,
+    .form-actions .btn-cancel { width: 100%; text-align: center; }
+
+    .attendance-stats { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .stat { padding: 8px 4px; }
+    .stat-value { font-size: 1.2rem; }
+
+    /* Convert table to stacked cards */
+    .students-table,
+    .students-table thead,
+    .students-table tbody,
+    .students-table tr,
+    .students-table td { display: block; width: 100%; }
+    .students-table thead { display: none; }
+
+    .students-table tbody tr {
+      border: 1px solid #dee2e6;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .students-table tbody tr.row-overdue { background: #fff5f5 !important; border-color: #f5c2c7; }
+    .students-table tbody tr.row-upcoming { background: #fffdf0 !important; border-color: #ffecb5; }
+    .students-table tbody tr:hover { background: #f8f9ff; }
+    .students-table tbody td { padding: 0; border: none; margin-bottom: 8px; }
+    .students-table tbody td:last-child { margin-bottom: 0; }
+
+    /* Code inline with name */
+    .students-table tbody td:first-child {
+      display: inline;
+      font-size: .78rem;
+      color: #6c757d;
+      font-family: monospace;
+    }
+    .students-table tbody td:nth-child(2) {
+      display: block;
+      margin-bottom: 8px;
     }
 
-    .batch-details {
-      flex-direction: column;
-      gap: 8px;
+    /* Status: big tap-friendly button */
+    .status-select {
+      width: 100%;
+      min-width: unset;
+      padding: 12px;
+      font-size: 1rem;
+      border-radius: 8px;
     }
 
-    .students-table {
-      font-size: 0.9rem;
-    }
-
-    .students-table th,
-    .students-table td {
+    /* Remarks: full width */
+    .remarks-input {
+      max-width: 100%;
+      width: 100%;
       padding: 10px;
     }
 
-    .status-select {
-      min-width: 100px;
-    }
-
-    .remarks-input {
-      max-width: 100%;
-    }
+    /* History cells: keep compact */
+    .hist-cell { width: 18px; height: 18px; }
+    .hist-label { width: 18px; font-size: .58rem; }
+    .hist-cells { gap: 2px; }
+    .hist-labels { gap: 2px; }
   }
-</style>
+
+  .status-select.not_marked {
+    border-color: #dee2e6;
+    background: #f8f9fa;
+    color: #6c757d;
+  }
+
+  .wa-absent-btn {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78rem;
+    color: #25D366;
+    text-decoration: none;
+    background: #e8f5e9;
+    padding: 3px 10px;
+    border-radius: 12px;
+    white-space: nowrap;
+    margin-top: 6px;
+    border: 1px solid #a5d6a7;
+  }
+
+  .wa-absent-btn:hover {
+    background: #c8e6c9;
+    text-decoration: none;
+  }
+
+  .student-photo-sm {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #e2e8f0;
+    flex-shrink: 0;
+  }
+  .student-avatar-sm {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .student-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  @media (max-width: 768px) {
+    .student-photo-sm, .student-avatar-sm { width: 44px; height: 44px; font-size: 17px; }
+  }
 {% endblock %}
 
 {% block content %}
@@ -413,6 +607,22 @@
           </select>
         </div>
 
+        {% if available_trainers|length > 1 %}
+        <div class="form-group">
+          <label for="trainer_id" class="form-label">👨‍🏫 Trainer</label>
+          <select class="form-select" id="trainer_id" name="trainer_id" onchange="this.form.submit()">
+            <option value="0">All Trainers</option>
+            {% for trainer in available_trainers %}
+            <option value="{{ trainer.id }}" {% if trainer_id == trainer.id %}selected{% endif %}>
+              {{ trainer.full_name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% else %}
+        <input type="hidden" name="trainer_id" value="0">
+        {% endif %}
+
         <div class="form-group">
           <label for="batch_id" class="form-label">📚 Batch</label>
           <select class="form-select" id="batch_id" name="batch_id" onchange="this.form.submit()">
@@ -449,29 +659,46 @@
         </div>
       </div>
       <div class="quick-actions">
-        <form method="POST" style="display: inline;">
+        <form method="POST" style="display: inline;" class="attendance-form">
           <input type="hidden" name="action" value="mark-all-present">
           <input type="hidden" name="batch_id" value="{{ batch_id }}">
           <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
           <input type="hidden" name="branch_id" value="{{ branch_id }}">
+          <input type="hidden" name="time_warn_reason" class="time-warn-reason-input">
           <button type="submit" class="quick-action-btn btn-present-all">✓ All Present</button>
         </form>
-        <form method="POST" style="display: inline;">
+        <form method="POST" style="display: inline;" class="attendance-form">
           <input type="hidden" name="action" value="mark-all-absent">
           <input type="hidden" name="batch_id" value="{{ batch_id }}">
           <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
           <input type="hidden" name="branch_id" value="{{ branch_id }}">
+          <input type="hidden" name="time_warn_reason" class="time-warn-reason-input">
           <button type="submit" class="quick-action-btn btn-absent-all">✗ All Absent</button>
         </form>
       </div>
     </div>
 
     <!-- Attendance Table -->
-    <form method="POST">
+    {% if attendance_data %}
+    <div class="alert alert-info" style="margin-bottom:16px;">
+      ✓ Attendance already recorded for <strong>{{ attendance_data|length }}</strong> student(s) on this date. You can update it below.
+    </div>
+    {% endif %}
+    {% if history_dates %}
+    <div class="hist-legend">
+      <span class="hist-legend-item"><span class="hist-legend-dot hist-present"></span> Present</span>
+      <span class="hist-legend-item"><span class="hist-legend-dot hist-absent"></span> Absent</span>
+      <span class="hist-legend-item"><span class="hist-legend-dot hist-late"></span> Late</span>
+      <span class="hist-legend-item"><span class="hist-legend-dot hist-leave"></span> Leave</span>
+      <span class="hist-legend-item"><span class="hist-legend-dot hist-none"></span> No record</span>
+    </div>
+    {% endif %}
+    <form method="POST" class="attendance-form">
       <input type="hidden" name="action" value="save">
       <input type="hidden" name="batch_id" value="{{ batch_id }}">
       <input type="hidden" name="attendance_date" value="{{ attendance_date }}">
       <input type="hidden" name="branch_id" value="{{ branch_id }}">
+      <input type="hidden" name="time_warn_reason" class="time-warn-reason-input">
 
       <div style="overflow-x: auto;">
         <table class="students-table">
@@ -479,37 +706,107 @@
             <tr>
               <th style="width: 120px;">Code</th>
               <th>Name</th>
+              <th style="min-width: 185px;">Last 7 Days</th>
               <th style="width: 140px;">Status</th>
               <th style="width: 250px;">Remarks</th>
             </tr>
           </thead>
           <tbody>
             {% for student in students %}
-            <tr>
+            {% set dues = payment_dues.get(student.student_id, {}) %}
+            <tr class="{% if dues.get('past_due', 0) > 0 %}row-overdue{% elif dues.get('upcoming_amount', 0) > 0 %}row-upcoming{% endif %}">
               <td>
-                <span class="student-code">{{ student.student_code }}</span>
+                <a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration: none; color: #0d6efd; font-size: 0.9rem;" target="_blank">{{ student.student_code }}</a>
               </td>
               <td>
-                <span class="student-name">{{ student.full_name }}</span>
-                <div style="font-size: 0.85rem; color: #6c757d;">{{ student.phone }}</div>
+                <div class="student-name-cell">
+                  {% if student.photo_filename %}
+                    <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="" class="student-photo-sm">
+                  {% else %}
+                    <div class="student-avatar-sm">{{ student.full_name[0] | upper }}</div>
+                  {% endif %}
+                  <div>
+                    <a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration: none; color: inherit;" target="_blank"><span class="student-name">{{ student.full_name }}</span></a>
+                    <div style="font-size: 0.85rem; color: #6c757d; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                      <span>{{ student.phone }}</span>
+                      {% if student.phone %}
+                      <a href="tel:{{ student.phone | replace(' ','') | replace('-','') }}"
+                         title="Call {{ student.full_name }}"
+                         style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:#e8f5e9; color:#2e7d32; text-decoration:none; font-size:14px; flex-shrink:0;">📞</a>
+                      <a href="https://wa.me/91{{ student.phone | replace(' ','') | replace('-','') | replace('+','') | replace('(','') | replace(')','') }}"
+                         target="_blank" title="WhatsApp {{ student.full_name }}"
+                         style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:50%; background:#e8f5e9; color:#25D366; text-decoration:none; font-size:14px; flex-shrink:0;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                      </a>
+                      {% endif %}
+                    </div>
+                    {% if dues.get('past_due', 0) > 0 %}
+                    {% set pd = dues.past_days %}
+                    {% if pd == 1 %}{% set pd_label = "1 day overdue" %}
+                    {% elif pd and pd > 1 %}{% set pd_label = pd ~ " days overdue" %}
+                    {% else %}{% set pd_label = dues.upcoming_date %}{% endif %}
+                    <div><span class="due-badge due-badge-overdue">⚠ Past Due: ₹{{ "{:,.0f}".format(dues.past_due) }} · {{ pd_label }}</span></div>
+                    {% endif %}
+                    {% if dues.get('upcoming_amount', 0) > 0 %}
+                    {% set ud = dues.upcoming_days %}
+                    {% if ud == 0 %}{% set ud_label = "Due today" %}
+                    {% elif ud == 1 %}{% set ud_label = "Due tomorrow" %}
+                    {% elif ud and ud > 1 %}{% set ud_label = ud ~ " days left · " ~ dues.upcoming_date %}
+                    {% else %}{% set ud_label = dues.upcoming_date %}{% endif %}
+                    <div><span class="due-badge due-badge-upcoming">💰 ₹{{ "{:,.0f}".format(dues.upcoming_amount) }} · {{ ud_label }}</span></div>
+                    {% endif %}
+                  </div>
+                </div>
               </td>
               <td>
-                <select class="status-select" name="status_{{ student.student_id }}" 
+                {% set hist = history_7days.get(student.student_id, {}) %}
+                <div class="hist-wrap">
+                  <div class="hist-cells">
+                    {% for d in history_dates %}
+                    {% set s = hist.get(d) %}
+                    <span class="hist-cell hist-{{ s or 'none' }}"
+                          title="{{ d }}: {{ s | capitalize if s else 'No record' }}"></span>
+                    {% endfor %}
+                  </div>
+                  <div class="hist-labels">
+                    {% for d in history_dates %}
+                    <span class="hist-label">{{ d[5:] }}</span>
+                    {% endfor %}
+                  </div>
+                </div>
+              </td>
+              <td>
+                {% set cur_status = attendance_data.get(student.student_id, {}).get('status', 'not_marked') %}
+                <select class="status-select {{ cur_status }}"
+                        name="status_{{ student.student_id }}"
                         id="status_{{ student.student_id }}"
-                        onchange="this.className = 'status-select ' + this.value">
-                  <option value="present" {% if attendance_data.get(student.student_id, {}).get('status') == 'present' %}selected{% endif %}>
+                        onchange="onStatusChange(this, {{ student.student_id }})">
+                  <option value="not_marked" {% if cur_status == 'not_marked' %}selected{% endif %}>
+                    ⬜ Not Marked
+                  </option>
+                  <option value="present" {% if cur_status == 'present' %}selected{% endif %}>
                     ✓ Present
                   </option>
-                  <option value="absent" {% if attendance_data.get(student.student_id, {}).get('status', 'absent') == 'absent' %}selected{% endif %}>
+                  <option value="absent" {% if cur_status == 'absent' %}selected{% endif %}>
                     ✗ Absent
                   </option>
-                  <option value="late" {% if attendance_data.get(student.student_id, {}).get('status') == 'late' %}selected{% endif %}>
+                  <option value="late" {% if cur_status == 'late' %}selected{% endif %}>
                     ⏱️ Late
                   </option>
-                  <option value="leave" {% if attendance_data.get(student.student_id, {}).get('status') == 'leave' %}selected{% endif %}>
+                  <option value="leave" {% if cur_status == 'leave' %}selected{% endif %}>
                     📋 Leave
                   </option>
                 </select>
+                {% set first_name = student.full_name.split(' ')[0] %}
+                <a id="wa_absent_{{ student.student_id }}"
+                   class="wa-absent-btn"
+                   href="#"
+                   data-name="{{ first_name }}"
+                   data-phone="{{ student.phone or '' }}"
+                   target="_blank"
+                   style="{% if cur_status in ['absent', 'late'] %}display:inline-flex;{% else %}display:none;{% endif %}">
+                  💬 Notify Absent
+                </a>
               </td>
               <td>
                 <input type="text" class="remarks-input" name="remarks_{{ student.student_id }}"
@@ -580,36 +877,205 @@
 </div>
 
 <script>
-  // Update statistics when status changes
-  function updateStatistics() {
-    let counts = {
-      present: 0,
-      absent: 0,
-      late: 0,
-      leave: 0
-    };
+  const ABSENT_MSG_TEMPLATE = (name) =>
+`Hi ${name},
+Today you were absent for your class at {{ company.company_name }}.
 
-    // Count all status selects
-    document.querySelectorAll('select[class*="status-select"]').forEach(select => {
-      const status = select.value;
-      if (status in counts) {
-        counts[status]++;
+Regular practice is important to gain real skills.
+
+If you have any issue, feel free to contact us.
+
+- {{ session.get('full_name', 'Team') }}
+{{ company.company_name }}
+{% if company.phone %}📞 {{ company.phone }}{% endif %}`;
+
+  function onStatusChange(select, studentId) {
+    // Update dropdown colour class
+    select.className = 'status-select ' + select.value;
+
+    // Show/hide WA absent notification button
+    const waBtn = document.getElementById('wa_absent_' + studentId);
+    if (waBtn) {
+      if (select.value === 'absent' || select.value === 'late') {
+        const name  = waBtn.dataset.name;
+        const phone = waBtn.dataset.phone.replace(/\D/g, '');
+        const fullPhone = phone.length === 10 ? '91' + phone : phone;
+        waBtn.href = 'https://wa.me/' + fullPhone +
+          '?text=' + encodeURIComponent(ABSENT_MSG_TEMPLATE(name));
+        waBtn.style.display = 'inline-flex';
+      } else {
+        waBtn.style.display = 'none';
       }
-    });
+    }
 
-    // Update display
+    updateStatistics();
+  }
+
+  function updateStatistics() {
+    const counts = { present: 0, absent: 0, late: 0, leave: 0 };
+    document.querySelectorAll('select[class*="status-select"]').forEach(select => {
+      if (select.value in counts) counts[select.value]++;
+    });
     document.getElementById('present-count').textContent = counts.present;
     document.getElementById('absent-count').textContent = counts.absent;
     document.getElementById('late-count').textContent = counts.late;
     document.getElementById('leave-count').textContent = counts.leave;
   }
 
-  // Add change event listeners to all status selects
-  document.querySelectorAll('select[class*="status-select"]').forEach(select => {
-    select.addEventListener('change', updateStatistics);
-  });
+  // ── Out-of-time attendance warning ──
+  (function() {
+    const batchStart    = "{{ batch_start_time or '' }}";
+    const batchEnd      = "{{ batch_end_time or '' }}";
+    const batchSelected = {{ 'true' if batch_id else 'false' }};
+    const batchId       = "{{ batch_id or '' }}";
+    const attendanceDate = "{{ attendance_date or '' }}";
+    const storageKey    = 'timeWarnReason_' + batchId + '_' + attendanceDate;
 
-  // Initial statistics update
-  updateStatistics();
+    function getCurrentHHMM() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      return h + ':' + m;
+    }
+
+    function formatTime12(hhmm) {
+      if (!hhmm) return hhmm;
+      const [h, m] = hhmm.split(':').map(Number);
+      const suffix = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return h12 + ':' + String(m).padStart(2, '0') + ' ' + suffix;
+    }
+
+    function applyReason(reason) {
+      document.querySelectorAll('.time-warn-reason-input').forEach(function(inp) {
+        inp.value = reason;
+      });
+    }
+
+    function isOutsideTime() {
+      if (!batchSelected || !batchStart || !batchEnd) return null;
+      const nowHHMM = getCurrentHHMM();
+      if (nowHHMM < batchStart) return 'before_start';
+      if (nowHHMM > batchEnd)   return 'after_end';
+      return null;
+    }
+
+    // Reference to the form that triggered the modal, so we can submit it after
+    let pendingForm = null;
+
+    function showWarningModal(form, warningType) {
+      pendingForm = form;
+      const nowDisplay   = formatTime12(getCurrentHHMM());
+      const startDisplay = formatTime12(batchStart);
+      const endDisplay   = formatTime12(batchEnd);
+      const typeLabel = warningType === 'before_start'
+        ? 'before the batch start time'
+        : 'after the batch end time';
+      const msgEl = document.getElementById('timeWarnMsg');
+      if (msgEl) {
+        msgEl.innerHTML =
+          '<strong>Current time: ' + nowDisplay + '</strong><br>' +
+          'This batch is scheduled <strong>' + startDisplay + ' – ' + endDisplay + '</strong>.<br>' +
+          'You are marking attendance <strong>' + typeLabel + '</strong>.<br>' +
+          'Attendance will still be saved, but this will be flagged for admin review.';
+      }
+      // Clear previous input
+      const textarea = document.getElementById('timeWarnReasonInput');
+      if (textarea) textarea.value = '';
+      const errEl = document.getElementById('timeWarnReasonError');
+      if (errEl) errEl.style.display = 'none';
+
+      const modal = document.getElementById('timeWarnModal');
+      if (modal && typeof bootstrap !== 'undefined') {
+        new bootstrap.Modal(modal, { backdrop: 'static', keyboard: false }).show();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      // WA buttons init (existing logic)
+      document.querySelectorAll('select[class*="status-select"]').forEach(select => {
+        const sid = select.id.replace('status_', '');
+        if (select.value === 'absent' || select.value === 'late') {
+          const waBtn = document.getElementById('wa_absent_' + sid);
+          if (waBtn) {
+            const name  = waBtn.dataset.name;
+            const phone = waBtn.dataset.phone.replace(/\D/g, '');
+            const fullPhone = phone.length === 10 ? '91' + phone : phone;
+            waBtn.href = 'https://wa.me/' + fullPhone +
+              '?text=' + encodeURIComponent(ABSENT_MSG_TEMPLATE(name));
+            waBtn.style.display = 'inline-flex';
+          }
+        }
+      });
+      updateStatistics();
+
+      // Intercept all attendance form submits
+      document.querySelectorAll('.attendance-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+          const warningType = isOutsideTime();
+          if (!warningType) return; // in-time — submit normally
+
+          // Always ask for a reason on every out-of-time submit
+          e.preventDefault();
+          showWarningModal(form, warningType);
+        });
+      });
+
+      // OK button: validate reason, save it, then submit the pending form
+      const okBtn = document.getElementById('timeWarnOkBtn');
+      if (okBtn) {
+        okBtn.addEventListener('click', function() {
+          const textarea = document.getElementById('timeWarnReasonInput');
+          const reason = textarea ? textarea.value.trim() : '';
+          const errEl = document.getElementById('timeWarnReasonError');
+          if (!reason) {
+            if (errEl) errEl.style.display = 'block';
+            if (textarea) textarea.focus();
+            return;
+          }
+          if (errEl) errEl.style.display = 'none';
+          applyReason(reason);
+          const modalEl = document.getElementById('timeWarnModal');
+          if (modalEl && typeof bootstrap !== 'undefined') {
+            const bsModal = bootstrap.Modal.getInstance(modalEl);
+            if (bsModal) bsModal.hide();
+          }
+          // Submit the form that was intercepted
+          if (pendingForm) {
+            pendingForm.submit();
+            pendingForm = null;
+          }
+        });
+      }
+    });
+  })();
 </script>
+
+<!-- Out-of-time attendance warning modal -->
+<div class="modal fade" id="timeWarnModal" tabindex="-1" aria-labelledby="timeWarnModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-warning">
+      <div class="modal-header bg-warning bg-opacity-10 border-warning">
+        <h5 class="modal-title text-warning" id="timeWarnModalLabel">
+          ⚠️ Outside Batch Schedule
+        </h5>
+      </div>
+      <div class="modal-body">
+        <div id="timeWarnMsg" style="margin-bottom: 16px;"></div>
+        <label for="timeWarnReasonInput" class="form-label fw-semibold">
+          Reason for marking outside scheduled hours <span class="text-danger">*</span>
+        </label>
+        <textarea id="timeWarnReasonInput" class="form-control" rows="3"
+          placeholder="e.g. Trainer was available early, system was down during class time, makeup session..."
+          maxlength="500" style="resize: vertical;"></textarea>
+        <div id="timeWarnReasonError" class="text-danger small mt-1" style="display:none;">
+          Please provide a reason before continuing.
+        </div>
+      </div>
+      <div class="modal-footer border-warning">
+        <button type="button" class="btn btn-warning" id="timeWarnOkBtn">OK, Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}

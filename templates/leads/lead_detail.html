@@ -1,158 +1,523 @@
-{% extends "leads/base.html" %}
+﻿{% extends "leads/base.html" %}
 {% block title %}Lead {{ lead.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Lead detail mobile styles */
+  .lead-profile-card {
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    border-radius: 14px;
+    color: #fff;
+    padding: 16px;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .lead-profile-card::before {
+    content: '';
+    position: absolute;
+    top: -30px; right: -30px;
+    width: 100px; height: 100px;
+    background: rgba(255,255,255,.07);
+    border-radius: 50%;
+  }
+  .lead-profile-card .lp-name { font-size: 18px; font-weight: 700; }
+  .lead-profile-card .lp-phone { font-size: 14px; opacity: .85; margin-top: 2px; }
+  .lead-profile-card .lp-meta { font-size: 12px; opacity: .7; margin-top: 4px; }
+  .lead-profile-card .lp-badges { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+  .wa-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #25D366; color: white; padding: 6px 14px;
+    border-radius: 20px; font-size: 12px; font-weight: 600;
+    text-decoration: none; border: none;
+  }
+  .wa-btn:hover { background: #1da851; color: white; }
+
+  .call-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #2e7d32; color: white; padding: 6px 14px;
+    border-radius: 20px; font-size: 12px; font-weight: 600;
+    text-decoration: none; border: none;
+  }
+  .call-btn:hover { background: #1b5e20; color: white; }
+
+  .save-contact-btn-lead {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #1565c0; color: white; padding: 6px 14px;
+    border-radius: 20px; font-size: 12px; font-weight: 600;
+    border: none; cursor: pointer;
+  }
+  .save-contact-btn-lead:hover { background: #0d47a1; color: white; }
+
+  /* Action button bar */
+  .action-bar {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    background: #fff; border-radius: 12px;
+    padding: 10px; margin-bottom: 12px;
+    box-shadow: 0 1px 5px rgba(0,0,0,.07);
+  }
+  .action-bar .btn { flex: 1; min-width: 70px; font-size: 13px; }
+
+  /* Detail info card */
+  .info-card {
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 1px 5px rgba(0,0,0,.07);
+    margin-bottom: 10px; overflow: hidden;
+  }
+  .info-card .ic-header {
+    padding: 10px 14px;
+    font-weight: 600; font-size: 13px;
+    border-bottom: 1px solid #f0f0f0;
+    background: #fafafa;
+    cursor: pointer;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .info-card .ic-body { padding: 12px 14px; }
+
+  .info-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 13px; border-bottom: 1px solid #f8f8f8; }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .ir-label { color: #9ca3af; font-size: 11px; min-width: 90px; flex-shrink: 0; }
+  .info-row .ir-value { font-weight: 500; color: #1f2937; }
+
+  /* Timeline */
+  .timeline-item {
+    position: relative; padding: 10px 14px 10px 30px;
+    border-bottom: 1px solid #f5f5f5; font-size: 13px;
+  }
+  .timeline-item:last-child { border-bottom: none; }
+  .timeline-item::before {
+    content: ''; position: absolute; left: 12px; top: 16px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #0d6efd; border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #0d6efd;
+  }
+  .timeline-item .ti-when { font-size: 11px; color: #9ca3af; }
+  .timeline-item .ti-title { font-weight: 600; margin: 2px 0; }
+  .timeline-item .ti-note { color: #4b5563; }
+  .timeline-item .ti-next { font-size: 11px; color: #0d6efd; margin-top: 2px; }
+
+  /* Add followup form */
+  .followup-form-card {
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 1px 5px rgba(0,0,0,.07);
+    padding: 14px; margin-bottom: 10px;
+  }
+  .followup-form-card .ff-title { font-weight: 600; font-size: 13px; margin-bottom: 10px; }
+
+  /* AI Assist panel */
+  .ai-assist-card {
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 1px 5px rgba(0,0,0,.07);
+    padding: 14px; margin-bottom: 10px;
+    border-top: 3px solid #7c3aed;
+  }
+  .ai-assist-card .ai-title { font-weight: 600; font-size: 13px; margin-bottom: 10px; color: #7c3aed; }
+  .ai-btn-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .ai-btn-bar .btn { font-size: 12px; padding: 5px 10px; }
+  .ai-result-box {
+    background: #f8f5ff; border-radius: 8px;
+    border: 1px solid #ddd6fe; padding: 12px;
+    font-size: 13px; line-height: 1.6; color: #1f2937;
+    white-space: pre-wrap; word-break: break-word;
+    display: none;
+  }
+  .ai-result-box.show { display: block; }
+  .ai-copy-btn {
+    font-size: 11px; margin-top: 8px;
+    border: 1px solid #7c3aed; color: #7c3aed;
+    background: transparent; border-radius: 6px;
+    padding: 3px 10px; cursor: pointer;
+  }
+  .ai-copy-btn:hover { background: #7c3aed; color: #fff; }
+  .ai-spinner { display: none; color: #7c3aed; font-size: 13px; margin-top: 6px; }
+  .ai-spinner.show { display: block; }
+</style>
+{% endblock %}
+
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <div>
-    <h5 class="mb-1">{{ lead.name }}</h5>
-    <div class="text-muted small">
-      Phone: <span class="fw-semibold">{{ lead.phone }}</span>
-      {% if lead.whatsapp %} | WhatsApp: {{ lead.whatsapp }}{% endif %}
-      | Stage: <span class="fw-semibold">{{ lead.stage }}</span>
-      | Score: <span class="badge {{ 'bg-danger' if lead.lead_score >= 60 else 'bg-secondary' }}">{{ lead.lead_score }}</span>
-      {% if lead.assigned_to_name or lead.assigned_to_username %}
-        | Owner: <span class="fw-semibold">{{ lead.assigned_to_name or lead.assigned_to_username }}</span>
-      {% endif %}
-    </div>
-    <div class="text-muted small">
-      Created: {{ lead.created_at or '' }} | Updated: {{ lead.updated_at or '' }}
-    </div>
+<!-- Back link -->
+<div class="mb-2">
+  <a href="{{ url_for('leads.leads_list') }}" class="text-muted text-decoration-none" style="font-size:13px;">
+    ‹ Back to Leads
+  </a>
+</div>
+
+<!-- Lead Profile Header Card -->
+<div class="lead-profile-card">
+  <div class="lp-name">{{ lead.name }}</div>
+  <div class="lp-phone">
+    📞 {{ lead.phone or '—' }}
+    {% if lead.phone %}
+    <a href="tel:{{ lead.phone | replace(' ', '') | replace('-', '') }}"
+       title="Call {{ lead.name }}" class="call-btn ms-2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+      Call
+    </a>
+    <a href="https://wa.me/91{{ lead.phone | replace(' ', '') | replace('-', '') }}"
+       target="_blank" rel="noopener noreferrer" class="wa-btn ms-1">
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      WhatsApp
+    </a>
+    <button onclick="saveLeadContact()" class="save-contact-btn-lead ms-1" title="Save to Contacts">
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+      Save Contact
+    </button>
+    {% endif %}
+    {% if lead.whatsapp and lead.whatsapp != lead.phone %}
+    <a href="https://wa.me/91{{ lead.whatsapp | replace(' ', '') | replace('-', '') }}"
+       target="_blank" rel="noopener noreferrer" class="wa-btn ms-1">
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      WA (Alt)
+    </a>
+    {% endif %}
   </div>
-
-  <div class="d-flex gap-2">
-    <a class="btn btn-outline-primary" href="{{ url_for('leads.lead_edit', lead_id=lead.id) }}">Edit</a>
-
-  <form method="post" action="{{ url_for('leads.lead_set_stage', lead_id=lead.id) }}">
-    <input type="hidden" name="stage" value="Converted">
-    <button class="btn btn-success" type="submit">Convert</button>
-  </form>
-
-  <form method="post" action="{{ url_for('leads.lead_delete', lead_id=lead.id) }}" onsubmit="return confirm('Delete this lead?');">
-    <button class="btn btn-outline-danger" type="submit">Delete</button>
-  </form>
+  <div class="lp-meta">
+    {% if lead.assigned_to_name or lead.assigned_to_username %}
+      Owner: {{ lead.assigned_to_name or lead.assigned_to_username }} &bull;
+    {% endif %}
+    Added: {{ lead.created_at or '' }}
+  </div>
+  <div class="lp-badges">
+    <span class="badge bg-white text-dark">{{ lead.stage }}</span>
+    <span class="badge {% if lead.lead_score >= 60 %}bg-danger{% else %}bg-secondary{% endif %}">
+      🔥 Score {{ lead.lead_score }}
+    </span>
+    {% if lead.lead_source %}
+      <span class="badge bg-white bg-opacity-25 text-white">{{ lead.lead_source }}</span>
+    {% endif %}
+    {% if linked_student %}
+      <a href="{{ url_for('billing.student_profile', student_id=linked_student.id) }}"
+         class="badge text-decoration-none"
+         style="background:#fff; color:#198754; border:1px solid rgba(255,255,255,0.5);">
+        🎓 Student #{{ linked_student.student_code }}
+      </a>
+    {% endif %}
   </div>
 </div>
 
-<div class="row g-3">
+<!-- Action Bar -->
+<div class="action-bar">
+  <a class="btn btn-outline-primary" href="{{ url_for('leads.lead_edit', lead_id=lead.id) }}">✏ Edit</a>
+
+  {% if linked_student %}
+  <a class="btn btn-success w-100" href="{{ url_for('billing.student_profile', student_id=linked_student.id) }}" style="flex:1; min-width:70px;">
+    👤 View Student #{{ linked_student.student_code }}
+  </a>
+  {% elif lead.status != 'converted' %}
+  <a class="btn btn-success w-100" href="{{ url_for('billing.student_new') }}?from_lead={{ lead.id }}" style="flex:1; min-width:70px;">
+    🎓 Convert to Student
+  </a>
+  {% else %}
+  <span class="btn btn-secondary w-100 disabled" style="flex:1; min-width:70px;">✓ Converted</span>
+  {% endif %}
+
+  <button class="btn btn-outline-warning" type="button" data-bs-toggle="collapse" data-bs-target="#markLostPanel">
+    Mark Lost
+  </button>
+
+  <form method="post" action="{{ url_for('leads.lead_delete', lead_id=lead.id) }}" onsubmit="return confirm('Delete this lead?');" style="min-width:auto;">
+    <button class="btn btn-outline-danger" type="submit">🗑</button>
+  </form>
+</div>
+
+<!-- Mark Lost panel (collapsible) -->
+<div class="collapse {% if lead.stage == 'Lost' %}show{% endif %} mb-2" id="markLostPanel">
+  <div class="card card-body p-2" style="border-radius:10px; background:#fff8f0; border-color:#fde68a;">
+    <form method="post" action="{{ url_for('leads.lead_mark_lost', lead_id=lead.id) }}">
+      <div class="d-flex gap-2">
+        <input class="form-control form-control-sm" name="lost_reason"
+               placeholder="Lost reason (e.g. too expensive, joined elsewhere…)" required
+               value="{{ lead.lost_reason or '' }}">
+        <button class="btn btn-warning btn-sm" type="submit">Mark Lost</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Main content: 2-col on large, stacked on mobile -->
+<div class="row g-2">
+
+  <!-- Left: Details -->
   <div class="col-lg-6">
-    <div class="card p-3">
-      <div class="fw-semibold mb-2">Details</div>
-      <div class="small">
-        <div><span class="text-muted">Education:</span> {{ lead.education_status or '' }} {{ lead.stream or '' }}</div>
-        <div><span class="text-muted">Institute:</span> {{ lead.institute_name or '' }}</div>
-        <div><span class="text-muted">Goal:</span> {{ lead.career_goal or '' }}</div>
-        <div><span class="text-muted">Courses:</span> {{ lead.interested_courses or '' }}</div>
-        <div><span class="text-muted">Source:</span> {{ lead.lead_source or '' }}</div>
-        <div><span class="text-muted">Decision Maker:</span> {{ lead.decision_maker or 'Self' }}</div>        <div><span class=\"text-muted\">Lead From:</span> {{ lead.lead_location or '' }}</div>        <div><span class="text-muted">Start:</span> {{ lead.start_timeframe or '' }}</div>
-        <div><span class="text-muted">Last Contact:</span> {{ lead.last_contact_date or '' }}</div>
-        <div><span class="text-muted">Next Follow-up:</span> {{ lead.next_followup_date or '' }}</div>
+
+    <!-- Lead Details (collapsible on mobile) -->
+    <div class="info-card">
+      <div class="ic-header" data-bs-toggle="collapse" data-bs-target="#detailsPanel" aria-expanded="true">
+        📋 Lead Details
+        <span class="text-muted" style="font-size:16px;">›</span>
+      </div>
+      <div class="collapse show ic-body" id="detailsPanel">
+        {% if lead.education_status or lead.stream %}
+        <div class="info-row">
+          <span class="ir-label">Education</span>
+          <span class="ir-value">{{ lead.education_status or '' }} {{ lead.stream or '' }}</span>
+        </div>
+        {% endif %}
+        {% if lead.institute_name %}
+        <div class="info-row">
+          <span class="ir-label">Institute</span>
+          <span class="ir-value">{{ lead.institute_name }}</span>
+        </div>
+        {% endif %}
+        {% if lead.career_goal %}
+        <div class="info-row">
+          <span class="ir-label">Goal</span>
+          <span class="ir-value">{{ lead.career_goal }}</span>
+        </div>
+        {% endif %}
+        {% if lead.interested_courses %}
+        <div class="info-row">
+          <span class="ir-label">Courses</span>
+          <span class="ir-value">{{ lead.interested_courses }}</span>
+        </div>
+        {% endif %}
+        {% if lead.lead_source %}
+        <div class="info-row">
+          <span class="ir-label">Source</span>
+          <span class="ir-value">{{ lead.lead_source }}</span>
+        </div>
+        {% endif %}
+        <div class="info-row">
+          <span class="ir-label">Decision</span>
+          <span class="ir-value">{{ lead.decision_maker or 'Self' }}</span>
+        </div>
+        {% if lead.lead_location %}
+        <div class="info-row">
+          <span class="ir-label">Lead From</span>
+          <span class="ir-value">{{ lead.lead_location }}</span>
+        </div>
+        {% endif %}
+        {% if lead.start_timeframe %}
+        <div class="info-row">
+          <span class="ir-label">Start</span>
+          <span class="ir-value">{{ lead.start_timeframe }}</span>
+        </div>
+        {% endif %}
+        {% if lead.last_contact_date %}
+        <div class="info-row">
+          <span class="ir-label">Last Contact</span>
+          <span class="ir-value">{{ lead.last_contact_date }}</span>
+        </div>
+        {% endif %}
+        {% if lead.next_followup_date %}
+        <div class="info-row">
+          <span class="ir-label">Next Follow-up</span>
+          <span class="ir-value text-primary fw-semibold">{{ lead.next_followup_date }}</span>
+        </div>
+        {% endif %}
         {% if lead.lost_reason %}
-        <div><span class="text-muted">Lost Reason:</span> {{ lead.lost_reason }}</div>
+        <div class="info-row">
+          <span class="ir-label">Lost Reason</span>
+          <span class="ir-value text-danger">{{ lead.lost_reason }}</span>
+        </div>
+        {% endif %}
+        {% if lead.notes %}
+        <div class="mt-2 pt-2" style="border-top:1px solid #f0f0f0; font-size:13px;">
+          <div class="text-muted mb-1" style="font-size:11px;">NOTES</div>
+          {{ lead.notes }}
+        </div>
         {% endif %}
       </div>
+    </div>
 
-      {% if lead.notes %}
-      <hr>
-      <div class="small">
-        <span class="text-muted">Notes:</span><br>
-        {{ lead.notes }}
+    <!-- Reassign Owner -->
+    <div class="info-card">
+      <div class="ic-header" data-bs-toggle="collapse" data-bs-target="#ownerPanel" aria-expanded="false">
+        👤 Lead Owner
+        <span class="text-muted" style="font-size:16px;">›</span>
       </div>
-      {% endif %}
+      <div class="collapse ic-body" id="ownerPanel">
+        <form method="post" action="{{ url_for('leads.lead_reassign', lead_id=lead.id) }}">
+          <div class="input-group input-group-sm">
+            <select class="form-select" name="assigned_to_id">
+              <option value="">Unassigned</option>
+              {% for user in all_users %}
+                <option value="{{ user.id }}" {% if lead.assigned_to_id == user.id %}selected{% endif %}>
+                  {{ user.full_name or user.username }}
+                </option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-outline-secondary" type="submit">Reassign</button>
+          </div>
+        </form>
+      </div>
     </div>
 
-    <div class="card p-3 mt-3">
-      <div class="fw-semibold mb-2">Lead Owner</div>
-      <form method="post" action="{{ url_for('leads.lead_reassign', lead_id=lead.id) }}">
-        <div class="input-group">
-          <select class="form-select" name="assigned_to_id">
-            <option value="">Unassigned</option>
-            {% for user in all_users %}
-              <option value="{{ user.id }}" {% if lead.assigned_to_id == user.id %}selected{% endif %}>
-                {{ user.full_name or user.username }}
-              </option>
-            {% endfor %}
-          </select>
-          <button class="btn btn-outline-secondary" type="submit">Reassign</button>
-        </div>
-      </form>
-    </div>
-
-    <div class="card p-3 mt-3">
-      <div class="fw-semibold mb-2">Mark Lost</div>
-      <form method="post" action="{{ url_for('leads.lead_mark_lost', lead_id=lead.id) }}">
-        <div class="input-group">
-          <input class="form-control" name="lost_reason" placeholder="Reason (too expensive, joined elsewhere...)" required>
-          <button class="btn btn-outline-warning" type="submit">Mark Lost</button>
-        </div>
-      </form>
-    </div>
   </div>
 
+  <!-- Right: Follow-up form + Timeline -->
   <div class="col-lg-6">
-    <div class="card p-3 mb-3">
-      <div class="fw-semibold mb-2">Add Follow-up</div>
+
+    <!-- Add Follow-up -->
+    {% if lead.status != 'converted' %}
+    <div class="followup-form-card">
+      <div class="ff-title">📞 Add Follow-up</div>
       <form method="post" action="{{ url_for('leads.followup_add', lead_id=lead.id) }}">
         <div class="row g-2">
-          <div class="col-md-4">
-            <label class="form-label">Follow-up Type</label>
-            <select class="form-select" name="method">
-              <option value="">(choose)</option>
+          <div class="col-6">
+            <select class="form-select form-select-sm" name="method">
+              <option value="">(Type)</option>
               {% for m in methods %}
                 <option value="{{ m }}">{{ m }}</option>
               {% endfor %}
             </select>
           </div>
-
-          <div class="col-md-4">
-            <label class="form-label">Outcome</label>
-            <select class="form-select" name="outcome">
-              <option value="">(choose)</option>
+          <div class="col-6">
+            <select class="form-select form-select-sm" name="outcome">
+              <option value="">(Outcome)</option>
               {% for o in outcomes %}
                 <option value="{{ o }}">{{ o }}</option>
               {% endfor %}
             </select>
           </div>
-
-          <div class="col-md-4">
-            <label class="form-label">Next Follow-up Date</label>
-            <input class="form-control" type="date" name="next_followup_date">
-          </div>
-
           <div class="col-12">
-            <textarea class="form-control" name="note" rows="2" placeholder="Notes..."></textarea>
+            <input class="form-control form-control-sm" type="date" name="next_followup_date" placeholder="Next follow-up date">
+          </div>
+          <div class="col-12">
+            <textarea class="form-control form-control-sm" name="note" rows="2" placeholder="Notes…"></textarea>
           </div>
         </div>
-        <button class="btn btn-primary mt-2">Save Follow-up</button>
+        <button class="btn btn-primary btn-sm w-100 mt-2">Save Follow-up</button>
       </form>
     </div>
+    {% endif %}
 
-    <div class="card">
-      <div class="card-header fw-semibold">Timeline</div>
-      <div class="card-body">
+    <!-- Timeline -->
+    <div class="info-card">
+      <div class="ic-header">
+        🕐 Timeline <span class="badge bg-secondary ms-1">{{ followups | length }}</span>
+      </div>
+      <div class="ic-body p-0">
         {% if followups %}
-          <div class="list-group">
-            {% for f in followups %}
-              <div class="list-group-item">
-                <div class="small text-muted">
-                  {{ f.created_at | format_datetime }}
-                  {% if f.user_username or f.user_full_name %}
-                    | {{ f.user_full_name or f.user_username }}
-                  {% endif %}
-                </div>
-                <div class="fw-semibold">{{ f.method or 'Follow-up' }} - {{ f.outcome or '' }}</div>
-                <div class="small">{{ f.note or '' }}</div>
-                {% if f.next_followup_date %}
-                  <div class="small text-muted">Next: {{ f.next_followup_date | format_datetime }}</div>
-                {% endif %}
-              </div>
-            {% endfor %}
+          {% for f in followups %}
+          <div class="timeline-item">
+            <div class="ti-when">
+              {{ f.created_at | format_datetime }}
+              {% if f.user_full_name or f.user_username %}
+                — {{ f.user_full_name or f.user_username }}
+              {% endif %}
+            </div>
+            <div class="ti-title">{{ f.method or 'Follow-up' }}{% if f.outcome %} · {{ f.outcome }}{% endif %}</div>
+            {% if f.note %}<div class="ti-note">{{ f.note }}</div>{% endif %}
+            {% if f.next_followup_date %}
+              <div class="ti-next">Next: {{ f.next_followup_date | format_datetime }}</div>
+            {% endif %}
           </div>
+          {% endfor %}
         {% else %}
-          <div class="text-muted">No follow-ups yet.</div>
+          <div class="text-muted text-center py-3" style="font-size:13px;">No follow-ups yet.</div>
         {% endif %}
       </div>
     </div>
+
+    <!-- AI Assist -->
+    <div class="ai-assist-card" id="aiAssistCard">
+      <div class="ai-title">✨ AI Assist</div>
+      <div class="ai-btn-bar">
+        <button class="btn btn-outline-secondary" onclick="aiRequest('script')">📞 Call Script</button>
+        <button class="btn btn-outline-secondary" onclick="aiRequest('next_action')">🎯 Next Action</button>
+        <button class="btn btn-outline-secondary" onclick="aiRequest('whatsapp')">💬 WhatsApp</button>
+        <button class="btn btn-outline-secondary" onclick="aiRequest('email')">✉ Email Draft</button>
+      </div>
+      <div class="ai-spinner" id="aiSpinner">⏳ Generating…</div>
+      <div class="ai-result-box" id="aiResultBox"></div>
+      <button class="ai-copy-btn" id="aiCopyBtn" onclick="copyAiResult()" style="display:none;">📋 Copy</button>
+    </div>
+
   </div>
 </div>
+
+<script>
+function saveLeadContact() {
+  var name  = {{ lead.name | tojson }};
+  var phone = {{ (lead.phone or '') | tojson }};
+  var org   = {{ company.company_short_name | tojson }};
+  var note  = "Lead Source: " + {{ (lead.lead_source or '') | tojson }};
+
+  var vcard = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:" + name,
+    "N:" + name + ";;;;",
+    phone ? "TEL;TYPE=CELL:" + phone : "",
+    "ORG:" + org,
+    "NOTE:" + note,
+    "END:VCARD"
+  ].filter(Boolean).join("\r\n");
+
+  var blob = new Blob([vcard], { type: "text/vcard;charset=utf-8" });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement("a");
+  a.href  = url;
+  a.download = name.replace(/\s+/g, "_") + ".vcf";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+}
+
+var _aiLeadId = {{ lead.id }};
+var _csrfToken = document.querySelector('meta[name="csrf-token"]') ?
+  document.querySelector('meta[name="csrf-token"]').getAttribute('content') : '';
+
+function aiRequest(action) {
+  var spinner  = document.getElementById('aiSpinner');
+  var resultBox = document.getElementById('aiResultBox');
+  var copyBtn  = document.getElementById('aiCopyBtn');
+
+  spinner.classList.add('show');
+  resultBox.classList.remove('show');
+  resultBox.textContent = '';
+  copyBtn.style.display = 'none';
+
+  fetch('/leads/' + _aiLeadId + '/ai-assist', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': _csrfToken
+    },
+    body: JSON.stringify({ action: action })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(data) {
+    spinner.classList.remove('show');
+    if (data.error) {
+      resultBox.textContent = '⚠ ' + data.error;
+    } else {
+      resultBox.textContent = data.result;
+      copyBtn.style.display = 'inline-block';
+    }
+    resultBox.classList.add('show');
+  })
+  .catch(function() {
+    spinner.classList.remove('show');
+    resultBox.textContent = '⚠ Network error. Please try again.';
+    resultBox.classList.add('show');
+  });
+}
+
+function copyAiResult() {
+  var text = document.getElementById('aiResultBox').textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function() {
+      var btn = document.getElementById('aiCopyBtn');
+      btn.textContent = '✓ Copied!';
+      setTimeout(function() { btn.textContent = '📋 Copy'; }, 2000);
+    });
+  }
+}
+
+// Auto-open AI panel if follow-up is due or overdue today
+(function() {
+  var nextDate = {{ (lead.next_followup_date or '') | tojson }};
+  var today = new Date().toISOString().slice(0, 10);
+  if (nextDate && nextDate <= today) {
+    var card = document.getElementById('aiAssistCard');
+    if (card) card.style.borderColor = '#dc3545';
+  }
+})();
+</script>
 
 {% endblock %}

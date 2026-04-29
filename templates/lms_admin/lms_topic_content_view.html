@@ -3,6 +3,35 @@
 {% block title %}Preview - {{ content.content_title }}{% endblock %}
 
 {% block content %}
+<style>
+.rich-text-content { overflow: hidden; }
+.rich-text-content h1 { font-size: 1.9em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.2; }
+.rich-text-content h2 { font-size: 1.55em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.25; }
+.rich-text-content h3 { font-size: 1.25em; font-weight: 600; margin: 0.55em 0 0.25em; line-height: 1.3; }
+.rich-text-content h4 { font-size: 1.05em; font-weight: 600; margin: 0.5em 0 0.2em; line-height: 1.35; }
+.lms-hotspot-embed {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden;
+    margin: 16px 0;
+    line-height: 0;
+    box-sizing: border-box;
+}
+.lms-hotspot-embed img {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+.lms-rt-dot {
+    position: absolute !important;
+    z-index: 10 !important;
+}
+</style>
 <div class="container-fluid py-4">
     <!-- Breadcrumb Navigation -->
     <nav aria-label="breadcrumb" class="mb-4">
@@ -67,6 +96,10 @@
                                 🎥 Video File
                             {% elif content.content_mode == 'pdf' %}
                                 📕 PDF Document
+                            {% elif content.content_mode == 'rich_text' %}
+                                📝 Rich Text Lesson
+                            {% elif content.content_mode == 'interactive_image' %}
+                                🖼️ Interactive Image
                             {% elif content.content_mode == 'image' %}
                                 🖼️ Image
                             {% elif content.content_mode == 'download' %}
@@ -92,7 +125,7 @@
                                 <div class="alert alert-info mb-3">
                                     <i class="bi bi-file-earmark-code"></i> Displaying HTML file content
                                 </div>
-                                <iframe src="{{ content.file_path }}" style="width:100%; height:600px; border: 1px solid #ddd; border-radius: 4px;"></iframe>
+                                <iframe src="{{ '/' + content.file_path }}" style="width:100%; height:600px; border: 1px solid #ddd; border-radius: 4px;"></iframe>
                             </div>
                             <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
                         {% else %}
@@ -104,11 +137,26 @@
 
                     {% elif content.content_mode == 'youtube' %}
                         <!-- YouTube Video -->
-                        {% if content.external_url %}
-                            <div class="ratio ratio-16x9 mb-3">
-                                <iframe src="{{ content.external_url }}" allowfullscreen></iframe>
+                        {% if embed_url %}
+                            <div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden;" class="mb-3">
+                                <iframe src="{{ embed_url }}"
+                                    style="position:absolute; top:0; left:0; width:100%; height:100%; border:0;"
+                                    allowfullscreen
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture">
+                                </iframe>
+                                <!-- Overlay: top bar — blocks video title + channel name link -->
+                                <div style="position:absolute; top:0; left:0; width:100%; height:13%; z-index:10;
+                                            background:transparent; cursor:default;"
+                                     oncontextmenu="return false;"></div>
+                                <!-- Overlay: bottom-right — blocks YouTube logo link -->
+                                <div style="position:absolute; bottom:0; right:0; width:22%; height:12%; z-index:10;
+                                            background:transparent; cursor:default;"
+                                     oncontextmenu="return false;"></div>
+                                <!-- Overlay: bottom-left share button area -->
+                                <div style="position:absolute; bottom:0; left:0; width:8%; height:12%; z-index:10;
+                                            background:transparent; cursor:default;"
+                                     oncontextmenu="return false;"></div>
                             </div>
-                            <p class="text-muted"><small>URL: {{ content.external_url }}</small></p>
                         {% else %}
                             <div class="alert alert-warning">No YouTube URL configured</div>
                         {% endif %}
@@ -118,7 +166,7 @@
                         {% if content.file_path %}
                             <div class="ratio ratio-16x9 mb-3">
                                 <video controls>
-                                    <source src="{{ content.file_path }}" type="video/mp4">
+                                    <source src="{{ '/' + content.file_path }}" type="video/mp4">
                                     Your browser does not support the video tag.
                                 </video>
                             </div>
@@ -128,21 +176,124 @@
                         {% endif %}
 
                     {% elif content.content_mode == 'pdf' %}
-                        <!-- PDF Document -->
+                        <!-- PDF rendered via PDF.js (no native viewer = no toolbar/right-click) -->
                         {% if content.file_path %}
-                            <div class="mb-3">
-                                <iframe src="{{ content.file_path }}" style="width:100%; height:600px; border: 1px solid #ddd;"></iframe>
+                            <div class="alert alert-warning py-2 mb-2" style="font-size:12px;">
+                                🔒 This content is protected. Saving and printing are disabled.
                             </div>
-                            <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
+                            <div id="pdf-loading" class="text-center py-4 text-muted">Loading PDF…</div>
+                            <div id="pdf-viewer" class="protected-content-wrapper" style="overflow-y:auto;"></div>
+                            <script src="{{ url_for('static', filename='js/pdfjs/pdf.min.js') }}"></script>
+                            <script>
+                                pdfjsLib.GlobalWorkerOptions.workerSrc =
+                                    '{{ url_for("static", filename="js/pdfjs/pdf.worker.min.js") }}';
+
+                                const pdfUrl = '{{ url_for("lms_admin.serve_pdf", content_id=content.id) }}';
+                                const PDF_DPR = window.devicePixelRatio || 1;
+                                const PDF_BASE_SCALE = 1.5;
+
+                                pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
+                                    document.getElementById('pdf-loading').style.display = 'none';
+                                    const viewer = document.getElementById('pdf-viewer');
+
+                                    function renderPage(num) {
+                                        pdf.getPage(num).then(function(page) {
+                                            const viewport = page.getViewport({ scale: PDF_BASE_SCALE * PDF_DPR });
+                                            const canvas = document.createElement('canvas');
+                                            canvas.width  = viewport.width;   /* physical pixels */
+                                            canvas.height = viewport.height;  /* physical pixels */
+                                            canvas.style.display    = 'block';
+                                            canvas.style.margin     = '0 auto 16px';
+                                            canvas.style.width      = (viewport.width  / PDF_DPR) + 'px'; /* CSS pixels */
+                                            canvas.style.height     = (viewport.height / PDF_DPR) + 'px'; /* CSS pixels */
+                                            canvas.style.boxShadow  = '0 1px 4px rgba(0,0,0,0.10)';
+                                            canvas.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+                                            viewer.appendChild(canvas);
+                                            page.render({ canvasContext: canvas.getContext('2d'), viewport });
+                                            if (num < pdf.numPages) renderPage(num + 1);
+                                        });
+                                    }
+                                    renderPage(1);
+                                }).catch(function(err) {
+                                    document.getElementById('pdf-loading').textContent = 'Failed to load PDF.';
+                                });
+                            </script>
                         {% else %}
                             <div class="alert alert-warning">No PDF file configured</div>
+                        {% endif %}
+
+                    {% elif content.content_mode == 'rich_text' %}
+                        <!-- Rich Text Lesson -->
+                        <div class="rich-text-content p-3 border rounded bg-white"
+                             style="line-height:1.7;font-size:15px;">
+                            {{ content.content_body | safe }}
+                        </div>
+
+                    {% elif content.content_mode == 'interactive_image' %}
+                        <!-- Interactive Image with Hotspots (admin preview) -->
+                        {% if content.file_path %}
+                        <div class="interactive-img-wrap" id="adminImgWrap"
+                             style="position:relative;display:inline-block;width:100%;max-width:100%;">
+                            <img id="adminHsImg"
+                                 src="{{ url_for('lms_admin.serve_image_admin', content_id=content.id) }}"
+                                 alt="{{ content.content_title }}"
+                                 style="width:100%;height:auto;display:block;border-radius:6px;border:1px solid #dee2e6;">
+                        </div>
+                        <!-- Hotspot popup modal -->
+                        <div id="adminHsModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+                             background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;">
+                          <div style="background:#fff;border-radius:10px;padding:24px;max-width:400px;width:90%;
+                               box-shadow:0 8px 32px rgba(0,0,0,0.25);position:relative;">
+                            <button onclick="document.getElementById('adminHsModal').style.display='none';"
+                                    style="position:absolute;top:10px;right:14px;border:none;background:none;
+                                           font-size:20px;cursor:pointer;color:#6c757d;">✕</button>
+                            <h5 id="adminHsTitle" style="margin:0 0 10px;color:#1a1a2e;"></h5>
+                            <p id="adminHsDesc" style="margin:0;color:#495057;font-size:14px;line-height:1.6;"></p>
+                          </div>
+                        </div>
+                        <script>
+                        (function(){
+                          var hotspots = [];
+                          try { hotspots = JSON.parse({{ content.hotspots_json | tojson }} || '[]'); } catch(e){}
+                          var img = document.getElementById('adminHsImg');
+                          function renderDots() {
+                            document.querySelectorAll('.admin-hs-dot').forEach(function(d){d.remove();});
+                            var wrap = document.getElementById('adminImgWrap');
+                            hotspots.forEach(function(hs, i) {
+                              var d = document.createElement('div');
+                              d.className = 'admin-hs-dot';
+                              Object.assign(d.style, {
+                                position:'absolute', left:hs.x+'%', top:hs.y+'%',
+                                transform:'translate(-50%,-50%)',
+                                width:'22px', height:'22px', borderRadius:'50%',
+                                background:'#e02020', border:'2px solid #fff',
+                                boxShadow:'0 0 0 2px rgba(0,0,0,0.25)',
+                                cursor:'pointer', zIndex:'10',
+                                display:'flex', alignItems:'center', justifyContent:'center',
+                                fontSize:'11px', color:'#fff', fontWeight:'700',
+                              });
+                              d.textContent = i + 1;
+                              d.addEventListener('click', function(){
+                                document.getElementById('adminHsTitle').textContent = hs.title || '';
+                                document.getElementById('adminHsDesc').textContent  = hs.description || '';
+                                document.getElementById('adminHsModal').style.display = 'flex';
+                              });
+                              wrap.appendChild(d);
+                            });
+                          }
+                          if (img.complete && img.naturalWidth > 0) renderDots();
+                          else img.onload = renderDots;
+                        })();
+                        </script>
+                        {% else %}
+                            <div class="alert alert-warning">No image file configured</div>
                         {% endif %}
 
                     {% elif content.content_mode == 'image' %}
                         <!-- Image -->
                         {% if content.file_path %}
                             <div class="mb-3">
-                                <img src="{{ content.file_path }}" class="img-fluid rounded" style="max-width: 100%; max-height: 500px;" alt="{{ content.content_title }}">
+                                <img src="{{ '/' + content.file_path }}" class="img-fluid rounded" style="max-width: 100%; max-height: 500px;" alt="{{ content.content_title }}">
                             </div>
                             <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
                         {% else %}
@@ -154,11 +305,11 @@
                         {% if content.file_path %}
                             <div class="alert alert-info">
                                 <i class="bi bi-download"></i>
-                                <a href="{{ content.file_path }}" class="btn btn-sm btn-primary ms-2">
+                                <strong>{{ content.content_title }}</strong> — available for download.
+                                <a href="{{ url_for('lms_admin.serve_protected_file', content_id=content.id) }}" class="btn btn-sm btn-primary ms-2">
                                     ⬇️ Download File
                                 </a>
                             </div>
-                            <p class="text-muted"><small>File: {{ content.file_path }}</small></p>
                         {% else %}
                             <div class="alert alert-warning">No file configured for download</div>
                         {% endif %}
@@ -212,10 +363,10 @@
                     {% if content.file_path %}
                     <div class="row mb-3">
                         <div class="col-sm-3">
-                            <strong>File Path:</strong>
+                            <strong>File:</strong>
                         </div>
                         <div class="col-sm-9">
-                            <small class="text-break">{{ content.file_path }}</small>
+                            <small class="text-muted">📎 File uploaded</small>
                         </div>
                     </div>
                     {% endif %}
@@ -230,11 +381,8 @@
                     <h5 class="mb-0">🔗 Navigation</h5>
                 </div>
                 <div class="card-body">
-                    <a href="{{ url_for('lms_admin.topic_view', topic_id=content.topic_id) }}" class="btn btn-outline-primary btn-sm w-100 mb-2">
-                        ← Go to Topic
-                    </a>
-                    <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=content.topic_id) }}" class="btn btn-outline-secondary btn-sm w-100 mb-2">
-                        📑 All Contents
+                    <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=content.topic_id) }}" class="btn btn-outline-primary btn-sm w-100 mb-2">
+                        ← Back to Contents
                     </a>
                     <a href="{{ url_for('lms_admin.content_edit', content_id=content.id) }}" class="btn btn-primary btn-sm w-100">
                         ✏️ Edit Content
@@ -258,19 +406,200 @@
 </div>
 
 <style>
-    .content-display {
-        line-height: 1.6;
-        font-size: 15px;
+    .content-display { line-height: 1.6; font-size: 15px; }
+    .content-display img { max-width: 100%; height: auto; }
+    .content-display video { max-width: 100%; height: auto; }
+
+    /* IP Protection */
+    .protected-content-wrapper {
+        position: relative;
+        user-select: none;
+        -webkit-user-select: none;
     }
-    
-    .content-display img {
-        max-width: 100%;
-        height: auto;
+    .card-body {
+        user-select: none;
+        -webkit-user-select: none;
     }
-    
-    .content-display video {
-        max-width: 100%;
-        height: auto;
+
+    /* Block printing entirely */
+    @media print {
+        body * { visibility: hidden !important; }
+        body::after {
+            visibility: visible !important;
+            content: "Printing this content is not permitted.";
+            position: fixed;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #333;
+        }
     }
 </style>
+<script>
+    /* Disable right-click on the whole page */
+    document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+    /* Disable Ctrl+S / Ctrl+P */
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'p' || e.key === 'u')) {
+            e.preventDefault();
+        }
+    });
+
+    /* ── Hotspot tooltip CSS ─────────────────────────────────────────── */
+    (function() {
+        var s = document.createElement('style');
+        s.textContent = [
+            '.lms-hs-tip{position:absolute;z-index:100;background:#fff;border-radius:10px;',
+            'padding:12px 14px;min-width:160px;max-width:240px;',
+            'box-shadow:0 4px 20px rgba(0,0,0,0.18);pointer-events:none;',
+            'opacity:0;transform:translateY(6px);',
+            'transition:opacity 0.18s ease,transform 0.18s ease;',
+            'line-height:1.4;font-size:13px;}',
+            '.lms-hs-tip.visible{opacity:1;transform:translateY(0);}',
+            '.lms-hs-tip-title{font-weight:700;color:#1a1a2e;margin-bottom:4px;font-size:13px;}',
+            '.lms-hs-tip-desc{color:#555;font-size:12px;line-height:1.5;margin:0;}',
+            '.lms-hs-tip::after{content:"";position:absolute;border:7px solid transparent;}',
+            /* arrow below tip (tip is above dot) */
+            '.lms-hs-tip.arrow-down::after{top:100%;left:50%;transform:translateX(-50%);border-top-color:#fff;}',
+            /* arrow above tip (tip is below dot) */
+            '.lms-hs-tip.arrow-up::after{bottom:100%;left:50%;transform:translateX(-50%);border-bottom-color:#fff;}',
+            '.lms-rt-dot{transition:transform 0.15s!important;}',
+            '.lms-rt-dot.active{transform:translate(-50%,-50%) scale(1.25)!important;}'
+        ].join('');
+        document.head.appendChild(s);
+    })();
+
+    /* Activate embedded hotspot images inside rich text content */
+    function activateLmsHotspots() {
+        // One shared tooltip element (re-used across all embeds)
+        var tip = document.getElementById('lms-hs-tip');
+        if (!tip) {
+            tip = document.createElement('div');
+            tip.id = 'lms-hs-tip';
+            tip.className = 'lms-hs-tip';
+            tip.innerHTML = '<div class="lms-hs-tip-title" id="lms-hs-tip-title"></div>'
+                          + '<p class="lms-hs-tip-desc" id="lms-hs-tip-desc"></p>';
+            document.body.appendChild(tip);
+        }
+        var _activeDot = null;
+
+        function hideTooltip() {
+            tip.classList.remove('visible');
+            if (_activeDot) { _activeDot.classList.remove('active'); _activeDot = null; }
+        }
+
+        function showTooltip(dot, title, desc) {
+            document.getElementById('lms-hs-tip-title').textContent = title || '';
+            var descEl = document.getElementById('lms-hs-tip-desc');
+            descEl.textContent = desc || '';
+            descEl.style.display = desc ? '' : 'none';
+
+            // Temporarily make visible (off-screen) to measure size
+            tip.style.visibility = 'hidden';
+            tip.style.left = '-9999px';
+            tip.style.top  = '-9999px';
+            tip.classList.add('visible');
+            tip.style.visibility = '';
+
+            var dotRect  = dot.getBoundingClientRect();
+            var tipW     = tip.offsetWidth;
+            var tipH     = tip.offsetHeight;
+            var vw       = window.innerWidth;
+            var vh       = window.innerHeight;
+            var ARROW    = 10; // gap between dot and tip
+            var GAP      = 8;  // edge padding
+
+            // Decide: show above or below dot?
+            var spaceAbove = dotRect.top;
+            var spaceBelow = vh - dotRect.bottom;
+            var showAbove  = spaceAbove >= tipH + ARROW || spaceAbove >= spaceBelow;
+
+            // Vertical position (fixed coords)
+            var top;
+            if (showAbove) {
+                top = dotRect.top - tipH - ARROW + window.scrollY;
+                tip.classList.remove('arrow-up');
+                tip.classList.add('arrow-down');
+            } else {
+                top = dotRect.bottom + ARROW + window.scrollY;
+                tip.classList.remove('arrow-down');
+                tip.classList.add('arrow-up');
+            }
+
+            // Horizontal: center over dot, clamp to viewport
+            var dotCenterX = dotRect.left + dotRect.width / 2;
+            var left = dotCenterX - tipW / 2 + window.scrollX;
+            left = Math.max(GAP + window.scrollX, Math.min(left, vw - tipW - GAP + window.scrollX));
+
+            tip.style.left = left + 'px';
+            tip.style.top  = top + 'px';
+            tip.style.position = 'absolute';
+
+            if (_activeDot && _activeDot !== dot) _activeDot.classList.remove('active');
+            _activeDot = dot;
+            dot.classList.add('active');
+        }
+
+        document.querySelectorAll('.lms-hotspot-embed').forEach(function(embed) {
+            if (embed.dataset.activated) return;
+            embed.dataset.activated = '1';
+            var badge = embed.querySelector('.lms-hs-badge');
+            if (badge) badge.remove();
+            embed.style.position  = 'relative';
+            embed.style.display   = 'block';
+            embed.style.width     = '100%';
+            embed.style.maxWidth  = '100%';
+            embed.style.overflow  = 'hidden';
+            embed.style.lineHeight = '0';
+            var img = embed.querySelector('img');
+            if (!img) return;
+            var correctSrc = embed.getAttribute('data-src');
+            if (correctSrc) img.src = correctSrc;
+            img.style.width = '100%'; img.style.maxWidth = '100%';
+            img.style.height = 'auto'; img.style.display = 'block';
+            var hotspots = [];
+            try { hotspots = JSON.parse(embed.getAttribute('data-hotspots') || '[]'); } catch(e) {}
+            if (!hotspots.length) return;
+
+            // Close tooltip when clicking outside the embed
+            document.addEventListener('click', function(e) {
+                if (!embed.contains(e.target)) hideTooltip();
+            });
+
+            function renderHsDots() {
+                embed.querySelectorAll('.lms-rt-dot').forEach(function(d){ d.remove(); });
+                hotspots.forEach(function(hs, i) {
+                    var d = document.createElement('div');
+                    d.className = 'lms-rt-dot';
+                    Object.assign(d.style, {
+                        position:'absolute', left:hs.x+'%', top:hs.y+'%',
+                        transform:'translate(-50%,-50%)',
+                        width:'20px', height:'20px', borderRadius:'50%',
+                        background:'rgba(220,38,38,0.75)',
+                        border:'2px solid rgba(220,38,38,0.9)',
+                        boxShadow:'0 0 0 3px rgba(220,38,38,0.18)',
+                        cursor:'pointer', zIndex:'10',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        fontSize:'10px', color:'#fff', fontWeight:'700',
+                        lineHeight:'1',
+                    });
+                    d.textContent = i + 1;
+                    d.addEventListener('mouseenter', function(){ if(_activeDot !== d) { this.style.transform='translate(-50%,-50%) scale(1.3)'; this.style.background='rgba(220,38,38,0.9)'; } });
+                    d.addEventListener('mouseleave', function(){ if(_activeDot !== d) { this.style.transform='translate(-50%,-50%)'; this.style.background='rgba(220,38,38,0.65)'; } });
+                    d.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        if (_activeDot === d) { hideTooltip(); return; }
+                        showTooltip(d, hs.title, hs.description);
+                    });
+                    embed.appendChild(d);
+                });
+            }
+            if (img.complete && img.naturalWidth > 0) renderHsDots();
+            else img.onload = renderHsDots;
+        });
+    }
+    activateLmsHotspots();
+    document.addEventListener('DOMContentLoaded', activateLmsHotspots);
+</script>
 {% endblock %}

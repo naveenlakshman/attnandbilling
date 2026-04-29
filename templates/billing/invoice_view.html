@@ -1,84 +1,174 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
 {% block content %}
 <style>
-  /* Screen View Styling */
-  .invoice-header {
-    margin-bottom: 25px;
-    border-bottom: 2px solid #007bff;
-    padding-bottom: 15px;
+  /* ── Base styles ── */
+  .bos-page { max-width: 900px; margin: 0 auto; padding: 0 4px; }
+
+  /* Page heading */
+  .bos-page h2 { font-size: 22px; font-weight: 700; margin: 0 0 12px 0; color: #1a1a2e; }
+
+  /* Action buttons bar */
+  .page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .page-actions .btn { font-size: 14px; padding: 8px 14px; border-radius: 8px; font-weight: 500; }
+
+  /* Document header card */
+  .doc-header {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 16px 20px 12px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .doc-header h1 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0 0 3px 0; }
+  .doc-header .sub { font-size: 13px; color: #666; margin: 0 0 6px 0; }
+  .doc-header .gstin-line {
+    font-size: 12px;
+    color: #333;
+    background: #f0f4ff;
+    border-radius: 6px;
+    padding: 5px 10px;
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    max-width: 100%;
+    word-break: break-word;
+  }
+  .doc-header hr { margin: 10px 0 8px; border-color: #007bff; border-width: 2px; }
+  .bos-stamp {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1e3a8a;
+    letter-spacing: 2px;
+    border: 2px solid #1e3a8a;
+    border-radius: 4px;
+    padding: 3px 14px;
+    margin: 4px 0 0 0;
   }
 
-  .invoice-header h1 {
-    margin: 0 0 5px 0;
-    color: #2c3e50;
-  }
-
-  .invoice-header p {
-    margin: 0;
-    color: #666;
-  }
-
+  /* Two-column summary grid */
   .grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    margin-bottom: 25px;
+    gap: 14px;
+    margin-bottom: 14px;
   }
 
+  /* Cards */
   .card {
     border: 1px solid #dee2e6;
-    border-radius: 6px;
-    padding: 20px;
+    border-radius: 10px;
+    padding: 16px;
     background: #fff;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    margin-bottom: 14px;
   }
-
   .card h3 {
-    margin: 0 0 15px 0;
-    color: #2c3e50;
+    margin: 0 0 12px 0;
+    color: #1a1a2e;
     border-bottom: 2px solid #007bff;
-    padding-bottom: 10px;
-    font-size: 16px;
+    padding-bottom: 8px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .card p { margin: 7px 0; line-height: 1.5; font-size: 14px; }
+  .card p strong { color: #333; }
+
+  /* Info rows for financial summary */
+  .fin-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 14px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .fin-row:last-child { border-bottom: none; }
+  .fin-row.total { border-top: 2px solid #dee2e6; margin-top: 4px; padding-top: 8px; font-weight: 700; font-size: 15px; }
+  .fin-row.balance { font-weight: 700; color: #d9534f; font-size: 15px; }
+  .fin-row .amount { font-weight: 600; }
+  .amount-green { color: #27ae60; }
+  .amount-red { color: #d9534f; }
+
+  /* Status badge */
+  .status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
   }
 
-  .card p {
-    margin: 8px 0;
-    line-height: 1.6;
-  }
-
-  .card p strong {
-    color: #333;
-  }
-
-  .billing-table {
-    margin: 15px 0;
-    width: 100%;
-    border-collapse: collapse;
-  }
-
+  /* Tables */
+  .table-responsive-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 6px; }
+  .billing-table { margin: 0; width: 100%; border-collapse: collapse; }
   .billing-table th {
     background-color: #007bff;
     color: white;
-    padding: 12px;
+    padding: 10px 12px;
     text-align: left;
     font-weight: 600;
     font-size: 13px;
+    white-space: nowrap;
   }
-
-  .billing-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid #dee2e6;
-  }
-
-  .billing-table tbody tr:hover {
-    background-color: #f9f9f9;
-  }
+  .billing-table td { padding: 9px 12px; border-bottom: 1px solid #dee2e6; font-size: 13px; }
+  .billing-table tbody tr:hover { background-color: #f9f9f9; }
+  .billing-table tbody tr:last-child td { border-bottom: none; }
 
   .invoice-footer {
-    margin-top: 30px;
-    padding-top: 20px;
+    margin-top: 16px;
+    padding-top: 12px;
     border-top: 1px solid #dee2e6;
+    font-size: 13px;
+    color: #555;
+  }
+
+  /* ── Mobile styles ── */
+  @media (max-width: 768px) {
+    .bos-page { padding: 0; }
+    .bos-page h2 { font-size: 18px; }
+
+    .page-actions { gap: 6px; }
+    .page-actions .btn {
+      flex: 1 1 calc(50% - 6px);
+      font-size: 12px;
+      padding: 9px 4px;
+      text-align: center;
+    }
+    /* Make Download PDF full width on mobile */
+    .page-actions .btn-success { flex: 1 1 100%; }
+
+    .doc-header { padding: 12px 14px 10px; }
+    .doc-header h1 { font-size: 18px; }
+    .doc-header .sub { font-size: 12px; }
+    .doc-header .gstin-line { font-size: 11px; padding: 4px 8px; }
+    .bos-stamp { font-size: 12px; letter-spacing: 1px; padding: 2px 10px; }
+
+    .grid { grid-template-columns: 1fr; gap: 10px; }
+
+    .card { padding: 12px; border-radius: 8px; margin-bottom: 10px; }
+    .card h3 { font-size: 14px; margin-bottom: 10px; }
+    .card p { font-size: 13px; margin: 5px 0; }
+
+    .fin-row { font-size: 13px; }
+    .fin-row.total, .fin-row.balance { font-size: 14px; }
+
+    .billing-table th { font-size: 12px; padding: 8px 8px; }
+    .billing-table td { font-size: 12px; padding: 7px 8px; }
+  }
+
+  @media (max-width: 400px) {
+    .page-actions .btn { font-size: 11px; padding: 8px 2px; }
+    .doc-header h1 { font-size: 16px; }
+    .card p { font-size: 12px; }
   }
 
   @media print {
@@ -136,7 +226,7 @@
       margin: 0 !important;
     }
 
-    /* Hide browser header bar (Logged in: admin, Global IT ERP - Billing) */
+    /* Hide browser header bar (Logged in: admin, {{ company.company_short_name }} - Billing) */
     body::before {
       display: none !important;
     }
@@ -153,23 +243,23 @@
     }
 
     /* Invoice styling for print - ONE PAGE */
-    .invoice-header {
+    .doc-header {
       margin: 0 0 10mm 0;
       padding-bottom: 5mm;
     }
 
-    .invoice-header h1 {
+    .doc-header h1 {
       margin: 0;
       font-size: 20px;
       padding: 5px 0;
     }
 
-    .invoice-header p {
+    .doc-header p {
       margin: 2px 0;
       font-size: 12px;
     }
 
-    .invoice-header hr {
+    .doc-header hr {
       margin: 5px 0;
     }
 
@@ -257,78 +347,83 @@
   }
 </style>
 
-<h2>Invoice Details</h2>
+<div class="bos-page">
+<h2>Bill of Supply</h2>
 
 <div class="page-actions">
+  <a class="btn btn-outline-secondary" href="{{ url_for('billing.invoices') }}">← Back</a>
   {% if session.get("role") == "admin" %}
   <a class="btn btn-warning" href="{{ url_for('billing.invoice_edit', invoice_id=invoice.id) }}">Edit Invoice</a>
   {% endif %}
+  {% if effective_status not in ['write_off', 'partially_written_off'] %}
   <a class="btn btn-primary" href="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">+ Record Payment</a>
-  {% if session.get("role") == "admin" and invoice['status'] in ['unpaid', 'partially_paid'] %}
+  {% endif %}
+  {% if session.get("role") == "admin" and effective_status in ['unpaid', 'partially_paid'] %}
   <a class="btn btn-danger" href="{{ url_for('baddebt.create') }}?invoice_id={{ invoice.id }}" title="Write-off outstanding balance">✗ Write-off</a>
   {% endif %}
-  <a class="btn btn-secondary" href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}" target="_blank"> Print Invoice </a>
+  <a class="btn btn-secondary" href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}" target="_blank"> Print Bill </a>
+  <a href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}?mode=pdf" target="_blank" class="btn btn-success">⬇️ Download PDF</a>
 </div>
-<div class="invoice-header">
-
-  <h1>Global IT Education</h1>
-  <p>Computer Training & Billing System</p>
-
-  <hr>
-
-</div>
+<div id="invoice-pdf-content">
 
 <div class="grid">
     <div class="card">
-      <h3>Invoice Summary</h3>
-      <p><strong>Invoice No:</strong> {{ invoice.invoice_no }}</p>
-      <p><strong>Invoice Date:</strong> {{ invoice.invoice_date }}</p>
-      <p><strong>Student:</strong> {{ invoice.student_code }} - {{ invoice.full_name }}</p>
+      <h3>Bill of Supply</h3>
+      <p><strong>Bill No:</strong> {{ invoice.invoice_no }}</p>
+      <p><strong>Bill Date:</strong> {{ invoice.invoice_date }}</p>
+      <p><strong>Student:</strong> <a href="{{ url_for('billing.student_profile', student_id=invoice.student_id) }}" style="text-decoration: none; color: #0d6efd;">{{ invoice.student_code }} - {{ invoice.full_name }}</a></p>
       <p><strong>Phone:</strong> {{ invoice.phone }}</p>
       <p><strong>Branch:</strong> {{ invoice.branch_name or "-" }}</p>
       <p><strong>Status:</strong> <span style="padding: 2px 8px; border-radius: 4px; 
-        {% if invoice.status == 'paid' %}background-color: #d4edda; color: #155724;
-        {% elif invoice.status == 'partially_paid' %}background-color: #fff3cd; color: #856404;
+        {% if effective_status == 'paid' %}background-color: #d4edda; color: #155724;
+        {% elif effective_status == 'write_off' %}background-color: #d1ecf1; color: #0c5460;
+        {% elif effective_status == 'partially_written_off' %}background-color: #fce8d5; color: #7a3e00;
+        {% elif effective_status == 'partially_paid' %}background-color: #fff3cd; color: #856404;
         {% else %}background-color: #f8d7da; color: #721c24;{% endif %}">
-        {{ invoice.status }}</span></p>
+        {{ effective_status }}</span></p>
     </div>
 
     <div class="card">
       <h3>Financial Summary</h3>
-      <p><strong>Subtotal:</strong> <span style="float: right;">₹ {{ "%.2f"|format(invoice.subtotal or 0) }}</span></p>
-      <p><strong>Total Discount:</strong> <span style="float: right;">₹ {{ "%.2f"|format(invoice.discount_amount or 0) }}</span></p>
-      <p style="border-top: 1px solid #ddd; padding-top: 8px; margin-top: 8px;"><strong>Net Total:</strong> <span style="float: right; font-weight: bold; font-size: 14px;">₹ {{ "%.2f"|format(invoice.total_amount or 0) }}</span></p>
-      <p><strong>Paid Amount:</strong> <span style="float: right; color: green;">₹ {{ "%.2f"|format(total_paid or 0) }}</span></p>
+      <div class="fin-row"><span>Subtotal</span><span class="amount">₹ {{ "%.2f"|format(invoice.subtotal or 0) }}</span></div>
+      <div class="fin-row"><span>Total Discount</span><span class="amount">₹ {{ "%.2f"|format(invoice.discount_amount or 0) }}</span></div>
+      <div class="fin-row total"><span>Net Total</span><span class="amount">₹ {{ "%.2f"|format(invoice.total_amount or 0) }}</span></div>
+      <div class="fin-row"><span>Paid Amount</span><span class="amount amount-green">₹ {{ "%.2f"|format(total_paid or 0) }}</span></div>
       {% if total_written_off > 0 %}
-      <p><strong>Written Off Amount:</strong> <span style="float: right; color: #ff6b6b;">₹ {{ "%.2f"|format(total_written_off or 0) }}</span></p>
+      <div class="fin-row"><span>Written Off</span><span class="amount amount-red">₹ {{ "%.2f"|format(total_written_off or 0) }}</span></div>
       {% endif %}
-      <p style="border-top: 1px solid #ddd; padding-top: 8px; margin-top: 8px;"><strong>Balance Amount:</strong> <span style="float: right; color: #d9534f; font-weight: bold;">₹ {{ "%.2f"|format(balance_amount or 0) }}</span></p>
+      <div class="fin-row balance"><span>Balance Amount</span><span class="amount">₹ {{ "%.2f"|format(balance_amount or 0) }}</span></div>
     </div>
 </div>
 
 <div class="card">
   <h3>Invoice Items</h3>
+  <div class="table-responsive-wrap">
   <table border="1" width="100%" cellpadding="10" class="billing-table">
     <tr>
       <th>Description</th>
       <th>Qty</th>
       <th>Unit Price</th>
+      <th>Discount</th>
       <th>Line Total</th>
     </tr>
 
     {% for item in items %}
     <tr>
-      <td>{{ item.description }}</td>
+      <td>{{ item.course_name or item.description }}</td>
       <td>{{ item.quantity }}</td>
       <td>₹ {{ "%.2f"|format(item.unit_price or 0) }}</td>
+      <td>₹ {{ "%.2f"|format(item.discount or 0) }}</td>
       <td>₹ {{ "%.2f"|format(item.line_total or 0) }}</td>
     </tr>
     {% endfor %}
   </table>
+  </div>
 </div>
 
 <div class="card">
   <h3>Installment Plan</h3>
+  <div class="table-responsive-wrap">
   <table border="1" width="100%" cellpadding="10" class="billing-table">
     <tr>
       <th>No</th>
@@ -358,10 +453,12 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 </div>
 
 <div class="card">
   <h3>Receipts</h3>
+  <div class="table-responsive-wrap">
   <table border="1" width="100%" cellpadding="10" class="billing-table">
     <tr>
       <th>Receipt No</th>
@@ -383,25 +480,14 @@
     </tr>
     {% endfor %}
   </table>
-
-  <div class="invoice-footer">
-
-  <div style="margin-top:40px; display:flex; justify-content:space-between;">
-
-    <div>
-      <p><strong>Prepared By:</strong> {{ session.get("full_name") }}</p>
-    </div>
-
-    <div style="text-align:center; min-width:200px;">
-      <br><br>
-      <hr>
-      <p>Authorized Signature</p>
-    </div>
-
   </div>
 
+  <div class="invoice-footer">
+    <p><strong>Prepared By:</strong> {{ session.get("full_name") }}</p>
+  </div>
 </div>
-</div>
+</div><!-- end invoice-pdf-content -->
+</div><!-- end bos-page -->
 
 <!-- Edit Installment Modal -->
 <div id="editInstallmentModal" class="modal">

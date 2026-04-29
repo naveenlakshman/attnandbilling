@@ -1,484 +1,240 @@
 {% extends "lms_admin/base.html" %}
 
 {% block title %}Topic Contents - {{ data.topic.topic_title }} - Global IT ERP{% endblock %}
-{% block page_title %}{{ data.topic.topic_title }} → Contents{% endblock %}
+{% block page_title %}{{ data.topic.topic_title }} &rarr; Contents{% endblock %}
 
 {% block extra_css %}
 <style>
   .breadcrumb-nav {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 24px;
-    font-size: 14px;
-    flex-wrap: wrap;
+    display: flex; gap: 8px; align-items: center;
+    margin-bottom: 24px; font-size: 14px; flex-wrap: wrap;
   }
+  .breadcrumb-nav a { color: #0d6efd; text-decoration: none; }
+  .breadcrumb-nav a:hover { text-decoration: underline; }
+  .breadcrumb-separator { color: #6c757d; }
 
-  .breadcrumb-nav a {
-    color: #0d6efd;
-    text-decoration: none;
+  .page-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
   }
+  .page-header h2 { margin: 0; font-size: 22px; font-weight: 700; color: #212529; }
 
-  .breadcrumb-nav a:hover {
-    text-decoration: underline;
+  .slot-card {
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    overflow: hidden; margin-bottom: 20px;
   }
-
-  .breadcrumb-separator {
-    color: #6c757d;
+  .slot-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 20px; border-bottom: 1px solid #f0f0f0;
   }
-
-  .contents-list-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    gap: 12px;
-    flex-wrap: wrap;
+  .slot-icon {
+    width: 42px; height: 42px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
   }
+  .slot-icon-video  { background: #fff3cd; }
+  .slot-icon-pdf    { background: #cfe2ff; }
+  .slot-icon-dl     { background: #e8d5f5; }
+  .slot-label { font-size: 15px; font-weight: 700; color: #212529; }
+  .slot-sublabel { font-size: 12px; color: #6c757d; }
+  .slot-body { padding: 20px; }
 
-  .contents-list-header h2 {
-    margin: 0;
-    font-size: 24px;
-    font-weight: 700;
-    color: #212529;
+  .slot-empty {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
   }
-
-  .contents-list-header .badge {
-    background: #667eea;
-    color: white;
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
+  .slot-empty-text { color: #6c757d; font-size: 13px; }
+  .btn-set {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 18px; border-radius: 8px; font-size: 13px;
+    font-weight: 600; text-decoration: none; cursor: pointer;
+    border: 2px dashed #adb5bd; background: #f8f9fa; color: #495057;
+    transition: all 0.15s; white-space: nowrap;
   }
+  .btn-set:hover { border-color: #0d6efd; background: #e8f0fe; color: #0d6efd; }
+  .btn-set-group { display: flex; gap: 8px; flex-wrap: wrap; }
 
-  .header-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
+  .slot-filled {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
   }
-
-  .btn-add {
-    background: #0d6efd;
-    color: white;
-    border: none;
-    padding: 10px 18px;
-    border-radius: 6px;
-    font-weight: 500;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+  .slot-filled-info { flex: 1; min-width: 0; }
+  .slot-filled-title { font-weight: 600; font-size: 14px; color: #212529; margin-bottom: 2px; }
+  .slot-filled-meta { font-size: 12px; color: #6c757d; }
+  .slot-filled-actions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+  .btn-slot-action {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 14px; border-radius: 7px; font-size: 12px; font-weight: 600;
+    text-decoration: none; border: none; cursor: pointer; transition: background 0.15s;
   }
-
-  .btn-add:hover {
-    background: #0a58ca;
-  }
-
-  .btn-back {
-    background: #e9ecef;
-    color: #333;
-    border: none;
-    padding: 10px 18px;
-    border-radius: 6px;
-    font-weight: 500;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .btn-back:hover {
-    background: #dee2e6;
-  }
-
-  .info-box {
-    background: #e7f3ff;
-    border-left: 4px solid #0d6efd;
-    padding: 12px 16px;
-    border-radius: 4px;
-    margin-bottom: 20px;
-    font-size: 14px;
-    color: #0c5460;
-  }
-
-  .contents-table-card {
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-  }
-
-  .contents-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .contents-table thead {
-    background: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
-  }
-
-  .contents-table thead th {
-    padding: 12px;
-    text-align: left;
-    font-weight: 600;
-    color: #495057;
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .contents-table tbody tr {
-    border-bottom: 1px solid #dee2e6;
-    transition: background-color 0.2s;
-  }
-
-  .contents-table tbody tr:hover {
-    background-color: #f8f9fa;
-  }
-
-  .contents-table tbody td {
-    padding: 12px;
-    font-size: 13px;
-  }
-
-  .content-order-input {
-    width: 60px;
-    padding: 6px;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    font-size: 13px;
-    text-align: center;
-  }
-
-  .content-type-badge {
-    display: inline-block;
-    background: #e2e3e5;
-    color: #383d41;
-    padding: 6px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    min-width: 70px;
-    text-align: center;
-  }
-
-  .content-type-text { background: #e7f3ff; color: #004085; }
-  .content-type-html { background: #d4edda; color: #155724; }
-  .content-type-youtube { background: #fff3cd; color: #856404; }
-  .content-type-video_file { background: #f8d7da; color: #721c24; }
-  .content-type-pdf { background: #cfe2ff; color: #084298; }
-  .content-type-image { background: #d1ecf1; color: #0c5460; }
-  .content-type-download { background: #e7d4f5; color: #663399; }
-
-  .content-title {
-    font-weight: 600;
-    color: #212529;
-  }
-
-  .content-description {
-    color: #6c757d;
-    font-size: 12px;
-    margin-top: 2px;
-    max-width: 400px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .duration-badge {
-    display: inline-block;
-    background: #ffeaa7;
-    color: #856404;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .required-badge {
-    display: inline-block;
-    background: #f8d7da;
-    color: #721c24;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .content-actions {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .btn-action {
-    padding: 6px 10px;
-    font-size: 12px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 500;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .btn-edit {
-    background: #cfe2ff;
-    color: #084298;
-  }
-
-  .btn-edit:hover {
-    background: #aec5fb;
-  }
-
-  .btn-view {
-    background: #d1ecf1;
-    color: #0c5460;
-  }
-
-  .btn-view:hover {
-    background: #bee5eb;
-  }
-
-  .btn-delete {
-    background: #f8d7da;
-    color: #721c24;
-  }
-
-  .btn-delete:hover {
-    background: #f5c6cb;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: #6c757d;
-  }
-
-  .empty-state-icon {
-    font-size: 48px;
-    opacity: 0.6;
-    margin-bottom: 16px;
-  }
-
-  .empty-state-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #212529;
-    margin-bottom: 8px;
-  }
-
-  .empty-state-text {
-    font-size: 13px;
-    color: #6c757d;
-    margin-bottom: 20px;
-  }
-
-  .empty-state .btn-add {
-    display: inline-flex;
-  }
-
-  .content-type-guide {
-    background: #f8f9fa;
-    border-radius: 6px;
-    padding: 12px;
-    margin-top: 16px;
-    font-size: 12px;
-    color: #6c757d;
-  }
-
-  .content-type-guide strong {
-    color: #212529;
-  }
-
-  @media (max-width: 768px) {
-    .contents-list-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .header-actions {
-      width: 100%;
-      flex-direction: column;
-    }
-
-    .btn-add,
-    .btn-back {
-      width: 100%;
-    }
-
-    .contents-table thead th,
-    .contents-table tbody td {
-      padding: 10px 8px;
-      font-size: 12px;
-    }
-
-    .content-actions {
-      flex-direction: column;
-    }
-
-    .btn-action {
-      width: 100%;
-      justify-content: center;
-    }
-  }
+  .btn-slot-preview { background: #d1ecf1; color: #0c5460; }
+  .btn-slot-preview:hover { background: #bee5eb; color: #0c5460; }
+  .btn-slot-edit    { background: #cfe2ff; color: #084298; }
+  .btn-slot-edit:hover { background: #b8d0f8; color: #084298; }
+  .btn-slot-remove  { background: #f8d7da; color: #721c24; }
+  .btn-slot-remove:hover { background: #f5c6cb; color: #721c24; }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- Breadcrumb Navigation -->
+<!-- Breadcrumb -->
 <div class="breadcrumb-nav">
-  <a href="{{ url_for('lms_admin.list_programs') }}">📖 Programs</a>
+  <a href="{{ url_for('lms_admin.list_programs') }}">Programs</a>
   <span class="breadcrumb-separator">/</span>
   <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}">{{ data.program.program_name }}</a>
   <span class="breadcrumb-separator">/</span>
-  <a href="{{ url_for('lms_admin.list_chapters', program_id=data.program.id) }}">📑 Chapters</a>
+  <a href="{{ url_for('lms_admin.list_chapters', program_id=data.program.id) }}">Chapters</a>
   <span class="breadcrumb-separator">/</span>
   <a href="{{ url_for('lms_admin.list_topics', chapter_id=data.chapter.id) }}">{{ data.chapter.chapter_title }}</a>
   <span class="breadcrumb-separator">/</span>
-  <a href="{{ url_for('lms_admin.list_topics', chapter_id=data.chapter.id) }}">📝 Topics</a>
-  <span class="breadcrumb-separator">/</span>
-  <a href="{{ url_for('lms_admin.topic_view', topic_id=data.topic.id) }}">{{ data.topic.topic_title }}</a>
-  <span class="breadcrumb-separator">/</span>
-  <span>📦 Contents</span>
+  <span>Manage Content</span>
 </div>
 
-<!-- Page Header -->
-<div class="contents-list-header">
+<!-- Page header -->
+<div class="page-header">
   <div>
-    <h2>📦 Content Blocks</h2>
-  </div>
-  <div class="header-actions">
-    <a href="{{ url_for('lms_admin.content_new', topic_id=data.topic.id) }}" class="btn-add">
-      + Add Content
-    </a>
-    <a href="{{ url_for('lms_admin.topic_student_view', topic_id=data.topic.id) }}" class="btn-add" style="background: #28a745;">
-      👀 Preview as Student
-    </a>
-    <a href="{{ url_for('lms_admin.topic_view', topic_id=data.topic.id) }}" class="btn-back">
-      ← Back to Topic
-    </a>
-  </div>
-</div>
-
-<!-- Info Box -->
-<div class="info-box">
-  📚 Managing content for <strong>{{ data.topic.topic_title }}</strong> in <strong>{{ data.chapter.chapter_title }}</strong> chapter. Total content items: <strong>{{ data.total_content }}</strong>
-</div>
-
-<!-- Content Type Guide -->
-<div class="content-type-guide">
-  <strong>Content Types:</strong> 📄 Text | 🌐 HTML | ▶️ YouTube | 🎥 Video | 📕 PDF | 🖼️ Image | ⬇️ Download
-</div>
-
-<!-- Contents Table -->
-<div class="contents-table-card">
-  {% if data.content_items %}
-    <table class="contents-table">
-      <thead>
-        <tr>
-          <th style="width: 70px;">Order</th>
-          <th style="width: 100px;">Type</th>
-          <th>Title</th>
-          <th style="width: 100px;">Duration</th>
-          <th style="width: 80px;">Required</th>
-          <th style="width: 280px;">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for content in data.content_items %}
-        <tr class="content-row" data-content-id="{{ content.id }}">
-          <td style="text-align: center;">
-            <input type="number" class="content-order-input" value="{{ content.display_order }}" min="1" readonly>
-          </td>
-          <td>
-            <span class="content-type-badge content-type-{{ content.content_type }}">
-              {% if content.content_type == 'text' %}
-                📄 Text
-              {% elif content.content_type == 'html' %}
-                🌐 HTML
-              {% elif content.content_type == 'youtube' %}
-                ▶️ YouTube
-              {% elif content.content_type == 'video_file' %}
-                🎥 Video
-              {% elif content.content_type == 'pdf' %}
-                📕 PDF
-              {% elif content.content_type == 'image' %}
-                🖼️ Image
-              {% elif content.content_type == 'download' %}
-                ⬇️ Download
-              {% else %}
-                📦 {{ content.content_type }}
-              {% endif %}
-            </span>
-          </td>
-          <td>
-            <div class="content-title">{{ content.title }}</div>
-            {% if content.description %}
-            <div class="content-description" title="{{ content.description }}">{{ content.description }}</div>
-            {% endif %}
-          </td>
-          <td>
-            {% if content.duration_minutes %}
-              <span class="duration-badge">⏱️ {{ content.duration_minutes }}m</span>
-            {% else %}
-              <span style="color: #999;">-</span>
-            {% endif %}
-          </td>
-          <td style="text-align: center;">
-            {% if content.is_required %}
-              <span class="required-badge">Required</span>
-            {% else %}
-              <span style="color: #999; font-size: 12px;">Optional</span>
-            {% endif %}
-          </td>
-          <td>
-            <div class="content-actions">
-              <a class="btn-action btn-view" href="{{ url_for('lms_admin.content_view', content_id=content.id) }}" title="Preview Content">
-                👁️ Preview
-              </a>
-              <a class="btn-action btn-edit" href="{{ url_for('lms_admin.content_edit', content_id=content.id) }}" title="Edit Content">
-                ✏️ Edit
-              </a>
-              <button class="btn-action btn-delete" onclick="deleteContent(event, {{ content.id }})" title="Delete Content">
-                🗑️ Delete
-              </button>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <div class="empty-state">
-      <div class="empty-state-icon">📦</div>
-      <div class="empty-state-title">No Content Yet</div>
-      <div class="empty-state-text">Start by adding your first content block to this topic. You can add text, videos, PDFs, images, and more.</div>
-      <a href="{{ url_for('lms_admin.content_new', topic_id=data.topic.id) }}" class="btn-add">+ Add Your First Content</a>
+    <h2>Manage Content</h2>
+    <div style="font-size:13px;color:#6c757d;margin-top:2px;">
+      Each topic has one Video slot, one PDF slot, and one Download slot.
     </div>
-  {% endif %}
+  </div>
+  <a href="{{ url_for('lms_admin.list_topics', chapter_id=data.chapter.id) }}" class="btn btn-outline-secondary btn-sm">
+    &larr; Back to Topics
+  </a>
 </div>
+
+{# SLOT 1: Video #}
+<div class="slot-card">
+  <div class="slot-header">
+    <div class="slot-icon slot-icon-video">&#x25B6;</div>
+    <div>
+      <div class="slot-label">Video Lesson</div>
+      <div class="slot-sublabel">One YouTube video per topic</div>
+    </div>
+  </div>
+  <div class="slot-body">
+    {% if data.video_content %}
+    <div class="slot-filled">
+      <div class="slot-filled-info">
+        <div class="slot-filled-title">{{ data.video_content.content_title }}</div>
+        <div class="slot-filled-meta">
+          {{ data.video_content.external_url or '' }}
+          {% if data.video_content.content_body %} &middot; {{ data.video_content.content_body[:80] }}{% endif %}
+        </div>
+      </div>
+      <div class="slot-filled-actions">
+        <a href="{{ url_for('lms_admin.content_view', content_id=data.video_content.id) }}" class="btn-slot-action btn-slot-preview">&#x1F441; Preview</a>
+        <a href="{{ url_for('lms_admin.content_edit', content_id=data.video_content.id) }}" class="btn-slot-action btn-slot-edit">&#x270F; Edit</a>
+        <button class="btn-slot-action btn-slot-remove" onclick="removeContent({{ data.video_content.id }})">&#x1F5D1; Remove</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="slot-empty">
+      <div class="slot-empty-text">No video set. Add a YouTube link to teach this topic.</div>
+      <a href="{{ url_for('lms_admin.content_new', topic_id=data.topic.id) }}?type=youtube" class="btn-set">+ Set Video</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# SLOT 2: Lesson Content (PDF / Rich Text / Interactive Image) #}
+<div class="slot-card">
+  <div class="slot-header">
+    <div class="slot-icon slot-icon-pdf">&#x1F4D6;</div>
+    <div>
+      <div class="slot-label">Lesson Content</div>
+      <div class="slot-sublabel">PDF or rich text lesson &mdash; one per topic</div>
+    </div>
+  </div>
+  <div class="slot-body">
+    {% if data.lesson_content %}
+    <div class="slot-filled">
+      <div class="slot-filled-info">
+        {% if data.lesson_content.content_mode == 'pdf' %}
+        <div class="slot-filled-title">&#x1F4D5; {{ data.lesson_content.content_title }}</div>
+        <div class="slot-filled-meta">
+          &#x1F4C1; {{ data.lesson_content.file_path.split('/')[-1] if data.lesson_content.file_path else '&mdash;' }}
+          {% if data.lesson_content.content_body %} &middot; {{ data.lesson_content.content_body[:80] }}{% endif %}
+        </div>
+        {% elif data.lesson_content.content_mode == 'rich_text' %}
+        <div class="slot-filled-title">&#x1F4DD; {{ data.lesson_content.content_title }}</div>
+        <div class="slot-filled-meta">Rich text lesson &middot;
+          {{ data.lesson_content.content_body | striptags | truncate(100) if data.lesson_content.content_body else '(no content)' }}
+        </div>
+        {% elif data.lesson_content.content_mode == 'interactive_image' %}
+        <div class="slot-filled-title">&#x1F5BC; {{ data.lesson_content.content_title }}</div>
+        <div class="slot-filled-meta">
+          Interactive image &middot; {{ data.lesson_content.file_path.split('/')[-1] if data.lesson_content.file_path else '&mdash;' }}
+          {% if data.lesson_content.hotspots_json %}
+            &middot; {{ data.lesson_content.hotspots_json | from_json_len }} hotspot(s)
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+      <div class="slot-filled-actions">
+        <a href="{{ url_for('lms_admin.content_view', content_id=data.lesson_content.id) }}" class="btn-slot-action btn-slot-preview">&#x1F441; Preview</a>
+        <a href="{{ url_for('lms_admin.content_edit', content_id=data.lesson_content.id) }}" class="btn-slot-action btn-slot-edit">&#x270F; Edit</a>
+        <button class="btn-slot-action btn-slot-remove" onclick="removeContent({{ data.lesson_content.id }})">&#x1F5D1; Remove</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="slot-empty">
+      <div class="slot-empty-text">No lesson content yet. Choose a format:</div>
+      <div class="btn-set-group">
+        <a href="{{ url_for('lms_admin.content_new', topic_id=data.topic.id) }}?type=pdf" class="btn-set">&#x1F4D5; Upload PDF</a>
+        <a href="{{ url_for('lms_admin.content_new', topic_id=data.topic.id) }}?type=rich_text" class="btn-set">&#x1F4DD; Write Rich Text</a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# SLOT 3: Download / Assignment #}
+<div class="slot-card">
+  <div class="slot-header">
+    <div class="slot-icon slot-icon-dl">&#x2B07;</div>
+    <div>
+      <div class="slot-label">Downloadable Assignment</div>
+      <div class="slot-sublabel">One file per topic &mdash; ZIP, DOCX, XLSX, PDF, etc.</div>
+    </div>
+  </div>
+  <div class="slot-body">
+    {% if data.download_content %}
+    <div class="slot-filled">
+      <div class="slot-filled-info">
+        <div class="slot-filled-title">{{ data.download_content.content_title }}</div>
+        <div class="slot-filled-meta">
+          &#x1F4CE; {{ data.download_content.file_path.split('/')[-1] if data.download_content.file_path else '&mdash;' }}
+          {% if data.download_content.content_body %} &middot; {{ data.download_content.content_body[:80] }}{% endif %}
+        </div>
+      </div>
+      <div class="slot-filled-actions">
+        <a href="{{ url_for('lms_admin.content_edit', content_id=data.download_content.id) }}" class="btn-slot-action btn-slot-edit">&#x270F; Edit</a>
+        <button class="btn-slot-action btn-slot-remove" onclick="removeContent({{ data.download_content.id }})">&#x1F5D1; Remove</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="slot-empty">
+      <div class="slot-empty-text">No assignment file. Add a practice exercise or worksheet.</div>
+      <a href="{{ url_for('lms_admin.content_new', topic_id=data.topic.id) }}?type=download" class="btn-set">+ Upload File</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<form id="deleteForm" method="POST" style="display:none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+</form>
 
 <script>
-  function deleteContent(event, contentId) {
-    event.preventDefault();
-    if (confirm('Are you sure you want to delete this content? This action cannot be undone.')) {
-      // Create a hidden form and submit it
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = '/lms_admin/content/' + contentId + '/delete';
-      document.body.appendChild(form);
-      form.submit();
-    }
-  }
+function removeContent(contentId) {
+  if (!confirm('Remove this content? This cannot be undone.')) return;
+  const form = document.getElementById('deleteForm');
+  form.action = '/lms_admin/content/' + contentId + '/delete';
+  form.submit();
+}
 </script>
 
 {% endblock %}

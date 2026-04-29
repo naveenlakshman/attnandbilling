@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Global IT ERP{% endblock %}</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <title>{% block title %}{{ company.company_short_name }}{% endblock %}</title>
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
 
   <style>
     body {
@@ -21,6 +21,12 @@
       border-right: 1px solid #dee2e6;
       padding: 24px 16px;
       flex-shrink: 0;
+    }
+
+    @media (max-width: 991.98px) {
+      .erp-sidebar {
+        padding: 16px;
+      }
     }
     .erp-brand-title {
       font-size: 1.9rem;
@@ -60,10 +66,13 @@
     .erp-topbar {
       background: #ffffff;
       border-bottom: 1px solid #dee2e6;
-      padding: 16px 24px;
+      padding: 12px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
     }
     .erp-topbar-title {
       font-size: 1.4rem;
@@ -77,6 +86,127 @@
     .erp-content {
       padding: 24px;
       flex-grow: 1;
+    }
+
+    /* ===== MOBILE BOTTOM NAV ===== */
+    .mobile-bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-top: 1px solid #dee2e6;
+      z-index: 1030;
+      padding: 4px 0 env(safe-area-inset-bottom, 4px);
+      box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+    }
+    .mobile-bottom-nav a {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      text-decoration: none;
+      color: #6c757d;
+      font-size: 10px;
+      padding: 4px 2px;
+      border-radius: 8px;
+      transition: color .15s;
+    }
+    .mobile-bottom-nav a .nav-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+    .mobile-bottom-nav a.active,
+    .mobile-bottom-nav a:hover {
+      color: #0d6efd;
+    }
+    .mobile-bottom-nav .fab-btn {
+      color: #fff;
+      background: #0d6efd;
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin-top: -12px;
+      box-shadow: 0 2px 8px rgba(13,110,253,.4);
+      flex: none;
+      padding: 0;
+      cursor: pointer;
+      text-decoration: none;
+      border: none;
+      font-size: 24px;
+      transition: background .15s;
+    }
+    .mobile-bottom-nav .fab-btn:hover { background: #0a58ca; color: #fff; }
+    .mobile-bottom-nav .fab-btn .nav-icon { font-size: 24px; line-height: 1; }
+
+    /* FAB quick-create menu */
+    .fab-menu-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1025;
+      background: rgba(0,0,0,.35);
+      backdrop-filter: blur(2px);
+    }
+    .fab-menu-overlay.show { display: block; }
+    .fab-menu {
+      position: fixed;
+      bottom: 72px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      z-index: 1035;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .18s, transform .18s;
+    }
+    .fab-menu.show {
+      pointer-events: auto;
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .fab-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      border-radius: 30px;
+      padding: 10px 20px 10px 14px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      text-decoration: none;
+      color: #1f2937;
+      font-weight: 600;
+      font-size: 14px;
+      white-space: nowrap;
+      min-width: 190px;
+    }
+    .fab-menu-item:hover { background: #f0f4ff; color: #0d6efd; }
+    .fab-menu-item .fmi-icon {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .fab-menu-label {
+      font-size: 10px;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    @media (max-width: 991.98px) {
+      .mobile-bottom-nav { display: flex; }
+      .erp-content { padding: 16px 12px 80px; }
     }
 
     /* Print styles */
@@ -150,14 +280,39 @@
   </style>
 
   {% block extra_css %}{% endblock %}
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+      document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function(form) {
+        if (!form.querySelector('input[name="csrf_token"]')) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'csrf_token';
+          input.value = token;
+          form.appendChild(input);
+        }
+      });
+    });
+  </script>
 </head>
 <body>
 
 <div class="erp-shell">
-  <aside class="erp-sidebar">
-    <div class="mb-4">
-      <h1 class="erp-brand-title">Global IT Education</h1>
-      <div class="erp-brand-subtitle">ERP System</div>
+  <div class="erp-sidebar offcanvas-lg offcanvas-start" id="erpSidebar" tabindex="-1">
+    <div class="offcanvas-header border-bottom d-lg-none">
+      <h6 class="offcanvas-title fw-bold mb-0">{{ company.company_name }}</h6>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#erpSidebar" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body p-0 d-lg-block">
+    <div class="mb-4 d-none d-lg-block">
+      {% if company.logo_filename %}
+        <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+             alt="{{ company.company_name }}" style="max-height:54px; max-width:200px; margin-bottom:6px;">
+        <br>
+      {% endif %}
+      <h1 class="erp-brand-title">{{ company.company_name }}</h1>
+      <div class="erp-brand-subtitle">{{ company.tagline or 'ERP System' }}</div>
       <hr>
     </div>
 
@@ -204,9 +359,19 @@
         🏢 Branches
         </a>
 
+        <a class="nav-link {% if request.endpoint == 'core.company_profile' %}active{% endif %}"
+        href="{{ url_for('core.company_profile') }}">
+        🏷️ Company Profile
+        </a>
+
         <a class="nav-link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}"
         href="{{ url_for('reports.dashboard') }}">
         📊 Reports
+        </a>
+
+        <a class="nav-link {% if request.endpoint == 'reports.daily_report' %}active{% endif %}"
+        href="{{ url_for('reports.daily_report') }}">
+        📋 Daily Report
         </a>
 
         <a class="nav-link {% if request.endpoint == 'reports.import_page' %}active{% endif %}"
@@ -227,15 +392,19 @@
         🚪 Logout
       </a>
     </nav>
-  </aside>
+    </div>
+  </div>
 
   <main class="erp-main">
     <div class="erp-topbar no-print">
-      <div class="erp-topbar-title">{% block page_title %}Global IT ERP{% endblock %}</div>
-      <div class="erp-topbar-user">
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#erpSidebar" aria-controls="erpSidebar" aria-label="Menu">☰</button>
+        <div class="erp-topbar-title">{% block page_title %}{{ company.company_short_name }}{% endblock %}</div>
+      </div>
+      <div class="erp-topbar-user d-none d-sm-block">
         Logged in: <strong>{{ session.get('username', 'Guest') }}</strong>
         {% if session.get('role') %}
-          ({{ session.get('role') }})
+          <span class="d-none d-md-inline">({{ session.get('role') }})</span>
         {% endif %}
       </div>
     </div>
@@ -257,7 +426,63 @@
   </main>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+
+<!-- FAB overlay + pop-up menu -->
+<div class="fab-menu-overlay" id="coreFabOverlay"></div>
+<div class="fab-menu" id="coreFabMenu">
+  <div class="fab-menu-label">Quick Create</div>
+  <a href="{{ url_for('leads.lead_create') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dcfce7;">➕</span>
+    Add Lead
+  </a>
+  <a href="{{ url_for('billing.student_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dbeafe;">🎓</span>
+    Add Student
+  </a>
+  <a href="{{ url_for('billing.invoice_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#fef3c7;">🧾</span>
+    New Invoice
+  </a>
+</div>
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-bottom-nav no-print" aria-label="Mobile navigation">
+  <a href="{{ url_for('core.dashboard') }}" class="{{ 'active' if request.endpoint == 'core.dashboard' else '' }}">
+    <span class="nav-icon">🏠</span>
+    <span>Home</span>
+  </a>
+  <a href="{{ url_for('leads.dashboard') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('leads.') else '' }}">
+    <span class="nav-icon">👥</span>
+    <span>Leads</span>
+  </a>
+  <a href="#" class="fab-btn" id="coreFabToggle" title="Quick Create" role="button" aria-label="Quick create menu" aria-expanded="false">
+    <span class="nav-icon" id="coreFabIcon">+</span>
+  </a>
+  <a href="{% if session.get('role') == 'admin' %}{{ url_for('billing.dashboard') }}{% else %}{{ url_for('billing.menu') }}{% endif %}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('billing.') else '' }}">
+    <span class="nav-icon">💰</span>
+    <span>Billing</span>
+  </a>
+  <a href="{{ url_for('attendance.dashboard') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('attendance.') else '' }}">
+    <span class="nav-icon">📋</span>
+    <span>Attendance</span>
+  </a>
+</nav>
+
+<script>
+  (function() {
+    var toggle  = document.getElementById('coreFabToggle');
+    var menu    = document.getElementById('coreFabMenu');
+    var overlay = document.getElementById('coreFabOverlay');
+    var icon    = document.getElementById('coreFabIcon');
+    if (!toggle) return;
+    function openMenu()  { menu.classList.add('show'); overlay.classList.add('show'); icon.textContent = '\u00d7'; toggle.setAttribute('aria-expanded','true'); }
+    function closeMenu() { menu.classList.remove('show'); overlay.classList.remove('show'); icon.textContent = '+'; toggle.setAttribute('aria-expanded','false'); }
+    toggle.addEventListener('click', function(e) { e.preventDefault(); menu.classList.contains('show') ? closeMenu() : openMenu(); });
+    overlay.addEventListener('click', closeMenu);
+    menu.querySelectorAll('.fab-menu-item').forEach(function(el) { el.addEventListener('click', closeMenu); });
+  })();
+</script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

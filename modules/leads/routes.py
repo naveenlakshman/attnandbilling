@@ -1,7 +1,8 @@
 from datetime import date, datetime
-from flask import Blueprint, render_template, session, flash, redirect, url_for, request
+from flask import Blueprint, render_template, session, flash, redirect, url_for, request, jsonify
 from db import get_conn, log_activity
 from modules.core.utils import login_required
+from modules.leads import ai_helper
 
 leads_bp = Blueprint("leads", __name__)
 
@@ -413,6 +414,11 @@ def lead_create():
             status = "active"
 
         if not name or not phone:
+            _conn2 = get_conn()
+            _cur2 = _conn2.cursor()
+            _cur2.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+            _active_courses = _cur2.fetchall()
+            _conn2.close()
             flash("Name and Phone are required.", "danger")
             return render_template(
                 "leads/lead_form.html",
@@ -425,6 +431,7 @@ def lead_create():
                 lead_sources=LEAD_SOURCE_OPTIONS,
                 decision_makers=DECISION_MAKER_OPTIONS,
                 timeframes=TIMEFRAME_OPTIONS,
+                active_courses=_active_courses,
             )
 
         conn = get_conn()
@@ -502,6 +509,12 @@ def lead_create():
         flash("Lead created successfully.", "success")
         return redirect(url_for("leads.dashboard"))
 
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+    active_courses = cur.fetchall()
+    conn.close()
+
     return render_template(
         "leads/lead_form.html",
         lead=None,
@@ -513,6 +526,7 @@ def lead_create():
         lead_sources=LEAD_SOURCE_OPTIONS,
         decision_makers=DECISION_MAKER_OPTIONS,
         timeframes=TIMEFRAME_OPTIONS,
+        active_courses=active_courses,
     )
 @leads_bp.route("/<int:lead_id>")
 @login_required
@@ -556,6 +570,13 @@ def lead_detail(lead_id):
     """, (lead_id,))
     followups = cur.fetchall()
 
+    # Linked student (if this lead was converted)
+    cur.execute(
+        "SELECT id, student_code, full_name FROM students WHERE lead_id = ?",
+        (lead_id,)
+    )
+    linked_student = cur.fetchone()
+
     conn.close()
 
     return render_template(
@@ -565,6 +586,7 @@ def lead_detail(lead_id):
         followups=followups,
         methods=FOLLOWUP_METHODS,
         outcomes=FOLLOWUP_OUTCOMES,
+        linked_student=linked_student,
     )
 
 @leads_bp.route("/list")
@@ -577,6 +599,9 @@ def leads_list():
     stage = request.args.get("stage", "").strip()
     source = request.args.get("source", "").strip()
     user_id = request.args.get("user_id", "").strip()
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+    hide_converted = request.args.get("hide_converted", "").strip()
 
     current_user_id = session.get("user_id")
     current_user_role = session.get("role")
@@ -611,6 +636,15 @@ def leads_list():
         query += " AND l.lead_source = ?"
         params.append(source)
 
+    if date_from:
+        query += " AND substr(l.created_at, 1, 10) >= ?"
+        params.append(date_from)
+    if date_to:
+        query += " AND substr(l.created_at, 1, 10) <= ?"
+        params.append(date_to)
+    if hide_converted == "1":
+        query += " AND l.status NOT IN ('converted', 'lost')"
+
     query += " ORDER BY l.updated_at DESC"
 
     cur.execute(query, params)
@@ -620,25 +654,49 @@ def leads_list():
     cur.execute("SELECT id, full_name, username FROM users ORDER BY full_name")
     all_users = cur.fetchall()
 
-    # Simple metrics (basic version for now)
+    # Calculate metrics properly
+    today = date.today()
+    month_str = today.strftime("%Y-%m")
+
     cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0")
-    total = cur.fetchone()[0]
+    total_overall = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND substr(created_at, 1, 7) = ?", (month_str,))
+    total_this_month = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'active'")
+    active_overall = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'active' AND substr(created_at, 1, 7) = ?", (month_str,))
+    active_this_month = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'converted'")
+    converted_overall = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'converted' AND substr(updated_at, 1, 7) = ?", (month_str,))
+    converted_this_month = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'lost'")
+    lost_overall = cur.fetchone()[0]
+
+    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'lost' AND substr(updated_at, 1, 7) = ?", (month_str,))
+    lost_this_month = cur.fetchone()[0]
 
     metrics = {
-        "total_overall": total,
-        "total_this_month": total,
-        "active_overall": total,
-        "active_this_month": total,
-        "converted_overall": 0,
-        "converted_this_month": 0,
-        "lost_overall": 0,
-        "lost_this_month": 0,
+        "total_overall": total_overall,
+        "total_this_month": total_this_month,
+        "active_overall": active_overall,
+        "active_this_month": active_this_month,
+        "converted_overall": converted_overall,
+        "converted_this_month": converted_this_month,
+        "lost_overall": lost_overall,
+        "lost_this_month": lost_this_month,
     }
 
     conn.close()
 
     stages = ["New Lead", "Contacted", "Interested", "Counseling Done", "Follow-up", "Converted", "Lost"]
-    sources = ["Walk-in", "Instagram", "Reference", "Website"]
+    sources = ["Walk-in", "Instagram", "Facebook", "WhatsApp", "Referral", "Banner", "College Campaign", "JustDial", "Other"]
 
     return render_template(
         "leads/leads_list.html",
@@ -646,6 +704,9 @@ def leads_list():
         q=q,
         stage=stage,
         source=source,
+        date_from=date_from,
+        date_to=date_to,
+        hide_converted=hide_converted,
         stages=stages,
         sources=sources,
         all_users=all_users,
@@ -802,6 +863,11 @@ def lead_edit(lead_id):
             status = "active"
 
         if not name or not phone:
+            _conn3 = get_conn()
+            _cur3 = _conn3.cursor()
+            _cur3.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+            _active_courses_edit = _cur3.fetchall()
+            _conn3.close()
             conn.close()
             flash("Name and Phone are required.", "danger")
             return render_template(
@@ -815,6 +881,7 @@ def lead_edit(lead_id):
                 lead_sources=LEAD_SOURCE_OPTIONS,
                 decision_makers=DECISION_MAKER_OPTIONS,
                 timeframes=TIMEFRAME_OPTIONS,
+                active_courses=_active_courses_edit,
             )
 
         now = datetime.now().isoformat(timespec="seconds")
@@ -883,6 +950,8 @@ def lead_edit(lead_id):
         flash("Lead updated.", "success")
         return redirect(url_for("leads.lead_detail", lead_id=lead_id))
 
+    cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+    active_courses = cur.fetchall()
     conn.close()
 
     return render_template(
@@ -896,6 +965,7 @@ def lead_edit(lead_id):
         lead_sources=LEAD_SOURCE_OPTIONS,
         decision_makers=DECISION_MAKER_OPTIONS,
         timeframes=TIMEFRAME_OPTIONS,
+        active_courses=active_courses,
     )
 
 @leads_bp.route("/<int:lead_id>/stage", methods=["POST"])
@@ -1113,13 +1183,16 @@ def followups_today():
 
     conn.close()
 
+    overdue_count = sum(1 for l in leads if l["next_followup_date"] and l["next_followup_date"] < today)
+
     return render_template(
         "leads/followups.html",
         leads=leads,
         today=today,
         all_users=all_users,
         selected_user_id=user_filter,
-        is_admin=(current_user_role == "admin")
+        is_admin=(current_user_role == "admin"),
+        overdue_count=overdue_count
     )
 @leads_bp.route("/pipeline")
 @login_required
@@ -1679,4 +1752,60 @@ def lead_mark_lost(lead_id):
 
     flash("Lead marked as lost.", "warning")
     return redirect(url_for("leads.lead_detail", lead_id=lead_id))
+
+
+@leads_bp.route("/<int:lead_id>/ai-assist", methods=["POST"])
+@login_required
+def ai_assist(lead_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM leads
+        WHERE id = ? AND is_deleted = 0
+    """, (lead_id,))
+    lead = cur.fetchone()
+
+    if not lead:
+        conn.close()
+        return jsonify({"error": "Lead not found."}), 404
+
+    cur.execute("""
+        SELECT f.*, u.full_name AS user_full_name
+        FROM followups f
+        LEFT JOIN users u ON f.user_id = u.id
+        WHERE f.lead_id = ?
+        ORDER BY f.created_at DESC
+        LIMIT 10
+    """, (lead_id,))
+    followups = cur.fetchall()
+    conn.close()
+
+    data = request.get_json(silent=True) or {}
+    action = data.get("action", "script")
+
+    lead_dict = dict(lead)
+    followups_list = [dict(f) for f in followups]
+
+    try:
+        if action == "script":
+            result = ai_helper.generate_followup_script(lead_dict, followups_list)
+        elif action == "next_action":
+            result = ai_helper.suggest_next_action(lead_dict, followups_list)
+        elif action == "whatsapp":
+            result = ai_helper.draft_message_template(lead_dict, method="WhatsApp")
+        elif action == "email":
+            result = ai_helper.draft_message_template(lead_dict, method="Email")
+        else:
+            return jsonify({"error": "Unknown action."}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 503
+    except Exception as e:
+        err_msg = str(e)
+        if "429" in err_msg or "quota" in err_msg.lower() or "ResourceExhausted" in err_msg:
+            return jsonify({"error": "Google AI quota exceeded. Please check your plan at https://ai.dev/rate-limit or try again later."}), 503
+        return jsonify({"error": f"AI error: {err_msg[:200]}"}), 503
+
+    return jsonify({"result": result})
 

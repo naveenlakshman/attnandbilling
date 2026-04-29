@@ -1,3 +1,6 @@
+# Environment secrets - never commit
+.env
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -6,7 +9,14 @@ __pycache__/
 # C extensions
 *.so
 
-
+.png
+.jpg
+.gif
+.pdf
+*/*/*/*.jpg
+*/*/*/*.png
+*/*/*/*.gif
+*/*/*/*.pdf
 *.xlsx
 
 # Distribution / packaging
@@ -208,3 +218,4 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+static/lms/images/inline/*.png

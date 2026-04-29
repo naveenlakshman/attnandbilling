@@ -1,10 +1,13 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
 {% block title %}
-  {% if student %}Edit Student{% else %}Add Student{% endif %} - Global IT ERP
+  {% if student %}Edit Student{% else %}Add Student{% endif %} - {{ company.company_short_name }}
 {% endblock %}
 
 {% block content %}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+
 
 <style>
   .student-form-wrap {
@@ -95,12 +98,234 @@
     .student-form-grid {
       grid-template-columns: 1fr;
     }
+
+    .student-form-card {
+      padding: 16px;
+    }
+
+    .page-header-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .page-header-row h2 {
+      font-size: 22px;
+    }
+
+    .page-header-row .btn {
+      align-self: stretch;
+      text-align: center;
+    }
+
+    .form-actions {
+      flex-direction: column;
+    }
+
+    .form-actions .btn {
+      width: 100%;
+      padding: 12px;
+      text-align: center;
+    }
+
+    /* Prevent iOS Safari from zooming in on focused inputs */
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      font-size: 16px;
+    }
+
+  }
+
+  /* ── DOB selector styling ───────────────────────── */
+  .dob-selector {
+    display: flex;
+    gap: 10px;
+  }
+  .dob-selector select,
+  .dob-selector input[type="number"] {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+    color: #333;
+    appearance: auto;
+    -webkit-appearance: auto;
+  }
+  .dob-selector select:focus,
+  .dob-selector input[type="number"]:focus {
+    border-color: #0d6efd;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+  }
+  .dob-selector input[type="number"]::-webkit-inner-spin-button,
+  .dob-selector input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .dob-selector input[type="number"] { -moz-appearance: textfield; }
+
+  /* ── Photo section ───────────────────────────────── */
+  .form-photo-section {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .form-photo-wrapper {
+    position: relative;
+    display: inline-block;
+  }
+  .form-photo-display {
+    width: 150px;
+    height: 150px;
+    border-radius: 10px;
+    background: #f0f0f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    border: 2px solid #e2e8f0;
+  }
+  .form-photo-placeholder {
+    font-size: 56px;
+    color: #a0aec0;
+    line-height: 1;
+  }
+  .form-photo-btn {
+    position: absolute;
+    bottom: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    color: #5b21b6;
+    border: 1.5px solid #7c3aed;
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    transition: background 0.15s;
+  }
+  .form-photo-btn:hover {
+    background: #f3e8ff;
+  }
+  .form-photo-section.photo-required-error .form-photo-display {
+    border-color: #dc3545;
+    background: #fff5f5;
+  }
+  .photo-error-msg {
+    display: none;
+    color: #dc3545;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 20px;
+  }
+  .form-photo-section.photo-required-error .photo-error-msg {
+    display: block;
+  }
+
+  /* ── Photo Modal ─────────────────────────────────── */
+  .form-photo-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+  .form-photo-modal.show {
+    display: flex;
+  }
+  .form-photo-modal-content {
+    background: #fff;
+    border-radius: 12px;
+    max-width: 480px;
+    width: calc(100% - 32px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    overflow: hidden;
+  }
+  .form-photo-modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+    padding: 16px 20px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .form-photo-modal-body {
+    padding: 16px 20px;
+  }
+  .form-photo-modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+  #photoPreviewBox {
+    aspect-ratio: 1;
+    border: 2px dashed #a78bfa;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: #faf5ff;
+    min-height: 180px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  #photoPreviewBox .preview-hint {
+    color: #7c3aed;
+    font-size: 13px;
+    text-align: center;
+    padding: 12px;
+  }
+  #photoCropWrapper {
+    max-height: 340px;
+    overflow: hidden;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    line-height: 0;
+  }
+  #photoCropWrapper img {
+    max-width: 100%;
+    display: block;
+  }
+  .modal-btn {
+    padding: 9px 20px;
+    border-radius: 7px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .modal-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .modal-btn.primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+  }
+  .modal-btn.secondary {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
   }
 </style>
 
 <div class="student-form-wrap">
   <div class="page-header-row">
-    <h2>{% if student %}Edit Student{% else %}Add Student{% endif %}</h2>
+    <h2>{% if student %}Edit Student{% elif prefill_lead %}Convert Lead to Student{% else %}Add Student{% endif %}</h2>
 
     <a href="{{ url_for('billing.students') }}" class="btn btn-secondary">
       ← Back to Students
@@ -108,7 +333,30 @@
   </div>
 
   <div class="student-form-card">
-    <form method="post">
+    {% if error %}
+    <div style="background:#fee2e2; border:1px solid #fca5a5; color:#991b1b; border-radius:7px; padding:12px 16px; margin-bottom:18px; font-size:13px; font-weight:600;">
+      ⚠️ {{ error }}
+    </div>
+    {% endif %}
+    {% if duplicate_warning %}
+    <div id="duplicateWarningBanner" style="background:#fff7ed; border:1px solid #fdba74; color:#9a3412; border-radius:7px; padding:14px 16px; margin-bottom:18px; font-size:13px;">
+      <div style="font-weight:700; margin-bottom:6px;">⚠️ Duplicate Phone Number Detected</div>
+      A student with phone <strong>{{ duplicate_warning.phone }}</strong> already exists:<br>
+      <strong>{{ duplicate_warning.full_name }}</strong> &nbsp;(Reg&nbsp;#{{ duplicate_warning.student_code }}) &mdash;
+      <a href="{{ url_for('billing.student_profile', student_id=duplicate_warning.student_id) }}" target="_blank" style="color:#9a3412; text-decoration:underline;">View Profile &rarr;</a><br><br>
+      If this is a different student sharing the same number, click <strong>Save Anyway</strong> below.
+    </div>
+    {% endif %}
+    <form method="post" id="studentForm">
+      <input type="hidden" name="force_save" id="force_save" value="{{ '1' if duplicate_warning else '0' }}">
+      {% if prefill_lead %}
+      <div style="background:#eff6ff; border:1px solid #93c5fd; color:#1e40af; border-radius:7px; padding:12px 16px; margin-bottom:18px; font-size:13px;">
+        <strong>🔄 Converting Lead to Student</strong><br>
+        Fields have been pre-filled from lead: <strong>{{ prefill_lead.name }}</strong> ({{ prefill_lead.phone }}).
+        Please complete any missing fields and upload a photo before saving.
+      </div>
+      <input type="hidden" name="lead_id" value="{{ prefill_lead.id }}">
+      {% endif %}
       <div class="student-form-grid">
         <div class="form-group">
           <label>Branch</label>
@@ -116,7 +364,8 @@
             <option value="">-- Select Branch --</option>
             {% for b in branches %}
               <option value="{{ b.id }}"
-                {% if student and student.branch_id == b.id %}selected{% endif %}>
+                {% if student and student.branch_id == b.id %}selected
+                {% elif form_data and form_data.get('branch_id') == b.id|string %}selected{% endif %}>
                 {{ b.branch_name }}
               </option>
             {% endfor %}
@@ -139,103 +388,265 @@
 
         <div class="form-group">
           <label>Full Name</label>
-          <input type="text" name="full_name" required {% if student %}value="{{ student.full_name }}"{% endif %}>
+          <input type="text" name="full_name" required value="{% if student %}{{ student.full_name }}{% elif prefill_lead %}{{ prefill_lead.name }}{% elif form_data %}{{ form_data.get('full_name', '') }}{% endif %}">
         </div>
 
         <div class="form-group">
           <label>Phone</label>
-          <input type="text" name="phone" required {% if student %}value="{{ student.phone }}"{% endif %}>
+          <input type="text" id="phoneInput" name="phone" required
+                 placeholder="10-digit mobile number"
+                 maxlength="10"
+                 value="{% if student %}{{ student.phone }}{% elif prefill_lead %}{{ prefill_lead.phone }}{% elif form_data %}{{ form_data.get('phone', '') }}{% endif %}">
+          <div id="phoneFormatError" style="display:none; color:#dc3545; font-size:12px; margin-top:4px;"></div>
+          <div id="phoneDupWarning" style="display:none; color:#9a3412; font-size:12px; margin-top:4px;"></div>
+        </div>
+
+        {% set _dob = (student.date_of_birth|string if student and student.date_of_birth else form_data.get('date_of_birth', '') if form_data else '') %}
+        {% set _dob_parts = _dob.split('-') if _dob else [] %}
+        {% set _dob_y = _dob_parts[0]|int if _dob_parts|length == 3 else '' %}
+        {% set _dob_m = _dob_parts[1]|int if _dob_parts|length == 3 else '' %}
+        {% set _dob_d = _dob_parts[2]|int if _dob_parts|length == 3 else '' %}
+        <div class="form-group">
+          <label>Date of Birth <span style="color:#dc3545;">*</span></label>
+          <div class="dob-selector">
+            <input type="number" id="dob_day" placeholder="Day" min="1" max="31"
+                   value="{{ _dob_d }}" aria-label="Day">
+            <select id="dob_month" aria-label="Month">
+              <option value="" disabled selected hidden>Month</option>
+              {% for m in [(1,'January'),(2,'February'),(3,'March'),(4,'April'),(5,'May'),(6,'June'),(7,'July'),(8,'August'),(9,'September'),(10,'October'),(11,'November'),(12,'December')] %}
+              <option value="{{ m[0] }}" {% if _dob_m == m[0] %}selected{% endif %}>{{ m[1] }}</option>
+              {% endfor %}
+            </select>
+            <input type="number" id="dob_year" placeholder="Year"
+                   value="{{ _dob_y }}" aria-label="Year">
+          </div>
+          <div id="dob-error" style="display:none; color:#dc3545; font-size:12px; margin-top:4px;"></div>
+          <input type="hidden" id="date_of_birth" name="date_of_birth" value="{{ _dob }}">
         </div>
 
         <div class="form-group">
-          <label>Gender</label>
-          <select name="gender">
+          <label>Gender <span style="color:#dc3545;">*</span></label>
+          <select name="gender" required>
             <option value="">-- Select --</option>
-            <option value="Male" {% if student and student.gender == 'Male' %}selected{% endif %}>Male</option>
-            <option value="Female" {% if student and student.gender == 'Female' %}selected{% endif %}>Female</option>
-            <option value="Other" {% if student and student.gender == 'Other' %}selected{% endif %}>Other</option>
+            {% set _gender = (student.gender if student else prefill_lead.gender if prefill_lead else form_data.get('gender', '') if form_data else '') %}
+            <option value="Male" {% if _gender == 'Male' %}selected{% endif %}>Male</option>
+            <option value="Female" {% if _gender == 'Female' %}selected{% endif %}>Female</option>
+            <option value="Other" {% if _gender == 'Other' %}selected{% endif %}>Other</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label>Email</label>
-          <input type="email" name="email" {% if student %}value="{{ student.email }}"{% endif %}>
+          <label>Email <span style="color:#dc3545;">*</span></label>
+          <input type="email" name="email" required value="{% if student %}{{ student.email }}{% elif form_data %}{{ form_data.get('email', '') }}{% endif %}">
         </div>
+
+        <!-- ── Structured Address Block ── -->
+        <div class="form-group full-width" style="grid-column: 1 / -1;">
+          <label style="font-weight:700; font-size:15px; color:#333; margin-bottom:10px; display:block;">Address</label>
+          <div class="student-form-grid" style="gap:14px;">
+
+            <!-- Row 1: Pincode + Locality -->
+            <div class="form-group" style="position:relative;">
+              <label>Pincode <span style="color:#dc3545;">*</span></label>
+              <input type="text" id="pincode_field" name="pincode" maxlength="6" placeholder="6-digit pincode" required
+                     value="{% if student %}{{ student.pincode or '' }}{% elif form_data %}{{ form_data.get('pincode', '') }}{% endif %}"
+                     style="padding-right:36px;">
+              <span id="pincode_spinner" style="display:none;position:absolute;right:10px;top:36px;font-size:16px;">⏳</span>
+              <span id="pincode_status" style="font-size:12px;margin-top:4px;display:block;"></span>
+            </div>
+            <div class="form-group">
+              <label>Locality <span style="color:#dc3545;">*</span></label>
+              <input type="text" id="locality_field" name="locality" placeholder="Auto-filled from pincode" required
+                     value="{% if student %}{{ student.locality or '' }}{% elif form_data %}{{ form_data.get('locality', '') }}{% endif %}">
+            </div>
+
+            <!-- Row 2: Area and Street (full width) -->
+            <div class="form-group full-width" style="grid-column: 1 / -1;">
+              <label>Address (Area and Street) <span style="color:#dc3545;">*</span></label>
+              <textarea name="address" rows="2" style="min-height:70px;" required>{% if student %}{{ student.address }}{% elif form_data %}{{ form_data.get('address', '') }}{% endif %}</textarea>
+            </div>
+
+            <!-- Row 3: City + State -->
+            <div class="form-group">
+              <label>City / District / Town <span style="color:#dc3545;">*</span></label>
+              <input type="text" id="city_field" name="city" placeholder="Auto-filled from pincode" required
+                     value="{% if student %}{{ student.city or '' }}{% elif form_data %}{{ form_data.get('city', '') }}{% endif %}">
+            </div>
+            <div class="form-group">
+              <label>State <span style="color:#dc3545;">*</span></label>
+              <select id="state_field" name="state" required>
+                <option value="">-- Select State --</option>
+                {% set _state_val = (student.state if student else form_data.get('state', '') if form_data else '') %}
+                {% for st in [
+                  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
+                  'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
+                  'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
+                  'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
+                  'Tripura','Uttar Pradesh','Uttarakhand','West Bengal',
+                  'Andaman and Nicobar Islands','Chandigarh',
+                  'Dadra and Nagar Haveli and Daman and Diu','Delhi',
+                  'Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'
+                ] %}
+                  <option value="{{ st }}" {% if _state_val == st %}selected{% endif %}>{{ st }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Row 4: Landmark + Alternate Phone -->
+            <div class="form-group">
+              <label>Landmark <span style="color:#888;font-weight:400;">(Optional)</span></label>
+              <input type="text" name="landmark" placeholder="Nearby landmark"
+                     value="{% if student %}{{ student.landmark or '' }}{% elif form_data %}{{ form_data.get('landmark', '') }}{% endif %}">
+            </div>
+            <div class="form-group">
+              <label>Alternate Phone <span style="color:#888;font-weight:400;">(Optional)</span></label>
+              <input type="text" name="alternate_phone" placeholder="Alternate contact number"
+                     value="{% if student %}{{ student.alternate_phone or '' }}{% elif form_data %}{{ form_data.get('alternate_phone', '') }}{% endif %}">
+            </div>
+
+            <!-- Row 5: Address Type -->
+            <div class="form-group full-width" style="grid-column: 1 / -1;">
+              <label>Address Type <span style="color:#dc3545;">*</span></label>
+              {% set _addr_type = (student.address_type if student else form_data.get('address_type', '') if form_data else '') %}
+              <div style="display:flex; gap:20px; margin-top:4px;">
+                {% for atype in ['Home', 'Office', 'Other'] %}
+                <label style="font-weight:400; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="radio" name="address_type" value="{{ atype }}"
+                         {% if _addr_type == atype %}checked{% endif %}
+                         required style="width:auto; margin:0;">
+                  {{ atype }}
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+
+          </div><!-- end inner grid -->
+        </div>
+        <!-- ── End Address Block ── -->
 
         <div class="form-group full-width">
-          <label>Address</label>
-          <textarea name="address">{% if student %}{{ student.address }}{% endif %}</textarea>
+          <label>Student Photo {% if not student %}<span style="color:#dc3545;">*</span>{% endif %}</label>
+          <div class="form-photo-section{% if error and 'photo' in error|lower %} photo-required-error{% endif %}" id="photoUploadSection">
+            <div class="form-photo-wrapper">
+              <div class="form-photo-display" id="formPhotoDisplay">
+                {% if student and student.photo_filename %}
+                  <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;">
+                {% elif form_data and form_data.get('photo_data') %}
+                  <img src="{{ form_data.get('photo_data') }}" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;" id="restoredPhotoPreview">
+                {% else %}
+                  <span class="form-photo-placeholder">👤</span>
+                {% endif %}
+              </div>
+              <button type="button" class="form-photo-btn" onclick="openPhotoModal()">
+                📷 {% if (student and student.photo_filename) or (form_data and form_data.get('photo_data')) %}Change Photo{% else %}Add Photo{% endif %}
+              </button>
+            </div>
+            {% if not student %}<div class="photo-error-msg" id="photoErrorMsg" {% if form_data and form_data.get('photo_data') %}style="display:none;"{% endif %}>📷 Please upload a student photo before saving.</div>{% endif %}
+            <input type="hidden" id="photo_data" name="photo_data" value="{{ form_data.get('photo_data', '') if form_data else '' }}">
+          </div>
         </div>
 
         <div class="form-group">
-          <label>Education Level</label>
-          <select name="education_level">
+          <label>Parent/Guardian Name</label>
+          <input type="text" name="parent_name" value="{% if student %}{{ student.parent_name }}{% elif form_data %}{{ form_data.get('parent_name', '') }}{% endif %}">
+        </div>
+
+        <div class="form-group">
+          <label>Parent/Guardian Contact Number</label>
+          <input type="text" name="parent_contact" value="{% if student %}{{ student.parent_contact }}{% elif form_data %}{{ form_data.get('parent_contact', '') }}{% endif %}">
+        </div>
+
+        <div class="form-group">
+          <label>Education Level <span style="color:#dc3545;">*</span></label>
+          {% if prefill_lead and prefill_lead.education_status %}
+            {% set _edu_status = prefill_lead.education_status %}
+            {% if _edu_status == 'School Student' %}{% set _lead_edlevel = 'School' %}
+            {% elif _edu_status == 'PUC Student' %}{% set _lead_edlevel = 'Pre-University' %}
+            {% elif _edu_status == 'Degree Student' %}{% set _lead_edlevel = 'Undergraduate' %}
+            {% elif _edu_status == 'Graduate' %}{% set _lead_edlevel = 'Postgraduate' %}
+            {% else %}{% set _lead_edlevel = '' %}
+            {% endif %}
+          {% else %}{% set _lead_edlevel = '' %}{% endif %}
+          {% set _edlevel = (student.education_level if student else _lead_edlevel if prefill_lead else form_data.get('education_level', '') if form_data else '') %}
+          <select name="education_level" required>
             <option value="">-- Select --</option>
-            <option value="Pre-University" {% if student and student.education_level == 'Pre-University' %}selected{% endif %}>Pre-University</option>
-            <option value="Undergraduate" {% if student and student.education_level == 'Undergraduate' %}selected{% endif %}>Undergraduate</option>
-            <option value="School" {% if student and student.education_level == 'School' %}selected{% endif %}>School</option>
-            <option value="Diploma" {% if student and student.education_level == 'Diploma' %}selected{% endif %}>Diploma</option>
-            <option value="Technical" {% if student and student.education_level == 'Technical' %}selected{% endif %}>Technical</option>
-            <option value="Postgraduate" {% if student and student.education_level == 'Postgraduate' %}selected{% endif %}>Postgraduate</option>
+            <option value="School" {% if _edlevel == 'School' %}selected{% endif %}>School (1st–10th)</option>
+            <option value="Pre-University" {% if _edlevel == 'Pre-University' %}selected{% endif %}>Pre-University / PUC / 11th–12th</option>
+            <option value="Diploma" {% if _edlevel == 'Diploma' %}selected{% endif %}>Diploma</option>
+            <option value="Undergraduate" {% if _edlevel == 'Undergraduate' %}selected{% endif %}>Undergraduate (Degree)</option>
+            <option value="Postgraduate" {% if _edlevel == 'Postgraduate' %}selected{% endif %}>Postgraduate</option>
+            <option value="Doctoral" {% if _edlevel == 'Doctoral' %}selected{% endif %}>Doctoral (Ph.D / M.Phil)</option>
+            <option value="Technical" {% if _edlevel == 'Technical' %}selected{% endif %}>Technical / ITI / Polytechnic</option>
+            <option value="Professional" {% if _edlevel == 'Professional' %}selected{% endif %}>Working Professional</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label>Qualification</label>
-          <select id="qualification_select" name="qualification_select" style="margin-bottom: 10px;">
-            <option value="">-- Select from list or enter custom --</option>
+          <label>Qualification <span style="color:#dc3545;">*</span></label>
+          <select id="qualification_select" name="qualification_select" required>
+            <option value="">-- Select Education Level first --</option>
             <option value="custom">Other / Enter Custom</option>
           </select>
           <input type="text"
                  id="qualification_custom"
                  name="qualification"
-                 placeholder="Enter custom qualification or select from dropdown"
-                 {% if student %}value="{{ student.qualification }}"{% endif %}>
-          <small class="field-help">
-            Select from the dropdown list above or enter a custom qualification directly in the text field.
-          </small>
+                 placeholder="Type here if selecting Other above"
+                 value="{% if student %}{{ student.qualification }}{% elif form_data %}{{ form_data.get('qualification', '') }}{% endif %}"
+                 style="margin-top:8px; display:none;">
         </div>
 
         <div class="form-group">
-          <label>Student From</label>
-          <select name="student_location">
+          <label>Student From <span style="color:#dc3545;">*</span></label>
+          {% set _sloc = (student.student_location if student else (prefill_lead.lead_location if prefill_lead else form_data.get('student_location', '') if form_data else '')) %}
+          <select name="student_location" required>
             <option value="">-- Select --</option>
-          <option value="rural" {% if student and student.student_location == 'rural' %}selected{% endif %}>Rural</option>
-          <option value="urban" {% if student and student.student_location == 'urban' %}selected{% endif %}>Urban</option>
+            <option value="rural" {% if _sloc == 'rural' %}selected{% endif %}>Rural</option>
+            <option value="urban" {% if _sloc == 'urban' %}selected{% endif %}>Urban</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label>Employment Status</label>
-          <select name="employment_status">
+          <label>Employment Status <span style="color:#dc3545;">*</span></label>
+          {% set _empstatus = (student.employment_status if student else form_data.get('employment_status', '') if form_data else '') %}
+          <select name="employment_status" required>
             <option value="">-- Select --</option>
-            <option value="unemployed" {% if student and student.employment_status == 'unemployed' %}selected{% endif %}>Unemployed</option>
-            <option value="employed" {% if student and student.employment_status == 'employed' %}selected{% endif %}>Employed</option>
-            <option value="self_employed" {% if student and student.employment_status == 'self_employed' %}selected{% endif %}>Self-Employed</option>
-            <option value="student" {% if student and student.employment_status == 'student' %}selected{% endif %}>Student</option>
+            <option value="unemployed" {% if _empstatus == 'unemployed' %}selected{% endif %}>Unemployed</option>
+            <option value="employed" {% if _empstatus == 'employed' %}selected{% endif %}>Employed</option>
+            <option value="self_employed" {% if _empstatus == 'self_employed' %}selected{% endif %}>Self-Employed</option>
+            <option value="student" {% if _empstatus == 'student' %}selected{% endif %}>Student</option>
           </select>
         </div>
 
+        {% if student %}
         <div class="form-group">
           <label>Student Status</label>
+          {% set _status = student.status %}
           <select name="status">
-            <option value="active" {% if student and student.status == 'active' %}selected{% elif not student %}selected{% endif %}>Active</option>
-            <option value="completed" {% if student and student.status == 'completed' %}selected{% endif %}>Completed</option>
-            <option value="dropped" {% if student and student.status == 'dropped' %}selected{% endif %}>Dropped</option>
+            <option value="active" {% if _status == 'active' %}selected{% endif %}>Active</option>
+            <option value="completed" {% if _status == 'completed' %}selected{% endif %}>Completed</option>
+            <option value="dropped" {% if _status == 'dropped' %}selected{% endif %}>Dropped</option>
           </select>
         </div>
+        {% else %}
+        <input type="hidden" name="status" value="active">
+        {% endif %}
       </div>
 
       <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Save Student</button>
+        <button type="submit" class="btn btn-primary" id="saveBtnPrimary" {% if duplicate_warning %}style="display:none;"{% endif %}>Save Student</button>
+        <button type="button" class="btn btn-warning" id="saveAnywayBtn" {% if not duplicate_warning %}style="display:none;"{% endif %} onclick="forceSaveStudent()">Save Anyway</button>
         <a href="{{ url_for('billing.students') }}" class="btn btn-secondary">Cancel</a>
       </div>
     </form>
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
 <script>
 const qualificationLevels = {{ qualification_levels | tojson }};
+
+let studentCode = "{% if student %}{{ student.student_code }}{% endif %}";
 
 const educationLevelSelect = document.querySelector('select[name="education_level"]');
 const qualificationSelect = document.getElementById('qualification_select');
@@ -244,40 +655,251 @@ const qualificationCustom = document.getElementById('qualification_custom');
 function updateQualifications() {
   const selectedLevel = educationLevelSelect.value;
 
+  // Remove all options except "Other / Enter Custom" (index 1)
   while (qualificationSelect.options.length > 2) {
     qualificationSelect.remove(2);
   }
 
   if (selectedLevel && qualificationLevels[selectedLevel]) {
-    const qualifications = qualificationLevels[selectedLevel];
+    // Update placeholder text
+    qualificationSelect.options[0].textContent = '-- Select Qualification --';
 
+    const qualifications = qualificationLevels[selectedLevel];
     qualifications.forEach(qual => {
       const option = document.createElement('option');
       option.value = qual;
       option.textContent = qual;
       qualificationSelect.appendChild(option);
     });
+
+    // Pre-select if there's an existing value (edit mode)
+    const existingVal = qualificationCustom.value.trim();
+    if (existingVal) {
+      const matchingOpt = Array.from(qualificationSelect.options).find(o => o.value === existingVal);
+      if (matchingOpt) {
+        qualificationSelect.value = existingVal;
+        qualificationCustom.style.display = 'none';
+      } else if (existingVal) {
+        qualificationSelect.value = 'custom';
+        qualificationCustom.style.display = '';
+      }
+    }
+  } else {
+    qualificationSelect.options[0].textContent = '-- Select Education Level first --';
+    qualificationCustom.style.display = 'none';
   }
 }
 
 qualificationSelect.addEventListener('change', function() {
-  if (this.value && this.value !== 'custom') {
-    qualificationCustom.value = this.value;
-  } else if (this.value === 'custom') {
+  if (this.value === 'custom') {
     qualificationCustom.value = '';
+    qualificationCustom.style.display = '';
     qualificationCustom.focus();
+  } else if (this.value) {
+    qualificationCustom.value = this.value;
+    qualificationCustom.style.display = 'none';
+  } else {
+    qualificationCustom.value = '';
+    qualificationCustom.style.display = 'none';
   }
 });
 
-educationLevelSelect.addEventListener('change', updateQualifications);
+educationLevelSelect.addEventListener('change', function() {
+  // Clear selection when education level changes
+  qualificationSelect.value = '';
+  qualificationCustom.value = '';
+  qualificationCustom.style.display = 'none';
+  updateQualifications();
+});
 
 document.addEventListener('DOMContentLoaded', function() {
   updateQualifications();
 
+  // DOB Month/Day/Year selector → hidden YYYY-MM-DD field
+  const dobDayInput   = document.getElementById('dob_day');
+  const dobMonthInput = document.getElementById('dob_month');
+  const dobYearInput  = document.getElementById('dob_year');
+  const dobHidden     = document.getElementById('date_of_birth');
+  const dobError      = document.getElementById('dob-error');
+  const DOB_MAX_YEAR  = new Date().getFullYear() - 5;
+  const DOB_MIN_YEAR  = new Date().getFullYear() - 100;
+  dobYearInput.min = DOB_MIN_YEAR;
+  dobYearInput.max = DOB_MAX_YEAR;
+
+  function validateAndSetDob() {
+    const d = parseInt(dobDayInput.value, 10);
+    const m = parseInt(dobMonthInput.value, 10);
+    const y = parseInt(dobYearInput.value, 10);
+
+    dobError.style.display = 'none';
+    dobError.textContent = '';
+    dobHidden.value = '';
+
+    // All three must be filled
+    if (!dobDayInput.value && !dobMonthInput.value && !dobYearInput.value) return;
+
+    if (dobDayInput.value && (isNaN(d) || d < 1 || d > 31)) {
+      dobError.textContent = 'Day must be between 1 and 31.';
+      dobError.style.display = 'block';
+      return;
+    }
+    if (dobYearInput.value && (isNaN(y) || y < DOB_MIN_YEAR || y > DOB_MAX_YEAR)) {
+      dobError.textContent = 'Year must be between ' + DOB_MIN_YEAR + ' and ' + DOB_MAX_YEAR + '.';
+      dobError.style.display = 'block';
+      return;
+    }
+
+    if (!dobDayInput.value || !dobMonthInput.value || !dobYearInput.value) return;
+
+    // Validate real calendar date — JS Date rolls over invalid dates (e.g. Feb 30 → Mar 2)
+    const testDate = new Date(y, m - 1, d);
+    if (
+      testDate.getFullYear() !== y ||
+      testDate.getMonth() !== m - 1 ||
+      testDate.getDate() !== d
+    ) {
+      const monthNames = ['January','February','March','April','May','June',
+                          'July','August','September','October','November','December'];
+      dobError.textContent = d + ' ' + (monthNames[m-1] || '') + ' is not a valid date.';
+      dobError.style.display = 'block';
+      return;
+    }
+
+    // Valid — set hidden field
+    const mm = String(m).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
+    dobHidden.value = y + '-' + mm + '-' + dd;
+  }
+
+  dobMonthInput.addEventListener('change', validateAndSetDob);
+  dobDayInput.addEventListener('input', validateAndSetDob);
+  dobYearInput.addEventListener('input', validateAndSetDob);
+
+  // Photo required validation (new student only)
+  const studentForm = document.getElementById('studentForm');
+  const isNewStudent = !{{ 'true' if student else 'false' }};
+  if (studentForm) {
+    studentForm.addEventListener('submit', function(e) {
+      // Phone validation on submit
+      const phoneVal = document.getElementById('phoneInput').value.trim();
+      const phoneErr = validatePhone(phoneVal);
+      if (phoneErr) {
+        e.preventDefault();
+        phoneFormatError.textContent = phoneErr;
+        phoneFormatError.style.display = 'block';
+        document.getElementById('phoneInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+      }
+      // DOB validation on submit
+      validateAndSetDob();
+      if (dobError.style.display === 'block') {
+        e.preventDefault();
+        dobDayInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+      }
+      // DOB required — must be fully filled
+      if (!dobHidden.value) {
+        e.preventDefault();
+        dobError.textContent = 'Date of Birth is required. Please enter Day, Month, and Year.';
+        dobError.style.display = 'block';
+        dobDayInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return false;
+      }
+      // Qualification required
+      const qualVal = document.getElementById('qualification_custom');
+      if (!qualVal || !qualVal.value.trim()) {
+        e.preventDefault();
+        const qSel = document.getElementById('qualification_select');
+        qSel.style.outline = '2px solid #dc3545';
+        qSel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => { qSel.style.outline = ''; }, 3000);
+        return false;
+      }
+      if (isNewStudent) {
+        const photoData = document.getElementById('photo_data');
+        const section = document.getElementById('photoUploadSection');
+        const errMsg = document.getElementById('photoErrorMsg');
+        if (!photoData || !photoData.value) {
+          e.preventDefault();
+          if (section) {
+            section.classList.add('photo-required-error');
+            section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+          if (errMsg) errMsg.style.display = 'block';
+          return false;
+        }
+      }
+    });
+  }
+
+  // Phone number validation
+  const phoneFormatError = document.getElementById('phoneFormatError');
+  function validatePhone(value) {
+    const digits = value.replace(/[\s\-\+]/g, '');
+    if (!/^\d+$/.test(digits)) return 'Phone number must contain digits only.';
+    if (digits.length !== 10) return 'Please enter a valid 10-digit mobile number.';
+    return '';
+  }
+  document.getElementById('phoneInput').addEventListener('input', function() {
+    const err = this.value.trim() ? validatePhone(this.value.trim()) : '';
+    phoneFormatError.textContent = err;
+    phoneFormatError.style.display = err ? 'block' : 'none';
+  });
+
+  // Real-time duplicate phone check via AJAX
+  (function() {
+    const phoneInput = document.getElementById('phoneInput');
+    const phoneDupWarning = document.getElementById('phoneDupWarning');
+    const saveAnywayBtn = document.getElementById('saveAnywayBtn');
+    const saveBtnPrimary = document.getElementById('saveBtnPrimary');
+    const forceSaveInput = document.getElementById('force_save');
+    const currentStudentId = {{ student.id if student else 'null' }};
+    // If page loaded with a server-side duplicate warning, don't run AJAX on initial blur
+    let serverDupShown = {{ 'true' if duplicate_warning else 'false' }};
+
+    if (!phoneInput) return;
+
+    phoneInput.addEventListener('blur', function() {
+      const phone = this.value.trim();
+      if (!phone) { phoneDupWarning.style.display = 'none'; return; }
+
+      fetch('{{ url_for("billing.student_check_duplicate") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ phone: phone, exclude_id: currentStudentId })
+      })
+      .then(r => r.json())
+      .then(data => {
+        serverDupShown = false; // user changed phone, server banner no longer applies
+        if (data.duplicate) {
+          phoneDupWarning.innerHTML =
+            '\u26a0\ufe0f Phone already used by <strong>' + data.full_name +
+            '</strong> (Reg&nbsp;#' + data.student_code + '). ' +
+            '<a href="/billing/student/' + data.student_id + '/profile" target="_blank" style="color:#9a3412;">View &rarr;</a>';
+          phoneDupWarning.style.display = 'block';
+          if (saveAnywayBtn) saveAnywayBtn.style.display = 'inline-block';
+          if (saveBtnPrimary) saveBtnPrimary.style.display = 'none';
+          if (forceSaveInput) forceSaveInput.value = '0';
+        } else {
+          phoneDupWarning.style.display = 'none';
+          if (saveAnywayBtn) saveAnywayBtn.style.display = 'none';
+          if (saveBtnPrimary) saveBtnPrimary.style.display = 'inline-block';
+          if (forceSaveInput) forceSaveInput.value = '0';
+        }
+      })
+      .catch(() => {});
+    });
+  })();
+
   {% if student and student.qualification %}
     const existingQualification = {{ student.qualification | tojson }};
+  {% elif form_data and form_data.get('qualification') %}
+    const existingQualification = {{ form_data.get('qualification') | tojson }};
+  {% else %}
+    const existingQualification = null;
+  {% endif %}
+  if (existingQualification) {
     let found = false;
-
     for (let i = 0; i < qualificationSelect.options.length; i++) {
       if (qualificationSelect.options[i].value === existingQualification) {
         qualificationSelect.value = existingQualification;
@@ -285,12 +907,312 @@ document.addEventListener('DOMContentLoaded', function() {
         break;
       }
     }
-
-    if (!found && existingQualification) {
+    if (!found) {
       qualificationSelect.value = "custom";
     }
-  {% endif %}
+  }
 });
+
+function forceSaveStudent() {
+  document.getElementById('force_save').value = '1';
+  document.getElementById('studentForm').submit();
+}
+</script>
+
+<!-- ── Photo Upload Modal ─────────────────────────────────── -->
+<div id="photoModal" class="form-photo-modal" onclick="if(event.target===this)closePhotoModal()">
+  <div class="form-photo-modal-content">
+    <div class="form-photo-modal-header">📷 {% if student %}Update Photo{% else %}Add Photo{% endif %}</div>
+    <div class="form-photo-modal-body">
+      <!-- Step 1: Select source -->
+      <div id="photoStep1">
+        <!-- Default: file/camera choice -->
+        <div id="photoStep1Default">
+          <div id="photoPreviewBox" onclick="document.getElementById('photoFileInput').click()" title="Click to choose a photo">
+            <span class="preview-hint">Click here or use camera to select a photo</span>
+          </div>
+          <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="handlePhotoFile(this)">
+          <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="document.getElementById('photoFileInput').click()">🖼 Choose File</button>
+            <button type="button" class="modal-btn secondary" style="flex:1; font-size:13px;" onclick="openCamera()">📸 Camera</button>
+          </div>
+        </div>
+        <!-- Camera active UI (shown when camera is running) -->
+        <div id="cameraControls" style="display:none;">
+          <div style="position:relative; margin-bottom:8px;">
+            <video id="cameraVideo" style="width:100%; border-radius:8px; display:block;" autoplay playsinline></video>
+            <button type="button" class="modal-btn secondary" style="position:absolute; top:8px; right:8px; padding:5px 11px; font-size:12px; opacity:0.9;" onclick="flipCamera()">🔄 Flip</button>
+          </div>
+          <canvas id="cameraCanvas" style="display:none;"></canvas>
+          <button type="button" class="modal-btn primary" style="width:100%; margin-bottom:6px;" onclick="snapPhoto()">📷 Snap Photo</button>
+          <button type="button" class="modal-btn secondary" style="width:100%; font-size:13px;" onclick="stopCamera()">✕ Cancel</button>
+        </div>
+      </div>
+      <!-- Step 2: Crop -->
+      <div id="photoStep2" style="display:none;">
+        <div id="photoCropWrapper">
+          <img id="photoCropImage" src="" alt="Crop">
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:4px;">
+          <button type="button" class="modal-btn primary" style="flex:1;" onclick="applyCrop()">✂️ Crop & Use</button>
+          <button type="button" class="modal-btn secondary" style="flex:1;" onclick="backToStep1()">← Back</button>
+        </div>
+      </div>
+      <!-- Step 3: Preview cropped result -->
+      <div id="photoStep3" style="display:none; text-align:center;">
+        <img id="photoCroppedPreview" src="" alt="Cropped preview" style="max-width:100%; max-height:280px; border-radius:8px; border:1px solid #dee2e6;">
+        <div style="margin-top:10px;">
+          <button type="button" class="modal-btn secondary" style="font-size:13px;" onclick="backToStep1()">🔄 Change Photo</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-photo-modal-footer">
+      <button type="button" class="modal-btn secondary" onclick="closePhotoModal()">Cancel</button>
+      <button type="button" class="modal-btn primary" id="savePhotoBtn" onclick="savePhoto()" disabled>Use Photo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  let croppedDataUrl = null;
+  let cameraStream = null;
+  let photoCropper = null;
+  let currentFacingMode = 'environment';
+
+  window.openPhotoModal = function() {
+    resetPhotoModal();
+    document.getElementById('photoModal').classList.add('show');
+  };
+  window.closePhotoModal = function() {
+    stopCamera();
+    destroyCropper();
+    document.getElementById('photoModal').classList.remove('show');
+  };
+
+  function resetPhotoModal() {
+    croppedDataUrl = null;
+    document.getElementById('savePhotoBtn').disabled = true;
+    const box = document.getElementById('photoPreviewBox');
+    box.innerHTML = '<span class="preview-hint">Click here or use camera to select a photo</span>';
+    document.getElementById('photoFileInput').value = '';
+    showStep(1);
+    stopCamera();
+    destroyCropper();
+  }
+
+  function showStep(n) {
+    document.getElementById('photoStep1').style.display = n === 1 ? '' : 'none';
+    document.getElementById('photoStep2').style.display = n === 2 ? '' : 'none';
+    document.getElementById('photoStep3').style.display = n === 3 ? '' : 'none';
+  }
+
+  function destroyCropper() {
+    if (photoCropper) {
+      photoCropper.destroy();
+      photoCropper = null;
+    }
+  }
+
+  window.handlePhotoFile = function(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      loadIntoCropper(e.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  function loadIntoCropper(dataUrl) {
+    stopCamera();
+    destroyCropper();
+    const img = document.getElementById('photoCropImage');
+    img.src = dataUrl;
+    showStep(2);
+    setTimeout(function() {
+      photoCropper = new Cropper(img, {
+        aspectRatio: 1,
+        viewMode: 1,
+        autoCropArea: 0.9,
+        responsive: true,
+        guides: true,
+        highlight: true,
+        cropBoxMovable: true,
+        cropBoxResizable: true,
+        toggleDragModeOnDblclick: true,
+      });
+      document.getElementById('savePhotoBtn').disabled = false;
+    }, 100);
+  }
+
+  window.applyCrop = function() {
+    if (!photoCropper) return;
+    const canvas = photoCropper.getCroppedCanvas({
+      maxWidth: 800,
+      maxHeight: 800,
+      fillColor: '#fff',
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+    croppedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    document.getElementById('photoCroppedPreview').src = croppedDataUrl;
+    document.getElementById('savePhotoBtn').disabled = false;
+    destroyCropper();
+    showStep(3);
+  };
+
+  window.backToStep1 = function() {
+    croppedDataUrl = null;
+    document.getElementById('savePhotoBtn').disabled = true;
+    destroyCropper();
+    showStep(1);
+    document.getElementById('photoFileInput').value = '';
+  };
+
+  window.openCamera = function() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Camera not supported on this device/browser.');
+      return;
+    }
+    // Stop existing stream before (re)starting
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
+      .then(function(stream) {
+        cameraStream = stream;
+        const video = document.getElementById('cameraVideo');
+        video.srcObject = stream;
+        document.getElementById('photoStep1Default').style.display = 'none';
+        document.getElementById('cameraControls').style.display = '';
+      })
+      .catch(function(err) {
+        alert('Could not access camera: ' + err.message);
+      });
+  };
+
+  window.flipCamera = function() {
+    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+    window.openCamera();
+  };
+
+  window.snapPhoto = function() {
+    const video = document.getElementById('cameraVideo');
+    const canvas = document.getElementById('cameraCanvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
+    stopCamera();
+    loadIntoCropper(dataUrl);
+  };
+
+  window.stopCamera = function() {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    const video = document.getElementById('cameraVideo');
+    if (video) { video.srcObject = null; }
+    document.getElementById('cameraControls').style.display = 'none';
+    document.getElementById('photoStep1Default').style.display = '';
+  };
+  // Local alias for calls within the IIFE
+  function stopCamera() { window.stopCamera(); }
+
+  window.savePhoto = function() {
+    if (!croppedDataUrl && photoCropper) {
+      const canvas = photoCropper.getCroppedCanvas({
+        maxWidth: 800,
+        maxHeight: 800,
+        fillColor: '#fff',
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high',
+      });
+      croppedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    }
+    if (!croppedDataUrl) return;
+
+    document.getElementById('photo_data').value = croppedDataUrl;
+
+    const display = document.getElementById('formPhotoDisplay');
+    display.innerHTML = '<img src="' + croppedDataUrl + '" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;">';
+
+    document.querySelector('.form-photo-btn').innerHTML = '📷 Change Photo';
+
+    const section = document.getElementById('photoUploadSection');
+    const errMsg = document.getElementById('photoErrorMsg');
+    if (section) section.classList.remove('photo-required-error');
+    if (errMsg) errMsg.style.display = 'none';
+
+    closePhotoModal();
+  };
+})();
+</script>
+
+<script>
+(function () {
+  const pincodeInput = document.getElementById('pincode_field');
+  const spinner = document.getElementById('pincode_spinner');
+  const statusEl = document.getElementById('pincode_status');
+  const localityField = document.getElementById('locality_field');
+  const cityField = document.getElementById('city_field');
+  const stateField = document.getElementById('state_field');
+
+  if (!pincodeInput) return;
+
+  let lookupTimer = null;
+
+  pincodeInput.addEventListener('input', function () {
+    const val = this.value.replace(/\D/g, '').slice(0, 6);
+    this.value = val;
+
+    clearTimeout(lookupTimer);
+    statusEl.textContent = '';
+    statusEl.style.color = '';
+
+    if (val.length === 6) {
+      spinner.style.display = 'inline';
+      lookupTimer = setTimeout(function () { doLookup(val); }, 400);
+    } else {
+      spinner.style.display = 'none';
+    }
+  });
+
+  function doLookup(pincode) {
+    fetch('/billing/api/pincode-lookup?pincode=' + encodeURIComponent(pincode), {
+      method: 'GET',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        spinner.style.display = 'none';
+        if (data.success) {
+          // Only fill fields that are currently empty, to avoid overwriting manual entries
+          if (data.locality && !localityField.value) localityField.value = data.locality;
+          if (data.city && !cityField.value) cityField.value = data.city;
+          if (data.state && stateField) {
+            // Select the matching state option (case-insensitive)
+            const opts = Array.from(stateField.options);
+            const match = opts.find(o => o.value.toLowerCase() === data.state.toLowerCase());
+            if (match && !stateField.value) stateField.value = match.value;
+          }
+          statusEl.textContent = '✓ ' + (data.city || '') + (data.state ? ', ' + data.state : '');
+          statusEl.style.color = '#198754';
+        } else {
+          statusEl.textContent = data.error || 'Pincode not found';
+          statusEl.style.color = '#dc3545';
+        }
+      })
+      .catch(function () {
+        spinner.style.display = 'none';
+        statusEl.textContent = 'Lookup failed — fill manually';
+        statusEl.style.color = '#dc3545';
+      });
+  }
+})();
 </script>
 
 {% endblock %}

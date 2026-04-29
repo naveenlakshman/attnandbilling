@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, send_file, flash, redirect, url_fo
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
 from werkzeug.security import generate_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 reports_bp = Blueprint("reports", __name__)
 
@@ -88,6 +88,384 @@ def dashboard():
     conn.close()
     
     return render_template("reports/dashboard.html", stats=stats)
+
+
+@reports_bp.route("/daily")
+@login_required
+def daily_report():
+    """Daily consolidated report: Leads, Invoices, Receipts, Attendance"""
+    IST = timezone(timedelta(hours=5, minutes=30))
+    today_default = datetime.now(IST).strftime("%Y-%m-%d")
+
+    report_date = request.args.get("date", today_default).strip()
+    # Validate date
+    try:
+        datetime.strptime(report_date, "%Y-%m-%d")
+    except ValueError:
+        report_date = today_default
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # ── Branches ──────────────────────────────────────────────────
+    cur.execute("SELECT id, branch_name, branch_code FROM branches WHERE is_active = 1 ORDER BY branch_name")
+    branches = cur.fetchall()
+
+    # Branch selection
+    can_view_all = session.get("can_view_all_branches", False) or session.get("role") == "admin"
+    user_branch_id = session.get("branch_id")
+    branch_param = request.args.get("branch_id", "").strip()
+    if can_view_all and branch_param:
+        selected_branch_id = int(branch_param) if branch_param.isdigit() else None
+    else:
+        selected_branch_id = user_branch_id
+
+    # ── 1. Today's Leads (global – no branch_id on leads table) ──
+    cur.execute("""
+        SELECT l.id, l.name, l.phone, l.lead_source, l.stage, l.status, l.created_at,
+               u.full_name AS owner_name
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE substr(l.created_at, 1, 10) = ? AND l.is_deleted = 0
+        ORDER BY l.created_at DESC
+    """, (report_date,))
+    new_leads = cur.fetchall()
+
+    # ── 2. Today's Followups due ──────────────────────────────────
+    cur.execute("""
+        SELECT id, name, phone, stage, status, next_followup_date
+        FROM leads
+        WHERE next_followup_date = ? AND is_deleted = 0
+        ORDER BY name
+    """, (report_date,))
+    followups_due = cur.fetchall()
+
+    # ── 2b. Today's Followups done (actually logged today) ────────
+    cur.execute("""
+        SELECT f.id, f.method, f.outcome, f.note, f.created_at,
+               l.id AS lead_id, l.name AS lead_name, l.phone AS lead_phone,
+               u.full_name AS done_by
+        FROM followups f
+        JOIN leads l ON f.lead_id = l.id
+        LEFT JOIN users u ON f.user_id = u.id
+        WHERE substr(f.created_at, 1, 10) = ? AND l.is_deleted = 0
+        ORDER BY f.created_at DESC
+    """, (report_date,))
+    followups_done = cur.fetchall()
+
+    # ── 3. Today's Invoices ───────────────────────────────────────
+    invoice_query = """
+        SELECT i.id, i.invoice_no, i.invoice_date, i.total_amount, i.status,
+               IFNULL((SELECT SUM(r2.amount_received) FROM receipts r2 WHERE r2.invoice_id = i.id), 0) AS paid_amount,
+               (i.total_amount - IFNULL((SELECT SUM(r2.amount_received) FROM receipts r2 WHERE r2.invoice_id = i.id), 0)) AS balance_amount,
+               s.full_name AS student_name, s.student_code, s.id AS student_id,
+               br.branch_name
+        FROM invoices i
+        JOIN students s ON i.student_id = s.id
+        LEFT JOIN branches br ON i.branch_id = br.id
+        WHERE parse_date(i.invoice_date) = ?
+    """
+    invoice_params = [report_date]
+    if selected_branch_id:
+        invoice_query += " AND i.branch_id = ?"
+        invoice_params.append(selected_branch_id)
+    invoice_query += " ORDER BY i.created_at DESC"
+    cur.execute(invoice_query, invoice_params)
+    invoices = cur.fetchall()
+
+    # ── 4. Today's Receipts ───────────────────────────────────────
+    receipt_query = """
+        SELECT r.id, r.receipt_no, r.receipt_date, r.amount_received, r.payment_mode,
+               s.full_name AS student_name, s.student_code, i.invoice_no,
+               br.branch_name
+        FROM receipts r
+        JOIN invoices i ON r.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        LEFT JOIN branches br ON i.branch_id = br.id
+        WHERE parse_date(r.receipt_date) = ?
+    """
+    receipt_params = [report_date]
+    if selected_branch_id:
+        receipt_query += " AND i.branch_id = ?"
+        receipt_params.append(selected_branch_id)
+    receipt_query += " ORDER BY r.created_at DESC"
+    cur.execute(receipt_query, receipt_params)
+    receipts = cur.fetchall()
+
+    # ── 5. Today's Attendance ─────────────────────────────────────
+    att_summary = {"present": 0, "absent": 0, "late": 0, "leave": 0, "total": 0}
+    att_records = []
+    if selected_branch_id:
+        cur.execute("""
+            SELECT ar.status, COUNT(*) AS cnt
+            FROM attendance_records ar
+            WHERE ar.attendance_date = ? AND ar.branch_id = ?
+            GROUP BY ar.status
+        """, (report_date, selected_branch_id))
+        for row in cur.fetchall():
+            s = row["status"]
+            if s in att_summary:
+                att_summary[s] = row["cnt"]
+            att_summary["total"] += row["cnt"]
+
+        cur.execute("""
+            SELECT ar.status, s.full_name AS student_name, s.student_code,
+                   b.batch_name
+            FROM attendance_records ar
+            JOIN students s ON ar.student_id = s.id
+            JOIN batches b ON ar.batch_id = b.id
+            WHERE ar.attendance_date = ? AND ar.branch_id = ?
+            ORDER BY b.batch_name, s.full_name
+        """, (report_date, selected_branch_id))
+        att_records = cur.fetchall()
+
+    conn.close()
+
+    # Summary totals
+    totals = {
+        "new_leads": len(new_leads),
+        "followups": len(followups_due),
+        "followups_done": len(followups_done),
+        "invoices": len(invoices),
+        "invoice_amount": sum(r["total_amount"] or 0 for r in invoices),
+        "receipts": len(receipts),
+        "receipt_amount": sum(r["amount_received"] or 0 for r in receipts),
+        "attendance": att_summary["total"],
+    }
+
+    return render_template(
+        "reports/daily.html",
+        report_date=report_date,
+        branches=branches,
+        selected_branch_id=selected_branch_id,
+        can_view_all=can_view_all,
+        new_leads=new_leads,
+        followups_due=followups_due,
+        followups_done=followups_done,
+        invoices=invoices,
+        receipts=receipts,
+        att_summary=att_summary,
+        att_records=att_records,
+        totals=totals,
+    )
+
+
+@reports_bp.route("/daily/download")
+@login_required
+def daily_report_download():
+    """Download daily report as CSV (all sections)"""
+    IST = timezone(timedelta(hours=5, minutes=30))
+    today_default = datetime.now(IST).strftime("%Y-%m-%d")
+
+    report_date = request.args.get("date", today_default).strip()
+    try:
+        datetime.strptime(report_date, "%Y-%m-%d")
+    except ValueError:
+        report_date = today_default
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    can_view_all = session.get("can_view_all_branches", False) or session.get("role") == "admin"
+    user_branch_id = session.get("branch_id")
+    branch_param = request.args.get("branch_id", "").strip()
+    if can_view_all and branch_param:
+        selected_branch_id = int(branch_param) if branch_param.isdigit() else None
+    else:
+        selected_branch_id = user_branch_id
+
+    # ── Branch name for filename ──────────────────────────────────
+    branch_label = ""
+    if selected_branch_id:
+        cur.execute("SELECT branch_name FROM branches WHERE id = ?", (selected_branch_id,))
+        br = cur.fetchone()
+        if br:
+            branch_label = "_" + br["branch_name"].replace(" ", "_")
+
+    # ── New Leads ─────────────────────────────────────────────────
+    cur.execute("""
+        SELECT l.id, l.name, l.phone, l.lead_source, l.stage, l.status, l.created_at,
+               u.full_name AS owner_name
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE substr(l.created_at, 1, 10) = ? AND l.is_deleted = 0
+        ORDER BY l.created_at DESC
+    """, (report_date,))
+    new_leads = cur.fetchall()
+
+    # ── Followups (due) ───────────────────────────────────────────
+    cur.execute("""
+        SELECT id, name, phone, stage, status, next_followup_date
+        FROM leads
+        WHERE next_followup_date = ? AND is_deleted = 0
+        ORDER BY name
+    """, (report_date,))
+    followups_due = cur.fetchall()
+
+    # ── Followups done today ──────────────────────────────────────
+    cur.execute("""
+        SELECT f.id, f.method, f.outcome, f.note, f.created_at,
+               l.name AS lead_name, l.phone AS lead_phone,
+               u.full_name AS done_by
+        FROM followups f
+        JOIN leads l ON f.lead_id = l.id
+        LEFT JOIN users u ON f.user_id = u.id
+        WHERE substr(f.created_at, 1, 10) = ? AND l.is_deleted = 0
+        ORDER BY f.created_at DESC
+    """, (report_date,))
+    followups_done = cur.fetchall()
+
+    # ── Invoices ──────────────────────────────────────────────────
+    invoice_query = """
+        SELECT i.invoice_no, i.invoice_date, s.full_name AS student_name, s.student_code,
+               i.total_amount,
+               IFNULL((SELECT SUM(r2.amount_received) FROM receipts r2 WHERE r2.invoice_id = i.id), 0) AS paid_amount,
+               (i.total_amount - IFNULL((SELECT SUM(r2.amount_received) FROM receipts r2 WHERE r2.invoice_id = i.id), 0)) AS balance_amount,
+               i.status, br.branch_name
+        FROM invoices i
+        JOIN students s ON i.student_id = s.id
+        LEFT JOIN branches br ON i.branch_id = br.id
+        WHERE parse_date(i.invoice_date) = ?
+    """
+    invoice_params = [report_date]
+    if selected_branch_id:
+        invoice_query += " AND i.branch_id = ?"
+        invoice_params.append(selected_branch_id)
+    invoice_query += " ORDER BY i.created_at DESC"
+    cur.execute(invoice_query, invoice_params)
+    invoices = cur.fetchall()
+
+    # ── Receipts ──────────────────────────────────────────────────
+    receipt_query = """
+        SELECT r.receipt_no, r.receipt_date, s.full_name AS student_name, s.student_code,
+               i.invoice_no, r.amount_received, r.payment_mode, br.branch_name
+        FROM receipts r
+        JOIN invoices i ON r.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        LEFT JOIN branches br ON i.branch_id = br.id
+        WHERE parse_date(r.receipt_date) = ?
+    """
+    receipt_params = [report_date]
+    if selected_branch_id:
+        receipt_query += " AND i.branch_id = ?"
+        receipt_params.append(selected_branch_id)
+    receipt_query += " ORDER BY r.created_at DESC"
+    cur.execute(receipt_query, receipt_params)
+    receipts = cur.fetchall()
+
+    # ── Attendance ────────────────────────────────────────────────
+    att_records = []
+    if selected_branch_id:
+        cur.execute("""
+            SELECT s.full_name AS student_name, s.student_code,
+                   b.batch_name, ar.status
+            FROM attendance_records ar
+            JOIN students s ON ar.student_id = s.id
+            JOIN batches b ON ar.batch_id = b.id
+            WHERE ar.attendance_date = ? AND ar.branch_id = ?
+            ORDER BY b.batch_name, s.full_name
+        """, (report_date, selected_branch_id))
+        att_records = cur.fetchall()
+
+    conn.close()
+
+    # ── Build CSV ─────────────────────────────────────────────────
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow([f"Daily Report – {report_date}{(' – ' + br['branch_name']) if selected_branch_id and br else ''}"])
+    writer.writerow([])
+
+    # Section 1: New Leads
+    writer.writerow(["NEW LEADS"])
+    writer.writerow(["#", "Name", "Phone", "Source", "Stage", "Status", "Time"])
+    for i, l in enumerate(new_leads, 1):
+        writer.writerow([i, l["name"], l["phone"] or "", l["lead_source"] or "",
+                         l["stage"] or "", l["status"] or "",
+                         (l["created_at"] or "")[11:16]])
+    if not new_leads:
+        writer.writerow(["No new leads"])
+    writer.writerow([])
+
+    # Section 2: Followups
+    writer.writerow(["FOLLOWUPS DUE"])
+    writer.writerow(["#", "Name", "Phone", "Stage", "Status"])
+    for i, f in enumerate(followups_due, 1):
+        writer.writerow([i, f["name"], f["phone"] or "", f["stage"] or "", f["status"] or ""])
+    if not followups_due:
+        writer.writerow(["No followups today"])
+    writer.writerow([])
+
+    # Section 2b: Followups Done Today
+    writer.writerow(["FOLLOWUPS DONE TODAY"])
+    writer.writerow(["#", "Lead Name", "Phone", "Method", "Outcome", "Note", "Done By", "Time (IST)"])
+    for i, f in enumerate(followups_done, 1):
+        from datetime import datetime as _dt, timedelta as _td
+        try:
+            t = _dt.fromisoformat(f["created_at"]) + _td(hours=5, minutes=30)
+            time_str = t.strftime("%I:%M %p")
+        except Exception:
+            time_str = (f["created_at"] or "")[11:16]
+        writer.writerow([i, f["lead_name"], f["lead_phone"] or "",
+                         f["method"] or "", f["outcome"] or "",
+                         f["note"] or "", f["done_by"] or "", time_str])
+    if not followups_done:
+        writer.writerow(["No followups logged today"])
+    writer.writerow([])
+
+    # Section 3: Invoices
+    writer.writerow(["INVOICES"])
+    writer.writerow(["#", "Invoice No.", "Date", "Student", "Reg. No", "Total", "Paid", "Balance", "Status", "Branch"])
+    inv_total = inv_paid = inv_balance = 0
+    for i, inv in enumerate(invoices, 1):
+        writer.writerow([i, inv["invoice_no"], inv["invoice_date"], inv["student_name"],
+                         inv["student_code"], inv["total_amount"] or 0,
+                         inv["paid_amount"] or 0, inv["balance_amount"] or 0,
+                         inv["status"] or "", inv["branch_name"] or ""])
+        inv_total += inv["total_amount"] or 0
+        inv_paid += inv["paid_amount"] or 0
+        inv_balance += inv["balance_amount"] or 0
+    if not invoices:
+        writer.writerow(["No invoices today"])
+    else:
+        writer.writerow(["", "", "", "", "TOTAL", inv_total, inv_paid, inv_balance, "", ""])
+    writer.writerow([])
+
+    # Section 4: Receipts
+    writer.writerow(["RECEIPTS"])
+    writer.writerow(["#", "Receipt No.", "Date", "Student", "Reg. No", "Invoice No.", "Amount", "Mode", "Branch"])
+    rec_total = 0
+    for i, r in enumerate(receipts, 1):
+        writer.writerow([i, r["receipt_no"], r["receipt_date"], r["student_name"],
+                         r["student_code"], r["invoice_no"],
+                         r["amount_received"] or 0, r["payment_mode"] or "", r["branch_name"] or ""])
+        rec_total += r["amount_received"] or 0
+    if not receipts:
+        writer.writerow(["No receipts today"])
+    else:
+        writer.writerow(["", "", "", "", "", "TOTAL", rec_total, "", ""])
+    writer.writerow([])
+
+    # Section 5: Attendance
+    writer.writerow(["ATTENDANCE"])
+    if att_records:
+        writer.writerow(["#", "Student", "Reg. No", "Batch", "Status"])
+        for i, a in enumerate(att_records, 1):
+            writer.writerow([i, a["student_name"], a["student_code"], a["batch_name"], a["status"]])
+    elif not selected_branch_id:
+        writer.writerow(["Select a branch to include attendance data"])
+    else:
+        writer.writerow(["No attendance recorded for this branch today"])
+
+    csv_data = output.getvalue()
+    output.close()
+
+    buf = io.BytesIO()
+    buf.write(csv_data.encode("utf-8-sig"))  # utf-8-sig adds BOM for Excel compatibility
+    buf.seek(0)
+
+    filename = f"daily_report_{report_date}{branch_label}.csv"
+    return send_file(buf, mimetype="text/csv", as_attachment=True, download_name=filename)
 
 
 @reports_bp.route("/export/<table_name>")

@@ -4,6 +4,33 @@
 
 {% block content %}
 <style>
+.rich-text-content { overflow: hidden; }
+.rich-text-content h1 { font-size: 1.9em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.2; }
+.rich-text-content h2 { font-size: 1.55em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.25; }
+.rich-text-content h3 { font-size: 1.25em; font-weight: 600; margin: 0.55em 0 0.25em; line-height: 1.3; }
+.rich-text-content h4 { font-size: 1.05em; font-weight: 600; margin: 0.5em 0 0.2em; line-height: 1.35; }
+.lms-hotspot-embed {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden;
+    margin: 16px 0;
+    line-height: 0;
+    box-sizing: border-box;
+}
+.lms-hotspot-embed img {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+.lms-rt-dot {
+    position: absolute !important;
+    z-index: 10 !important;
+}
     .student-lms-wrapper {
         display: grid;
         grid-template-columns: 280px 1fr;
@@ -440,6 +467,10 @@
                             ▶️
                             {% elif content.content_mode == 'pdf' %}
                             📕
+                            {% elif content.content_mode == 'rich_text' %}
+                            📝
+                            {% elif content.content_mode == 'interactive_image' %}
+                            🖼️
                             {% elif content.content_mode == 'image' %}
                             🖼️
                             {% elif content.content_mode == 'html' %}
@@ -477,6 +508,64 @@
                             {% if content.content_body %}
                             <p style="margin-top: 15px; color: #666;">{{ content.content_body }}</p>
                             {% endif %}
+
+                        {% elif content.content_mode == 'rich_text' %}
+                            <div class="rich-text-content" style="line-height:1.7;font-size:15px;">
+                                {{ content.content_body | safe }}
+                            </div>
+
+                        {% elif content.content_mode == 'interactive_image' %}
+                            <div class="interactive-img-wrap" id="prevWrap{{ loop.index }}"
+                                 style="position:relative;display:inline-block;width:100%;">
+                                <img id="prevImg{{ loop.index }}"
+                                     src="{{ url_for('lms_admin.serve_image_admin', content_id=content.id) }}"
+                                     alt="{{ content.content_title }}"
+                                     style="width:100%;height:auto;display:block;border-radius:6px;border:1px solid #dee2e6;">
+                            </div>
+                            <div id="prevModal{{ loop.index }}" style="display:none;position:fixed;top:0;left:0;
+                                 width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;
+                                 align-items:center;justify-content:center;">
+                              <div style="background:#fff;border-radius:10px;padding:24px;max-width:400px;width:90%;
+                                   box-shadow:0 8px 32px rgba(0,0,0,0.25);position:relative;">
+                                <button onclick="document.getElementById('prevModal{{ loop.index }}').style.display='none';"
+                                        style="position:absolute;top:10px;right:14px;border:none;background:none;
+                                               font-size:20px;cursor:pointer;color:#6c757d;">✕</button>
+                                <h5 id="prevTitle{{ loop.index }}" style="margin:0 0 10px;color:#1a1a2e;"></h5>
+                                <p id="prevDesc{{ loop.index }}" style="margin:0;color:#495057;font-size:14px;line-height:1.6;"></p>
+                              </div>
+                            </div>
+                            <script>
+                            (function(){
+                              var hs = [];
+                              try { hs = JSON.parse({{ content.hotspots_json | tojson }} || '[]'); } catch(e){}
+                              var img = document.getElementById('prevImg{{ loop.index }}');
+                              var wrap = document.getElementById('prevWrap{{ loop.index }}');
+                              function renderDots() {
+                                hs.forEach(function(h, i) {
+                                  var d = document.createElement('div');
+                                  Object.assign(d.style, {
+                                    position:'absolute', left:h.x+'%', top:h.y+'%',
+                                    transform:'translate(-50%,-50%)',
+                                    width:'22px', height:'22px', borderRadius:'50%',
+                                    background:'#e02020', border:'2px solid #fff',
+                                    boxShadow:'0 0 0 2px rgba(0,0,0,0.25)',
+                                    cursor:'pointer', zIndex:'10',
+                                    display:'flex', alignItems:'center', justifyContent:'center',
+                                    fontSize:'11px', color:'#fff', fontWeight:'700',
+                                  });
+                                  d.textContent = i + 1;
+                                  d.addEventListener('click', function(){
+                                    document.getElementById('prevTitle{{ loop.index }}').textContent = h.title || '';
+                                    document.getElementById('prevDesc{{ loop.index }}').textContent  = h.description || '';
+                                    document.getElementById('prevModal{{ loop.index }}').style.display = 'flex';
+                                  });
+                                  wrap.appendChild(d);
+                                });
+                              }
+                              if (img.complete && img.naturalWidth > 0) renderDots();
+                              else img.onload = renderDots;
+                            })();
+                            </script>
 
                         {% elif content.content_mode == 'image' %}
                             <img src="{{ content.file_path }}" style="max-width: 100%; height: auto; border-radius: 4px;">
@@ -568,6 +657,150 @@ function previousContent() {
 function completeAndNext() {
     alert('This would mark content as complete and show next content.');
 }
+
+/* Activate embedded hotspot images inside rich text content */
+function activateLmsHotspots() {
+    (function() {
+        if (document.getElementById('lms-hs-tip-style')) return;
+        var s = document.createElement('style');
+        s.id = 'lms-hs-tip-style';
+        s.textContent = [
+            '.lms-hs-tip{position:absolute;z-index:100;background:#fff;border-radius:10px;',
+            'padding:12px 14px;min-width:160px;max-width:240px;',
+            'box-shadow:0 4px 20px rgba(0,0,0,0.18);pointer-events:none;',
+            'opacity:0;transform:translateY(6px);',
+            'transition:opacity 0.18s ease,transform 0.18s ease;',
+            'line-height:1.4;font-size:13px;}',
+            '.lms-hs-tip.visible{opacity:1;transform:translateY(0);}',
+            '.lms-hs-tip-title{font-weight:700;color:#1a1a2e;margin-bottom:4px;font-size:13px;}',
+            '.lms-hs-tip-desc{color:#555;font-size:12px;line-height:1.5;margin:0;}',
+            '.lms-hs-tip::after{content:"";position:absolute;border:7px solid transparent;}',
+            '.lms-hs-tip.arrow-down::after{top:100%;left:50%;transform:translateX(-50%);border-top-color:#fff;}',
+            '.lms-hs-tip.arrow-up::after{bottom:100%;left:50%;transform:translateX(-50%);border-bottom-color:#fff;}',
+            '.lms-rt-dot{transition:transform 0.15s!important;}',
+            '.lms-rt-dot.active{transform:translate(-50%,-50%) scale(1.25)!important;}'
+        ].join('');
+        document.head.appendChild(s);
+    })();
+
+    var tip = document.getElementById('lms-hs-tip');
+    if (!tip) {
+        tip = document.createElement('div');
+        tip.id = 'lms-hs-tip';
+        tip.className = 'lms-hs-tip';
+        tip.innerHTML = '<div class="lms-hs-tip-title" id="lms-hs-tip-title"></div>'
+                      + '<p class="lms-hs-tip-desc" id="lms-hs-tip-desc"></p>';
+        document.body.appendChild(tip);
+    }
+    var _activeDot = null;
+
+    function hideTooltip() {
+        tip.classList.remove('visible');
+        if (_activeDot) { _activeDot.classList.remove('active'); _activeDot = null; }
+    }
+
+    function showTooltip(dot, title, desc) {
+        document.getElementById('lms-hs-tip-title').textContent = title || '';
+        var descEl = document.getElementById('lms-hs-tip-desc');
+        descEl.textContent = desc || '';
+        descEl.style.display = desc ? '' : 'none';
+
+        tip.style.visibility = 'hidden';
+        tip.style.left = '-9999px'; tip.style.top = '-9999px';
+        tip.classList.add('visible');
+        tip.style.visibility = '';
+
+        var dotRect  = dot.getBoundingClientRect();
+        var tipW     = tip.offsetWidth;
+        var tipH     = tip.offsetHeight;
+        var vw       = window.innerWidth;
+        var vh       = window.innerHeight;
+        var ARROW    = 10;
+        var GAP      = 8;
+
+        var spaceAbove = dotRect.top;
+        var spaceBelow = vh - dotRect.bottom;
+        var showAbove  = spaceAbove >= tipH + ARROW || spaceAbove >= spaceBelow;
+
+        var top;
+        if (showAbove) {
+            top = dotRect.top - tipH - ARROW + window.scrollY;
+            tip.classList.remove('arrow-up'); tip.classList.add('arrow-down');
+        } else {
+            top = dotRect.bottom + ARROW + window.scrollY;
+            tip.classList.remove('arrow-down'); tip.classList.add('arrow-up');
+        }
+
+        var dotCenterX = dotRect.left + dotRect.width / 2;
+        var left = dotCenterX - tipW / 2 + window.scrollX;
+        left = Math.max(GAP + window.scrollX, Math.min(left, vw - tipW - GAP + window.scrollX));
+        tip.style.left = left + 'px'; tip.style.top = top + 'px';
+        tip.style.position = 'absolute';
+
+        if (_activeDot && _activeDot !== dot) _activeDot.classList.remove('active');
+        _activeDot = dot;
+        dot.classList.add('active');
+    }
+
+    document.querySelectorAll('.lms-hotspot-embed').forEach(function(embed) {
+        if (embed.dataset.activated) return;
+        embed.dataset.activated = '1';
+        var badge = embed.querySelector('.lms-hs-badge');
+        if (badge) badge.remove();
+        embed.style.position = 'relative';
+        embed.style.display  = 'block';
+        embed.style.width    = '100%';
+        embed.style.maxWidth = '100%';
+        embed.style.overflow = 'hidden';
+        embed.style.lineHeight = '0';
+        var img = embed.querySelector('img');
+        if (!img) return;
+        var correctSrc = embed.getAttribute('data-src');
+        if (correctSrc) img.src = correctSrc;
+        img.style.width = '100%'; img.style.maxWidth = '100%';
+        img.style.height = 'auto'; img.style.display = 'block';
+        var hotspots = [];
+        try { hotspots = JSON.parse(embed.getAttribute('data-hotspots') || '[]'); } catch(e) {}
+        if (!hotspots.length) return;
+
+        document.addEventListener('click', function(e) {
+            if (!embed.contains(e.target)) hideTooltip();
+        });
+
+        function renderHsDots() {
+            embed.querySelectorAll('.lms-rt-dot').forEach(function(d){ d.remove(); });
+            hotspots.forEach(function(hs, i) {
+                var d = document.createElement('div');
+                d.className = 'lms-rt-dot';
+                Object.assign(d.style, {
+                    position:'absolute', left:hs.x+'%', top:hs.y+'%',
+                    transform:'translate(-50%,-50%)',
+                    width:'20px', height:'20px', borderRadius:'50%',
+                    background:'rgba(220,38,38,0.75)',
+                    border:'2px solid rgba(220,38,38,0.9)',
+                    boxShadow:'0 0 0 3px rgba(220,38,38,0.18)',
+                    cursor:'pointer', zIndex:'10',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:'10px', color:'#fff', fontWeight:'700',
+                    lineHeight:'1',
+                });
+                d.textContent = i + 1;
+                d.addEventListener('mouseenter', function(){ if(_activeDot !== d) { this.style.transform='translate(-50%,-50%) scale(1.3)'; this.style.background='rgba(220,38,38,0.9)'; } });
+                d.addEventListener('mouseleave', function(){ if(_activeDot !== d) { this.style.transform='translate(-50%,-50%)'; this.style.background='rgba(220,38,38,0.65)'; } });
+                d.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (_activeDot === d) { hideTooltip(); return; }
+                    showTooltip(d, hs.title, hs.description);
+                });
+                embed.appendChild(d);
+            });
+        }
+        if (img.complete && img.naturalWidth > 0) renderHsDots();
+        else img.onload = renderHsDots;
+    });
+}
+activateLmsHotspots();
+document.addEventListener('DOMContentLoaded', activateLmsHotspots);
 </script>
 
 {% endblock %}

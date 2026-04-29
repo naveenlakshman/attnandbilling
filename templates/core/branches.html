@@ -1,6 +1,6 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
-{% block title %}Branches - Global IT ERP{% endblock %}
+{% block title %}Branches - {{ company.company_short_name }}{% endblock %}
 
 {% block page_title %}Manage Branches{% endblock %}
 
@@ -26,6 +26,7 @@
                     <th>Branch Name</th>
                     <th>Branch Code</th>
                     <th>Address</th>
+                    <th>Computers</th>
                     <th>Status</th>
                     <th>Created At</th>
                     <th>Actions</th>
@@ -38,6 +39,7 @@
                     <td><strong>{{ branch.branch_name }}</strong></td>
                     <td><code>{{ branch.branch_code }}</code></td>
                     <td>{{ branch.address or '-' }}</td>
+                    <td><span class="badge bg-secondary">{{ branch.no_of_computers or 0 }} 🖥️</span></td>
                     <td>
                         {% if branch.is_active == 1 %}
                             <span class="badge bg-success">Active</span>

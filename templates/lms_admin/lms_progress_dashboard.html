@@ -237,7 +237,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {% for idx, student in data.top_students %}
+                                    {% for student in data.top_students %}
                                     <tr style="cursor: pointer;" onclick="window.location.href='{{ url_for('lms_admin.view_student_progress', student_id=student.student_id) }}';">
                                         <td>
                                             <span class="badge" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-size: 0.9rem;">
@@ -302,7 +302,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {% for idx, student in data.low_engagement_students %}
+                                    {% for student in data.low_engagement_students %}
                                     <tr style="cursor: pointer;" onclick="window.location.href='{{ url_for('lms_admin.view_student_progress', student_id=student.student_id) }}';">
                                         <td>
                                             <span class="badge bg-danger" style="font-size: 0.9rem;">
