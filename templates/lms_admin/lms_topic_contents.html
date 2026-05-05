@@ -78,6 +78,7 @@
 {% endblock %}
 
 {% block content %}
+{% set is_admin = session.get('role') == 'admin' %}
 
 <!-- Breadcrumb -->
 <div class="breadcrumb-nav">
@@ -127,7 +128,9 @@
       <div class="slot-filled-actions">
         <a href="{{ url_for('lms_admin.content_view', content_id=data.video_content.id) }}" class="btn-slot-action btn-slot-preview">&#x1F441; Preview</a>
         <a href="{{ url_for('lms_admin.content_edit', content_id=data.video_content.id) }}" class="btn-slot-action btn-slot-edit">&#x270F; Edit</a>
+        {% if is_admin %}
         <button class="btn-slot-action btn-slot-remove" onclick="removeContent({{ data.video_content.id }})">&#x1F5D1; Remove</button>
+        {% endif %}
       </div>
     </div>
     {% else %}
@@ -176,7 +179,9 @@
       <div class="slot-filled-actions">
         <a href="{{ url_for('lms_admin.content_view', content_id=data.lesson_content.id) }}" class="btn-slot-action btn-slot-preview">&#x1F441; Preview</a>
         <a href="{{ url_for('lms_admin.content_edit', content_id=data.lesson_content.id) }}" class="btn-slot-action btn-slot-edit">&#x270F; Edit</a>
+        {% if is_admin %}
         <button class="btn-slot-action btn-slot-remove" onclick="removeContent({{ data.lesson_content.id }})">&#x1F5D1; Remove</button>
+        {% endif %}
       </div>
     </div>
     {% else %}
@@ -212,7 +217,9 @@
       </div>
       <div class="slot-filled-actions">
         <a href="{{ url_for('lms_admin.content_edit', content_id=data.download_content.id) }}" class="btn-slot-action btn-slot-edit">&#x270F; Edit</a>
+        {% if is_admin %}
         <button class="btn-slot-action btn-slot-remove" onclick="removeContent({{ data.download_content.id }})">&#x1F5D1; Remove</button>
+        {% endif %}
       </div>
     </div>
     {% else %}

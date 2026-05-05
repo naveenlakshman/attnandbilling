@@ -395,6 +395,7 @@
 {% endblock %}
 
 {% block content %}
+{% set can_manage_content = session.get('role') in ['admin', 'staff'] %}
 
 <!-- Breadcrumb Navigation -->
 <div class="breadcrumb-nav">
@@ -415,7 +416,7 @@
     <h2>📝 Topics</h2>
   </div>
   <div class="header-actions">
-    {% if session.get('role') == 'admin' %}
+    {% if can_manage_content %}
     {% if data.topics %}
     <form id="saveOrderForm" method="POST" action="{{ url_for('lms_admin.reorder_topics', chapter_id=data.chapter.id) }}" class="order-actions">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -459,14 +460,14 @@
       </thead>
       <tbody>
         {% for topic in data.topics %}
-        <tr class="topic-row" data-topic-id="{{ topic.id }}" {% if session.get('role') == 'admin' %}draggable="true"{% endif %}>
+        <tr class="topic-row" data-topic-id="{{ topic.id }}" {% if can_manage_content %}draggable="true"{% endif %}>
           <td class="drag-cell">
-            {% if session.get('role') == 'admin' %}
+            {% if can_manage_content %}
             <span class="drag-handle" title="Drag to reorder">↕</span>
             {% endif %}
           </td>
           <td style="text-align: center;">
-            <input type="number" class="topic-order-input" value="{{ topic.topic_order }}" min="1" {% if session.get('role') != 'admin' %}readonly{% endif %}>
+            <input type="number" class="topic-order-input" value="{{ topic.topic_order }}" min="1" {% if not can_manage_content %}readonly{% endif %}>
           </td>
           <td>
             <div class="topic-title">
@@ -501,7 +502,7 @@
               <a class="btn-action btn-content" href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" title="Manage Content">
                 📦 Content
               </a>
-              {% if session.get('role') == 'admin' %}
+              {% if can_manage_content %}
               <a class="btn-action btn-edit" href="{{ url_for('lms_admin.topic_edit', topic_id=topic.id) }}" title="Edit Topic">
                 ✏️ Edit
               </a>
@@ -522,7 +523,7 @@
       <div class="empty-state-icon">📝</div>
       <div class="empty-state-title">No Topics Yet</div>
       <div class="empty-state-text">Start building your chapter by creating your first topic.</div>
-      {% if session.get('role') == 'admin' %}
+      {% if can_manage_content %}
       <a href="{{ url_for('lms_admin.topic_new', chapter_id=data.chapter.id) }}" class="btn-add">+ Add Your First Topic</a>
       {% endif %}
     </div>
@@ -552,7 +553,7 @@
     window.location.href = '/lms_admin/topic/' + topicId + '/contents';
   }
 
-  {% if session.get('role') == 'admin' and data.topics %}
+  {% if can_manage_content and data.topics %}
   (function initTopicReorder() {
     const tbody = document.querySelector('.topics-table tbody');
     const saveForm = document.getElementById('saveOrderForm');

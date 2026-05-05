@@ -11,7 +11,7 @@ import bleach
 from bleach.css_sanitizer import CSSSanitizer
 from werkzeug.utils import secure_filename
 from config import Config
-from modules.core.utils import login_required, admin_required
+from modules.core.utils import login_required, admin_required, lms_content_manager_required
 
 # ── Rich text sanitization config ──────────────────────────────────────────
 _BLEACH_TAGS = [
@@ -760,7 +760,7 @@ def list_chapters(program_id):
 
 
 @lms_admin_bp.route('/program/<int:program_id>/chapter/new', methods=['GET', 'POST'])
-@admin_required
+@lms_content_manager_required
 def chapter_new(program_id):
     """Add new chapter to a program"""
     conn = get_conn()
@@ -850,7 +850,7 @@ def chapter_new(program_id):
 
 
 @lms_admin_bp.route('/chapter/<int:chapter_id>/edit', methods=['GET', 'POST'])
-@admin_required
+@lms_content_manager_required
 def chapter_edit(chapter_id):
     """Edit existing chapter"""
     conn = get_conn()
@@ -1059,7 +1059,7 @@ def list_topics(chapter_id):
 
 
 @lms_admin_bp.route('/chapter/<int:chapter_id>/topics/reorder', methods=['POST'])
-@admin_required
+@lms_content_manager_required
 def reorder_topics(chapter_id):
     """Reorder topics within a chapter and normalize topic_order sequentially."""
     conn = get_conn()
@@ -1162,7 +1162,7 @@ def reorder_topics(chapter_id):
 
 
 @lms_admin_bp.route('/chapter/<int:chapter_id>/topic/new', methods=['GET', 'POST'])
-@admin_required
+@lms_content_manager_required
 def topic_new(chapter_id):
     """Add new topic to a chapter"""
     conn = get_conn()
@@ -1307,7 +1307,7 @@ def topic_new(chapter_id):
 
 
 @lms_admin_bp.route('/topic/<int:topic_id>/edit', methods=['GET', 'POST'])
-@admin_required
+@lms_content_manager_required
 def topic_edit(topic_id):
     """Edit existing topic"""
     conn = get_conn()
@@ -1631,7 +1631,7 @@ def topic_student_view(topic_id):
 
 
 @lms_admin_bp.route('/topic/<int:topic_id>/content/new', methods=['GET', 'POST'])
-@login_required
+@lms_content_manager_required
 def content_new(topic_id):
     """Add new content to a topic"""
     conn = get_conn()
@@ -1907,7 +1907,7 @@ def serve_pdf(content_id):
 
 @lms_admin_bp.route('/inline_image/upload', methods=['POST'])
 @csrf.exempt
-@login_required
+@lms_content_manager_required
 def upload_inline_image():
     """AJAX: receive an image file, save to static/lms/images/inline/, return URL."""
     if 'file' not in request.files:
@@ -1985,7 +1985,7 @@ def serve_image_admin(content_id):
 
 
 @lms_admin_bp.route('/content/<int:content_id>/edit', methods=['GET', 'POST'])
-@login_required
+@lms_content_manager_required
 def content_edit(content_id):
     """Edit existing content"""
     conn = get_conn()

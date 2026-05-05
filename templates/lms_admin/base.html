@@ -120,6 +120,7 @@
       </a>
 
       <!-- Batch Assignments -->
+      {% if session.get('role') == 'admin' %}
       <a
         class="nav-link {{ 'active' if request.endpoint == 'lms_admin.list_batch_programs' else '' }}"
         href="{{ url_for('lms_admin.list_batch_programs') }}">
@@ -132,6 +133,7 @@
         href="{{ url_for('lms_admin.list_course_mappings') }}">
         🔗 Course Mapping
       </a>
+      {% endif %}
 
       <hr style="border-color:rgba(255,255,255,0.1);margin:12px 0 8px;">
       <a href="{{ url_for('lms_admin.launch_demo') }}"
