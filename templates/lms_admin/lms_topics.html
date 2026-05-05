@@ -58,6 +58,13 @@
     flex-wrap: wrap;
   }
 
+  .order-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
   .btn-add {
     background: #0d6efd;
     color: white;
@@ -92,6 +99,33 @@
 
   .btn-back:hover {
     background: #dee2e6;
+  }
+
+  .btn-save-order {
+    background: #198754;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-save-order:hover {
+    background: #157347;
+  }
+
+  .btn-save-order:disabled {
+    background: #9fb7a8;
+    cursor: not-allowed;
+  }
+
+  .order-hint {
+    font-size: 12px;
+    color: #6c757d;
   }
 
   .info-box {
@@ -156,6 +190,45 @@
     border-radius: 4px;
     font-size: 13px;
     text-align: center;
+  }
+
+  .topic-order-input.order-invalid {
+    border-color: #dc3545;
+    background: #fff5f5;
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.12);
+  }
+
+  .order-validation-error {
+    font-size: 12px;
+    color: #dc3545;
+    display: none;
+  }
+
+  .order-validation-error.show {
+    display: inline;
+  }
+
+  .drag-cell {
+    width: 42px;
+    text-align: center;
+  }
+
+  .drag-handle {
+    display: inline-block;
+    padding: 4px 6px;
+    color: #6c757d;
+    cursor: grab;
+    user-select: none;
+    font-size: 14px;
+  }
+
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+
+  tr.dragging {
+    opacity: 0.55;
+    background: #fff3cd;
   }
 
   .topic-title {
@@ -343,6 +416,17 @@
   </div>
   <div class="header-actions">
     {% if session.get('role') == 'admin' %}
+    {% if data.topics %}
+    <form id="saveOrderForm" method="POST" action="{{ url_for('lms_admin.reorder_topics', chapter_id=data.chapter.id) }}" class="order-actions">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" id="topicOrdersPayload" name="topic_orders" value="">
+      <button id="saveOrderBtn" class="btn-save-order" type="submit" disabled>
+        💾 Save Order
+      </button>
+      <span class="order-hint">Drag rows or edit order numbers, then save.</span>
+      <span id="orderValidationError" class="order-validation-error">Each topic must have a unique order number from 1 to total topics.</span>
+    </form>
+    {% endif %}
     <a href="{{ url_for('lms_admin.topic_new', chapter_id=data.chapter.id) }}" class="btn-add">
       + Add Topic
     </a>
@@ -364,6 +448,7 @@
     <table class="topics-table">
       <thead>
         <tr>
+          <th class="drag-cell"></th>
           <th style="width: 70px;">Order</th>
           <th>Topic Title</th>
           <th style="width: 120px;">Content</th>
@@ -374,14 +459,19 @@
       </thead>
       <tbody>
         {% for topic in data.topics %}
-        <tr class="topic-row" data-topic-id="{{ topic.id }}">
+        <tr class="topic-row" data-topic-id="{{ topic.id }}" {% if session.get('role') == 'admin' %}draggable="true"{% endif %}>
+          <td class="drag-cell">
+            {% if session.get('role') == 'admin' %}
+            <span class="drag-handle" title="Drag to reorder">↕</span>
+            {% endif %}
+          </td>
           <td style="text-align: center;">
-            <input type="number" class="topic-order-input" value="{{ topic.topic_order }}" min="1" readonly>
+            <input type="number" class="topic-order-input" value="{{ topic.topic_order }}" min="1" {% if session.get('role') != 'admin' %}readonly{% endif %}>
           </td>
           <td>
             <div class="topic-title">
               <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" style="color: #212529; text-decoration: none;">
-                {{ topic.topic_order }}. {{ topic.topic_title }}
+                <span class="topic-title-order">{{ topic.topic_order }}.</span> {{ topic.topic_title }}
               </a>
               {% if topic.is_preview %}
                 <span class="preview-badge">👁️ Preview</span>
@@ -417,7 +507,7 @@
               </a>
               {% endif %}
               {% if session.get('role') == 'admin' %}
-              <button class="btn-action btn-delete" onclick="deleteTopic(event, {{ topic.id }})" title="Delete Topic">
+              <button type="button" class="btn-action btn-delete" onclick="deleteTopic(event, {{ topic.id }})" title="Delete Topic">
                 🗑️ Delete
               </button>
               {% endif %}
@@ -461,6 +551,185 @@
     event.preventDefault();
     window.location.href = '/lms_admin/topic/' + topicId + '/contents';
   }
+
+  {% if session.get('role') == 'admin' and data.topics %}
+  (function initTopicReorder() {
+    const tbody = document.querySelector('.topics-table tbody');
+    const saveForm = document.getElementById('saveOrderForm');
+    const saveBtn = document.getElementById('saveOrderBtn');
+    const payloadInput = document.getElementById('topicOrdersPayload');
+    const errorBox = document.getElementById('orderValidationError');
+    if (!tbody || !saveForm || !saveBtn || !payloadInput || !errorBox) {
+      return;
+    }
+
+    let draggedRow = null;
+    let isDirty = false;
+    const totalTopics = {{ data.total_topics|int }};
+
+    function getRows() {
+      return Array.from(tbody.querySelectorAll('tr.topic-row'));
+    }
+
+    function toggleInputError(input, shouldShow) {
+      if (!input) {
+        return;
+      }
+      input.classList.toggle('order-invalid', shouldShow);
+    }
+
+    function parseStrictPositiveInt(rawValue) {
+      const text = String(rawValue === undefined || rawValue === null ? '' : rawValue).trim();
+      if (!/^\d+$/.test(text)) {
+        return null;
+      }
+      const parsed = Number(text);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        return null;
+      }
+      return parsed;
+    }
+
+    function validateRows() {
+      const rows = getRows();
+      const seen = new Map();
+      const invalidInputs = new Set();
+      const parsedOrders = [];
+
+      rows.forEach((row) => {
+        const orderInput = row.querySelector('.topic-order-input');
+        if (!orderInput) {
+          return;
+        }
+        const parsed = parseStrictPositiveInt(orderInput.value);
+        if (parsed === null || parsed < 1 || parsed > totalTopics) {
+          invalidInputs.add(orderInput);
+          return;
+        }
+        parsedOrders.push(parsed);
+        if (seen.has(parsed)) {
+          invalidInputs.add(orderInput);
+          invalidInputs.add(seen.get(parsed));
+        } else {
+          seen.set(parsed, orderInput);
+        }
+      });
+
+      const isValid = parsedOrders.length === rows.length && invalidInputs.size === 0;
+      rows.forEach((row) => {
+        toggleInputError(row.querySelector('.topic-order-input'), false);
+      });
+      invalidInputs.forEach((input) => toggleInputError(input, true));
+
+      errorBox.classList.toggle('show', !isValid);
+      saveBtn.disabled = !(isDirty && isValid);
+      return isValid;
+    }
+
+    function setDirtyAndValidate() {
+      isDirty = true;
+      validateRows();
+    }
+
+    function syncTitleAndOrderFromPosition() {
+      getRows().forEach((row, idx) => {
+        const orderInput = row.querySelector('.topic-order-input');
+        const orderText = row.querySelector('.topic-title-order');
+        if (orderInput) {
+          orderInput.value = idx + 1;
+        }
+        if (orderText) {
+          orderText.textContent = (idx + 1) + '.';
+        }
+      });
+    }
+
+    function getDropTargetRow(mouseY) {
+      const rows = getRows().filter((row) => row !== draggedRow);
+      let closest = { offset: Number.NEGATIVE_INFINITY, row: null };
+
+      rows.forEach((row) => {
+        const rect = row.getBoundingClientRect();
+        const offset = mouseY - rect.top - rect.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+          closest = { offset, row };
+        }
+      });
+
+      return closest.row;
+    }
+
+    getRows().forEach((row) => {
+      row.addEventListener('dragstart', () => {
+        draggedRow = row;
+        row.classList.add('dragging');
+      });
+
+      row.addEventListener('dragend', () => {
+        row.classList.remove('dragging');
+        draggedRow = null;
+      });
+
+      const orderInput = row.querySelector('.topic-order-input');
+      if (orderInput) {
+        orderInput.addEventListener('input', () => {
+          setDirtyAndValidate();
+        });
+      }
+    });
+
+    tbody.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      if (!draggedRow) {
+        return;
+      }
+
+      const targetRow = getDropTargetRow(event.clientY);
+      if (!targetRow) {
+        tbody.appendChild(draggedRow);
+      } else {
+        tbody.insertBefore(draggedRow, targetRow);
+      }
+    });
+
+    tbody.addEventListener('drop', (event) => {
+      event.preventDefault();
+      if (!draggedRow) {
+        return;
+      }
+      syncTitleAndOrderFromPosition();
+      setDirtyAndValidate();
+    });
+
+    saveForm.addEventListener('submit', (event) => {
+      const rows = getRows();
+      if (!rows.length) {
+        event.preventDefault();
+        return;
+      }
+
+      if (!validateRows()) {
+        event.preventDefault();
+        return;
+      }
+
+      const payload = rows.map((row, visualIndex) => {
+        const topicId = parseInt(row.dataset.topicId, 10);
+        const orderInput = row.querySelector('.topic-order-input');
+        const parsedOrder = orderInput ? parseStrictPositiveInt(orderInput.value) : (visualIndex + 1);
+        return {
+          id: topicId,
+          order: parsedOrder || (visualIndex + 1)
+        };
+      });
+
+      payloadInput.value = JSON.stringify(payload);
+      saveBtn.disabled = true;
+    });
+
+    validateRows();
+  })();
+  {% endif %}
 </script>
 
 {% endblock %}

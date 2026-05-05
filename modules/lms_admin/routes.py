@@ -87,6 +87,74 @@ def sanitize_rich_text(html):
     )
 
 
+def _to_positive_int(value, default=1):
+    """Convert value to a positive integer with a safe default."""
+    try:
+        parsed = int(value)
+        return parsed if parsed > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _strict_positive_int(value):
+    """Return positive integer only for strict int-like input, else None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if cleaned.isdigit():
+            parsed = int(cleaned)
+            return parsed if parsed > 0 else None
+    return None
+
+
+def _renumber_chapter_topics(cur, chapter_id, ordered_topic_ids=None):
+    """Ensure topic_order is sequential (1..n) for one chapter only."""
+    rows = cur.execute(
+        """
+            SELECT id
+            FROM lms_topics
+            WHERE chapter_id = ?
+            ORDER BY topic_order ASC, id ASC
+        """,
+        (chapter_id,)
+    ).fetchall()
+
+    if not rows:
+        return []
+
+    existing_ids = [row['id'] for row in rows]
+    ordered_ids = []
+
+    if ordered_topic_ids:
+        seen = set()
+        for topic_id in ordered_topic_ids:
+            if topic_id in existing_ids and topic_id not in seen:
+                ordered_ids.append(topic_id)
+                seen.add(topic_id)
+        for topic_id in existing_ids:
+            if topic_id not in seen:
+                ordered_ids.append(topic_id)
+    else:
+        ordered_ids = existing_ids
+
+    now = datetime.now().isoformat(timespec='seconds')
+    for next_order, topic_id in enumerate(ordered_ids, start=1):
+        cur.execute(
+            """
+                UPDATE lms_topics
+                SET topic_order = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """,
+            (next_order, now, topic_id)
+        )
+
+    return ordered_ids
+
+
 # File Upload Handler
 def upload_file(file_obj, content_type):
     """
@@ -990,6 +1058,109 @@ def list_topics(chapter_id):
         conn.close()
 
 
+@lms_admin_bp.route('/chapter/<int:chapter_id>/topics/reorder', methods=['POST'])
+@admin_required
+def reorder_topics(chapter_id):
+    """Reorder topics within a chapter and normalize topic_order sequentially."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        chapter = cur.execute(
+            """
+                SELECT id, chapter_title
+                FROM lms_chapters
+                WHERE id = ?
+            """,
+            (chapter_id,)
+        ).fetchone()
+
+        if not chapter:
+            flash('Chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_programs'))
+
+        topics = cur.execute(
+            """
+                SELECT id, topic_order
+                FROM lms_topics
+                WHERE chapter_id = ?
+                ORDER BY topic_order ASC, id ASC
+            """,
+            (chapter_id,)
+        ).fetchall()
+
+        if not topics:
+            flash('No topics found to reorder.', 'warning')
+            return redirect(url_for('lms_admin.list_topics', chapter_id=chapter_id))
+
+        payload = request.form.get('topic_orders', '').strip()
+        requested_entries = []
+        total_topics = len(topics)
+
+        if payload:
+            try:
+                decoded = json.loads(payload)
+                if isinstance(decoded, list):
+                    requested_entries = decoded
+            except json.JSONDecodeError:
+                flash('Invalid reorder payload.', 'danger')
+                return redirect(url_for('lms_admin.list_topics', chapter_id=chapter_id))
+
+        if not isinstance(requested_entries, list) or len(requested_entries) != total_topics:
+            flash('Each topic must have a unique order number from 1 to total topics.', 'danger')
+            return redirect(url_for('lms_admin.list_topics', chapter_id=chapter_id))
+
+        valid_topic_ids = {row['id'] for row in topics}
+        payload_topic_ids = []
+        payload_orders = []
+
+        for entry in requested_entries:
+            if not isinstance(entry, dict):
+                flash('Each topic must have a unique order number from 1 to total topics.', 'danger')
+                return redirect(url_for('lms_admin.list_topics', chapter_id=chapter_id))
+
+            topic_id = _strict_positive_int(entry.get('id'))
+            requested_order = _strict_positive_int(entry.get('order'))
+
+            if topic_id is None or requested_order is None:
+                flash('Each topic must have a unique order number from 1 to total topics.', 'danger')
+                return redirect(url_for('lms_admin.list_topics', chapter_id=chapter_id))
+
+            payload_topic_ids.append(topic_id)
+            payload_orders.append(requested_order)
+
+        if set(payload_topic_ids) != valid_topic_ids or len(payload_topic_ids) != len(set(payload_topic_ids)):
+            flash('Invalid topic selection for this chapter.', 'danger')
+            return redirect(url_for('lms_admin.list_topics', chapter_id=chapter_id))
+
+        valid_orders = set(range(1, total_topics + 1))
+        if set(payload_orders) != valid_orders or len(payload_orders) != len(set(payload_orders)):
+            flash('Each topic must have a unique order number from 1 to total topics.', 'danger')
+            return redirect(url_for('lms_admin.list_topics', chapter_id=chapter_id))
+
+        ranked = []
+        for idx, entry in enumerate(requested_entries):
+            ranked.append((int(entry['order']), idx, int(entry['id'])))
+
+        ordered_topic_ids = [topic_id for _, _, topic_id in sorted(ranked, key=lambda x: (x[0], x[1]))]
+        _renumber_chapter_topics(cur, chapter_id, ordered_topic_ids)
+
+        conn.commit()
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='update',
+            module_name='lms_topics',
+            record_id=chapter_id,
+            description=f'Reordered topics in chapter {chapter["chapter_title"]}'
+        )
+
+        flash('Topic order updated successfully.', 'success')
+        return redirect(url_for('lms_admin.list_topics', chapter_id=chapter_id))
+    finally:
+        conn.close()
+
+
 @lms_admin_bp.route('/chapter/<int:chapter_id>/topic/new', methods=['GET', 'POST'])
 @admin_required
 def topic_new(chapter_id):
@@ -1084,6 +1255,24 @@ def topic_new(chapter_id):
                 raise
             
             topic_id = cur.lastrowid
+
+            # Place the new topic at the requested position, then normalize to 1..n.
+            remaining_ids = [
+                row['id']
+                for row in cur.execute(
+                    """
+                        SELECT id
+                        FROM lms_topics
+                        WHERE chapter_id = ? AND id != ?
+                        ORDER BY topic_order ASC, id ASC
+                    """,
+                    (chapter_id, topic_id)
+                ).fetchall()
+            ]
+            insert_index = min(max(topic_order, 1) - 1, len(remaining_ids))
+            ordered_topic_ids = remaining_ids[:insert_index] + [topic_id] + remaining_ids[insert_index:]
+            _renumber_chapter_topics(cur, chapter_id, ordered_topic_ids)
+
             conn.commit()
             
             log_activity(
@@ -1220,6 +1409,23 @@ def topic_edit(topic_id):
                 now,
                 topic_id
             ))
+
+            # Reposition this topic inside its chapter and normalize order values.
+            remaining_ids = [
+                row['id']
+                for row in cur.execute(
+                    """
+                        SELECT id
+                        FROM lms_topics
+                        WHERE chapter_id = ? AND id != ?
+                        ORDER BY topic_order ASC, id ASC
+                    """,
+                    (topic['chapter_id'], topic_id)
+                ).fetchall()
+            ]
+            insert_index = min(max(topic_order, 1) - 1, len(remaining_ids))
+            ordered_topic_ids = remaining_ids[:insert_index] + [topic_id] + remaining_ids[insert_index:]
+            _renumber_chapter_topics(cur, topic['chapter_id'], ordered_topic_ids)
             
             conn.commit()
             log_activity(
@@ -1265,6 +1471,9 @@ def delete_topic(topic_id):
             DELETE FROM lms_topics
             WHERE id = ?
         """, (topic_id,))
+
+        _renumber_chapter_topics(cur, topic['chapter_id'])
+
         conn.commit()
         log_activity(
             user_id=session['user_id'],
