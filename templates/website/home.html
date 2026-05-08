@@ -1,0 +1,221 @@
+{% extends "website/base.html" %}
+{% block title %}{{ company.company_name }} — {{ company.tagline or 'Welcome' }}{% endblock %}
+
+{% block content %}
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <h1>{{ company.company_name }}</h1>
+    <p>{{ company.tagline or 'Building Skills. Building Futures.' }}</p>
+    <a href="#enquire" class="btn btn-light btn-lg px-4 me-2 fw-semibold">Enquire Now</a>
+    <a href="#courses" class="btn btn-outline-light btn-lg px-4">View Courses</a>
+  </div>
+</section>
+
+<!-- About -->
+<section class="section" id="about">
+  <div class="container">
+    <div class="row align-items-center g-5">
+      <div class="col-md-6">
+        <p class="text-primary fw-semibold text-uppercase" style="letter-spacing:.08em;">About Us</p>
+        <h2 class="section-title">Why Choose {{ company.company_short_name }}?</h2>
+        <p class="text-secondary" style="font-size:1.05rem;">
+          We provide industry-relevant training designed to equip students with the skills
+          needed for today's job market. Our expert trainers, hands-on curriculum, and
+          strong placement support make us the preferred choice for thousands of students.
+        </p>
+        <div class="row g-3 mt-2">
+          <div class="col-6">
+            <div class="d-flex align-items-start gap-2">
+              <span style="font-size:1.4rem;">🎯</span>
+              <div>
+                <div class="fw-semibold">Goal-oriented Training</div>
+                <div class="text-muted small">Focused on real outcomes</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="d-flex align-items-start gap-2">
+              <span style="font-size:1.4rem;">👩‍💻</span>
+              <div>
+                <div class="fw-semibold">Expert Trainers</div>
+                <div class="text-muted small">Industry professionals</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="d-flex align-items-start gap-2">
+              <span style="font-size:1.4rem;">📜</span>
+              <div>
+                <div class="fw-semibold">Certification</div>
+                <div class="text-muted small">Recognised certificates</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="d-flex align-items-start gap-2">
+              <span style="font-size:1.4rem;">🤝</span>
+              <div>
+                <div class="fw-semibold">Placement Support</div>
+                <div class="text-muted small">Career guidance</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6 text-center">
+        {% if company.logo_filename %}
+          <img src="{{ url_for('static', filename='images/company_logo/' ~ company.logo_filename) }}"
+               alt="{{ company.company_name }}"
+               class="img-fluid rounded-4 shadow"
+               style="max-height:320px; object-fit:contain;">
+        {% else %}
+          <div class="rounded-4 d-flex align-items-center justify-content-center"
+               style="background:#e7f0ff; height:280px;">
+            <span style="font-size:5rem;">🎓</span>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Courses -->
+<section class="section section-alt" id="courses">
+  <div class="container">
+    <div class="text-center">
+      <p class="text-primary fw-semibold text-uppercase" style="letter-spacing:.08em;">What We Offer</p>
+      <h2 class="section-title">Our Courses</h2>
+      <p class="section-subtitle">Choose from our wide range of professional courses</p>
+    </div>
+
+    {% if grouped_courses %}
+      {% for domain, domain_courses in grouped_courses.items() %}
+        <h4 class="mt-4 mb-3 fw-700" style="font-size:1.25rem; font-weight:700; color:#1e293b;">
+          {{ domain }}
+        </h4>
+        <div class="row g-4 mb-3">
+          {% for course in domain_courses %}
+            <div class="col-sm-6 col-lg-4">
+              <div class="course-card">
+                {% if course['course_category'] %}
+                  <span class="course-badge">{{ course['course_category'] }}</span>
+                {% endif %}
+                <h5>{{ course['course_name'] }}</h5>
+                {% if course['duration'] %}
+                  <div class="course-meta">⏱ Duration: {{ course['duration'] }}</div>
+                {% endif %}
+                {% if course['fee'] and course['fee'] > 0 %}
+                  <div class="course-fee">₹{{ '{:,.0f}'.format(course['fee']) }}</div>
+                {% endif %}
+                {% if course['course_slug'] and course['course_slug'] in valid_slugs %}
+                  <a href="{{ url_for('website.course_page', slug=course['course_slug']) }}"
+                     class="btn btn-primary btn-sm mt-3 w-100">View Course Details →</a>
+                  <a href="#enquire" class="btn btn-outline-secondary btn-sm w-100">Enquire Now</a>
+                {% else %}
+                  <a href="#enquire" class="btn btn-outline-primary btn-sm mt-3 w-100">Enquire Now</a>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="text-center text-muted py-4">Courses will be listed here soon.</div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Enquire -->
+<section class="section" id="enquire">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="text-center mb-4">
+          <p class="text-primary fw-semibold text-uppercase" style="letter-spacing:.08em;">Get In Touch</p>
+          <h2 class="section-title">Enquire Now</h2>
+          <p class="text-muted">Fill in your details and we'll get back to you shortly.</p>
+        </div>
+        <div class="enquire-card">
+          <form method="POST" action="{{ url_for('website.enquire') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <label class="form-label fw-semibold">Your Name <span class="text-danger">*</span></label>
+                <input type="text" name="name" class="form-control form-control-lg"
+                       placeholder="Full name" required maxlength="100">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label fw-semibold">Phone Number <span class="text-danger">*</span></label>
+                <input type="tel" name="phone" class="form-control form-control-lg"
+                       placeholder="10-digit mobile number" required maxlength="15"
+                       pattern="[0-9+\s\-]{7,15}">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label fw-semibold">Email Address</label>
+                <input type="email" name="email" class="form-control form-control-lg"
+                       placeholder="your@email.com" maxlength="100">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label fw-semibold">Course of Interest</label>
+                <select name="interested_course" class="form-select form-select-lg">
+                  <option value="">— Select a course —</option>
+                  {% for domain, domain_courses in grouped_courses.items() %}
+                    <optgroup label="{{ domain }}">
+                      {% for course in domain_courses %}
+                        <option value="{{ course['course_name'] }}">{{ course['course_name'] }}</option>
+                      {% endfor %}
+                    </optgroup>
+                  {% endfor %}
+                  <option value="Other">Other / Not Sure Yet</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold">Message (optional)</label>
+                <textarea name="message" class="form-control" rows="3"
+                          placeholder="Any questions or specific requirements…"
+                          maxlength="500"></textarea>
+              </div>
+              <div class="col-12 text-center">
+                <button type="submit" class="btn btn-primary btn-lg px-5 mt-2">
+                  Submit Enquiry
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Contact bar -->
+{% if company.phone or company.email or company.address %}
+<div class="section-alt py-4 border-top">
+  <div class="container">
+    <div class="row g-3 text-center justify-content-center">
+      {% if company.phone %}
+        <div class="col-auto">
+          <span class="fw-semibold">📞</span>
+          <a href="tel:{{ company.phone }}" class="text-decoration-none ms-1">{{ company.phone }}</a>
+        </div>
+      {% endif %}
+      {% if company.email %}
+        <div class="col-auto">
+          <span class="fw-semibold">✉️</span>
+          <a href="mailto:{{ company.email }}" class="text-decoration-none ms-1">{{ company.email }}</a>
+        </div>
+      {% endif %}
+      {% if company.address %}
+        <div class="col-auto">
+          <span class="fw-semibold">📍</span>
+          <span class="ms-1">{{ company.address }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

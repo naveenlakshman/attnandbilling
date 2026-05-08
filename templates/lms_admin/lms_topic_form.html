@@ -65,6 +65,7 @@
             <div class="card shadow-sm">
                 <div class="card-body p-4">
                     <form method="POST" id="topicForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <!-- Basic Information Section -->
                         <div class="form-section mb-4">
                             <h5 class="text-primary mb-3">
@@ -170,12 +171,9 @@
                                     required
                                 >
                                     <option value="">-- Select Content Type --</option>
-                                    <option value="lesson" {% if not topic or topic.content_type == 'lesson' %}selected{% endif %}>📚 Lesson</option>
-                                    <option value="video" {% if topic and topic.content_type == 'video' %}selected{% endif %}>▶️ Video</option>
+                                    <option value="video" {% if not topic or topic.content_type == 'video' %}selected{% endif %}>▶️ YouTube Video</option>
                                     <option value="pdf" {% if topic and topic.content_type == 'pdf' %}selected{% endif %}>📕 PDF Document</option>
-                                    <option value="assignment" {% if topic and topic.content_type == 'assignment' %}selected{% endif %}>✏️ Assignment</option>
-                                    <option value="ebook" {% if topic and topic.content_type == 'ebook' %}selected{% endif %}>📖 E-Book</option>
-                                    <option value="workbook" {% if topic and topic.content_type == 'workbook' %}selected{% endif %}>📝 Workbook</option>
+                                    <option value="download" {% if topic and topic.content_type == 'download' %}selected{% endif %}>⬇️ Downloadable Assignment</option>
                                 </select>
                                 <small class="form-text text-muted" id="contentTypeHelp">
                                     Select the main content format for this topic.
@@ -468,13 +466,9 @@
         const contentTypeSelect = document.getElementById('content_type');
         const contentTypeHelp = document.getElementById('contentTypeHelp');
         const helpTexts = {
-            'text': 'Plain text content - ideal for simple instructions or notes.',
-            'html': 'HTML-formatted content - allows rich text, styling, and interactive elements.',
-            'youtube': 'Embed YouTube videos directly from URLs.',
-            'video_file': 'Upload and serve video files (MP4, WebM, etc.).',
-            'pdf': 'Attach PDF documents for students to download and read.',
-            'image': 'Display images and infographics.',
-            'download': 'Provide downloadable resources like templates or datasets.'
+            'video':    'YouTube video — students watch the embedded video lesson.',
+            'pdf':      'PDF document — students read or download a PDF file.',
+            'download': 'Downloadable assignment — students download a file (ZIP, DOCX, etc.).',
         };
         
         contentTypeSelect.addEventListener('change', function() {

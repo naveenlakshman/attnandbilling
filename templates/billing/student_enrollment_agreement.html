@@ -1,0 +1,1070 @@
+{% extends "print_base.html" %}
+
+{% block title %}Student Enrollment Agreement - {{ student.full_name }}{% endblock %}
+
+{% block content %}
+
+<style>
+  /* Override print_base .print-container for this document */
+  .print-container {
+    width: 100%;
+    max-width: 860px;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 auto;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow-x: hidden;
+  }
+
+  .document-wrapper {
+    width: 100%;
+    margin: 0 auto;
+    background: white;
+    padding: 12px;
+  }
+
+  .header {
+    text-align: center;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+  }
+
+  .header h1 {
+    margin: 0;
+    color: #333;
+    font-size: 24px;
+  }
+
+  .header p {
+    margin: 4px 0;
+    color: #666;
+    font-size: 12px;
+    line-height: 1.3;
+  }
+
+  .document-title {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: #333;
+    margin: 12px 0;
+    border: 1px solid #667eea;
+    padding: 8px;
+    background: #f8f9ff;
+  }
+
+  .info-section {
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+  }
+
+  .student-info-wrapper {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .student-photo {
+    width: 90px;
+    height: 110px;
+    border: 2px solid #667eea;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    page-break-inside: avoid;
+  }
+
+  .student-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .student-photo-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #e0e0e0;
+    color: #999;
+    font-size: 10px;
+    text-align: center;
+    padding: 8px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: white;
+    background: #667eea;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    border-radius: 3px;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .info-item {
+    font-size: 13px;
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+
+  .info-label {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  .info-value {
+    color: #555;
+    word-break: break-word;
+  }
+
+  .full-width {
+    grid-column: 1 / -1;
+  }
+
+  .courses-table,
+  .installments-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 12px;
+    page-break-inside: avoid;
+  }
+
+  .courses-table thead,
+  .installments-table thead {
+    background-color: #f0f0f0;
+  }
+
+  .courses-table th,
+  .installments-table th {
+    padding: 8px;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid #ddd;
+    color: #333;
+    vertical-align: middle;
+  }
+  
+  .courses-table th:first-child {
+    width: auto;
+    min-width: 150px;
+  }
+  
+  .installments-table th:first-child {
+    width: 80px;
+  }
+
+  .courses-table td,
+  .installments-table td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    color: #555;
+    vertical-align: middle;
+  }
+  
+  .courses-table td:first-child {
+    min-width: 150px;
+  }
+  
+  .installments-table td:first-child {
+    width: 80px;
+  }
+
+  .courses-table tbody tr:nth-child(odd),
+  .installments-table tbody tr:nth-child(odd) {
+    background-color: #f9f9f9;
+  }
+
+  .text-right {
+    text-align: right;
+  }
+
+  .text-center {
+    text-align: center;
+  }
+
+  /* Column-specific alignment */
+  .courses-table td:nth-child(2),
+  .courses-table th:nth-child(2) {
+    text-align: center;
+  }
+
+  .payment-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    margin: 8px 0;
+    align-items: stretch;
+  }
+
+  .summary-card {
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    border-left: 3px solid #667eea;
+    font-size: 12px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .summary-label {
+    font-weight: 600;
+    color: #666;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .summary-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: #333;
+    margin-top: 3px;
+  }
+
+  .terms-section {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.6;
+    margin: 12px 0;
+    page-break-inside: avoid;
+  }
+
+  .terms-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #333;
+  }
+
+  .terms-section ol {
+    margin: 8px 0;
+    padding-left: 18px;
+  }
+
+  .terms-section li {
+    margin-bottom: 4px;
+    text-align: justify;
+    font-size: 10px;
+    line-height: 1.5;
+  }
+
+  .signature-section {
+    margin-top: 20px;
+    page-break-inside: avoid;
+  }
+
+  .signature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-top: 20px;
+  }
+
+  .signature-block {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .signature-line {
+    border-top: 2px solid #333;
+    margin-top: 20px;
+    padding-top: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    width: 100%;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  .signature-label {
+    font-size: 10px;
+    color: #666;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+
+  .date-line {
+    margin-top: 20px;
+    font-size: 12px;
+    color: #666;
+  }
+
+  .page-actions {
+    text-align: center;
+    margin-bottom: 20px;
+    gap: 10px;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 10px 20px;
+    margin-right: 10px;
+    background: #667eea;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .btn-secondary {
+    background: #666;
+  }
+
+  @media print {
+    html, body {
+      width: 100% !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      background: white !important;
+      line-height: 1.3 !important;
+      font-size: 10px !important;
+    }
+
+    @page {
+      size: A4;
+      margin: 10mm;
+    }
+
+    .print-container {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .document-wrapper {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+      background: white !important;
+    }
+
+    .header {
+      text-align: center;
+      border-bottom: 2px solid #667eea;
+      padding-bottom: 6mm;
+      margin-bottom: 6mm;
+      page-break-inside: avoid;
+      page-break-after: avoid;
+    }
+
+    .header h1 {
+      margin: 0 !important;
+      color: #333 !important;
+      font-size: 20px !important;
+      print-color-adjust: exact !important;
+      -webkit-print-color-adjust: exact !important;
+    }
+
+    .header p {
+      margin: 2mm 0 !important;
+      color: #666 !important;
+      font-size: 10px !important;
+      line-height: 1.3 !important;
+    }
+
+    .document-title {
+      text-align: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: #333;
+      margin: 4mm 0;
+      border: 1px solid #667eea;
+      padding: 6px;
+      background: #f8f9ff;
+      page-break-inside: avoid;
+      print-color-adjust: exact !important;
+      -webkit-print-color-adjust: exact !important;
+    }
+
+    /* Preserve background colors in print */
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+
+    .page-actions {
+      display: none !important;
+    }
+
+    .no-print {
+      display: none !important;
+    }
+
+    header, footer, nav, .sidebar, .topbar, .navbar {
+      display: none !important;
+    }
+
+    .header,
+    .document-title,
+    .info-section,
+    .terms-section,
+    .signature-section {
+      page-break-inside: avoid;
+      margin-bottom: 8mm;
+      padding: 0;
+    }
+
+    .header {
+      margin-bottom: 12mm;
+    }
+
+    table {
+      page-break-inside: avoid;
+      width: 100% !important;
+      border-collapse: collapse;
+    }
+
+    tr {
+      page-break-inside: avoid;
+    }
+
+    thead {
+      display: table-header-group;
+    }
+
+    tfoot {
+      display: table-footer-group;
+    }
+    
+    th, td {
+      vertical-align: middle;
+      padding: 8px !important;
+    }
+
+    .info-grid {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 3mm !important;
+      margin-bottom: 4mm !important;
+      width: 100% !important;
+    }
+
+    .student-info-wrapper {
+      display: grid !important;
+      grid-template-columns: 140px 1fr !important;
+      gap: 4mm !important;
+      align-items: flex-start !important;
+      width: 100% !important;
+    }
+
+    .student-photo {
+      width: 140px !important;
+      height: 175px !important;
+      border: 1px solid #667eea !important;
+      border-radius: 2px !important;
+      overflow: hidden !important;
+      background: #f0f0f0 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      page-break-inside: avoid;
+      flex-shrink: 0 !important;
+    }
+
+    .student-photo img {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+    }
+
+    .student-photo-placeholder {
+      width: 100% !important;
+      height: 100% !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      background: #e0e0e0 !important;
+      color: #999 !important;
+      font-size: 7px !important;
+      text-align: center !important;
+      padding: 2px !important;
+    }
+
+    .info-item {
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: flex-start !important;
+      page-break-inside: avoid;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    .info-label {
+      font-weight: 600 !important;
+      color: #333 !important;
+      margin-bottom: 1px !important;
+      display: block !important;
+      font-size: 11px !important;
+    }
+
+    .info-value {
+      color: #555 !important;
+      word-break: break-word !important;
+      font-size: 11px !important;
+    }
+
+    .payment-summary {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr 1fr 1fr !important;
+      gap: 3mm !important;
+      margin: 4mm 0 !important;
+      width: 100% !important;
+    }
+
+    .summary-card {
+      background: #f8f9fa !important;
+      padding: 6px !important;
+      border-radius: 3px !important;
+      border-left: 2px solid #667eea !important;
+      text-align: center !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: center !important;
+      align-items: center !important;
+      page-break-inside: avoid;
+    }
+
+    .summary-label {
+      font-weight: 600 !important;
+      color: #666 !important;
+      font-size: 9px !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.3px !important;
+    }
+
+    .summary-value {
+      font-size: 13px !important;
+      font-weight: 700 !important;
+      color: #333 !important;
+      margin-top: 2px !important;
+    }
+
+    .signature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15mm;
+      margin-top: 8mm;
+    }
+
+    .signature-block {
+      page-break-inside: avoid;
+    }
+
+    .section-title {
+      background: #667eea !important;
+      color: white !important;
+      padding: 6px 8px !important;
+      font-weight: 700 !important;
+      page-break-inside: avoid;
+      margin-bottom: 4mm !important;
+      font-size: 12px !important;
+      print-color-adjust: exact !important;
+      -webkit-print-color-adjust: exact !important;
+    }
+
+    .courses-table,
+    .installments-table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      margin: 4mm 0 !important;
+      page-break-inside: auto;
+      font-size: 10px !important;
+    }
+
+    .courses-table thead,
+    .installments-table thead {
+      display: table-header-group;
+      background-color: #f0f0f0 !important;
+      print-color-adjust: exact !important;
+      -webkit-print-color-adjust: exact !important;
+    }
+
+    .courses-table th,
+    .installments-table th {
+      padding: 6px !important;
+      text-align: left !important;
+      font-weight: 600 !important;
+      border: 1px solid #ddd !important;
+      color: #333 !important;
+      vertical-align: middle !important;
+      page-break-inside: avoid;
+      font-size: 10px !important;
+    }
+
+    .courses-table td,
+    .installments-table td {
+      padding: 6px !important;
+      border: 1px solid #ddd !important;
+      color: #555 !important;
+      vertical-align: middle !important;
+      font-size: 10px !important;
+    }
+
+    .text-right {
+      text-align: right !important;
+    }
+
+    .text-center {
+      text-align: center !important;
+    }
+
+    img {
+      max-width: 100%;
+      page-break-inside: avoid;
+    }
+
+    .terms-section {
+      background: #f8f9fa !important;
+      padding: 8px !important;
+      border-radius: 3px !important;
+      font-size: 9px !important;
+      line-height: 1.4 !important;
+      margin: 4mm 0 !important;
+      page-break-inside: avoid;
+      print-color-adjust: exact !important;
+      -webkit-print-color-adjust: exact !important;
+    }
+
+    .terms-section h4 {
+      margin: 0 0 4px 0 !important;
+      font-size: 10px !important;
+      font-weight: 700 !important;
+      color: #333 !important;
+    }
+
+    .terms-section ol {
+      margin: 4px 0 !important;
+      padding-left: 16px !important;
+    }
+
+    .terms-section li {
+      margin-bottom: 2px !important;
+      text-align: justify !important;
+      font-size: 9px !important;
+      line-height: 1.3 !important;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .print-container {
+      max-width: 100% !important;
+      width: 100% !important;
+      overflow-x: hidden !important;
+    }
+
+    .document-wrapper {
+      padding: 12px;
+    }
+
+    .info-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .student-info-wrapper {
+      grid-template-columns: 70px 1fr;
+    }
+
+    .student-photo {
+      width: 70px !important;
+      height: 85px !important;
+    }
+
+    .courses-table,
+    .installments-table {
+      display: block;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .payment-summary {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .signature-grid {
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    .courses-table,
+    .installments-table {
+      font-size: 11px;
+    }
+    
+    .courses-table td,
+    .installments-table td,
+    .courses-table th,
+    .installments-table th {
+      padding: 8px;
+    }
+  }
+
+  /* Override mobile rules for print */
+  @media print and (max-width: 768px) {
+    .info-grid {
+      grid-template-columns: 1fr 1fr !important;
+    }
+
+    .student-info-wrapper {
+      grid-template-columns: 140px 1fr !important;
+    }
+
+    .student-photo {
+      width: 140px !important;
+      height: 175px !important;
+    }
+
+    .courses-table,
+    .installments-table {
+      display: table !important;
+      width: 100% !important;
+      overflow: visible !important;
+      border-collapse: collapse !important;
+      -webkit-overflow-scrolling: unset !important;
+    }
+
+    .courses-table thead,
+    .installments-table thead {
+      display: table-header-group !important;
+    }
+
+    .courses-table tbody,
+    .installments-table tbody {
+      display: table-row-group !important;
+    }
+
+    .courses-table tr,
+    .installments-table tr {
+      display: table-row !important;
+    }
+
+    .courses-table th,
+    .courses-table td,
+    .installments-table th,
+    .installments-table td {
+      display: table-cell !important;
+    }
+
+    .payment-summary {
+      grid-template-columns: 1fr 1fr 1fr 1fr !important;
+    }
+
+    .signature-grid {
+      grid-template-columns: 1fr 1fr !important;
+      gap: 25mm !important;
+    }
+
+    .courses-table,
+    .installments-table {
+      font-size: 12px !important;
+    }
+    
+    .courses-table td,
+    .installments-table td,
+    .courses-table th,
+    .installments-table th {
+      padding: 10px !important;
+    }
+  }
+</style>
+
+<div class="page-actions no-print" style="margin-bottom: 20px;">
+  <a href="{{ url_for('billing.student_profile', student_id=student.id) }}" class="btn btn-secondary">← Back to Profile</a>
+  <button onclick="window.print()" class="btn">🖨️ Print Document</button>
+</div>
+
+<div class="document-wrapper">
+  <!-- Header -->
+  <div class="header">
+    <h1>{{ company.company_name }}{% if company.reg_number %}®{% endif %}</h1>
+    <p>{{ company.address or '' }}</p>
+    <p>{% if company.phone %}Phone: {{ company.phone }}{% endif %}{% if company.email %} | Email: {{ company.email }}{% endif %}</p>
+  </div>
+
+  <div class="document-title">
+    STUDENT ENROLLMENT AGREEMENT & PAYMENT SCHEDULE
+  </div>
+
+  <!-- Student Information -->
+  <div class="info-section">
+    <div class="section-title">STUDENT INFORMATION</div>
+    <div class="student-info-wrapper">
+      <div class="student-photo">
+        {% if student.photo_filename and student.photo_filename != '' %}
+          <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="{{ student.full_name }}">
+        {% else %}
+          <div class="student-photo-placeholder">No Photo</div>
+        {% endif %}
+      </div>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-label">Student Name:</div>
+          <div class="info-value">{{ student.full_name }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Registration Number:</div>
+          <div class="info-value">{{ student.student_code }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Date of Birth:</div>
+          <div class="info-value">{{ student.date_of_birth or '-' }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Gender:</div>
+          <div class="info-value">{{ student.gender or '-' }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Phone:</div>
+          <div class="info-value">{{ student.phone }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Email:</div>
+          <div class="info-value">{{ student.email or '-' }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Address:</div>
+          <div class="info-value">{{ student.address or '-' }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Branch:</div>
+          <div class="info-value">{{ student.branch_name }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Guardian Information -->
+  {% if student.parent_name or student.parent_contact %}
+  <div class="info-section">
+    <div class="section-title">PARENT/GUARDIAN INFORMATION</div>
+    <div class="info-grid">
+      <div class="info-item">
+        <div class="info-label">Parent/Guardian Name:</div>
+        <div class="info-value">{{ student.parent_name or '-' }}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">Contact Number:</div>
+        <div class="info-value">{{ student.parent_contact or '-' }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Courses Enrolled -->
+  <div class="info-section">
+    <div class="section-title">COURSES ENROLLED</div>
+    <table class="courses-table">
+      <thead>
+        <tr>
+          <th>Course Name</th>
+          <th style="width: 60px; text-align: center;">Quantity</th>
+          <th style="width: 100px; text-align: right;">Unit Price</th>
+          <th style="width: 80px; text-align: right;">Discount</th>
+          <th style="width: 100px; text-align: right;">Total Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in invoice_items %}
+        <tr>
+          <td>{{ item.description }}</td>
+          <td style="text-align: center;">{{ item.quantity }}</td>
+          <td class="text-right">₹ {{ "%.2f"|format(item.unit_price or 0) }}</td>
+          <td class="text-right">₹ {{ "%.2f"|format(item.discount or 0) }}</td>
+          <td class="text-right"><strong>₹ {{ "%.2f"|format(item.line_total or 0) }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="payment-summary">
+      <div class="summary-card">
+        <div class="summary-label">Total Amount</div>
+        <div class="summary-value">₹ {{ "%.2f"|format(invoice.total_amount or 0) }}</div>
+      </div>
+      <div class="summary-card" style="border-left-color: #27ae60;">
+        <div class="summary-label">Already Paid</div>
+        <div class="summary-value">₹ {{ "%.2f"|format(total_paid or 0) }}</div>
+      </div>
+      <div class="summary-card" style="border-left-color: #e74c3c;">
+        <div class="summary-label">Balance Due</div>
+        <div class="summary-value">₹ {{ "%.2f"|format(balance or 0) }}</div>
+      </div>
+      <div class="summary-card" style="border-left-color: #f39c12;">
+        <div class="summary-label">Invoice No</div>
+        <div class="summary-value">{{ invoice.invoice_no }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Installment Plan -->
+  {% if installment_plans %}
+  <div class="info-section">
+    <div class="section-title">PAYMENT SCHEDULE & INSTALLMENTS</div>
+    <table class="installments-table">
+      <thead>
+        <tr>
+          <th style="width: 70px;">Installment</th>
+          <th style="width: 100px;">Due Date</th>
+          <th style="width: 90px; text-align: right;">Amount Due</th>
+          <th style="width: 90px; text-align: right;">Amount Paid</th>
+          <th style="width: 70px;">Status</th>
+          <th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for plan in installment_plans %}
+        <tr>
+          <td>#{{ plan.installment_no }}</td>
+          <td>{{ plan.due_date }}</td>
+          <td class="text-right">₹ {{ "%.2f"|format(plan.amount_due or 0) }}</td>
+          <td class="text-right">₹ {{ "%.2f"|format(plan.amount_paid or 0) }}</td>
+          <td><strong>{{ plan.status | upper }}</strong></td>
+          <td>{{ plan.remarks or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Terms and Conditions -->
+  <div class="terms-section">
+    <h4>TERMS AND CONDITIONS</h4>
+    <ol>
+      <li><strong>TUITION FEES:</strong> The total course fee as mentioned above is agreed upon by both parties. This includes course materials, instruction, and facility usage during the course period.</li>
+      
+      <li><strong>PAYMENT SCHEDULE:</strong> Payment must be made according to the installment schedule mentioned above. Failure to pay on the due date may result in suspension of classes or cancellation of enrollment.</li>
+      
+      <li><strong>CANCELLATION POLICY:</strong> Cancellation requests must be submitted in writing at least 7 days before the course start date. Depending on the timing, a cancellation fee may apply as per company policy.</li>
+      
+      <li><strong>ATTENDANCE:</strong> Regular attendance is mandatory. Students are required to maintain at least 75% attendance throughout the course. Absence beyond this may result in course discontinuation.</li>
+      
+      <li><strong>CODE OF CONDUCT:</strong> Students agree to follow the institution's code of conduct and maintain professional behavior. Any violation may result in disciplinary action up to and including expulsion.</li>
+      
+      <li><strong>INTELLECTUAL PROPERTY:</strong> All course materials, documents, and content provided are the intellectual property of {{ company.company_name }} and are for educational use only.</li>
+      
+      <li><strong>LIABILITY:</strong> {{ company.company_name }} is not responsible for any loss or damage to personal belongings on the premises.</li>
+      
+      <li><strong>CERTIFICATE:</strong> Certificate of completion will be issued only upon successful completion of the course and full payment of fees.</li>
+      
+      <li><strong>LATE FEE:</strong> A late fee of ₹500 per month will be charged for payments made after the due date.</li>
+      
+      <li><strong>GOVERNING LAW:</strong> This agreement shall be governed by the laws of India and subject to the exclusive jurisdiction of courts in Hoskote, Bangalore.</li>
+    </ol>
+  </div>
+
+  <!-- Signature Section -->
+  <div class="signature-section">
+    <div style="text-align: center; font-size: 13px; margin-bottom: 30px;">
+      <strong>DECLARATION & CONSENT</strong>
+    </div>
+
+    <p style="font-size: 12px; line-height: 1.8; margin: 0 0 20px 0;">
+      I/We hereby acknowledge that I/We have read and understood all the terms and conditions mentioned above and agree to abide by them. 
+      I/We confirm that the information provided above is true and complete. I/We also authorize {{ company.company_name }} to contact me/us 
+      for any course-related communications and follow-ups.
+    </p>
+
+    <div class="signature-grid">
+      <div class="signature-block">
+        <div class="signature-label">STUDENT'S SIGNATURE</div>
+        {% if student.student_signature_filename %}
+          <div style="height: 80px; display: flex; align-items: flex-end; padding-bottom: 4px;">
+            <img src="/static/images/student_signatures/{{ student.student_signature_filename }}"
+                 style="max-height: 76px; max-width: 100%; object-fit: contain;"
+                 alt="Student Signature">
+          </div>
+          <div style="border-bottom: 2px solid #333; margin-bottom: 6px;"></div>
+        {% else %}
+          <div style="height: 80px; border-bottom: 2px solid #333;"></div>
+        {% endif %}
+        <div class="signature-line">
+          {{ student.full_name }}<br>
+          Date: {{ student.student_signature_date[:10] if student.student_signature_date else '______________' }}
+        </div>
+      </div>
+
+      <div class="signature-block">
+        <div class="signature-label">PARENT/GUARDIAN SIGNATURE</div>
+        {% if student.parent_signature_filename %}
+          <div style="height: 80px; display: flex; align-items: flex-end; padding-bottom: 4px;">
+            <img src="/static/images/student_signatures/{{ student.parent_signature_filename }}"
+                 style="max-height: 76px; max-width: 100%; object-fit: contain;"
+                 alt="Parent Signature">
+          </div>
+          <div style="border-bottom: 2px solid #333; margin-bottom: 6px;"></div>
+        {% else %}
+          <div style="height: 80px; border-bottom: 2px solid #333;"></div>
+        {% endif %}
+        <div class="signature-line">
+          {{ student.parent_name or 'Parent/Guardian Name' }}<br>
+          Date: {{ student.parent_signature_date[:10] if student.parent_signature_date else '______________' }}
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 40px; border-top: 1px solid #ddd; padding-top: 20px; font-size: 12px; color: #666;">
+      <p style="margin: 0;">
+        <strong>For Official Use Only</strong><br>
+        Date of Enrollment: {{ invoice.invoice_date }}<br>
+        Processed By: _________________ &nbsp; Authorized By: _________________
+      </p>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -277,6 +277,10 @@
             <form id="followupForm" method="POST">
                 <div class="modal-body">
                     <div class="mb-3">
+                        <label for="followupDate" class="form-label">Follow-up Date <span class="text-danger">*</span></label>
+                        <input type="date" id="followupDate" name="followup_date" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
                         <label for="followupStatus" class="form-label">Follow-up Status <span class="text-danger">*</span></label>
                         <select id="followupStatus" name="followup_status" class="form-select" required>
                             <option value="">Select status...</option>
@@ -363,6 +367,10 @@ function openFollowupModal(studentId, studentName, currentStatus, currentRemarks
     document.getElementById('followupStatus').value = currentStatus;
     document.getElementById('followupRemarks').value = currentRemarks;
     
+    // Set today's date as default
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('followupDate').value = today;
+    
     const modal = new bootstrap.Modal(document.getElementById('followupModal'));
     modal.show();
 }
@@ -371,6 +379,7 @@ document.getElementById('followupForm').addEventListener('submit', async functio
     e.preventDefault();
     
     const formData = new FormData();
+    formData.append('followup_date', document.getElementById('followupDate').value);
     formData.append('followup_status', document.getElementById('followupStatus').value);
     formData.append('remarks', document.getElementById('followupRemarks').value);
     
@@ -379,6 +388,7 @@ document.getElementById('followupForm').addEventListener('submit', async functio
             `/attendance/defaulters/${currentStudentId}/add-followup`,
             {
                 method: 'POST',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
                 body: formData
             }
         );

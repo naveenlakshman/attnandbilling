@@ -1,0 +1,244 @@
+{% extends "students/base.html" %}
+{% block title %}My Profile{% endblock %}
+{% block page_title %}👤 My Profile{% endblock %}
+
+{% block extra_css %}
+<style>
+  .profile-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 28px;
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    margin-bottom: 24px;
+  }
+  .profile-photo {
+    width: 110px; height: 110px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.2);
+    border: 3px solid rgba(255,255,255,0.6);
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 42px;
+  }
+  .profile-photo img { width:100%; height:100%; object-fit:cover; }
+  .profile-header h1 { font-size: 26px; font-weight: 700; margin: 0 0 4px; }
+  .profile-header .student-code { font-size: 16px; opacity: 0.9; margin-bottom: 10px; }
+  .status-pill {
+    display: inline-block; padding: 4px 14px; border-radius: 20px;
+    background: rgba(255,255,255,0.2); font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px;
+  }
+  .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; font-size: 13px; }
+  .quick-item label { opacity: 0.8; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; display: block; }
+  .quick-item span { font-weight: 600; }
+
+  .info-card {
+    background: #fff; border-radius: 10px; border: 1px solid #e9ecef;
+    padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .info-card h3 {
+    font-size: 14px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: #6c757d;
+    border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin: 0 0 16px;
+  }
+  .info-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; }
+  .info-row:last-child { margin-bottom: 0; }
+  .info-row .lbl { color: #6c757d; font-weight: 500; }
+  .info-row .val { font-weight: 600; color: #212529; text-align: right; flex: 1; margin-left: 12px; }
+
+  .status-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+  }
+  .badge-active    { background:#d1ecf1; color:#0c5460; }
+  .badge-completed { background:#d4edda; color:#155724; }
+  .badge-dropped   { background:#f8d7da; color:#721c24; }
+  .badge-paid      { background:#d4edda; color:#155724; }
+  .badge-pending   { background:#fff3cd; color:#856404; }
+  .badge-partially_paid { background:#fff3cd; color:#856404; }
+  .badge-cancelled { background:#e2e3e5; color:#383d41; }
+
+  @media (max-width: 600px) {
+    .profile-header { flex-direction: column; }
+    .quick-grid { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Profile header -->
+<div class="profile-header">
+  <div class="profile-photo">
+    {% if student.photo_filename %}
+      <img src="{{ url_for('static', filename='images/student_photos/' ~ student.photo_filename) }}"
+           alt="{{ student.full_name }}">
+    {% else %}
+      👤
+    {% endif %}
+  </div>
+  <div style="flex:1;">
+    <h1>{{ student.full_name }}</h1>
+    <div class="student-code">🪪 {{ student.student_code }}</div>
+    <span class="status-pill">{{ student.status | title }}</span>
+    <div class="quick-grid">
+      {% if student.phone %}
+      <div class="quick-item"><label>Phone</label><span>{{ student.phone }}</span></div>
+      {% endif %}
+      {% if student.email %}
+      <div class="quick-item"><label>Email</label><span>{{ student.email }}</span></div>
+      {% endif %}
+      {% if student.joined_date %}
+      <div class="quick-item"><label>Joined</label><span>{{ student.joined_date }}</span></div>
+      {% endif %}
+      {% if student.gender %}
+      <div class="quick-item"><label>Gender</label><span>{{ student.gender | title }}</span></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Personal Information -->
+  <div class="col-md-6">
+    <div class="info-card">
+      <h3>Personal Information</h3>
+      {% if student.date_of_birth %}
+      <div class="info-row"><span class="lbl">Date of Birth</span><span class="val">{{ student.date_of_birth }}</span></div>
+      {% endif %}
+      {% if student.gender %}
+      <div class="info-row"><span class="lbl">Gender</span><span class="val">{{ student.gender | title }}</span></div>
+      {% endif %}
+      {% if student.education_level %}
+      <div class="info-row"><span class="lbl">Education</span><span class="val">{{ student.education_level }}</span></div>
+      {% endif %}
+      {% if student.qualification %}
+      <div class="info-row"><span class="lbl">Qualification</span><span class="val">{{ student.qualification }}</span></div>
+      {% endif %}
+      {% if student.employment_status %}
+      <div class="info-row"><span class="lbl">Employment</span><span class="val">{{ student.employment_status | title }}</span></div>
+      {% endif %}
+      {% if student.student_location %}
+      <div class="info-row"><span class="lbl">Location</span><span class="val">{{ student.student_location }}</span></div>
+      {% endif %}
+      {% if student.address %}
+      <div class="info-row"><span class="lbl">Address</span><span class="val">{{ student.address }}</span></div>
+      {% endif %}
+      {% if not (student.date_of_birth or student.gender or student.education_level or student.qualification or student.employment_status or student.address) %}
+        <p class="text-muted text-center mb-0" style="font-size:13px;">No details available.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Contact & Family -->
+  <div class="col-md-6">
+    <div class="info-card">
+      <h3>Contact & Family</h3>
+      {% if student.phone %}
+      <div class="info-row"><span class="lbl">Phone</span><span class="val">{{ student.phone }}</span></div>
+      {% endif %}
+      {% if student.email %}
+      <div class="info-row"><span class="lbl">Email</span><span class="val">{{ student.email }}</span></div>
+      {% endif %}
+      {% if student.parent_name %}
+      <div class="info-row"><span class="lbl">Parent / Guardian</span><span class="val">{{ student.parent_name }}</span></div>
+      {% endif %}
+      {% if student.parent_contact %}
+      <div class="info-row"><span class="lbl">Parent Contact</span><span class="val">{{ student.parent_contact }}</span></div>
+      {% endif %}
+      {% if not (student.phone or student.email or student.parent_name or student.parent_contact) %}
+        <p class="text-muted text-center mb-0" style="font-size:13px;">No contact details available.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Enrolled Batches -->
+<div class="info-card">
+  <h3>📅 Enrolled Courses / Batches</h3>
+  {% if batches or invoice_courses %}
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0" style="font-size:13px;">
+      <thead class="table-light">
+        <tr>
+          <th>Course</th>
+          <th>Batch</th>
+          <th>Joined On</th>
+          <th>Batch Start</th>
+          <th>Batch End</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in batches %}
+        <tr>
+          <td>{{ b.course_name or '—' }}</td>
+          <td>{{ b.batch_name }}</td>
+          <td>{{ b.joined_on or '—' }}</td>
+          <td>{{ b.start_date or '—' }}</td>
+          <td>{{ b.end_date or '—' }}</td>
+          <td>
+            <span class="status-badge badge-{{ b.status }}">{{ b.status | title }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+        {% for ic in invoice_courses %}
+        <tr>
+          <td>{{ ic.course_name }}</td>
+          <td><span class="text-muted" style="font-size:11px;">No batch assigned</span></td>
+          <td>{{ ic.invoice_date }}</td>
+          <td>—</td>
+          <td>—</td>
+          <td><span class="status-badge" style="background:#cfe2ff;color:#084298;">Invoice</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="text-muted text-center mb-0" style="font-size:13px;">Not enrolled in any courses.</p>
+  {% endif %}
+</div>
+
+<!-- Invoices -->
+<div class="info-card">
+  <h3>🧾 Fee Invoices</h3>
+  {% if invoices %}
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0" style="font-size:13px;">
+      <thead class="table-light">
+        <tr>
+          <th>Invoice #</th>
+          <th>Date</th>
+          <th class="text-end">Total</th>
+          <th class="text-end">Paid</th>
+          <th class="text-end">Balance</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
+        <tr>
+          <td>{{ inv.invoice_no }}</td>
+          <td>{{ inv.invoice_date }}</td>
+          <td class="text-end">{{ "%.2f"|format(inv.total_amount or 0) }}</td>
+          <td class="text-end text-success fw-semibold">{{ "%.2f"|format(inv.paid_amount or 0) }}</td>
+          <td class="text-end {% if (inv.balance_amount or 0) > 0 %}text-danger fw-semibold{% endif %}">
+            {{ "%.2f"|format(inv.balance_amount or 0) }}
+          </td>
+          <td>
+            <span class="status-badge badge-{{ inv.status }}">{{ inv.status | replace('_', ' ') | title }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="text-muted text-center mb-0" style="font-size:13px;">No invoices found.</p>
+  {% endif %}
+</div>
+{% endblock %}

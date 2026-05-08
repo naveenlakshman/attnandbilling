@@ -1,6 +1,6 @@
-{% extends "billing/base.html" %}
+﻿{% extends "billing/base.html" %}
 
-{% block title %}Receipt View - Global IT ERP{% endblock %}
+{% block title %}Receipt View - {{ company.company_short_name }}{% endblock %}
 
 {% block content %}
 <div class="receipt-page-wrap">
@@ -11,7 +11,8 @@
     </div>
 
     <div class="receipt-actions">
-      <button onclick="window.print()" class="btn btn-primary">🖨️ Print Receipt</button>
+      <a href="{{ url_for('billing.receipt_print', receipt_id=receipt.id) }}" target="_blank" class="btn btn-primary">🖨️ Print Receipt</a>
+      <a href="{{ url_for('billing.receipt_print', receipt_id=receipt.id) }}?mode=pdf" target="_blank" class="btn btn-success">⬇️ Download PDF</a>
 
       {% if session.get("role") == "admin" %}
       <a href="{{ url_for('billing.receipt_edit', receipt_id=receipt.id) }}" class="btn btn-secondary">✎ Edit</a>
@@ -21,24 +22,29 @@
     </div>
   </div>
 
-  <div class="receipt-paper">
+ 
+
+    
+ <div class="receipt-paper">
     <!-- Header -->
     <div class="receipt-header">
+<!-- Organization Info -->
+    <div class="receipt-org-info">
+      {% if company.logo_filename %}
+        <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+             alt="{{ company.company_name }}" style="max-height:55px; margin-bottom:4px;">
+        <br>
+      {% endif %}
+      <h1>{{ company.company_name }}</h1>
+  <p style="margin: 0; color: #000000; font-size: 13px;">{% if company.phone %}Phone: {{ company.phone }}{% endif %}{% if company.email %} Email: {{ company.email }}{% endif %}</p>
+      <div class="org-branch">{{ company.address or '' }}</div>
+    </div>
       <div class="receipt-title">RECEIPT</div>
       <div class="receipt-info">
         <div><strong>Receipt No:</strong> {{ receipt.receipt_no }}</div>
         <div><strong>Date:</strong> {{ receipt.receipt_date }}</div>
       </div>
     </div>
-
-    <!-- Organization Info -->
-    <div class="receipt-org-info">
-      <div class="org-name">Global IT Education</div>
-      {% if receipt.branch_name %}
-        <div class="org-branch">{{ receipt.branch_name }}</div>
-      {% endif %}
-    </div>
-
     <!-- Student Details -->
     <div class="receipt-section">
       <div class="section-title">Student Details</div>
@@ -299,7 +305,20 @@
     }
   }
 
+  #downloadPdfBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
   @media print {
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: white !important;
+    }
+
     .sidebar,
     .topbar,
     .receipt-toolbar {
@@ -308,25 +327,150 @@
 
     .content-wrap,
     .container-fluid {
+      width: 100%;
       padding: 0 !important;
       margin: 0 !important;
     }
 
     .receipt-page-wrap {
+      width: 100%;
       max-width: 100%;
       margin: 0;
+      padding: 0;
     }
 
     .receipt-paper {
-      border: none;
-      box-shadow: none;
-      padding: 0;
-      max-width: 100%;
+      width: 8.5in;
+      padding: 0.5in;
+      margin: 0;
+      border: none !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      page-break-after: always;
     }
 
-    body {
-      background: white !important;
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+
+    .receipt-header {
+      text-align: center;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #333;
+      padding-bottom: 15px;
+      page-break-after: avoid;
+    }
+
+    .receipt-org-info h1 {
+      margin: 0 0 5px 0;
+      font-size: 26px;
+      color: #01070e !important;
+    }
+
+    .receipt-org-info p {
+      margin: 0;
+      font-size: 13px;
+      color: #000000 !important;
+    }
+
+    .org-branch {
+      font-size: 12px;
+      color: #666 !important;
+      margin-top: 5px;
+    }
+
+    .receipt-title {
+      font-size: 24px;
+      font-weight: bold;
+      color: #1e3a8a !important;
+      margin-bottom: 10px;
+    }
+
+    .receipt-info {
+      display: block;
+      text-align: center;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+
+    .receipt-section {
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+      page-break-inside: avoid;
+    }
+
+    .receipt-section:last-of-type {
+      border-bottom: 2px solid #333;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #1e3a8a !important;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .detail-row {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      page-break-inside: avoid;
+    }
+
+    .detail-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .label {
+      font-weight: 600;
+      color: #333 !important;
+      display: inline-block;
+      width: 35%;
+      vertical-align: top;
+    }
+
+    .value {
+      color: #555 !important;
+      display: inline-block;
+      width: 64%;
+      text-align: right;
+      word-break: break-word;
+    }
+
+    .amount-highlight {
+      font-size: 16px;
+      font-weight: bold;
+      color: #27ae60 !important;
+    }
+
+    .receipt-footer {
+      text-align: center;
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid #ddd;
+      font-size: 12px;
+    }
+
+    .footer-text {
+      margin: 5px 0;
+      color: #666 !important;
+    }
+
+    .footer-text.smaller {
+      font-size: 10px;
+      color: #999 !important;
+    }
+
+    @page {
+      size: A4;
+      margin: 0;
     }
   }
 </style>
+
 {% endblock %}

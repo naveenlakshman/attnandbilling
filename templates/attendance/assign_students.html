@@ -1,6 +1,6 @@
-{% extends "attendance/base.html" %}
+﻿{% extends "attendance/base.html" %}
 
-{% block title %}Assign Students - {{ batch.batch_name }} - Global IT ERP{% endblock %}
+{% block title %}Assign Students - {{ batch.batch_name }} - {{ company.company_short_name }}{% endblock %}
 
 {% block extra_css %}
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -51,14 +51,15 @@
   }
 
   .section-title {
-    font-size: 1.1rem;
-    font-weight: 600;
+    font-size: 1.05rem;
+    font-weight: 700;
     margin-bottom: 20px;
     display: flex;
     align-items: center;
     gap: 10px;
-    border-bottom: 2px solid #f0f0f0;
+    border-bottom: 2px solid #f1f5f9;
     padding-bottom: 12px;
+    color: #1e293b;
   }
 
   .add-student-form {
@@ -111,35 +112,44 @@
   }
 
   .students-table thead {
-    background: #f8f9fa;
-    border-bottom: 2px solid #dee2e6;
+    background: #f8fafc;
+    border-bottom: 2px solid #e2e8f0;
   }
 
   .students-table th {
-    padding: 12px;
+    padding: 10px 12px;
     text-align: left;
-    font-weight: 600;
-    color: #212529;
-    font-size: 0.95rem;
+    font-weight: 700;
+    color: #64748b;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
   .students-table td {
-    padding: 12px;
-    border-bottom: 1px solid #dee2e6;
+    padding: 11px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
   }
 
   .students-table tbody tr:hover {
-    background: #f8f9fa;
+    background: #f8fafc;
   }
 
   .student-name {
-    font-weight: 600;
-    color: #212529;
+    font-weight: 700;
+    color: #1e293b;
+    display: block;
+    line-height: 1.3;
   }
 
   .student-code {
-    color: #6c757d;
-    font-size: 0.9rem;
+    color: #94a3b8;
+    font-size: 0.78rem;
+    display: block;
+    margin-top: 2px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
   }
 
   .status-badge {
@@ -201,12 +211,14 @@
   }
 
   .btn-remove {
-    background: #dc3545;
-    color: white;
+    background: white;
+    color: #ef4444;
+    border: 1.5px solid #fca5a5 !important;
   }
 
   .btn-remove:hover {
-    background: #bb2d3b;
+    background: #fef2f2;
+    border-color: #ef4444 !important;
   }
 
   .empty-state {
@@ -264,27 +276,91 @@
 
   .stat-label {
     font-size: 0.85rem;
-    color: #6c757d;
+    color: #64748b;
     margin-top: 4px;
   }
 
+  /* Laptop toggle button styles */
+  .btn-laptop-own { background: #eff6ff; color: #1d4ed8; border: 1.5px solid #bfdbfe !important; }
+  .btn-laptop-own:hover { background: #dbeafe; }
+  .btn-laptop-pc  { background: #f8fafc; color: #64748b; border: 1.5px solid #cbd5e1 !important; }
+  .btn-laptop-pc:hover  { background: #f1f5f9; }
+
+  /* Status select color variants */
+  .status-select.status-active    { border-color: #6ee7b7; color: #047857; background: #ecfdf5; }
+  .status-select.status-completed { border-color: #86efac; color: #15803d; background: #f0fdf4; }
+  .status-select.status-dropped   { border-color: #fca5a5; color: #b91c1c; background: #fef2f2; }
+
   @media (max-width: 768px) {
-    .batch-info {
-      grid-template-columns: 1fr;
+    .batch-header-card { padding: 16px; margin-bottom: 16px; }
+    .batch-info { grid-template-columns: 1fr; gap: 10px; }
+    .section-card { padding: 16px; margin-bottom: 16px; }
+    .add-student-form { grid-template-columns: 1fr; }
+    .add-btn { width: 100%; padding: 12px; font-size: 1rem; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+
+    /* Mobile: table rows become CSS Grid cards */
+    .students-table thead { display: none; }
+    .students-table, .students-table tbody { display: block; }
+
+    .students-table tbody tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "name    name"
+        "phone   joined"
+        "laptop  status"
+        "actions actions";
+      gap: 6px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      padding: 14px;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
     }
 
-    .add-student-form {
-      grid-template-columns: 1fr;
-    }
-
-    .students-table {
-      font-size: 0.9rem;
-    }
-
-    .students-table th,
     .students-table td {
-      padding: 8px;
+      border: none;
+      padding: 0;
+      display: block;
     }
+
+    .students-table td::before {
+      content: attr(data-label);
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .td-name {
+      grid-area: name;
+      padding-bottom: 10px !important;
+      border-bottom: 1px solid #f1f5f9 !important;
+    }
+    .td-name::before { display: none; }
+    .td-phone   { grid-area: phone; }
+    .td-joined  { grid-area: joined; }
+    .td-laptop  { grid-area: laptop; }
+    .td-status  { grid-area: status; }
+
+    .td-actions {
+      grid-area: actions;
+      display: flex !important;
+      align-items: center;
+      gap: 8px;
+      padding-top: 10px !important;
+      border-top: 1px solid #f1f5f9 !important;
+    }
+    .td-actions::before { display: none; }
+
+    .status-select { font-size: 0.82rem; padding: 5px 6px; width: 100%; }
+    .btn-sm { font-size: 0.82rem; padding: 5px 10px; }
+    .btn-remove { margin-left: auto; }
   }
 </style>
 {% endblock %}
@@ -333,10 +409,10 @@
       <table class="students-table">
         <thead>
           <tr>
-            <th>Student Code</th>
-            <th>Name</th>
+            <th>Student</th>
             <th>Phone</th>
             <th>Joined On</th>
+            <th>Laptop</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -344,15 +420,26 @@
         <tbody>
           {% for student in assigned_students %}
           <tr>
-            <td>
+            <td class="td-name">
+              <span class="student-name">{{ student.full_name }}</span>
               <span class="student-code">{{ student.student_code }}</span>
             </td>
-            <td>
-              <span class="student-name">{{ student.full_name }}</span>
+            <td data-label="Phone" class="td-phone">{{ student.phone }}</td>
+            <td data-label="Joined" class="td-joined">{{ student.joined_on }}</td>
+            <td data-label="Laptop" class="td-laptop">
+              <form method="POST" style="display:inline;">
+                <input type="hidden" name="action" value="update-laptop">
+                <input type="hidden" name="student_batch_id" value="{{ student.id }}">
+                {% if student.uses_own_laptop %}
+                  <input type="hidden" name="uses_own_laptop" value="0">
+                  <button type="submit" class="btn-sm btn-laptop-own" title="Using own laptop — click to unset">💻 Own</button>
+                {% else %}
+                  <input type="hidden" name="uses_own_laptop" value="1">
+                  <button type="submit" class="btn-sm btn-laptop-pc" title="Using institute computer — click to set laptop">🖥️ PC</button>
+                {% endif %}
+              </form>
             </td>
-            <td>{{ student.phone }}</td>
-            <td>{{ student.joined_on }}</td>
-            <td>
+            <td data-label="Status" class="td-status">
               <form method="POST" style="display: inline;">
                 <input type="hidden" name="action" value="update-status">
                 <input type="hidden" name="student_batch_id" value="{{ student.id }}">
@@ -363,14 +450,12 @@
                 </select>
               </form>
             </td>
-            <td>
-              <div class="action-buttons">
-                <form method="POST" onsubmit="return confirm('Remove this student from batch?');">
-                  <input type="hidden" name="action" value="remove">
-                  <input type="hidden" name="student_batch_id" value="{{ student.id }}">
-                  <button type="submit" class="btn-sm btn-remove">🗑️ Remove</button>
-                </form>
-              </div>
+            <td class="td-actions">
+              <form method="POST" onsubmit="return confirm('Remove this student from batch?');">
+                <input type="hidden" name="action" value="remove">
+                <input type="hidden" name="student_batch_id" value="{{ student.id }}">
+                <button type="submit" class="btn-sm btn-remove">🗑️ Remove</button>
+              </form>
             </td>
           </tr>
           {% endfor %}
@@ -392,17 +477,25 @@
     </div>
 
     {% if available_students|length > 0 %}
-    <form method="POST" class="add-student-form">
+    <form method="POST">
       <input type="hidden" name="action" value="add">
-      <select class="form-select" name="student_id" required>
-        <option value="">-- Select a student to add --</option>
-        {% for student in available_students %}
-        <option value="{{ student.id }}">
-          {{ student.student_code }} - {{ student.full_name }} ({{ student.phone }})
-        </option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="add-btn">➕ Add Student</button>
+      <div class="add-student-form">
+        <select class="form-select" name="student_id" required>
+          <option value="">-- Select a student to add --</option>
+          {% for student in available_students %}
+          <option value="{{ student.id }}">
+            {{ student.student_code }} - {{ student.full_name }} ({{ student.phone }})
+          </option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="add-btn">➕ Add Student</button>
+      </div>
+      <div style="margin-top: -8px; margin-bottom: 16px;">
+        <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-size:0.95rem;">
+          <input type="checkbox" name="uses_own_laptop" value="1" style="width:16px;height:16px;">
+          💻 Student brings own laptop (won't occupy a computer)
+        </label>
+      </div>
     </form>
 
     <div class="stats-row">
@@ -455,6 +548,11 @@ $(document).ready(function() {
       if (!item.id) return item.text;
       return item.text;
     }
+  });
+
+  // Apply status color classes on page load
+  document.querySelectorAll('.status-select').forEach(function(sel) {
+    sel.classList.add('status-' + sel.value);
   });
 });
 </script>

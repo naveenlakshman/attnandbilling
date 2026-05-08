@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}{{ company.company_name }}{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <style>
+    /* ── Minimal sticky navbar — no Bootstrap, no conflicting styles ── */
+    * { box-sizing: border-box; }
+    .site-nav {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 14px 0;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+    .site-nav .nav-inner {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .site-nav .nav-brand {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1d4ed8;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .site-nav .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .site-nav .nav-link {
+      color: #475569;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 14px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      transition: background 0.15s;
+    }
+    .site-nav .nav-link:hover { background: #f1f5f9; }
+    .site-nav .nav-login {
+      background: #1d4ed8;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: background 0.15s;
+    }
+    .site-nav .nav-login:hover { background: #1e40af; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      {% if company.logo_filename %}
+        <img src="{{ url_for('static', filename='images/company_logo/' ~ company.logo_filename) }}"
+             alt="{{ company.company_short_name }}" height="36"
+             style="object-fit:contain; vertical-align:middle;">
+      {% endif %}
+      {{ company.company_short_name or company.company_name }}
+    </a>
+    <div class="nav-links">
+      <a href="/#courses" class="nav-link">Courses</a>
+      <a href="/#enquire" class="nav-link">Contact</a>
+      <a href="{{ url_for('students.login') }}" class="nav-login" target="_blank" rel="noopener">Student Login</a>
+      <a href="{{ url_for('core.login') }}" class="nav-login" target="_blank" rel="noopener">Login</a>
+    </div>
+  </div>
+</nav>
+
+{% block content %}{% endblock %}
+
+</body>
+</html>

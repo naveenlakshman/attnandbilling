@@ -1,0 +1,54 @@
+{% extends "students/base.html" %}
+{% block title %}{{ program.program_name }}{% endblock %}
+{% block page_title %}📚 {{ program.program_name }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('students.dashboard') }}">My Programs</a></li>
+    <li class="breadcrumb-item active">{{ program.program_name }}</li>
+  </ol>
+</nav>
+
+{% if chapters %}
+  <div class="row g-3">
+    {% for chapter in chapters %}
+    <div class="col-12">
+      <a href="{{ url_for('students.chapter_view', chapter_id=chapter.id) }}"
+         class="text-decoration-none">
+        <div class="card border-0 shadow-sm chapter-card">
+          <div class="card-body d-flex align-items-center gap-3 py-3 px-4">
+            <div class="chapter-num fw-bold text-white rounded-circle d-flex align-items-center justify-content-center"
+                 style="width:40px;height:40px;background:#0d6efd;flex-shrink:0;font-size:14px;">
+              {{ chapter.chapter_order }}
+            </div>
+            <div class="flex-grow-1">
+              <div class="fw-semibold text-dark">{{ chapter.chapter_title }}</div>
+              {% if chapter.description %}
+                <div class="text-muted" style="font-size:12px;">{{ chapter.description[:100] }}</div>
+              {% endif %}
+            </div>
+            <div class="text-muted" style="font-size:13px; white-space:nowrap;">
+              📝 {{ chapter.topic_count }} Topics
+            </div>
+            <div class="text-primary" style="font-size:18px;">›</div>
+          </div>
+        </div>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-center py-5 text-muted">
+    <div style="font-size:48px;">📭</div>
+    <p class="mt-3">No chapters available yet.</p>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .chapter-card { transition: box-shadow 0.15s; }
+  .chapter-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important; }
+</style>
+{% endblock %}

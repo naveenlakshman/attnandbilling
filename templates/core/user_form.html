@@ -1,5 +1,5 @@
-{% extends "base.html" %}
-{% block title %}{{ "Add User" if mode == "create" else "Edit User" }} - Global IT ERP{% endblock %}
+﻿{% extends "base.html" %}
+{% block title %}{{ "Add User" if mode == "create" else "Edit User" }} - {{ company.company_short_name }}{% endblock %}
 {% block page_title %}{{ "Add User" if mode == "create" else "Edit User" }}{% endblock %}
 
 {% block content %}

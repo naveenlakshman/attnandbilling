@@ -1,69 +1,394 @@
 {% extends "leads/base.html" %}
 {% block title %}Follow-ups{% endblock %}
-{% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h5 class="mb-0">Follow-ups Due ({{ today }})</h5>
+{% block extra_css %}
+<style>
+  .tab-chip {
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid #d7dce2;
+    color: #334155;
+    text-decoration: none;
+    background: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tab-chip.active {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #ffffff;
+  }
+  .count-pill {
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    background: #eef2f7;
+    color: #0f172a;
+  }
+  .tab-chip.active .count-pill {
+    background: rgba(255,255,255,.2);
+    color: #ffffff;
+  }
+
+  .stage-badge,
+  .temp-badge,
+  .due-badge {
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 3px 8px;
+    display: inline-block;
+  }
+  .stage-new-lead { background: #e2e8f0; color: #334155; }
+  .stage-contacted { background: #dbeafe; color: #1e40af; }
+  .stage-interested { background: #d1fae5; color: #065f46; }
+  .stage-counseling-done { background: #fef3c7; color: #92400e; }
+  .stage-follow-up { background: #ede9fe; color: #5b21b6; }
+  .stage-converted { background: #dcfce7; color: #166534; }
+  .stage-lost { background: #e5e7eb; color: #374151; }
+
+  .temp-hot { background: #fee2e2; color: #b91c1c; }
+  .temp-warm { background: #fef3c7; color: #92400e; }
+  .temp-cold { background: #dbeafe; color: #1d4ed8; }
+
+  .due-overdue { background: #fecaca; color: #991b1b; }
+  .due-today { background: #fed7aa; color: #9a3412; }
+  .due-normal { background: #e2e8f0; color: #334155; }
+
+  .followup-hidden { display: none !important; }
+
+  .mobile-card {
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+  .mobile-card.overdue { border-left-color: #ef4444; }
+  .mobile-card.today { border-left-color: #f59e0b; }
+
+  .last-note {
+    font-size: 12px;
+    color: #475569;
+    max-width: 340px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h5 class="mb-0">Daily Follow-up Console</h5>
+    <div class="text-muted small">Date: {{ today }}</div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <span class="badge text-bg-danger">Overdue {{ tab_counts.overdue }}</span>
+    <span class="badge text-bg-warning">Today {{ tab_counts.today }}</span>
+    <span class="badge text-bg-secondary">Completed {{ tab_counts.completed }}</span>
+  </div>
 </div>
 
-{% if is_admin %}
-<form method="get" class="row g-2 mb-3">
-  <div class="col-md-4">
-    <select name="user_id" class="form-select" onchange="this.form.submit()">
-      <option value="">All Counselors</option>
-      {% for user in all_users %}
-        <option value="{{ user.id }}" {% if selected_user_id == user.id|string %}selected{% endif %}>
-          {{ user.full_name or user.username }}
-        </option>
-      {% endfor %}
-    </select>
+<form method="get" id="filterForm" class="card card-body mb-3">
+  <div class="row g-2 align-items-center">
+    <div class="col-12 col-md-5">
+      <input type="text" id="searchInput" class="form-control" placeholder="Search name or phone" autocomplete="off">
+    </div>
+    {% if is_admin %}
+    <div class="col-12 col-md-3">
+      <select name="user_id" class="form-select" onchange="document.getElementById('filterForm').submit()">
+        <option value="">All Counselors</option>
+        {% for user in all_users %}
+          <option value="{{ user.id }}" {% if selected_user_id == user.id|string %}selected{% endif %}>
+            {{ user.full_name or user.username }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <input type="hidden" name="tab" value="{{ selected_tab }}">
   </div>
 </form>
-{% endif %}
 
-<div class="card">
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="tab-chip {% if selected_tab == 'overdue' %}active{% endif %}" href="{{ url_for('leads.followups_today', tab='overdue', user_id=selected_user_id) }}">Overdue <span class="count-pill">{{ tab_counts.overdue }}</span></a>
+  <a class="tab-chip {% if selected_tab == 'today' %}active{% endif %}" href="{{ url_for('leads.followups_today', tab='today', user_id=selected_user_id) }}">Today <span class="count-pill">{{ tab_counts.today }}</span></a>
+  <a class="tab-chip {% if selected_tab == 'tomorrow' %}active{% endif %}" href="{{ url_for('leads.followups_today', tab='tomorrow', user_id=selected_user_id) }}">Tomorrow <span class="count-pill">{{ tab_counts.tomorrow }}</span></a>
+  <a class="tab-chip {% if selected_tab == 'upcoming' %}active{% endif %}" href="{{ url_for('leads.followups_today', tab='upcoming', user_id=selected_user_id) }}">Upcoming <span class="count-pill">{{ tab_counts.upcoming }}</span></a>
+  <a class="tab-chip {% if selected_tab == 'completed' %}active{% endif %}" href="{{ url_for('leads.followups_today', tab='completed', user_id=selected_user_id) }}">Completed <span class="count-pill">{{ tab_counts.completed }}</span></a>
+</div>
+
+<div class="card d-none d-md-block">
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
+    <table class="table table-hover align-middle mb-0" id="desktopTable">
       <thead class="table-light">
         <tr>
-          <th>Name</th>
+          <th>Lead</th>
           <th>Phone</th>
-          {% if is_admin %}<th>Owner</th>{% endif %}
+          <th>Course</th>
           <th>Stage</th>
-          <th>Next Follow-up</th>
-          <th></th>
+          <th>Temp</th>
+          {% if is_admin %}<th>Counselor</th>{% endif %}
+          <th>{% if selected_tab == 'completed' %}Completed At{% else %}Due Date{% endif %}</th>
+          <th>Last Note</th>
+          <th class="text-end">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for l in leads %}
-        <tr>
-          <td>{{ l.name }}</td>
-          <td>{{ l.phone }}</td>
-          {% if is_admin %}
-          <td>
-            <small>{{ l.owner_name or l.owner_username or 'Unassigned' }}</small>
-          </td>
+          {% set lead_id = l.lead_id if selected_tab == 'completed' else l.id %}
+          {% set lead_name = l.name or '-' %}
+          {% set lead_phone = l.phone or '' %}
+          {% set stage_text = l.stage or 'New Lead' %}
+          {% set stage_key = stage_text|lower|replace(' ', '-') %}
+          {% set temperature = l.temperature or 'Cold' %}
+          {% set temp_key = temperature|lower %}
+          {% set due_date = l.next_followup_date if selected_tab != 'completed' else l.followup_created_at %}
+          {% set note_text = (l.note if selected_tab == 'completed' else l.last_note) or '-' %}
+          {% set due_status = 'due-normal' %}
+          {% if selected_tab != 'completed' %}
+            {% if l.next_followup_date and l.next_followup_date < today %}
+              {% set due_status = 'due-overdue' %}
+            {% elif l.next_followup_date == today %}
+              {% set due_status = 'due-today' %}
+            {% endif %}
           {% endif %}
-          <td>{{ l.stage }}</td>
-          <td>{{ l.next_followup_date }}</td>
-          <td class="text-end">
-            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">
-              Open
-            </a>
-          </td>
-        </tr>
+          <tr class="followup-row" data-search="{{ (lead_name + ' ' + lead_phone)|lower }}">
+            <td class="fw-semibold">{{ lead_name }}</td>
+            <td class="text-muted">{{ lead_phone or '-' }}</td>
+            <td>{{ l.course_interested or '-' }}</td>
+            <td><span class="stage-badge stage-{{ stage_key }}">{{ stage_text }}</span></td>
+            <td><span class="temp-badge temp-{{ temp_key }}">{{ temperature }}</span></td>
+            {% if is_admin %}<td class="text-muted">{{ l.owner_name or l.owner_username or 'Unassigned' }}</td>{% endif %}
+            <td><span class="due-badge {{ due_status }}">{{ due_date or '-' }}</span></td>
+            <td><div class="last-note" title="{{ note_text }}">{{ note_text }}</div></td>
+            <td class="text-end">
+              <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                {% if lead_phone %}
+                  <a class="btn btn-sm btn-outline-success" href="tel:{{ lead_phone }}">Call</a>
+                  <a class="btn btn-sm btn-outline-success" target="_blank" href="https://wa.me/91{{ lead_phone }}">WhatsApp</a>
+                {% endif %}
+                {% if selected_tab != 'completed' %}
+                  <button type="button" class="btn btn-sm btn-primary"
+                          data-mode="complete"
+                          data-lead-id="{{ lead_id }}"
+                          data-lead-name="{{ lead_name }}"
+                          data-next-followup="{{ l.next_followup_date or '' }}"
+                          data-bs-toggle="modal" data-bs-target="#quickCompleteModal">
+                    Complete
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-primary"
+                          data-mode="reschedule"
+                          data-lead-id="{{ lead_id }}"
+                          data-lead-name="{{ lead_name }}"
+                          data-next-followup="{{ l.next_followup_date or '' }}"
+                          data-bs-toggle="modal" data-bs-target="#quickCompleteModal">
+                    Reschedule
+                  </button>
+                {% endif %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.lead_detail', lead_id=lead_id) }}">Open</a>
+              </div>
+            </td>
+          </tr>
         {% endfor %}
-
         {% if not leads %}
-        <tr>
-          <td {% if is_admin %}colspan="6"{% else %}colspan="5"{% endif %} class="text-center text-muted py-4">
-            No follow-ups due 🎉
-          </td>
-        </tr>
+          <tr>
+            <td colspan="{{ 9 if is_admin else 8 }}" class="text-center text-muted py-5">
+              No records in this tab.
+            </td>
+          </tr>
         {% endif %}
       </tbody>
     </table>
   </div>
+  <div id="noResultsDesktop" class="text-center text-muted py-4" style="display:none;">No leads match your search.</div>
 </div>
 
+<div class="d-md-none" id="mobileCards">
+  {% for l in leads %}
+    {% set lead_id = l.lead_id if selected_tab == 'completed' else l.id %}
+    {% set lead_name = l.name or '-' %}
+    {% set lead_phone = l.phone or '' %}
+    {% set stage_text = l.stage or 'New Lead' %}
+    {% set stage_key = stage_text|lower|replace(' ', '-') %}
+    {% set temperature = l.temperature or 'Cold' %}
+    {% set temp_key = temperature|lower %}
+    {% set note_text = (l.note if selected_tab == 'completed' else l.last_note) or '-' %}
+    {% set card_state = '' %}
+    {% if selected_tab != 'completed' and l.next_followup_date and l.next_followup_date < today %}
+      {% set card_state = 'overdue' %}
+    {% elif selected_tab != 'completed' and l.next_followup_date == today %}
+      {% set card_state = 'today' %}
+    {% endif %}
+    <div class="mobile-card {{ card_state }} followup-card-item" data-search="{{ (lead_name + ' ' + lead_phone)|lower }}">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <div class="fw-semibold">{{ lead_name }}</div>
+          <div class="text-muted small">{{ l.course_interested or '-' }}</div>
+          {% if is_admin %}
+            <div class="text-muted" style="font-size:12px;">{{ l.owner_name or l.owner_username or 'Unassigned' }}</div>
+          {% endif %}
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.lead_detail', lead_id=lead_id) }}">Open</a>
+      </div>
+      <div class="mt-2 d-flex gap-2 flex-wrap">
+        <span class="stage-badge stage-{{ stage_key }}">{{ stage_text }}</span>
+        <span class="temp-badge temp-{{ temp_key }}">{{ temperature }}</span>
+      </div>
+      <div class="mt-2 text-muted" style="font-size:13px;">{{ lead_phone or '-' }}</div>
+      <div class="mt-1 text-muted" style="font-size:12px;">Due: {{ l.next_followup_date if selected_tab != 'completed' else l.followup_created_at }}</div>
+      <div class="mt-1" style="font-size:12px; color:#475569;">Last note: {{ note_text }}</div>
+      <div class="mt-2 d-flex gap-1 flex-wrap">
+        {% if lead_phone %}
+          <a class="btn btn-sm btn-outline-success" href="tel:{{ lead_phone }}">Call</a>
+          <a class="btn btn-sm btn-outline-success" target="_blank" href="https://wa.me/91{{ lead_phone }}">WhatsApp</a>
+        {% endif %}
+        {% if selected_tab != 'completed' %}
+          <button type="button" class="btn btn-sm btn-primary"
+                  data-mode="complete"
+                  data-lead-id="{{ lead_id }}"
+                  data-lead-name="{{ lead_name }}"
+                  data-next-followup="{{ l.next_followup_date or '' }}"
+                  data-bs-toggle="modal" data-bs-target="#quickCompleteModal">
+            Complete
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-primary"
+                  data-mode="reschedule"
+                  data-lead-id="{{ lead_id }}"
+                  data-lead-name="{{ lead_name }}"
+                  data-next-followup="{{ l.next_followup_date or '' }}"
+                  data-bs-toggle="modal" data-bs-target="#quickCompleteModal">
+            Reschedule
+          </button>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+  {% if not leads %}
+    <div class="text-center text-muted py-4">No records in this tab.</div>
+  {% endif %}
+  <div id="noResultsMobile" class="text-center text-muted py-4" style="display:none;">No leads match your search.</div>
+</div>
+
+<div class="modal fade" id="quickCompleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('leads.followups_quick_complete') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="lead_id" id="qcLeadId">
+        <input type="hidden" name="tab" value="{{ selected_tab }}">
+        <input type="hidden" name="selected_user_id" value="{{ selected_user_id }}">
+        <input type="hidden" name="mode" id="qcMode" value="complete">
+
+        <div class="modal-header">
+          <h5 class="modal-title" id="qcTitle">Complete Follow-up</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2 small text-muted" id="qcLeadName"></div>
+
+          <div class="mb-2">
+            <label class="form-label">Method</label>
+            <select class="form-select" name="method">
+              <option value="Call">Call</option>
+              <option value="WhatsApp">WhatsApp</option>
+              <option value="Walk-in">Walk-in</option>
+              <option value="Email">Email</option>
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Outcome</label>
+            <select class="form-select" name="outcome" id="qcOutcome">
+              <option value="">Select outcome</option>
+              {% for out in outcomes %}
+                <option value="{{ out }}">{{ out }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" name="note" rows="3" placeholder="Key talking points, objection, intent"></textarea>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Next Follow-up Date</label>
+            <input type="date" class="form-control" name="next_followup_date" id="qcNextDate">
+          </div>
+
+          <div>
+            <label class="form-label">Next Action</label>
+            <input type="text" class="form-control" name="next_action" placeholder="Send fee details, call parent, schedule visit">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="qcSubmitBtn">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var input = document.getElementById('searchInput');
+  if (input) {
+    input.addEventListener('input', function () {
+      var q = this.value.trim().toLowerCase();
+
+      var rows = document.querySelectorAll('#desktopTable .followup-row');
+      var rowVisible = 0;
+      rows.forEach(function (row) {
+        var val = row.getAttribute('data-search') || '';
+        var visible = (!q || val.indexOf(q) !== -1);
+        row.classList.toggle('followup-hidden', !visible);
+        if (visible) rowVisible++;
+      });
+      var noDesktop = document.getElementById('noResultsDesktop');
+      if (noDesktop) noDesktop.style.display = (rows.length > 0 && rowVisible === 0) ? 'block' : 'none';
+
+      var cards = document.querySelectorAll('#mobileCards .followup-card-item');
+      var cardVisible = 0;
+      cards.forEach(function (card) {
+        var val = card.getAttribute('data-search') || '';
+        var visible = (!q || val.indexOf(q) !== -1);
+        card.classList.toggle('followup-hidden', !visible);
+        if (visible) cardVisible++;
+      });
+      var noMobile = document.getElementById('noResultsMobile');
+      if (noMobile) noMobile.style.display = (cards.length > 0 && cardVisible === 0) ? 'block' : 'none';
+    });
+  }
+
+  var modal = document.getElementById('quickCompleteModal');
+  if (!modal) return;
+  modal.addEventListener('show.bs.modal', function (event) {
+    var btn = event.relatedTarget;
+    if (!btn) return;
+
+    var mode = btn.getAttribute('data-mode') || 'complete';
+    var leadId = btn.getAttribute('data-lead-id') || '';
+    var leadName = btn.getAttribute('data-lead-name') || '';
+    var nextDate = btn.getAttribute('data-next-followup') || '';
+
+    document.getElementById('qcMode').value = mode;
+    document.getElementById('qcLeadId').value = leadId;
+    document.getElementById('qcLeadName').textContent = 'Lead: ' + leadName;
+    document.getElementById('qcNextDate').value = nextDate;
+
+    var isReschedule = mode === 'reschedule';
+    document.getElementById('qcTitle').textContent = isReschedule ? 'Reschedule Follow-up' : 'Complete Follow-up';
+    document.getElementById('qcSubmitBtn').textContent = isReschedule ? 'Reschedule' : 'Complete';
+  });
+})();
+</script>
 {% endblock %}

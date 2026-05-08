@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Global IT ERP - Leads{% endblock %}</title>
+  <title>{% block title %}{{ company.company_short_name }} - Leads{% endblock %}</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
   {% block extra_css %}{% endblock %}
@@ -31,6 +31,13 @@
       position: sticky;
       top: 0;
       flex-shrink: 0;
+    }
+
+    @media (max-width: 991.98px) {
+      .sidebar {
+        min-height: unset;
+        position: fixed;
+      }
     }
 
     .sidebar .nav-link {
@@ -59,15 +66,94 @@
       min-width: 0;
       flex: 1;
     }
+
+    /* ===== MOBILE BOTTOM NAV ===== */
+    .mobile-bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-top: 1px solid #dee2e6;
+      z-index: 1030;
+      padding: 4px 0 env(safe-area-inset-bottom, 4px);
+      box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+    }
+    .mobile-bottom-nav a {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      text-decoration: none;
+      color: #6c757d;
+      font-size: 10px;
+      padding: 4px 2px;
+      border-radius: 8px;
+      transition: color .15s;
+    }
+    .mobile-bottom-nav a .nav-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+    .mobile-bottom-nav a.active, .mobile-bottom-nav a:hover {
+      color: #0d6efd;
+    }
+    .mobile-bottom-nav a.add-btn {
+      color: #fff;
+      background: #0d6efd;
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      justify-content: center;
+      margin-top: -12px;
+      box-shadow: 0 2px 8px rgba(13,110,253,.4);
+      flex: none;
+      padding: 0;
+      font-size: 24px;
+    }
+    .mobile-bottom-nav a.add-btn .nav-icon {
+      font-size: 22px;
+    }
+    @media (max-width: 991.98px) {
+      .mobile-bottom-nav { display: flex; }
+      .main-content-pad { padding-bottom: 72px !important; }
+    }
   </style>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+      document.querySelectorAll('form[method="post"], form[method="POST"]').forEach(function(form) {
+        if (!form.querySelector('input[name="csrf_token"]')) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'csrf_token';
+          input.value = token;
+          form.appendChild(input);
+        }
+      });
+    });
+  </script>
 </head>
 <body>
 
 <div class="d-flex">
   <!-- Sidebar -->
-  <aside class="sidebar p-3">
-    <div class="mb-3">
-      <div class="fw-bold">Global IT Education</div>
+  <div class="sidebar offcanvas-lg offcanvas-start" id="mainSidebar" tabindex="-1">
+    <div class="offcanvas-header border-bottom d-lg-none">
+      <h6 class="offcanvas-title fw-bold mb-0">{{ company.company_name }}</h6>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#mainSidebar" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body p-3 d-lg-flex flex-column">
+    <div class="mb-3 d-none d-lg-block">
+      {% if company.logo_filename %}
+        <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+             alt="{{ company.company_name }}" style="max-height:44px; max-width:180px; margin-bottom:4px;">
+        <br>
+      {% endif %}
+      <div class="fw-bold">{{ company.company_name }}</div>
       <div class="text-muted small">Leads Module</div>
       <hr>
     </div>
@@ -147,21 +233,28 @@
         🚪 Logout
       </a>
     </nav>
-  </aside>
+    </div>
+  </div>
 
   <!-- Main -->
   <main class="flex-grow-1 content-wrap">
     <!-- Top bar -->
-    <div class="topbar px-3 py-2 bg-white border-bottom d-flex align-items-center justify-content-between">
-      <div class="fw-semibold">Global IT ERP - Leads</div>
-      <div class="small text-muted">
-        Logged in:
-        <span class="fw-semibold">{{ session.get("username", "User") }}</span>
-        ({{ session.get("role", "staff") }})
+    <div class="topbar px-3 py-2 bg-white border-bottom" style="display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+        <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainSidebar" aria-controls="mainSidebar" aria-label="Menu">☰</button>
+        <div class="fw-semibold" style="white-space:nowrap;">{{ company.company_short_name }} - Leads</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+        <div class="small text-muted d-none d-sm-block">
+          Logged in:
+          <span class="fw-semibold">{{ session.get("username", "User") }}</span>
+          <span class="d-none d-md-inline">({{ session.get("role", "staff") }})</span>
+        </div>
+        <a href="{{ url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary" title="Back to Main Dashboard">🏠 Home</a>
       </div>
     </div>
 
-    <div class="container-fluid p-3">
+    <div class="container-fluid p-3 main-content-pad">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
@@ -178,6 +271,29 @@
   </main>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+  <a href="{{ url_for('leads.dashboard') }}" class="{{ 'active' if request.endpoint == 'leads.dashboard' else '' }}">
+    <span class="nav-icon">📊</span>
+    <span>Dashboard</span>
+  </a>
+  <a href="{{ url_for('leads.leads_list') }}" class="{{ 'active' if request.endpoint == 'leads.leads_list' else '' }}">
+    <span class="nav-icon">👥</span>
+    <span>Leads</span>
+  </a>
+  <a href="{{ url_for('leads.lead_create') }}" class="add-btn" title="Add Lead">
+    <span class="nav-icon">+</span>
+  </a>
+  <a href="{{ url_for('leads.followups_today') }}" class="{{ 'active' if request.endpoint == 'leads.followups_today' else '' }}">
+    <span class="nav-icon">📞</span>
+    <span>Follow-ups</span>
+  </a>
+  <a href="{{ url_for('leads.pipeline') }}" class="{{ 'active' if request.endpoint == 'leads.pipeline' else '' }}">
+    <span class="nav-icon">🧩</span>
+    <span>Pipeline</span>
+  </a>
+</nav>
+
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
 </body>
 </html>

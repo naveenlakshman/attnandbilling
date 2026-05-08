@@ -1,62 +1,243 @@
-from flask import Blueprint, render_template, request, session, redirect, url_for, flash, Response
+from flask import Blueprint, render_template, request, session, redirect, url_for, flash, Response, jsonify
 from datetime import date, datetime, timedelta
 import calendar
 import uuid
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
+from werkzeug.security import generate_password_hash
 import io
 import csv
+import os
+import base64
+
+
+def _auto_enable_portal(student_id):
+    """Set portal_enabled=1 and default password (=student_code) if not already set."""
+    try:
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT student_code, portal_enabled, password_hash FROM students WHERE id = ?",
+            (student_id,)
+        ).fetchone()
+        if row and not row['portal_enabled']:
+            ph = generate_password_hash(row['student_code'])
+            conn.execute(
+                "UPDATE students SET portal_enabled = 1, password_hash = ? WHERE id = ?",
+                (ph, student_id)
+            )
+            conn.commit()
+        conn.close()
+    except Exception:
+        pass  # Never block the main flow
 
 
 QUALIFICATION_LEVELS = {
     "School": [
+        "1st Standard",
+        "2nd Standard",
+        "3rd Standard",
+        "4th Standard",
         "5th Standard",
         "6th Standard",
         "7th Standard",
         "8th Standard",
         "9th Standard",
-        "10th Standard / SSLC"
+        "10th Standard / SSLC",
+        "10th Standard / SSLC Completed",
     ],
     "Pre-University": [
-        "1st PUC",
-        "2nd PUC"
+        "1st PUC - Science",
+        "1st PUC - Commerce",
+        "1st PUC - Arts",
+        "2nd PUC - Science",
+        "2nd PUC - Commerce",
+        "2nd PUC - Arts",
+        "11th CBSE - Science",
+        "11th CBSE - Commerce",
+        "11th CBSE - Humanities",
+        "12th CBSE - Science",
+        "12th CBSE - Commerce",
+        "12th CBSE - Humanities",
+        "11th ICSE - Science",
+        "11th ICSE - Commerce",
+        "12th ICSE - Science",
+        "12th ICSE - Commerce",
+        "12th / PUC Completed",
     ],
     "Diploma": [
-        "Diploma 1st Year",
-        "Diploma 2nd Year",
-        "Diploma 3rd Year",
-        "Diploma Completed"
+        "Diploma in Computer Science",
+        "Diploma in Information Technology",
+        "Diploma in Electronics & Communication",
+        "Diploma in Electrical Engineering",
+        "Diploma in Mechanical Engineering",
+        "Diploma in Civil Engineering",
+        "Diploma in Automobile Engineering",
+        "Diploma in Fashion Design",
+        "Diploma in Hotel Management",
+        "Diploma - 1st Year",
+        "Diploma - 2nd Year",
+        "Diploma - 3rd Year",
+        "Diploma Completed",
     ],
     "Undergraduate": [
-        "B.Com",
-        "BBA",
-        "BBM",
-        "BA",
-        "BCA",
-        "B.Sc",
-        "BE",
-        "B.Tech",
-        "Degree 1st Year",
-        "Degree 2nd Year",
-        "Degree 3rd Year",
-        "Undergraduate Completed"
-    ],
-    "Technical": [
-        "ITI",
-        "Polytechnic",
-        "Certification Course"
+        "B.Com - 1st Year",
+        "B.Com - 2nd Year",
+        "B.Com - 3rd Year",
+        "B.Com Completed",
+        "BBA - 1st Year",
+        "BBA - 2nd Year",
+        "BBA - 3rd Year",
+        "BBA Completed",
+        "BBM Completed",
+        "BA - 1st Year",
+        "BA - 2nd Year",
+        "BA - 3rd Year",
+        "BA Completed",
+        "BCA - 1st Year",
+        "BCA - 2nd Year",
+        "BCA - 3rd Year",
+        "BCA Completed",
+        "B.Sc - 1st Year",
+        "B.Sc - 2nd Year",
+        "B.Sc - 3rd Year",
+        "B.Sc Completed",
+        "B.Sc (CS) Completed",
+        "B.Sc (IT) Completed",
+        "BE / B.Tech - 1st Year",
+        "BE / B.Tech - 2nd Year",
+        "BE / B.Tech - 3rd Year",
+        "BE / B.Tech - 4th Year",
+        "BE / B.Tech Completed",
+        "B.Ed Completed",
+        "B.Pharm Completed",
+        "BHM Completed",
+        "BJMC Completed",
+        "B.Design Completed",
+        "B.Arch Completed",
+        "LLB Completed",
+        "Undergraduate Completed",
     ],
     "Postgraduate": [
         "M.Com",
+        "M.Com Completed",
         "MBA",
+        "MBA Completed",
         "MCA",
+        "MCA Completed",
         "M.Sc",
+        "M.Sc Completed",
+        "M.Sc (CS) Completed",
+        "M.Sc (IT) Completed",
         "MA",
-        "Postgraduate Completed"
-    ]
+        "MA Completed",
+        "M.Tech / ME",
+        "M.Tech / ME Completed",
+        "PGDM",
+        "PGDCA",
+        "M.Ed Completed",
+        "LLM Completed",
+        "Postgraduate Completed",
+    ],
+    "Technical": [
+        "ITI - COPA (Computer Operator & Programming)",
+        "ITI - Electronics",
+        "ITI - Electrician",
+        "ITI - Fitter",
+        "ITI - Mechanic",
+        "ITI Completed",
+        "Polytechnic - 1st Year",
+        "Polytechnic - 2nd Year",
+        "Polytechnic - 3rd Year",
+        "Polytechnic Completed",
+        "Certification Course",
+        "Vocational Training",
+    ],
+    "Professional": [
+        "Working Professional - IT / Software",
+        "Working Professional - Finance / Accounts",
+        "Working Professional - Sales / Marketing",
+        "Working Professional - Teaching / Education",
+        "Working Professional - Healthcare",
+        "Working Professional - Government / PSU",
+        "Working Professional - Banking / Insurance",
+        "Working Professional - Retail / E-commerce",
+        "Working Professional - Other",
+        "Freelancer",
+        "Business Owner / Entrepreneur",
+    ],
+    "Doctoral": [
+        "Ph.D - Pursuing",
+        "Ph.D Completed",
+        "M.Phil",
+    ],
 }
 
 billing_bp = Blueprint("billing", __name__)
+
+
+@billing_bp.route('/student/<int:student_id>/toggle-portal', methods=['POST'])
+@login_required
+def toggle_portal(student_id):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT full_name, student_code, portal_enabled, password_hash FROM students WHERE id = ?",
+        (student_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        flash("Student not found.", "danger")
+        return redirect(url_for('billing.students'))
+
+    if row['portal_enabled']:
+        # Disable
+        conn.execute("UPDATE students SET portal_enabled = 0 WHERE id = ?", (student_id,))
+        conn.commit()
+        conn.close()
+        log_activity(session['user_id'], None, 'update', 'students', student_id,
+                     f"Disabled portal access for {row['full_name']} ({row['student_code']})")
+        flash(f"Portal access disabled for {row['full_name']}. They can no longer log in.", "warning")
+    else:
+        # Enable — set password to student_code if not set
+        ph = row['password_hash'] or generate_password_hash(row['student_code'])
+        conn.execute(
+            "UPDATE students SET portal_enabled = 1, password_hash = ? WHERE id = ?",
+            (ph, student_id)
+        )
+        conn.commit()
+        conn.close()
+        log_activity(session['user_id'], None, 'update', 'students', student_id,
+                     f"Enabled portal access for {row['full_name']} ({row['student_code']})")
+        flash(f"Portal access enabled for {row['full_name']}. Password: {row['student_code']}", "success")
+
+    return redirect(url_for('billing.student_profile', student_id=student_id))
+
+
+def save_student_photo(photo_data, student_code):
+    """Save student photo from base64 data"""
+    if not photo_data:
+        return None
+    
+    try:
+        # Remove data URL prefix if present
+        if ',' in photo_data:
+            photo_data = photo_data.split(',')[1]
+        
+        # Create directory if it doesn't exist
+        photo_dir = os.path.join('static', 'images', 'student_photos')
+        os.makedirs(photo_dir, exist_ok=True)
+        
+        # Decode and save
+        photo_bytes = base64.b64decode(photo_data)
+        filename = f"{student_code}.jpg"
+        filepath = os.path.join(photo_dir, filename)
+        
+        with open(filepath, 'wb') as f:
+            f.write(photo_bytes)
+        
+        return filename
+    except Exception as e:
+        print(f"Error saving photo: {e}")
+        return None
 
 @billing_bp.route("/")
 @login_required
@@ -474,6 +655,82 @@ def dashboard():
         expenses_data=expenses_data
     )
 
+@billing_bp.route("/student/<int:student_id>/enrollment-agreement/<int:invoice_id>")
+@login_required
+def student_enrollment_agreement(student_id, invoice_id):
+    """Display printable enrollment agreement for student"""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Fetch student details
+    cur.execute("""
+        SELECT
+            students.*,
+            branches.branch_name
+        FROM students
+        LEFT JOIN branches ON students.branch_id = branches.id
+        WHERE students.id = ?
+    """, (student_id,))
+    student = cur.fetchone()
+
+    if not student:
+        conn.close()
+        flash("Student not found.", "danger")
+        return redirect(url_for("billing.students"))
+
+    # Fetch invoice details
+    cur.execute("""
+        SELECT *
+        FROM invoices
+        WHERE id = ? AND student_id = ?
+    """, (invoice_id, student_id))
+    invoice = cur.fetchone()
+
+    if not invoice:
+        conn.close()
+        flash("Invoice not found.", "danger")
+        return redirect(url_for("billing.student_profile", student_id=student_id))
+
+    # Fetch invoice items (courses)
+    cur.execute("""
+        SELECT *
+        FROM invoice_items
+        WHERE invoice_id = ?
+        ORDER BY id
+    """, (invoice_id,))
+    invoice_items = cur.fetchall()
+
+    # Fetch installment plans for this invoice
+    cur.execute("""
+        SELECT *
+        FROM installment_plans
+        WHERE invoice_id = ?
+        ORDER BY installment_no ASC
+    """, (invoice_id,))
+    installment_plans = cur.fetchall()
+
+    # Fetch total paid for this invoice
+    cur.execute("""
+        SELECT IFNULL(SUM(amount_received), 0) AS total_paid
+        FROM receipts
+        WHERE invoice_id = ?
+    """, (invoice_id,))
+    payment_info = cur.fetchone()
+    total_paid = float(payment_info["total_paid"] or 0)
+    balance = float(invoice["total_amount"] or 0) - total_paid
+
+    conn.close()
+
+    return render_template(
+        "billing/student_enrollment_agreement.html",
+        student=student,
+        invoice=invoice,
+        invoice_items=invoice_items,
+        installment_plans=installment_plans,
+        total_paid=total_paid,
+        balance=balance
+    )
+
 @billing_bp.route("/students")
 @login_required
 def students():
@@ -484,6 +741,7 @@ def students():
     search_query = request.args.get("search", "").strip()
     branch_filter = request.args.get("branch", "").strip()
     status_filter = request.args.get("status", "").strip()
+    batch_filter = request.args.get("batch", "").strip()
 
     # Get student statistics
     cur.execute("""
@@ -550,10 +808,43 @@ def students():
         query += " AND students.status = ?"
         params.append(status_filter)
 
+    # Batch filter
+    if batch_filter == 'none':
+        query += """ AND students.id NOT IN (
+            SELECT DISTINCT student_id FROM student_batches
+        )"""
+    elif batch_filter:
+        query += """ AND students.id IN (
+            SELECT student_id FROM student_batches WHERE batch_id = ?
+        )"""
+        params.append(batch_filter)
+
     query += " ORDER BY students.id DESC"
 
     cur.execute(query, params)
     students = cur.fetchall()
+
+    # Build batch lookup for all returned students (single query, no N+1)
+    student_batches_map = {}
+    if students:
+        student_ids = [s['id'] for s in students]
+        placeholders = ','.join('?' * len(student_ids))
+        cur.execute(f"""
+            SELECT sb.student_id, b.id AS batch_id, b.batch_name
+            FROM student_batches sb
+            JOIN batches b ON sb.batch_id = b.id
+            WHERE sb.student_id IN ({placeholders})
+            AND sb.status = 'active'
+            ORDER BY sb.student_id, b.batch_name
+        """, student_ids)
+        for row in cur.fetchall():
+            sid = row['student_id']
+            if sid not in student_batches_map:
+                student_batches_map[sid] = []
+            student_batches_map[sid].append({
+                'batch_id': row['batch_id'],
+                'batch_name': row['batch_name']
+            })
 
     # Branches for filter dropdown
     cur.execute("""
@@ -564,18 +855,122 @@ def students():
     """)
     branches = cur.fetchall()
 
+    # All batches for filter dropdown
+    cur.execute("""
+        SELECT id, batch_name
+        FROM batches
+        ORDER BY batch_name
+    """)
+    all_batches = cur.fetchall()
+
     conn.close()
 
     return render_template(
         "billing/students.html",
         students=students,
         branches=branches,
+        all_batches=all_batches,
         search_query=search_query,
         branch_filter=branch_filter,
         status_filter=status_filter,
+        batch_filter=batch_filter,
         stats=stats,
-        branch_stats=branch_stats
+        branch_stats=branch_stats,
+        student_batches_map=student_batches_map
     )
+
+@billing_bp.route("/student/check-duplicate", methods=["POST"])
+@login_required
+def student_check_duplicate():
+    """AJAX endpoint: check if a phone number already belongs to a student."""
+    data = request.get_json(silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    exclude_id = data.get("exclude_id")  # student id to exclude (for edit page)
+
+    if not phone:
+        return jsonify({"duplicate": False})
+
+    conn = get_conn()
+    cur = conn.cursor()
+    if exclude_id:
+        cur.execute(
+            "SELECT id, student_code, full_name, phone FROM students WHERE phone = ? AND id != ?",
+            (phone, exclude_id)
+        )
+    else:
+        cur.execute(
+            "SELECT id, student_code, full_name, phone FROM students WHERE phone = ?",
+            (phone,)
+        )
+    existing = cur.fetchone()
+    conn.close()
+
+    if existing:
+        return jsonify({
+            "duplicate": True,
+            "student_id": existing["id"],
+            "student_code": existing["student_code"],
+            "full_name": existing["full_name"],
+        })
+    return jsonify({"duplicate": False})
+
+
+@billing_bp.route("/api/pincode-lookup")
+@login_required
+def pincode_lookup():
+    """Backend proxy: resolve Indian pincode to city/state/locality via Google Geocoding API."""
+    import re as _re
+    import urllib.request
+    import json as _json
+    from flask import current_app
+
+    pincode = request.args.get("pincode", "").strip()
+    if not _re.fullmatch(r"\d{6}", pincode):
+        return jsonify({"success": False, "error": "Invalid pincode"})
+
+    api_key = current_app.config.get("GOOGLE_MAPS_API_KEY", "")
+    if not api_key:
+        return jsonify({"success": False, "error": "Maps API not configured"})
+
+    url = (
+        "https://maps.googleapis.com/maps/api/geocode/json"
+        f"?address={pincode},India&key={api_key}"
+    )
+
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = _json.loads(resp.read().decode())
+    except Exception as e:
+        return jsonify({"success": False, "error": "Lookup failed"})
+
+    if data.get("status") != "OK" or not data.get("results"):
+        return jsonify({"success": False, "error": "Pincode not found"})
+
+    components = data["results"][0].get("address_components", [])
+
+    locality = ""
+    city = ""
+    state = ""
+
+    for comp in components:
+        types = comp.get("types", [])
+        name = comp.get("long_name", "")
+        if "locality" in types and not locality:
+            locality = name
+        if "administrative_area_level_3" in types and not city:
+            city = name
+        if "administrative_area_level_2" in types and not city:
+            city = name
+        if "administrative_area_level_1" in types:
+            state = name
+
+    return jsonify({
+        "success": True,
+        "locality": locality,
+        "city": city,
+        "state": state,
+    })
+
 
 @billing_bp.route("/student/new", methods=["GET", "POST"])
 @login_required
@@ -587,16 +982,108 @@ def student_new():
         branch_id = request.form["branch_id"]
         full_name = request.form["full_name"].strip()
         phone = request.form["phone"].strip()
+        lead_id_raw = request.form.get("lead_id", "").strip()
+        form_lead_id = int(lead_id_raw) if lead_id_raw.isdigit() else None
+
+        # Validate phone number
+        import re as _re
+        _phone_digits = _re.sub(r'[\s\-\+]', '', phone)
+        if not _phone_digits.isdigit() or len(_phone_digits) != 10:
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            branches = cur.fetchall()
+            conn.close()
+            return render_template(
+                "billing/student_form.html",
+                student=None,
+                branches=branches,
+                education_levels=QUALIFICATION_LEVELS.keys(),
+                qualification_levels=QUALIFICATION_LEVELS,
+                error="Invalid phone number. Please enter a valid 10-digit mobile number.",
+                form_data=request.form
+            )
+
         gender = request.form.get("gender", "").strip()
         email = request.form.get("email", "").strip()
         address = request.form.get("address", "").strip()
+        pincode = request.form.get("pincode", "").strip()
+        locality = request.form.get("locality", "").strip()
+        city = request.form.get("city", "").strip()
+        state = request.form.get("state", "").strip()
+        landmark = request.form.get("landmark", "").strip()
+        alternate_phone = request.form.get("alternate_phone", "").strip()
+        address_type = request.form.get("address_type", "").strip()
         education_level = request.form.get("education_level", "").strip()
         qualification = request.form.get("qualification", "").strip()
         student_location = request.form.get("student_location", "").strip()
         employment_status = request.form.get("employment_status", "").strip()
         status = request.form.get("status", "active").strip()
+        date_of_birth = request.form.get("date_of_birth", "").strip() or None
+        parent_name = request.form.get("parent_name", "").strip() or None
+        parent_contact = request.form.get("parent_contact", "").strip() or None
+        photo_data = request.form.get("photo_data", "").strip()
 
-        # Get next registration number
+        # Validate date_of_birth is a real calendar date
+        if date_of_birth:
+            try:
+                datetime.strptime(date_of_birth, "%Y-%m-%d")
+            except ValueError:
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                branches = cur.fetchall()
+                conn.close()
+                return render_template(
+                    "billing/student_form.html",
+                    student=None,
+                    branches=branches,
+                    education_levels=QUALIFICATION_LEVELS.keys(),
+                    qualification_levels=QUALIFICATION_LEVELS,
+                    error="Invalid date of birth. Please enter a valid calendar date.",
+                    form_data=request.form
+                )
+
+        # Photo is required for new students
+        if not photo_data:
+            cur.execute("""
+                SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name
+            """)
+            branches = cur.fetchall()
+            conn.close()
+            return render_template(
+                "billing/student_form.html",
+                student=None,
+                branches=branches,
+                education_levels=QUALIFICATION_LEVELS.keys(),
+                qualification_levels=QUALIFICATION_LEVELS,
+                error="Student photo is required.",
+                form_data=request.form
+            )
+
+        # Duplicate phone check
+        force_save = request.form.get("force_save") == "1"
+        if not force_save:
+            cur.execute(
+                "SELECT id, student_code, full_name FROM students WHERE phone = ?",
+                (phone,)
+            )
+            dup = cur.fetchone()
+            if dup:
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                branches = cur.fetchall()
+                conn.close()
+                return render_template(
+                    "billing/student_form.html",
+                    student=None,
+                    branches=branches,
+                    education_levels=QUALIFICATION_LEVELS.keys(),
+                    qualification_levels=QUALIFICATION_LEVELS,
+                    duplicate_warning={
+                        "student_id": dup["id"],
+                        "student_code": dup["student_code"],
+                        "full_name": dup["full_name"],
+                        "phone": phone,
+                    },
+                    form_data=request.form
+                )
+
         cur.execute("""
             SELECT student_code
             FROM students
@@ -616,6 +1103,11 @@ def student_new():
             max_reg = 1515000
             next_reg_no = max_reg + 1
 
+        # Save photo if provided
+        photo_filename = None
+        if photo_data:
+            photo_filename = save_student_photo(photo_data, str(next_reg_no))
+
         now = datetime.now().isoformat(timespec="seconds")
 
         cur.execute("""
@@ -626,17 +1118,29 @@ def student_new():
                 gender,
                 email,
                 address,
+                pincode,
+                locality,
+                city,
+                state,
+                landmark,
+                alternate_phone,
+                address_type,
                 education_level,
                 qualification,
                 student_location,
                 employment_status,
+                date_of_birth,
+                parent_name,
+                parent_contact,
                 joined_date,
                 status,
                 branch_id,
+                photo_filename,
+                lead_id,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(next_reg_no),
             full_name,
@@ -644,20 +1148,65 @@ def student_new():
             gender,
             email,
             address,
+            pincode,
+            locality,
+            city,
+            state,
+            landmark,
+            alternate_phone,
+            address_type,
             education_level,
             qualification,
             student_location,
             employment_status,
+            date_of_birth,
+            parent_name,
+            parent_contact,
             now,
             status,
             branch_id,
+            photo_filename,
+            form_lead_id,
             now,
             now
         ))
 
         student_id = cur.lastrowid
-        conn.commit()
-        conn.close()
+
+        # ── Lead linkage ────────────────────────────────────────────
+        if form_lead_id:
+            # Mark the originating lead as converted
+            cur.execute(
+                "UPDATE leads SET stage = 'Converted', status = 'converted', updated_at = ? WHERE id = ?",
+                (now, form_lead_id)
+            )
+            conn.commit()
+            conn.close()
+        else:
+            # Auto-create a lead record for this direct admission
+            _edu_map = {
+                "School": "School Student",
+                "Pre-University": "PUC Student",
+                "Diploma": "Degree Student",
+                "Undergraduate": "Degree Student",
+                "Postgraduate": "Graduate",
+                "Professional": "Working Professional",
+            }
+            lead_edu = _edu_map.get(education_level, "")
+            cur.execute(
+                """INSERT INTO leads
+                       (name, phone, gender, education_status, lead_location,
+                        stage, status, lead_source, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, 'Converted', 'converted', 'Walk-in', ?, ?)""",
+                (full_name, phone, gender, lead_edu, student_location, now, now)
+            )
+            new_lead_id = cur.lastrowid
+            cur.execute("UPDATE students SET lead_id = ? WHERE id = ?", (new_lead_id, student_id))
+            conn.commit()
+            conn.close()
+            flash("A lead record was automatically created for this student.", "info")
+
+        _auto_enable_portal(student_id)
 
         log_activity(
             user_id=session["user_id"],
@@ -679,6 +1228,16 @@ def student_new():
     """)
     branches = cur.fetchall()
 
+    # Pre-fill from a lead if ?from_lead=<id> is provided
+    prefill_lead = None
+    from_lead_raw = request.args.get("from_lead", "").strip()
+    if from_lead_raw.isdigit():
+        cur.execute(
+            "SELECT * FROM leads WHERE id = ? AND is_deleted = 0",
+            (int(from_lead_raw),)
+        )
+        prefill_lead = cur.fetchone()
+
     conn.close()
 
     return render_template(
@@ -686,7 +1245,8 @@ def student_new():
         student=None,
         branches=branches,
         education_levels=QUALIFICATION_LEVELS.keys(),
-        qualification_levels=QUALIFICATION_LEVELS
+        qualification_levels=QUALIFICATION_LEVELS,
+        prefill_lead=prefill_lead
     )
 
 @billing_bp.route("/student/<int:student_id>/edit", methods=["GET", "POST"])
@@ -711,14 +1271,98 @@ def student_edit(student_id):
         branch_id = request.form["branch_id"]
         full_name = request.form["full_name"].strip()
         phone = request.form["phone"].strip()
+
+        # Validate phone number
+        import re as _re
+        _phone_digits = _re.sub(r'[\s\-\+]', '', phone)
+        if not _phone_digits.isdigit() or len(_phone_digits) != 10:
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            branches = cur.fetchall()
+            conn.close()
+            return render_template(
+                "billing/student_form.html",
+                student=student,
+                branches=branches,
+                education_levels=QUALIFICATION_LEVELS.keys(),
+                qualification_levels=QUALIFICATION_LEVELS,
+                error="Invalid phone number. Please enter a valid 10-digit mobile number.",
+                form_data=request.form
+            )
+
         gender = request.form.get("gender", "").strip()
         email = request.form.get("email", "").strip()
         address = request.form.get("address", "").strip()
+        pincode = request.form.get("pincode", "").strip()
+        locality = request.form.get("locality", "").strip()
+        city = request.form.get("city", "").strip()
+        state = request.form.get("state", "").strip()
+        landmark = request.form.get("landmark", "").strip()
+        alternate_phone = request.form.get("alternate_phone", "").strip()
+        address_type = request.form.get("address_type", "").strip()
         education_level = request.form.get("education_level", "").strip()
         qualification = request.form.get("qualification", "").strip()
         student_location = request.form.get("student_location", "").strip()
         employment_status = request.form.get("employment_status", "").strip()
         status = request.form.get("status", "active").strip()
+        date_of_birth = request.form.get("date_of_birth", "").strip() or None
+        parent_name = request.form.get("parent_name", "").strip() or None
+        parent_contact = request.form.get("parent_contact", "").strip() or None
+        photo_data = request.form.get("photo_data", "").strip()
+
+        # Validate date_of_birth is a real calendar date
+        if date_of_birth:
+            try:
+                datetime.strptime(date_of_birth, "%Y-%m-%d")
+            except ValueError:
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                branches = cur.fetchall()
+                conn.close()
+                return render_template(
+                    "billing/student_form.html",
+                    student=student,
+                    branches=branches,
+                    education_levels=QUALIFICATION_LEVELS.keys(),
+                    qualification_levels=QUALIFICATION_LEVELS,
+                    error="Invalid date of birth. Please enter a valid calendar date.",
+                    form_data=request.form
+                )
+
+        # Save photo if provided
+        # Row objects don't have .get() method, use bracket notation instead
+        try:
+            photo_filename = student["photo_filename"] if "photo_filename" in student.keys() else None
+        except:
+            photo_filename = None
+        
+        if photo_data:
+            photo_filename = save_student_photo(photo_data, student["student_code"])
+
+        # Duplicate phone check (exclude current student)
+        force_save = request.form.get("force_save") == "1"
+        if not force_save:
+            cur.execute(
+                "SELECT id, student_code, full_name FROM students WHERE phone = ? AND id != ?",
+                (phone, student_id)
+            )
+            dup = cur.fetchone()
+            if dup:
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                branches = cur.fetchall()
+                conn.close()
+                return render_template(
+                    "billing/student_form.html",
+                    student=student,
+                    branches=branches,
+                    education_levels=QUALIFICATION_LEVELS.keys(),
+                    qualification_levels=QUALIFICATION_LEVELS,
+                    duplicate_warning={
+                        "student_id": dup["id"],
+                        "student_code": dup["student_code"],
+                        "full_name": dup["full_name"],
+                        "phone": phone,
+                    },
+                    form_data=request.form
+                )
 
         now = datetime.now().isoformat(timespec="seconds")
 
@@ -730,11 +1374,22 @@ def student_edit(student_id):
                 gender = ?,
                 email = ?,
                 address = ?,
+                pincode = ?,
+                locality = ?,
+                city = ?,
+                state = ?,
+                landmark = ?,
+                alternate_phone = ?,
+                address_type = ?,
                 education_level = ?,
                 qualification = ?,
                 student_location = ?,
                 employment_status = ?,
+                date_of_birth = ?,
+                parent_name = ?,
+                parent_contact = ?,
                 status = ?,
+                photo_filename = ?,
                 updated_at = ?
             WHERE id = ?
         """, (
@@ -744,11 +1399,22 @@ def student_edit(student_id):
             gender,
             email,
             address,
+            pincode,
+            locality,
+            city,
+            state,
+            landmark,
+            alternate_phone,
+            address_type,
             education_level,
             qualification,
             student_location,
             employment_status,
+            date_of_birth,
+            parent_name,
+            parent_contact,
             status,
+            photo_filename,
             now,
             student_id
         ))
@@ -785,6 +1451,188 @@ def student_edit(student_id):
         education_levels=QUALIFICATION_LEVELS.keys(),
         qualification_levels=QUALIFICATION_LEVELS
     )
+
+@billing_bp.route("/student/<int:student_id>/upload-photo", methods=["POST"])
+@login_required
+def student_upload_photo(student_id):
+    """Quick photo upload from student profile page."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, student_code, full_name FROM students WHERE id = ?", (student_id,))
+    student = cur.fetchone()
+    if not student:
+        conn.close()
+        return jsonify({"success": False, "error": "Student not found"}), 404
+
+    photo_data = request.form.get("photo_data", "").strip()
+    if not photo_data:
+        conn.close()
+        return jsonify({"success": False, "error": "No photo data received"}), 400
+
+    try:
+        photo_filename = save_student_photo(photo_data, student["student_code"])
+        now = datetime.now().isoformat(timespec="seconds")
+        cur.execute(
+            "UPDATE students SET photo_filename = ?, updated_at = ? WHERE id = ?",
+            (photo_filename, now, student_id)
+        )
+        conn.commit()
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=None,
+            action_type="update",
+            module_name="students",
+            record_id=student_id,
+            description=f"Updated photo for student {student['full_name']} ({student['student_code']})"
+        )
+        conn.close()
+        return jsonify({"success": True, "photo_filename": photo_filename})
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@billing_bp.route("/student/<int:student_id>/save-signature", methods=["POST"])
+@login_required
+def student_save_signature(student_id):
+    """Save student or parent digital signature from profile page."""
+    import os, base64
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, student_code, full_name FROM students WHERE id = ?", (student_id,))
+    student = cur.fetchone()
+    if not student:
+        conn.close()
+        return jsonify({"success": False, "error": "Student not found"}), 404
+
+    sig_type = request.form.get("sig_type", "").strip()   # "student" or "parent"
+    sig_data = request.form.get("sig_data", "").strip()   # base64 PNG data URL
+
+    if sig_type not in ("student", "parent"):
+        conn.close()
+        return jsonify({"success": False, "error": "Invalid signature type"}), 400
+    if not sig_data:
+        conn.close()
+        return jsonify({"success": False, "error": "No signature data"}), 400
+
+    try:
+        if ',' in sig_data:
+            sig_data = sig_data.split(',')[1]
+        sig_bytes = base64.b64decode(sig_data)
+
+        sig_dir = os.path.join("static", "images", "student_signatures")
+        os.makedirs(sig_dir, exist_ok=True)
+
+        code = student["student_code"]
+        filename = f"{code}_{sig_type}_signature.png"
+        filepath = os.path.join(sig_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(sig_bytes)
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if sig_type == "student":
+            cur.execute(
+                "UPDATE students SET student_signature_filename=?, student_signature_date=?, updated_at=? WHERE id=?",
+                (filename, now, now, student_id)
+            )
+        else:
+            cur.execute(
+                "UPDATE students SET parent_signature_filename=?, parent_signature_date=?, updated_at=? WHERE id=?",
+                (filename, now, now, student_id)
+            )
+        conn.commit()
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=None,
+            action_type="update",
+            module_name="students",
+            record_id=student_id,
+            description=f"Saved {sig_type} signature for {student['full_name']} ({code})"
+        )
+        conn.close()
+        return jsonify({"success": True, "filename": filename, "signed_at": now})
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@billing_bp.route("/student/<int:student_id>/batches-available")
+@login_required
+def student_batches_available(student_id):
+    """Return active batches not already enrolled by this student (JSON)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    # Get student's branch first
+    cur.execute("SELECT branch_id FROM students WHERE id = ?", (student_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"batches": []})
+    branch_id = row["branch_id"]
+    cur.execute("""
+        SELECT b.id, b.batch_name, b.start_time, b.end_time,
+               c.course_name, br.branch_name
+        FROM batches b
+        LEFT JOIN courses c ON b.course_id = c.id
+        LEFT JOIN branches br ON b.branch_id = br.id
+        WHERE b.status = 'active'
+          AND b.branch_id = ?
+          AND b.id NOT IN (
+              SELECT batch_id FROM student_batches
+              WHERE student_id = ? AND status = 'active'
+          )
+        ORDER BY b.batch_name
+    """, (branch_id, student_id))
+    batches = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return jsonify({"batches": batches})
+
+@billing_bp.route("/student/<int:student_id>/add-to-batch", methods=["POST"])
+@login_required
+def student_add_to_batch(student_id):
+    """Enroll student in a batch."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, full_name, student_code FROM students WHERE id = ?", (student_id,))
+    student = cur.fetchone()
+    if not student:
+        conn.close()
+        return jsonify({"success": False, "error": "Student not found"}), 404
+
+    batch_id = request.form.get("batch_id", type=int)
+    if not batch_id:
+        conn.close()
+        return jsonify({"success": False, "error": "No batch selected"}), 400
+
+    cur.execute("SELECT id, batch_name, branch_id FROM batches WHERE id = ? AND status = 'active'", (batch_id,))
+    batch = cur.fetchone()
+    if not batch:
+        conn.close()
+        return jsonify({"success": False, "error": "Batch not found or inactive"}), 404
+
+    # Check for duplicate active enrollment
+    cur.execute("SELECT id FROM student_batches WHERE student_id = ? AND batch_id = ? AND status = 'active'",
+                (student_id, batch_id))
+    if cur.fetchone():
+        conn.close()
+        return jsonify({"success": False, "error": "Student is already enrolled in this batch"}), 409
+
+    now = datetime.now().isoformat(timespec="seconds")
+    cur.execute("""
+        INSERT INTO student_batches (student_id, batch_id, joined_on, status, created_at, updated_at)
+        VALUES (?, ?, ?, 'active', ?, ?)
+    """, (student_id, batch_id, now.split("T")[0], now, now))
+    conn.commit()
+    log_activity(
+        user_id=session["user_id"],
+        branch_id=batch["branch_id"],
+        action_type="create",
+        module_name="attendance",
+        record_id=batch_id,
+        description=f"Enrolled student {student['full_name']} ({student['student_code']}) in batch '{batch['batch_name']}'"
+    )
+    conn.close()
+    return jsonify({"success": True, "batch_name": batch["batch_name"]})
 
 @billing_bp.route("/student/<int:student_id>")
 @login_required
@@ -844,10 +1692,71 @@ def student_profile(student_id):
     """, (student_id,))
     payment_summary = cur.fetchone()
 
+    # Fetch invoice items (courses enrolled)
+    cur.execute("""
+        SELECT
+            invoice_items.id,
+            invoice_items.invoice_id,
+            invoice_items.description,
+            invoice_items.quantity,
+            invoice_items.unit_price,
+            invoice_items.line_total,
+            invoice_items.discount,
+            invoices.invoice_no,
+            invoices.invoice_date
+        FROM invoice_items
+        JOIN invoices ON invoice_items.invoice_id = invoices.id
+        WHERE invoices.student_id = ?
+        ORDER BY invoices.invoice_date DESC, invoice_items.id
+    """, (student_id,))
+    invoice_items = cur.fetchall()
+
+    # Fetch installment plans
+    cur.execute("""
+        SELECT
+            installment_plans.*,
+            invoices.invoice_no
+        FROM installment_plans
+        JOIN invoices ON installment_plans.invoice_id = invoices.id
+        WHERE invoices.student_id = ?
+        ORDER BY installment_plans.due_date ASC
+    """, (student_id,))
+    installment_plans = cur.fetchall()
+
+    cur.execute("""
+        SELECT COALESCE(SUM(bw.amount_written_off), 0) AS total_written_off
+        FROM bad_debt_writeoffs bw
+        JOIN invoices i ON bw.invoice_id = i.id
+        WHERE i.student_id = ?
+    """, (student_id,))
+    writeoff_summary = cur.fetchone()
+
     total_invoices = int(invoice_summary["total_invoices"] or 0)
     total_billed = float(invoice_summary["total_billed"] or 0)
     total_paid = float(payment_summary["total_paid"] or 0)
-    total_balance = total_billed - total_paid
+    total_written_off_student = float(writeoff_summary["total_written_off"] or 0) if writeoff_summary else 0.0
+    total_balance = total_billed - total_paid - total_written_off_student
+
+    # Fetch batches this student is enrolled in
+    cur.execute("""
+        SELECT b.id AS batch_id, b.batch_name, b.start_time, b.end_time,
+               b.status AS batch_status, c.course_name, sb.status AS enroll_status
+        FROM student_batches sb
+        JOIN batches b ON sb.batch_id = b.id
+        LEFT JOIN courses c ON b.course_id = c.id
+        WHERE sb.student_id = ?
+        ORDER BY sb.status ASC, b.batch_name ASC
+    """, (student_id,))
+    student_batches = cur.fetchall()
+
+    # Originating lead (if student was converted from or auto-linked to a lead)
+    origin_lead = None
+    if student["lead_id"]:
+        cur.execute(
+            "SELECT id, name, stage, status FROM leads WHERE id = ? AND is_deleted = 0",
+            (student["lead_id"],)
+        )
+        origin_lead = cur.fetchone()
 
     conn.close()
 
@@ -855,10 +1764,14 @@ def student_profile(student_id):
         "billing/student_profile.html",
         student=student,
         invoices=invoices,
+        invoice_items=invoice_items,
+        installment_plans=installment_plans,
         total_invoices=total_invoices,
         total_billed=total_billed,
         total_paid=total_paid,
-        total_balance=total_balance
+        total_balance=total_balance,
+        student_batches=student_batches,
+        origin_lead=origin_lead
     )
 
 @billing_bp.route("/students/export-csv")
@@ -960,13 +1873,43 @@ def courses():
     cur.execute("""
         SELECT *
         FROM courses
-        ORDER BY id DESC
+        ORDER BY
+            CASE WHEN course_domain IS NULL OR course_domain = '' THEN 1 ELSE 0 END,
+            course_domain,
+            CASE WHEN duration_hours IS NULL THEN 9999 ELSE duration_hours END,
+            course_name
     """)
     courses = cur.fetchall()
-
     conn.close()
 
-    return render_template("billing/courses.html", courses=courses)
+    # Group by domain for the grouped view
+    from collections import OrderedDict
+    grouped = OrderedDict()
+    for c in courses:
+        key = c["course_domain"] or "(No Domain)"
+        grouped.setdefault(key, []).append(c)
+
+    return render_template("billing/courses.html", courses=courses, grouped=grouped)
+
+
+COURSE_DOMAINS = [
+    "Accounting",
+    "Coding & Programming",
+    "Design & Multimedia",
+    "Digital Marketing",
+    "Hardware & Networking",
+    "Office Tools",
+    "Spoken English & Communication",
+    "Other",
+]
+
+COURSE_CATEGORIES = [
+    "Short Term",
+    "Certificate Course",
+    "Bootcamp",
+    "Diploma",
+    "Other",
+]
 
 
 @billing_bp.route("/course/new", methods=["GET", "POST"])
@@ -976,6 +1919,14 @@ def course_new():
         course_name = request.form["course_name"].strip()
         duration = request.form["duration"].strip()
         fee = request.form["fee"].strip()
+        course_domain = request.form.get("course_domain", "").strip() or None
+        course_category = request.form.get("course_category", "").strip() or None
+        show_on_website = 1 if request.form.get("show_on_website") else 0
+        duration_hours_raw = request.form.get("duration_hours", "").strip()
+        duration_hours = int(duration_hours_raw) if duration_hours_raw.isdigit() else None
+        course_slug_raw = request.form.get("course_slug", "").strip().lower()
+        import re as _re
+        course_slug = _re.sub(r"[^a-z0-9_-]", "", course_slug_raw) or None
 
         conn = get_conn()
         cur = conn.cursor()
@@ -987,14 +1938,24 @@ def course_new():
                 course_name,
                 duration,
                 fee,
+                course_domain,
+                course_category,
+                show_on_website,
+                duration_hours,
+                course_slug,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             course_name,
             duration,
             fee,
+            course_domain,
+            course_category,
+            show_on_website,
+            duration_hours,
+            course_slug,
             now,
             now
         ))
@@ -1015,7 +1976,8 @@ def course_new():
         flash("Course added successfully.", "success")
         return redirect(url_for("billing.courses"))
 
-    return render_template("billing/course_form.html", course=None)
+    return render_template("billing/course_form.html", course=None,
+                           course_domains=COURSE_DOMAINS, course_categories=COURSE_CATEGORIES)
 
 
 @billing_bp.route("/course/<int:id>/edit", methods=["GET", "POST"])
@@ -1040,6 +2002,14 @@ def course_edit(id):
         course_name = request.form["course_name"].strip()
         duration = request.form["duration"].strip()
         fee = request.form["fee"].strip()
+        course_domain = request.form.get("course_domain", "").strip() or None
+        course_category = request.form.get("course_category", "").strip() or None
+        show_on_website = 1 if request.form.get("show_on_website") else 0
+        duration_hours_raw = request.form.get("duration_hours", "").strip()
+        duration_hours = int(duration_hours_raw) if duration_hours_raw.isdigit() else None
+        course_slug_raw = request.form.get("course_slug", "").strip().lower()
+        import re as _re
+        course_slug = _re.sub(r"[^a-z0-9_-]", "", course_slug_raw) or None
 
         now = datetime.now().isoformat(timespec="seconds")
 
@@ -1048,12 +2018,22 @@ def course_edit(id):
             SET course_name = ?,
                 duration = ?,
                 fee = ?,
+                course_domain = ?,
+                course_category = ?,
+                show_on_website = ?,
+                duration_hours = ?,
+                course_slug = ?,
                 updated_at = ?
             WHERE id = ?
         """, (
             course_name,
             duration,
             fee,
+            course_domain,
+            course_category,
+            show_on_website,
+            duration_hours,
+            course_slug,
             now,
             id
         ))
@@ -1074,7 +2054,87 @@ def course_edit(id):
         return redirect(url_for("billing.courses"))
 
     conn.close()
-    return render_template("billing/course_form.html", course=course)
+    return render_template("billing/course_form.html", course=course,
+                           course_domains=COURSE_DOMAINS, course_categories=COURSE_CATEGORIES)
+
+
+@billing_bp.route("/course/<int:id>/toggle_active", methods=["POST"])
+@login_required
+@admin_required
+def course_toggle_active(id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, course_name, is_active FROM courses WHERE id = ?", (id,))
+    course = cur.fetchone()
+
+    if not course:
+        conn.close()
+        flash("Course not found.", "danger")
+        return redirect(url_for("billing.courses"))
+
+    new_status = 0 if course["is_active"] else 1
+    label = "activated" if new_status else "deactivated"
+
+    now = datetime.now().isoformat(timespec="seconds")
+    cur.execute("UPDATE courses SET is_active = ?, updated_at = ? WHERE id = ?", (new_status, now, id))
+    conn.commit()
+    conn.close()
+
+    log_activity(
+        user_id=session["user_id"],
+        branch_id=session.get("branch_id"),
+        action_type="update",
+        module_name="courses",
+        record_id=id,
+        description=f"Course '{course['course_name']}' {label}"
+    )
+
+    flash(f"Course '{course['course_name']}' has been {label}.", "success")
+    return redirect(url_for("billing.courses"))
+
+
+@billing_bp.route("/course/<int:id>/toggle_website", methods=["POST"])
+@login_required
+@admin_required
+def course_toggle_website(id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, course_name, is_active, show_on_website FROM courses WHERE id = ?", (id,))
+    course = cur.fetchone()
+
+    if not course:
+        conn.close()
+        flash("Course not found.", "danger")
+        return redirect(url_for("billing.courses"))
+
+    if not course["is_active"]:
+        conn.close()
+        flash("Only active courses can be shown on the website.", "warning")
+        return redirect(url_for("billing.courses"))
+
+    new_val = 0 if course["show_on_website"] else 1
+    label = "added to" if new_val else "removed from"
+
+    now = datetime.now().isoformat(timespec="seconds")
+    cur.execute("UPDATE courses SET show_on_website = ?, updated_at = ? WHERE id = ?",
+                (new_val, now, id))
+    conn.commit()
+    conn.close()
+
+    log_activity(
+        user_id=session["user_id"],
+        branch_id=session.get("branch_id"),
+        action_type="update",
+        module_name="courses",
+        record_id=id,
+        description=f"Course '{course['course_name']}' {label} website"
+    )
+
+    flash(f"Course '{course['course_name']}' {label} the website.", "success")
+    return redirect(url_for("billing.courses"))
+
 
 @billing_bp.route("/invoices")
 @login_required
@@ -1239,6 +2299,7 @@ def invoice_view(invoice_id):
             description,
             quantity,
             unit_price,
+            discount,
             line_total
         FROM invoice_items
         WHERE invoice_id = ?
@@ -1299,11 +2360,28 @@ def invoice_view(invoice_id):
     writeoff_result = cur.fetchone()
     total_written_off = float(writeoff_result["total_written_off"] or 0) if writeoff_result else 0.0
 
-    # For written-off invoices, balance is zero (cannot receive further payments)
-    if invoice["status"] in ["write_off", "partially_written_off"]:
-        balance_amount = 0.0
+    # Compute effective status based on actual financials (guards against stale DB status)
+    invoice_total = float(invoice["total_amount"] or 0)
+    covered = round(total_paid + total_written_off, 2)
+    if covered >= round(invoice_total, 2):
+        if total_written_off > 0 and total_paid == 0:
+            effective_status = "write_off"
+        elif total_written_off > 0:
+            effective_status = "write_off"
+        else:
+            effective_status = "paid"
+    elif total_written_off > 0:
+        effective_status = "partially_written_off"
+    elif invoice["status"] in ["write_off", "partially_written_off"]:
+        effective_status = invoice["status"]
     else:
-        balance_amount = float(invoice["total_amount"] or 0) - total_paid - total_written_off
+        effective_status = invoice["status"]
+
+    # Balance is zero once fully covered by payments + write-offs
+    if covered >= round(invoice_total, 2) or effective_status in ["write_off", "partially_written_off"]:
+        balance_amount = max(0.0, invoice_total - total_paid - total_written_off)
+    else:
+        balance_amount = invoice_total - total_paid - total_written_off
 
     conn.close()
 
@@ -1315,7 +2393,8 @@ def invoice_view(invoice_id):
         payments=payments,
         total_paid=total_paid,
         balance_amount=balance_amount,
-        total_written_off=total_written_off
+        total_written_off=total_written_off,
+        effective_status=effective_status
     )
 
 @billing_bp.route("/invoice/<int:invoice_id>/print")
@@ -1363,6 +2442,7 @@ def invoice_print(invoice_id):
             description,
             quantity,
             unit_price,
+            discount,
             line_total
         FROM invoice_items
         WHERE invoice_id = ?
@@ -1425,6 +2505,8 @@ def invoice_print(invoice_id):
 
     conn.close()
 
+    pdf_mode = request.args.get('mode') == 'pdf'
+
     return render_template(
         "billing/invoice_print.html",
         invoice=invoice,
@@ -1434,7 +2516,8 @@ def invoice_print(invoice_id):
         total_paid=total_paid,
         balance_amount=balance_amount,
         net_total=net_total,
-        prepared_by=prepared_by
+        prepared_by=prepared_by,
+        pdf_mode=pdf_mode
     )
 
 @billing_bp.route("/installment/<int:installment_id>/edit", methods=["POST"])
@@ -1537,7 +2620,7 @@ def invoice_new():
             notes = request.form.get("notes", "").strip()
 
             item_course_ids = request.form.getlist("item_course_id[]")
-            item_descriptions = request.form.getlist("item_description[]")
+            item_descriptions = request.form.getlist("item_course_name[]")
             item_qtys = request.form.getlist("item_qty[]")
             item_rates = request.form.getlist("item_rate[]")
             item_discounts = request.form.getlist("item_discount[]")
@@ -1546,7 +2629,7 @@ def invoice_new():
                 flash("Please select a student.", "danger")
                 return redirect(url_for("billing.invoice_new"))
 
-            if not item_descriptions:
+            if not item_course_ids:
                 flash("Please add at least one bill item.", "danger")
                 return redirect(url_for("billing.invoice_new"))
 
@@ -1574,23 +2657,20 @@ def invoice_new():
             discount_amount = 0.0
             total_amount = 0.0
 
-            for i in range(len(item_descriptions)):
-                description = (item_descriptions[i] or "").strip()
+            for i in range(len(item_course_ids)):
                 course_id_raw = (item_course_ids[i] or "").strip()
                 qty_raw = (item_qtys[i] or "0").strip()
                 rate_raw = (item_rates[i] or "0").strip()
                 discount_raw = (item_discounts[i] or "0").strip()
 
+                # Skip empty rows (no course selected)
+                if not course_id_raw:
+                    continue
+
+                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
                 qty = float(qty_raw or 0)
                 rate = float(rate_raw or 0)
                 row_discount = float(discount_raw or 0)
-
-                if not description and qty == 0 and rate == 0:
-                    continue
-
-                if not description:
-                    flash(f"Description is required in item row {i + 1}.", "danger")
-                    return redirect(url_for("billing.invoice_new"))
 
                 if qty <= 0:
                     flash(f"Quantity must be greater than 0 in item row {i + 1}.", "danger")
@@ -1621,6 +2701,7 @@ def invoice_new():
                     "description": description,
                     "quantity": qty,
                     "unit_price": rate,
+                    "discount": row_discount,
                     "line_total": line_total
                 })
 
@@ -1707,16 +2788,18 @@ def invoice_new():
                         description,
                         quantity,
                         unit_price,
+                        discount,
                         line_total,
                         created_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     invoice_id,
                     item["course_id"],
                     item["description"],
                     item["quantity"],
                     item["unit_price"],
+                    item["discount"],
                     item["line_total"],
                     now
                 ))
@@ -1817,6 +2900,8 @@ def invoice_new():
             # Extract student name before closing connection to avoid Row access after close
             student_full_name = str(student['full_name'])
 
+            _auto_enable_portal(student_id)
+
             log_activity(
                 user_id=session["user_id"],
                 branch_id=branch_id,
@@ -1862,12 +2947,28 @@ def invoice_new():
 
     conn.close()
     today = datetime.today().strftime("%Y-%m-%d")
+    
+    # Convert Row objects to dictionaries for JSON serialization in template
+    def row_to_dict(row):
+        if row is None:
+            return None
+        try:
+            return dict(row)
+        except (TypeError, ValueError):
+            return row if isinstance(row, dict) else str(row)
+
+    students_dict = [row_to_dict(student) for student in (students or [])]
+    courses_dict = [row_to_dict(course) for course in (courses or [])]
+
+    prefill_student_id = request.args.get('student_id', '', type=int) or None
+
     return render_template(
-        "billing/invoice_form.html",
-        students=students,
-        courses=courses,
+        "billing/invoice_form_modern.html",
+        students=students_dict,
+        courses=courses_dict,
         today=today,
-        mode="create"
+        mode="create",
+        prefill_student_id=prefill_student_id
     )
 
 @billing_bp.route("/invoice/<int:invoice_id>/edit", methods=["GET", "POST"])
@@ -1953,12 +3054,12 @@ def invoice_edit(invoice_id):
             total_paid = float(cur.fetchone()["total_paid"] or 0)
 
             item_course_ids = request.form.getlist("item_course_id[]")
-            item_descriptions = request.form.getlist("item_description[]")
+            item_descriptions = request.form.getlist("item_course_name[]")
             item_qtys = request.form.getlist("item_qty[]")
             item_rates = request.form.getlist("item_rate[]")
             item_discounts = request.form.getlist("item_discount[]")
 
-            if not item_descriptions:
+            if not item_course_ids:
                 flash("Please add at least one bill item.", "danger")
                 conn.close()
                 return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
@@ -1970,24 +3071,20 @@ def invoice_edit(invoice_id):
             discount_amount = 0.0
             total_amount = 0.0
 
-            for i in range(len(item_descriptions)):
-                description = (item_descriptions[i] or "").strip()
+            for i in range(len(item_course_ids)):
                 course_id_raw = (item_course_ids[i] or "").strip()
                 qty_raw = (item_qtys[i] or "0").strip()
                 rate_raw = (item_rates[i] or "0").strip()
                 discount_raw = (item_discounts[i] or "0").strip()
 
+                # Skip empty rows (no course selected)
+                if not course_id_raw:
+                    continue
+
+                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
                 qty = float(qty_raw or 0)
                 rate = float(rate_raw or 0)
                 row_discount = float(discount_raw or 0)
-
-                if not description and qty == 0 and rate == 0:
-                    continue
-
-                if not description:
-                    conn.close()
-                    flash(f"Description is required in item row {i + 1}.", "danger")
-                    return redirect(url_for("billing.invoice_edit", invoice_id=invoice_id))
 
                 if qty <= 0:
                     conn.close()
@@ -2020,6 +3117,7 @@ def invoice_edit(invoice_id):
                     "description": description,
                     "quantity": qty,
                     "unit_price": rate,
+                    "discount": row_discount,
                     "line_total": line_total
                 })
 
@@ -2069,16 +3167,18 @@ def invoice_edit(invoice_id):
                         description,
                         quantity,
                         unit_price,
+                        discount,
                         line_total,
                         created_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     invoice_id,
                     item["course_id"],
                     item["description"],
                     item["quantity"],
                     item["unit_price"],
+                    item["discount"],
                     item["line_total"],
                     now
                 ))
@@ -2293,13 +3393,28 @@ def invoice_edit(invoice_id):
 
     conn.close()
 
+    # Convert Row objects to dictionaries for JSON serialization in template
+    def row_to_dict(row):
+        if row is None:
+            return None
+        try:
+            return dict(row)
+        except (TypeError, ValueError):
+            return row if isinstance(row, dict) else str(row)
+
+    items_dict = [row_to_dict(item) for item in (items or [])]
+    installments_dict = [row_to_dict(inst) for inst in (installments or [])]
+    courses_dict = [row_to_dict(course) for course in (courses or [])]
+    students_dict = [row_to_dict(student) for student in (students or [])]
+    invoice_dict = row_to_dict(invoice) if invoice else {}
+
     return render_template(
-        "billing/invoice_form.html",
-        invoice=invoice,
-        items=items,
-        installments=installments,
-        courses=courses,
-        students=students,
+        "billing/invoice_form_modern.html",
+        invoice=invoice_dict,
+        items=items_dict,
+        installments=installments_dict,
+        courses=courses_dict,
+        students=students_dict,
         total_paid=total_paid,
         today=datetime.now().date().isoformat(),
         mode="edit"
@@ -2309,6 +3424,7 @@ def invoice_edit(invoice_id):
 @login_required
 def receipts():
     search = request.args.get("search", "").strip()
+    stats_date_str = request.args.get("stats_date", "").strip()
 
     conn = get_conn()
     cur = conn.cursor()
@@ -2317,7 +3433,14 @@ def receipts():
     today = datetime.now().date()
     first_day_of_month = today.replace(day=1)
 
-    # Today's statistics
+    # Use selected date for stats, fall back to today
+    try:
+        from datetime import date as date_type
+        stats_date = date_type.fromisoformat(stats_date_str) if stats_date_str else today
+    except ValueError:
+        stats_date = today
+
+    # Selected date statistics
     cur.execute("""
         SELECT
             COUNT(*) AS total_receipts,
@@ -2329,8 +3452,8 @@ def receipts():
             IFNULL(AVG(amount_received), 0) AS avg_amount
         FROM receipts
         WHERE parse_date(receipt_date) = ?
-    """, [today.isoformat()])
-    today_stats = cur.fetchone()
+    """, [stats_date.isoformat()])
+    date_stats = cur.fetchone()
 
     # This month's statistics
     cur.execute("""
@@ -2396,7 +3519,9 @@ def receipts():
         "billing/receipts.html",
         receipts=all_receipts,
         search=search,
-        today_stats=today_stats,
+        date_stats=date_stats,
+        stats_date=stats_date.isoformat(),
+        today=today.isoformat(),
         month_stats=month_stats
     )
 
@@ -2532,7 +3657,7 @@ def receipt_new():
                 if remaining_payment <= 0:
                     cur.execute("""
                         UPDATE installment_plans
-                        SET status = 'pending', updated_at = ?
+                        SET amount_paid = 0, status = 'pending', updated_at = ?
                         WHERE id = ?
                     """, (now, inst_id))
 
@@ -2590,13 +3715,27 @@ def receipt_new():
         flash("Invoice not found.", "danger")
         return redirect(url_for("billing.invoices"))
 
+    # Prevent payments on written-off invoices
+    if invoice["status"] in ["write_off", "partially_written_off"]:
+        conn.close()
+        flash("Cannot record payments for written-off invoices.", "danger")
+        return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
     cur.execute("""
         SELECT IFNULL(SUM(amount_received), 0) AS total_paid
         FROM receipts
         WHERE invoice_id = ?
     """, (invoice_id,))
     total_paid = float(cur.fetchone()["total_paid"] or 0)
-    balance_amount = float(invoice["total_amount"] or 0) - total_paid
+
+    # Subtract any write-offs from the displayed balance
+    cur.execute("""
+        SELECT COALESCE(SUM(amount_written_off), 0) AS total_written_off
+        FROM bad_debt_writeoffs WHERE invoice_id = ?
+    """, (invoice_id,))
+    written_off_result = cur.fetchone()
+    total_written_off_new = float(written_off_result["total_written_off"] or 0) if written_off_result else 0.0
+    balance_amount = float(invoice["total_amount"] or 0) - total_paid - total_written_off_new
 
     conn.close()
 
@@ -2698,18 +3837,73 @@ def receipt_edit(receipt_id):
             """, (receipt["invoice_id"],))
             total_received = float(cur.fetchone()["total_received"] or 0)
 
-            if total_received >= invoice_total:
-                new_status = "paid"
-            elif total_received > 0:
-                new_status = "partially_paid"
-            else:
-                new_status = "unpaid"
-
+            # Check current invoice status — don't override write-off statuses
             cur.execute("""
-                UPDATE invoices
-                SET status = ?, updated_at = ?
-                WHERE id = ?
-            """, (new_status, now, receipt["invoice_id"]))
+                SELECT status,
+                       (SELECT COALESCE(SUM(bw.amount_written_off), 0)
+                        FROM bad_debt_writeoffs bw WHERE bw.invoice_id = invoices.id) AS total_written_off
+                FROM invoices WHERE id = ?
+            """, (receipt["invoice_id"],))
+            inv_row = cur.fetchone()
+            current_status = inv_row["status"] if inv_row else "unpaid"
+            total_written_off = float(inv_row["total_written_off"] or 0) if inv_row else 0.0
+
+            if current_status not in ("write_off", "partially_written_off"):
+                # Recalculate status including any write-offs
+                if round(total_received + total_written_off, 2) >= round(invoice_total, 2):
+                    new_status = "write_off" if total_received == 0 else "paid"
+                elif total_written_off > 0:
+                    new_status = "partially_written_off"
+                elif total_received >= invoice_total:
+                    new_status = "paid"
+                elif total_received > 0:
+                    new_status = "partially_paid"
+                else:
+                    new_status = "unpaid"
+
+                cur.execute("""
+                    UPDATE invoices
+                    SET status = ?, updated_at = ?
+                    WHERE id = ?
+                """, (new_status, now, receipt["invoice_id"]))
+
+            # Reallocate installment payments based on updated receipt total
+            cur.execute("""
+                SELECT id, installment_no, amount_due
+                FROM installment_plans
+                WHERE invoice_id = ?
+                ORDER BY installment_no ASC
+            """, (receipt["invoice_id"],))
+            installments_to_update = cur.fetchall()
+
+            remaining_payment = total_received
+
+            for inst in installments_to_update:
+                inst_id = inst["id"]
+                inst_due = float(inst["amount_due"] or 0)
+
+                if remaining_payment <= 0:
+                    cur.execute("""
+                        UPDATE installment_plans
+                        SET amount_paid = 0, status = 'pending', updated_at = ?
+                        WHERE id = ?
+                    """, (now, inst_id))
+                elif remaining_payment >= inst_due:
+                    cur.execute("""
+                        UPDATE installment_plans
+                        SET amount_paid = ?, status = 'paid',
+                            remarks = 'Fully paid', updated_at = ?
+                        WHERE id = ?
+                    """, (inst_due, now, inst_id))
+                    remaining_payment -= inst_due
+                else:
+                    cur.execute("""
+                        UPDATE installment_plans
+                        SET amount_paid = ?, status = 'partially_paid',
+                            remarks = ?, updated_at = ?
+                        WHERE id = ?
+                    """, (remaining_payment, f"Partial payment of {remaining_payment}", now, inst_id))
+                    remaining_payment = 0
 
             conn.commit()
             conn.close()
@@ -2780,6 +3974,41 @@ def receipt_view(receipt_id):
 
     return render_template("billing/receipt_view.html", receipt=receipt)
 
+@billing_bp.route("/receipt/<int:receipt_id>/print")
+@login_required
+def receipt_print(receipt_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            receipts.*,
+            invoices.id AS invoice_id,
+            invoices.invoice_no,
+            invoices.total_amount,
+            invoices.invoice_date,
+            students.student_code,
+            students.full_name,
+            students.phone,
+            students.email,
+            users.full_name AS created_by_name
+        FROM receipts
+        JOIN invoices ON receipts.invoice_id = invoices.id
+        JOIN students ON invoices.student_id = students.id
+        LEFT JOIN users ON receipts.created_by = users.id
+        WHERE receipts.id = ?
+    """, (receipt_id,))
+    receipt = cur.fetchone()
+    conn.close()
+
+    if not receipt:
+        flash("Receipt not found.", "danger")
+        return redirect(url_for("billing.receipts"))
+
+    pdf_mode = request.args.get('mode') == 'pdf'
+
+    return render_template("billing/receipt_print.html", receipt=receipt, pdf_mode=pdf_mode)
+
 @billing_bp.route("/receivables")
 @login_required
 def receivables():
@@ -2788,6 +4017,13 @@ def receivables():
 
     today = datetime.now().date().isoformat()
     branch_id = request.args.get("branch_id", "").strip()
+    trainer_id = request.args.get("trainer_id", "").strip()
+    user_id = session.get("user_id")
+    user_role = session.get("role", "staff")
+
+    # Staff users auto-filtered to their own students
+    if not trainer_id and user_role != "admin":
+        trainer_id = str(user_id)
 
     # Branches for filter
     cur.execute("""
@@ -2797,6 +4033,32 @@ def receivables():
         ORDER BY branch_name
     """)
     branches = cur.fetchall()
+
+    # Trainers for filter dropdown (only for admin)
+    available_trainers = []
+    if user_role == "admin":
+        cur.execute("""
+            SELECT DISTINCT u.id, u.full_name
+            FROM users u
+            JOIN batches bt ON bt.trainer_id = u.id
+            WHERE bt.status = 'active'
+            ORDER BY u.full_name ASC
+        """)
+        available_trainers = cur.fetchall()
+
+    # Trainer filter SQL snippet (added to WHERE clause of each query)
+    trainer_filter_sql = ""
+    trainer_filter_param = []
+    if trainer_id:
+        trainer_filter_sql = """
+          AND s.id IN (
+              SELECT DISTINCT sb.student_id
+              FROM student_batches sb
+              JOIN batches bt ON sb.batch_id = bt.id
+              WHERE bt.trainer_id = ? AND sb.status = 'active'
+          )
+        """
+        trainer_filter_param = [trainer_id]
 
     # Past dues
     past_dues_query = """
@@ -2810,11 +4072,22 @@ def receivables():
             i.invoice_no,
             i.id AS invoice_id,
             i.branch_id,
+            s.id AS student_id,
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
+            s.photo_filename,
             b.branch_name,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            (ip.amount_due - ip.amount_paid) AS balance_due,
+            (SELECT GROUP_CONCAT(bt.batch_name, ', ')
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS batch_names,
+            (SELECT GROUP_CONCAT(DISTINCT u.full_name)
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             JOIN users u ON bt.trainer_id = u.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS trainer_names
         FROM installment_plans ip
         JOIN invoices i
             ON ip.invoice_id = i.id
@@ -2825,12 +4098,20 @@ def receivables():
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND (
+            (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
+            + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
+          ) < i.total_amount
     """
     past_dues_params = [today]
 
     if branch_id:
         past_dues_query += " AND i.branch_id = ?"
         past_dues_params.append(branch_id)
+
+    if trainer_filter_sql:
+        past_dues_query += trainer_filter_sql
+        past_dues_params.extend(trainer_filter_param)
 
     past_dues_query += " ORDER BY parse_date(ip.due_date) ASC"
 
@@ -2849,11 +4130,22 @@ def receivables():
             i.invoice_no,
             i.id AS invoice_id,
             i.branch_id,
+            s.id AS student_id,
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
+            s.photo_filename,
             b.branch_name,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            (ip.amount_due - ip.amount_paid) AS balance_due,
+            (SELECT GROUP_CONCAT(bt.batch_name, ', ')
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS batch_names,
+            (SELECT GROUP_CONCAT(DISTINCT u.full_name)
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             JOIN users u ON bt.trainer_id = u.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS trainer_names
         FROM installment_plans ip
         JOIN invoices i
             ON ip.invoice_id = i.id
@@ -2864,12 +4156,20 @@ def receivables():
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND (
+            (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
+            + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
+          ) < i.total_amount
     """
     todays_dues_params = [today]
 
     if branch_id:
         todays_dues_query += " AND i.branch_id = ?"
         todays_dues_params.append(branch_id)
+
+    if trainer_filter_sql:
+        todays_dues_query += trainer_filter_sql
+        todays_dues_params.extend(trainer_filter_param)
 
     todays_dues_query += " ORDER BY s.full_name ASC"
 
@@ -2888,11 +4188,22 @@ def receivables():
             i.invoice_no,
             i.id AS invoice_id,
             i.branch_id,
+            s.id AS student_id,
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
+            s.photo_filename,
             b.branch_name,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            (ip.amount_due - ip.amount_paid) AS balance_due,
+            (SELECT GROUP_CONCAT(bt.batch_name, ', ')
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS batch_names,
+            (SELECT GROUP_CONCAT(DISTINCT u.full_name)
+             FROM student_batches sb
+             JOIN batches bt ON sb.batch_id = bt.id
+             JOIN users u ON bt.trainer_id = u.id
+             WHERE sb.student_id = s.id AND sb.status = 'active') AS trainer_names
         FROM installment_plans ip
         JOIN invoices i
             ON ip.invoice_id = i.id
@@ -2903,12 +4214,20 @@ def receivables():
         WHERE ip.status != 'paid'
           AND parse_date(ip.due_date) > ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND (
+            (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
+            + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
+          ) < i.total_amount
     """
     upcoming_dues_params = [today]
 
     if branch_id:
         upcoming_dues_query += " AND i.branch_id = ?"
         upcoming_dues_params.append(branch_id)
+
+    if trainer_filter_sql:
+        upcoming_dues_query += trainer_filter_sql
+        upcoming_dues_params.extend(trainer_filter_param)
 
     upcoming_dues_query += " ORDER BY parse_date(ip.due_date) ASC LIMIT 50"
 
@@ -2918,6 +4237,19 @@ def receivables():
     total_past_due = sum(float(row["balance_due"] or 0) for row in past_dues)
     total_today_due = sum(float(row["balance_due"] or 0) for row in todays_dues)
     total_upcoming_due = sum(float(row["balance_due"] or 0) for row in upcoming_dues)
+
+    # Reminder stats per installment
+    all_ids = [r['id'] for r in list(past_dues) + list(todays_dues) + list(upcoming_dues)]
+    reminder_stats = {}
+    if all_ids:
+        placeholders = ','.join(['?'] * len(all_ids))
+        cur.execute(f"""
+            SELECT installment_id, COUNT(*) as count, MAX(sent_at) as last_sent_at
+            FROM reminder_logs
+            WHERE installment_id IN ({placeholders})
+            GROUP BY installment_id
+        """, all_ids)
+        reminder_stats = {row['installment_id']: dict(row) for row in cur.fetchall()}
 
     conn.close()
 
@@ -2931,8 +4263,51 @@ def receivables():
         total_upcoming_due=total_upcoming_due,
         today=today,
         branches=branches,
-        branch_id=branch_id
+        branch_id=branch_id,
+        reminder_stats=reminder_stats,
+        available_trainers=available_trainers,
+        trainer_id=trainer_id,
+        user_role=user_role
     )
+
+
+@billing_bp.route("/reminder/log", methods=["POST"])
+@login_required
+def reminder_log():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "No data"}), 400
+
+    installment_id = data.get("installment_id")
+    invoice_id = data.get("invoice_id")
+    student_id = data.get("student_id")
+    phone_number = data.get("phone_number", "")
+    reminder_type = data.get("reminder_type", "")
+    message_text = data.get("message_text", "")
+    status = data.get("status", "sent")
+    sent_via = data.get("sent_via", "manual")
+
+    if not all([installment_id, invoice_id, student_id, reminder_type, message_text]):
+        return jsonify({"success": False, "error": "Missing required fields"}), 400
+
+    conn = get_conn()
+    cur = conn.cursor()
+    now = datetime.now().isoformat(timespec="seconds")
+    user_id = session.get("user_id")
+
+    cur.execute("""
+        INSERT INTO reminder_logs (
+            student_id, invoice_id, installment_id, phone_number,
+            reminder_type, message_text, status, sent_via, sent_by, sent_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (student_id, invoice_id, installment_id, phone_number,
+          reminder_type, message_text, status, sent_via, user_id, now))
+    conn.commit()
+    log_id = cur.lastrowid
+    conn.close()
+
+    return jsonify({"success": True, "log_id": log_id, "sent_at": now})
+
 
 @billing_bp.route("/expenses")
 @login_required

@@ -1,10 +1,10 @@
 {% extends "login_base.html" %}
 
-{% block title %}Login - Global IT ERP{% endblock %}
+{% block title %}Login - {{ company.company_short_name }}{% endblock %}
 
 {% block content %}
 <div class="card shadow-sm p-4 login-card">
-    <h3 class="text-center mb-1">Global IT ERP</h3>
+    <h3 class="text-center mb-1">{{ company.company_short_name }}</h3>
     <p class="text-center text-muted mb-4">Login to your account</p>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -31,5 +31,12 @@
 
         <button type="submit" class="btn btn-primary w-100">Login</button>
     </form>
+    <hr class="my-3">
+    <div class="text-center">
+        <p class="text-muted mb-2" style="font-size: 0.9rem;">Are you a student?</p>
+        <a href="{{ url_for('students.login') }}" class="btn btn-outline-success w-100">
+            🎓 Student Login
+        </a>
+    </div>
 </div>
 {% endblock %}

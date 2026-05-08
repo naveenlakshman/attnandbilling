@@ -1,0 +1,536 @@
+{% extends "website/course_base.html" %}
+
+{% block title %}Basic Computer Skills + AI Productivity — Global IT Education{% endblock %}
+
+{% block head %}
+<style>
+    :root {
+      --primary: #0f172a;
+      --secondary: #1d4ed8;
+      --accent: #22c55e;
+      --soft: #eff6ff;
+      --text: #1e293b;
+      --muted: #64748b;
+      --card: rgba(255,255,255,0.9);
+      --border: rgba(148,163,184,0.25);
+      --shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+      --radius: 24px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .hero {
+      padding: 28px 0 22px;
+    }
+
+    .hero-card {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%);
+      color: white;
+      border-radius: 28px;
+      padding: 26px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-card::after {
+      content: "";
+      position: absolute;
+      width: 240px;
+      height: 240px;
+      right: -80px;
+      top: -60px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 50%;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      padding: 8px 14px;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 5vw, 54px);
+      line-height: 1.05;
+      max-width: 760px;
+    }
+
+    .hero-sub {
+      font-size: clamp(16px, 2vw, 20px);
+      color: rgba(255,255,255,0.9);
+      max-width: 780px;
+      margin: 14px 0 20px;
+    }
+
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .btn {
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 20px;
+      border-radius: 14px;
+      font-weight: 700;
+      font-size: 15px;
+      transition: transform 0.2s ease;
+    }
+
+    .btn:hover { transform: translateY(-2px); }
+
+    .btn-primary {
+      background: white;
+      color: var(--secondary);
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.12);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .stat {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 18px;
+      padding: 16px;
+      backdrop-filter: blur(6px);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 26px;
+      margin-bottom: 4px;
+    }
+
+    .section {
+      padding: 22px 0;
+    }
+
+    .section-title {
+      font-size: clamp(24px, 4vw, 38px);
+      margin: 0 0 8px;
+      color: var(--primary);
+    }
+
+    .section-sub {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .grid-3, .grid-2, .course-grid, .chapters, .reasons, .faq-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    .course-grid { grid-template-columns: 1.2fr 0.8fr; }
+    .chapters { grid-template-columns: repeat(2, 1fr); }
+    .reasons { grid-template-columns: repeat(3, 1fr); }
+    .faq-grid { grid-template-columns: repeat(2, 1fr); }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+    }
+
+    .mini-tag {
+      display: inline-block;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
+    .problem-list, .check-list, .chapter-list, .faq-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .problem-list li, .check-list li, .chapter-list li, .faq-list li {
+      padding-left: 28px;
+      position: relative;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    .problem-list li::before, .check-list li::before, .chapter-list li::before, .faq-list li::before {
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-weight: 700;
+    }
+
+    .problem-list li::before { content: "•"; color: #ef4444; font-size: 26px; line-height: 18px; }
+    .check-list li::before { content: "✓"; color: var(--accent); }
+    .chapter-list li::before { content: "→"; color: var(--secondary); }
+    .faq-list li::before { content: "?"; color: #7c3aed; }
+
+    .highlight-box {
+      background: linear-gradient(135deg, #ecfeff, #eff6ff);
+      border: 1px solid #c7d2fe;
+      border-radius: 20px;
+      padding: 18px;
+    }
+
+    .chapter-card h3,
+    .reason-card h3,
+    .faq-card h3,
+    .card h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 20px;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .offer {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: white;
+      border-radius: 28px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .offer strong {
+      font-size: 34px;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .footer-cta {
+      padding: 8px 0 36px;
+    }
+
+    .footer-box {
+      background: linear-gradient(135deg, #111827 0%, #1e293b 100%);
+      color: white;
+      border-radius: 28px;
+      padding: 26px;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+
+    .footer-box p {
+      color: rgba(255,255,255,0.85);
+      max-width: 720px;
+      margin: 10px auto 18px;
+    }
+
+    .contact-line {
+      font-size: 18px;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    @media (max-width: 900px) {
+      .hero-stats,
+      .grid-3,
+      .grid-2,
+      .course-grid,
+      .chapters,
+      .reasons,
+      .faq-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-card,
+      .card,
+      .offer,
+      .footer-box {
+        border-radius: 22px;
+      }
+    }
+
+    @media (max-width: 540px) {
+      .container { width: min(100% - 20px, 1120px); }
+      .hero-card, .card, .offer, .footer-box { padding: 18px; }
+      .btn { width: 100%; }
+      .stat strong { font-size: 22px; }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <section class="hero">
+    <div class="container">
+      <div class="hero-card">
+        <div class="brand">GLOBAL IT EDUCATION • HOSKOTE</div>
+        <h1>Give Your Child a Strong Start with Computer Skills + AI Learning</h1>
+        <p class="hero-sub">
+          A practical <strong>30-hour beginner course</strong> designed for students who want to learn computer basics,
+          shortcuts, MS Word, Excel, internet, email, and smart usage of <strong>ChatGPT for self-learning</strong>.
+        </p>
+
+        <div class="cta-row">
+          <a class="btn btn-primary" href="tel:9071717161">Call Now: 9071717161</a>
+          <a class="btn btn-secondary" href="https://wa.me/919071717161" target="_blank">WhatsApp for Admission</a>
+        </div>
+
+        <div class="hero-stats">
+          <div class="stat">
+            <strong>30 Hrs</strong>
+            <span>Focused practical training</span>
+          </div>
+          <div class="stat">
+            <strong>20+</strong>
+            <span>Shortcut keys included</span>
+          </div>
+          <div class="stat">
+            <strong>4</strong>
+            <span>Job-use skill areas</span>
+          </div>
+          <div class="stat">
+            <strong>AI</strong>
+            <span>Daily ChatGPT practice</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container grid-2">
+      <div class="card">
+        <div class="mini-tag">Why this course matters</div>
+        <h2 class="section-title" style="font-size: 30px;">Today, basic computer knowledge is not optional</h2>
+        <ul class="problem-list">
+          <li>Many students know smartphones but are not confident using computers.</li>
+          <li>Parents want children to be ready for college, office work, and real life.</li>
+          <li>Students often waste time because they do not know shortcuts, typing, email, or Excel basics.</li>
+          <li>Most learners are curious about AI, but do not know how to use it productively.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="mini-tag">What parents get</div>
+        <h3>Clear outcome after 30 hours</h3>
+        <ul class="check-list">
+          <li>Better confidence in using a computer independently</li>
+          <li>Ability to create documents and simple resumes</li>
+          <li>Basic Excel skills for marks, lists, and small records</li>
+          <li>Email usage with file attachment</li>
+          <li>Understanding of ChatGPT for learning, practice, and doubt clearing</li>
+        </ul>
+        <div class="highlight-box" style="margin-top: 14px;">
+          <strong>This is not just theory.</strong><br />
+          Students learn by doing practical tasks in every class.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">What students will learn</h2>
+      <p class="section-sub">Simple, practical, beginner-friendly topics designed for real use.</p>
+
+      <div class="chapters">
+        <div class="card chapter-card">
+          <div class="mini-tag">Chapter 1</div>
+          <h3>Computer Basics & Shortcut Keys</h3>
+          <ul class="chapter-list">
+            <li>Introduction to computers</li>
+            <li>Keyboard and mouse usage</li>
+            <li>File and folder management</li>
+            <li>20+ useful shortcut keys</li>
+          </ul>
+        </div>
+
+        <div class="card chapter-card">
+          <div class="mini-tag">Chapter 2</div>
+          <h3>MS Word for Real-Life Use</h3>
+          <ul class="chapter-list">
+            <li>Typing and formatting</li>
+            <li>Paragraph alignment and styling</li>
+            <li>Resume creation</li>
+            <li>Letter and application writing</li>
+          </ul>
+        </div>
+
+        <div class="card chapter-card">
+          <div class="mini-tag">Chapter 3</div>
+          <h3>MS Excel Basics</h3>
+          <ul class="chapter-list">
+            <li>Rows, columns, and cells</li>
+            <li>Data entry and formatting</li>
+            <li>Basic formulas like SUM and AVERAGE</li>
+            <li>Simple income and expense sheet</li>
+          </ul>
+        </div>
+
+        <div class="card chapter-card">
+          <div class="mini-tag">Chapter 4</div>
+          <h3>Internet, Email & AI Tools</h3>
+          <ul class="chapter-list">
+            <li>Safe internet browsing</li>
+            <li>Professional email usage</li>
+            <li>Using ChatGPT for self-learning</li>
+            <li>Final practical skill integration</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container course-grid">
+      <div class="card">
+        <div class="mini-tag">Daily value</div>
+        <h2 class="section-title" style="font-size: 30px;">What makes this course special?</h2>
+        <div class="reasons">
+          <div class="reason-card">
+            <h3>Practical Learning</h3>
+            <p class="muted">Every topic includes hands-on practice, not only explanation.</p>
+          </div>
+          <div class="reason-card">
+            <h3>AI in Every Session</h3>
+            <p class="muted">Students learn how to use ChatGPT to ask doubts, improve answers, and practice independently.</p>
+          </div>
+          <div class="reason-card">
+            <h3>Confidence Building</h3>
+            <p class="muted">The course reduces fear and helps beginners become comfortable with computers.</p>
+          </div>
+        </div>
+
+        <div class="pill-row">
+          <span class="pill">Beginner Friendly</span>
+          <span class="pill">Student Focused</span>
+          <span class="pill">Parent Approved</span>
+          <span class="pill">Modern Learning</span>
+        </div>
+      </div>
+
+      <div class="offer">
+        <div class="mini-tag" style="background: rgba(255,255,255,0.18); color: white;">Best for</div>
+        <strong>School Students<br />PUC Students<br />College Freshers</strong>
+        <p>
+          Ideal for students who want a strong foundation before stepping into higher studies, office work, commerce,
+          computer courses, or job-oriented learning.
+        </p>
+        <ul class="check-list" style="margin-top: 16px;">
+          <li>Useful for academic growth</li>
+          <li>Useful for future jobs</li>
+          <li>Useful for self-confidence</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">Frequently asked questions</h2>
+      <p class="section-sub">Helpful during counseling conversations with students and parents.</p>
+
+      <div class="faq-grid">
+        <div class="card faq-card">
+          <h3>Can a beginner join this course?</h3>
+          <ul class="faq-list">
+            <li>Yes. This course is designed for complete beginners.</li>
+          </ul>
+        </div>
+
+        <div class="card faq-card">
+          <h3>Can 30 hours really make a difference?</h3>
+          <ul class="faq-list">
+            <li>Yes. It gives a strong foundation and practical confidence.</li>
+          </ul>
+        </div>
+
+        <div class="card faq-card">
+          <h3>Will students only learn theory?</h3>
+          <ul class="faq-list">
+            <li>No. Every session includes practical usage and guided activities.</li>
+          </ul>
+        </div>
+
+        <div class="card faq-card">
+          <h3>Why include ChatGPT in a basic computer course?</h3>
+          <ul class="faq-list">
+            <li>Because students should learn modern tools that help them self-learn faster.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="footer-cta">
+    <div class="container">
+      <div class="footer-box">
+        <div class="mini-tag" style="background: rgba(255,255,255,0.12); color: white;">Admission Open</div>
+        <h2 class="section-title" style="color: white; margin-bottom: 10px;">Start the journey with a skill that helps for life</h2>
+        <p>
+          Computer knowledge is no longer optional. Give your child the opportunity to build confidence, save time,
+          learn smarter, and step into the future with practical digital skills.
+        </p>
+        <div class="cta-row" style="justify-content: center;">
+          <a class="btn btn-primary" href="tel:9071717161">Call Now</a>
+          <a class="btn btn-secondary" href="https://wa.me/919071717161" target="_blank">Enquire on WhatsApp</a>
+        </div>
+        <div class="contact-line">Global IT Education, Hoskote • 9071717161</div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

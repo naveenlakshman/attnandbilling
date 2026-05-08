@@ -1,34 +1,56 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
-{% block title %}Dashboard - Global IT ERP{% endblock %}
+{% block title %}Dashboard - {{ company.company_short_name }}{% endblock %}
 
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <div class="row">
-        <div class="col-md-12">
-            <h3 class="mb-4">Welcome, {{ session.get('full_name') }}!</h3>
+    <div class="row align-items-center mb-2">
+        <div class="col">
+            <h3 class="mb-0">Welcome, {{ session.get('full_name') }}!</h3>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('core.dashboard') }}"
+               style="display:inline-flex; align-items:center; gap:8px; background:#f0f4ff; border:1px solid #c7d4f5; border-radius:20px; padding:5px 14px; font-size:.82rem; text-decoration:none; color:#374495;">
+                ✨ New Dashboard
+            </a>
         </div>
     </div>
+    <div class="row mb-3"></div>
 
-    {% if session.get('role') == 'admin' %}
     <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card border-primary">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">📤 Quick Export</h5>
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">⚡ Quick Links</h5>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted mb-3">Export all database tables to a single Excel workbook with one click.</p>
-                    <a href="{{ url_for('import_export.export_all_tables') }}" class="btn btn-primary">
-                        <i class="fas fa-download"></i> Export All Tables
-                    </a>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="{{ url_for('leads.lead_create') }}" class="btn btn-outline-success">
+                            ➕ Add Lead
+                        </a>
+                        <a href="{{ url_for('billing.student_new') }}" class="btn btn-outline-primary">
+                            🎓 Add Student
+                        </a>
+                        <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-info">
+                            ✅ Mark Attendance
+                        </a>
+                        <a href="{{ url_for('billing.students') }}" class="btn btn-outline-secondary">
+                            👥 View Students
+                        </a>
+                        <a href="{{ url_for('reports.daily_report') }}" class="btn btn-outline-warning">
+                            📋 Daily Report
+                        </a>
+                        <a href="{{ url_for('billing.receivables') }}" class="btn btn-outline-danger">
+                            💰 Receivables
+                        </a>
+                        
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-    {% endif %}
 
     <!-- Receivables Summary Section -->
     <div class="row g-4 mb-4">
@@ -64,13 +86,14 @@
     <!-- Past Due Details Table -->
     {% if past_dues %}
     <div class="card mb-4">
-        <div class="card-header" style="background-color: #e74c3c; color: white; display: flex; justify-content: space-between; align-items: center;">
+        <div class="card-header" style="background-color: #e74c3c; color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <h5 class="mb-0">Past Due Installments</h5>
             <button type="button" class="btn btn-sm btn-light" onclick="togglePastDuesTable()" style="font-weight: bold;">
                 <span id="pastDuesIcon">▶</span> Show Details
             </button>
         </div>
         <div class="card-body p-0" id="pastDuesBody" style="display: none;">
+            <div class="table-responsive">
             <table class="table table-hover mb-0" id="pastDuesTable">
                 <thead style="background-color: #f8f9fa;">
                     <tr>
@@ -97,6 +120,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 
@@ -121,13 +145,14 @@
     <!-- Today's Due Details Table -->
     {% if todays_dues %}
     <div class="card mb-4">
-        <div class="card-header" style="background-color: #f39c12; color: white; display: flex; justify-content: space-between; align-items: center;">
+        <div class="card-header" style="background-color: #f39c12; color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <h5 class="mb-0">Due Today</h5>
             <button type="button" class="btn btn-sm btn-light" onclick="toggleTodaysDuesTable()" style="font-weight: bold;">
                 <span id="todaysDuesIcon">▶</span> Show Details
             </button>
         </div>
         <div class="card-body p-0" id="todaysDuesBody" style="display: none;">
+            <div class="table-responsive">
             <table class="table table-hover mb-0" id="todaysDuesTable">
                 <thead style="background-color: #f8f9fa;">
                     <tr>
@@ -154,6 +179,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 
@@ -216,6 +242,7 @@
                 <h5 class="mb-0">Past Due Leads - Followup Required</h5>
             </div>
             <div class="card-body p-0">
+                <div class="table-responsive">
                 <table class="table table-hover mb-0">
                     <thead style="background-color: #f8f9fa;">
                         <tr>
@@ -246,6 +273,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
         {% endif %}
@@ -257,6 +285,7 @@
                 <h5 class="mb-0">Due Today - Leads Followup</h5>
             </div>
             <div class="card-body p-0">
+                <div class="table-responsive">
                 <table class="table table-hover mb-0">
                     <thead style="background-color: #f8f9fa;">
                         <tr>
@@ -287,6 +316,7 @@
                         {% endfor %}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
         {% endif %}

@@ -1,0 +1,1318 @@
+﻿{% extends "billing/base.html" %}
+
+{% block title %}
+  {% if mode == "edit" %}Edit Invoice{% else %}Create Invoice{% endif %} - {{ company.company_short_name }}
+{% endblock %}
+
+{% block content %}
+
+<style>
+  :root {
+    --primary-color: #2c3e50;
+    --accent-color: #3498db;
+    --success-color: #27ae60;
+    --danger-color: #e74c3c;
+    --warning-color: #f39c12;
+    --light-bg: #ecf0f1;
+    --border-color: #bdc3c7;
+  }
+
+  * {
+    --bs-border-radius: 8px;
+  }
+
+  .invoice-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 15px 20px;
+  }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+
+  .page-header h1 {
+    margin: 0;
+    color: var(--primary-color);
+    font-weight: 700;
+    font-size: 28px;
+  }
+
+  .form-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* Card Styling */
+  .modern-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #e0e6ed;
+    padding: 18px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    transition: box-shadow 0.3s ease;
+  }
+
+  .modern-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin: 0 0 14px 0;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--light-bg);
+  }
+
+  /* Header Section */
+  .invoice-header-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  .form-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .form-field label {
+    font-weight: 600;
+    font-size: 12px;
+    color: #555;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .form-field input,
+  .form-field select {
+    padding: 11px 13px;
+    border: 1.5px solid #e0e6ed;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    background: white;
+    transition: all 0.3s ease;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .form-field input:focus,
+  .form-field select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+
+  /* Installment Type Tabs */
+  .installment-type-tabs {
+    display: flex;
+    gap: 0;
+    margin: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--light-bg);
+    padding: 4px;
+    width: 100%;
+  }
+
+  .installment-type-tabs label {
+    flex: 1;
+    padding: 11px 14px;
+    cursor: pointer;
+    font-weight: 600;
+    text-align: center;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    color: #666;
+    margin: 0;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .installment-type-tabs input[type="radio"] {
+    display: none;
+  }
+
+  .installment-type-tabs input[type="radio"]:checked + label {
+    background: white;
+    color: var(--accent-color);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  }
+
+  /* Items Management */
+  .items-container {
+    margin-bottom: 25px;
+  }
+
+  .items-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .items-header h3 {
+    margin: 0;
+    color: var(--primary-color);
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .add-item-btn {
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .add-item-btn:hover {
+    background: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+  }
+
+  /* Item Row */
+  .item-row {
+    background: #f9fafb;
+    border: 1.5px solid #e9ecef;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+    display: grid;
+    grid-template-columns: 2.5fr 0.9fr 1.1fr 1.1fr 1fr auto;
+    gap: 10px;
+    align-items: start;
+    transition: all 0.3s ease;
+  }
+
+  .item-row:hover {
+    background: white;
+    border-color: var(--accent-color);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.08);
+  }
+
+  .item-row.header {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #34495e 100%);
+    color: white;
+    padding: 14px 16px;
+    margin-bottom: 0;
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    grid-template-columns: 2.5fr 0.9fr 1.1fr 1.1fr 1fr auto;
+  }
+
+  .item-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .item-field-group label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+  }
+
+  .item-field-group .course-select,
+  .item-field-group input {
+    padding: 9px 11px;
+    border: 1.5px solid #e0e6ed;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    background: white;
+    transition: all 0.3s ease;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .item-field-group input:focus,
+  .item-field-group .course-select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+  }
+
+  /* TomSelect styling for course dropdowns */
+  .item-field-group .ts-control {
+    border: 1.5px solid #e0e6ed;
+    border-radius: 6px;
+    padding: 9px 11px;
+    min-height: auto;
+    background: white;
+  }
+
+  .item-field-group .ts-control.focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+  }
+
+  .item-field-group .ts-dropdown {
+    border: 1.5px solid #e0e6ed;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .item-field-group .ts-dropdown-content .option {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .item-field-group .ts-dropdown-content .option.selected {
+    background-color: var(--accent-color);
+    color: white;
+  }
+
+  .course-info {
+    font-size: 11px;
+    color: #999;
+    margin-top: 4px;
+  }
+
+  .item-delete-btn {
+    background: var(--danger-color);
+    color: white;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    align-self: center;
+  }
+
+  .item-delete-btn:hover {
+    background: #c0392b;
+    transform: scale(1.05);
+  }
+
+  /* Course Quick Select */
+  .course-quick-select {
+    margin-bottom: 15px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 8px;
+    border: 1.5px solid #d0d8e8;
+  }
+
+  .quick-courses-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .quick-course-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .course-chip {
+    background: white;
+    border: 1.5px solid #3498db;
+    color: #3498db;
+    padding: 7px 13px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .course-chip:hover {
+    background: #3498db;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+  }
+
+  /* Notes Section */
+  .notes-section textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1.5px solid #e0e6ed;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 90px;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+  }
+
+  .notes-section textarea:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+  }
+
+  /* Installment Plan Section */
+  .installment-section {
+    display: none;
+  }
+
+  .installment-section.active {
+    display: block;
+  }
+
+  .installment-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .installment-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.5fr auto;
+    gap: 10px;
+    align-items: end;
+    background: #f9fafb;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px solid #e9ecef;
+  }
+
+  .installment-row input {
+    padding: 10px 12px;
+    border: 1.5px solid #e0e6ed;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .installment-row input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+  }
+
+  .installment-no-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+  }
+
+  .quick-split-group {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    margin-bottom: 12px;
+  }
+
+  .quick-split-group select {
+    padding: 10px 12px;
+    border: 1.5px solid #e0e6ed;
+    border-radius: 6px;
+    font-size: 13px;
+    flex: 1;
+    background: white;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .quick-split-group select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+  }
+
+  .split-btn {
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 12px;
+    transition: all 0.3s ease;
+  }
+
+  .split-btn:hover {
+    background: #2980b9;
+  }
+
+  /* Installment Count Control */
+  .installment-count-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .installment-count-control label {
+    font-weight: 600;
+    font-size: 13px;
+    color: #555;
+    white-space: nowrap;
+  }
+
+  .installment-count-control input {
+    width: 70px;
+    padding: 10px 12px;
+    border: 1.5px solid #e0e6ed;
+    border-radius: 6px;
+    font-size: 13px;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  .installment-count-control input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+  }
+
+  /* Sticky Summary */
+  .summary-sticky {
+    position: sticky;
+    top: 80px;
+    background: white;
+    border-radius: 12px;
+    border: 2px solid #e0e6ed;
+    padding: 18px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  }
+
+  .summary-sticky h3 {
+    margin: 0 0 15px 0;
+    color: var(--primary-color);
+    font-size: 14px;
+    font-weight: 700;
+    border-bottom: 2px solid var(--light-bg);
+    padding-bottom: 10px;
+  }
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    font-size: 13px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .summary-row:last-of-type {
+    border-bottom: none;
+  }
+
+  .summary-row.total {
+    background: linear-gradient(135deg, var(--accent-color) 0%, #2980b9 100%);
+    color: white;
+    padding: 14px 12px;
+    margin: 12px -12px -12px -12px;
+    border-radius: 0 0 12px 12px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .summary-label {
+    color: #666;
+    font-weight: 500;
+  }
+
+  .summary-value {
+    font-weight: 700;
+    color: var(--primary-color);
+    font-size: 14px;
+  }
+
+  .summary-row.total .summary-value {
+    color: white;
+    font-size: 18px;
+  }
+
+  .installment-status {
+    padding: 12px;
+    background: #f0f0f0;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 13px;
+    margin-top: 15px;
+  }
+
+  .installment-status.balanced {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+  }
+
+  .installment-status.unbalanced {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+  }
+
+  .submit-btn {
+    width: 100%;
+    padding: 13px;
+    background: linear-gradient(135deg, var(--success-color) 0%, #229954 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 18px;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
+  }
+
+  .submit-btn:active {
+    transform: translateY(0);
+  }
+
+  /* Responsive */
+  @media (max-width: 1200px) {
+    .form-wrapper {
+      grid-template-columns: 1fr;
+    }
+
+    .summary-sticky {
+      position: static;
+    }
+
+    .invoice-header-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .item-row {
+      grid-template-columns: 1.5fr 1fr 1fr 1fr;
+      gap: 10px;
+    }
+  }
+
+  @media (max-width: 992px) {
+    .invoice-header-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .item-row {
+      grid-template-columns: 1fr;
+    }
+
+    .item-row.header {
+      display: none;
+    }
+
+    .installment-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .installment-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .page-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .form-wrapper {
+      grid-template-columns: 1fr;
+    }
+
+    .invoice-header-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .item-row {
+      grid-template-columns: 1fr;
+      padding: 12px;
+    }
+
+    .installment-type-tabs label {
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+
+    .quick-course-chips {
+      gap: 6px;
+    }
+
+    .course-chip {
+      padding: 6px 12px;
+      font-size: 11px;
+    }
+
+    .submit-btn {
+      padding: 12px;
+      font-size: 13px;
+    }
+  }
+</style>
+
+<div class="invoice-container">
+  <!-- Page Header -->
+  <div class="page-header">
+    <h1>{% if mode == "edit" %}Edit Invoice{% else %}New Invoice{% endif %}</h1>
+    <a href="{{ url_for('billing.invoices') }}" class="btn btn-outline-secondary">
+      ← Back to Invoices
+    </a>
+  </div>
+
+  <!-- Main Form -->
+  <form method="post" id="invoiceForm" class="form-wrapper">
+
+    <!-- Left Column -->
+    <div>
+
+      <!-- Header Information -->
+      <div class="modern-card">
+        <div class="card-title">Invoice Details</div>
+
+        <div class="invoice-header-grid">
+          <div class="form-field">
+            <label>Student *</label>
+            <select name="student_id" id="student_id" required>
+              <option value="">-- Select Student --</option>
+              {% for s in students %}
+              <option value="{{ s.id }}" {% if (mode == 'edit' and invoice.student_id == s.id) or (mode == 'create' and prefill_student_id and prefill_student_id == s.id) %}selected{% endif %}>
+                {{ s.student_code }} - {{ s.full_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label>Invoice Date *</label>
+            <input type="date" name="invoice_date"
+                   value="{% if mode == 'edit' %}{{ invoice.invoice_date }}{% else %}{{ today }}{% endif %}" required>
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 20px;">
+          <label>Payment Type *</label>
+          <div class="installment-type-tabs" style="margin-top: 8px;">
+            <input type="radio" id="type_full" name="installment_type" value="full"
+                   {% if mode != "edit" or invoice.installment_type == "full" %}checked{% endif %}
+                   onchange="toggleInstallmentType()">
+            <label for="type_full">Full Payment</label>
+
+            <input type="radio" id="type_custom" name="installment_type" value="custom"
+                   {% if mode == "edit" and invoice.installment_type == "custom" %}checked{% endif %}
+                   onchange="toggleInstallmentType()">
+            <label for="type_custom">Installments</label>
+          </div>
+        </div>
+
+        <div class="invoice-header-grid" id="full_due_date_field">
+          <div class="form-field">
+            <label>Full Payment Due Date *</label>
+            <input type="date" name="full_due_date" id="full_due_date"
+                   value="{% if installments and installments[0] %}{{ installments[0].due_date }}{% else %}{{ today }}{% endif %}">
+          </div>
+          <div></div>
+        </div>
+      </div>
+
+      <!-- Course Quick Selection -->
+      <div class="course-quick-select">
+        <div class="quick-courses-label">📚 Quick Add Courses</div>
+        <div class="quick-course-chips">
+          {% set popular_courses = courses[:5] %}
+          {% for course in popular_courses %}
+          <button type="button" class="course-chip" onclick="quickAddCourse({{ course.id }}, '{{ course.course_name }}', {{ course.fee }})">
+            {{ course.course_name }}
+          </button>
+          {% endfor %}
+          {% if courses|length > 5 %}
+          <button type="button" class="course-chip" onclick="alert('Use the course dropdown in items to select more courses')" style="opacity: 0.6;">
+            +{{ courses|length - 5 }} more...
+          </button>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Items Section -->
+      <div class="modern-card">
+        <div class="items-header">
+          <h3>📋 Bill Items</h3>
+          <button type="button" class="add-item-btn" onclick="addItemRow()">
+            ➕ Add Item
+          </button>
+        </div>
+
+        <div id="itemsContainer">
+          <!-- Items will be populated here -->
+          {% if mode == "edit" and items %}
+            {% for item in items %}
+            <!-- Existing item loaded via script -->
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Notes Section -->
+      <div class="modern-card">
+        <div class="card-title">Additional Notes</div>
+        <div class="notes-section">
+          <textarea name="notes" placeholder="Add any additional notes or remarks for this invoice...">{% if mode == "edit" and invoice %}{{ invoice.notes or '' }}{% endif %}</textarea>
+        </div>
+      </div>
+
+      <!-- Installment Plan Section -->
+      <div class="modern-card installment-section" id="installment_section">
+        <div class="card-title">💳 Installment Plan</div>
+
+        <div class="quick-split-group">
+          <select id="quick_split" onchange="applyQuickSplit()" class="form-control">
+            <option value="">Quick Split Options</option>
+            <option value="2">Split into 2 Payments</option>
+            <option value="3">Split into 3 Payments</option>
+            <option value="4">Split into 4 Payments</option>
+            <option value="6">Split into 6 Payments</option>
+          </select>
+        </div>
+
+        <div class="installment-count-control">
+          <label for="installment_count">Number of Installments:</label>
+          <input type="number" id="installment_count" name="installment_count" min="1" max="6" value="2"
+                 oninput="renderInstallmentRows()">
+        </div>
+
+        <div id="installmentContainer"></div>
+      </div>
+
+    </div>
+
+    <!-- Right Column - Summary -->
+    <div class="summary-sticky">
+      <h3>💰 Invoice Summary</h3>
+
+      <div class="summary-row">
+        <span class="summary-label">Subtotal</span>
+        <span class="summary-value">₹ <span id="summary_subtotal">0.00</span></span>
+      </div>
+
+      <div class="summary-row">
+        <span class="summary-label">Total Discount</span>
+        <span class="summary-value" style="color: var(--danger-color);">-₹ <span id="summary_discount">0.00</span></span>
+      </div>
+
+      <div class="summary-row total">
+        <span>NET TOTAL</span>
+        <span>₹ <span id="summary_total">0.00</span></span>
+      </div>
+
+      <div class="summary-row" style="margin-top: 20px;">
+        <span class="summary-label">Installment Total</span>
+        <span class="summary-value">₹ <span id="installment_total">0.00</span></span>
+      </div>
+
+      <div class="summary-row">
+        <span class="summary-label">Difference</span>
+        <span class="summary-value" id="difference_label">₹ <span id="difference_total">0.00</span></span>
+      </div>
+
+      <div id="balance_status_container" style="margin-top: 15px;"></div>
+
+      <button type="submit" class="submit-btn">
+        {% if mode == "edit" %}✓ Save Changes{% else %}✓ Create Invoice{% endif %}
+      </button>
+    </div>
+
+  </form>
+</div>
+
+<script>
+  // Data for edit mode
+  const editModeData = {
+    items: {% if mode == "edit" and items %}{{ items|tojson }}{% else %}[]{% endif %},
+    installments: {% if mode == "edit" and installments %}{{ installments|tojson }}{% else %}[]{% endif %}
+  };
+
+  // Initialize TomSelect for student dropdown
+  function initStudentSelect() {
+    if (!document.getElementById("student_id").tomselect) {
+      const ts = new TomSelect("#student_id", {
+        create: false,
+        placeholder: "Search student by name or code",
+        searchField: ["text"],
+        onChange: function() {
+          calculateInvoiceTotals();
+        }
+      });
+      {% if mode == 'create' and prefill_student_id %}
+      ts.setValue("{{ prefill_student_id }}");
+      {% endif %}
+    }
+  }
+
+  // Initialize TomSelect for course dropdown in a specific row
+  function initCourseSelect(selectElement) {
+    // Check if already initialized
+    if (selectElement.tomselect) {
+      selectElement.tomselect.destroy();
+    }
+    
+    new TomSelect(selectElement, {
+      create: false,
+      placeholder: "Search or select course",
+      searchField: ["text"],
+      maxOptions: 50,
+      onChange: function() {
+        handleCourseSelect(selectElement);
+      }
+    });
+  }
+
+  // Quick add course
+  function quickAddCourse(courseId, courseName, courseFee) {
+    const container = document.getElementById("itemsContainer");
+    const newRow = createItemRow();
+    
+    const select = newRow.querySelector('.course-select');
+    select.value = courseId;
+    
+    const rateInput = newRow.querySelector('input[name="item_rate[]"]');
+    rateInput.value = courseFee.toFixed(2);
+    
+    const qtyInput = newRow.querySelector('input[name="item_qty[]"]');
+    qtyInput.value = 1;
+    
+    container.appendChild(newRow);
+    
+    // Initialize TomSelect for the course dropdown in the new row
+    const courseSelect = newRow.querySelector('.course-select');
+    if (courseSelect) {
+      setTimeout(() => initCourseSelect(courseSelect), 100);
+    }
+    
+    calculateInvoiceTotals();
+  }
+
+  // Create a new item row
+  function createItemRow(item = null) {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    
+    const courseSelectOptions = `
+      <option value="">💬 Custom Item</option>
+      {% for c in courses %}
+      <option value="{{ c.id }}" data-name="{{ c.course_name }}" data-fee="{{ c.fee }}">
+        {{ c.course_name }} - ₹ {{ c.fee }}
+      </option>
+      {% endfor %}
+    `;
+
+    const discount = item ? (item.quantity * item.unit_price - (item.line_total || 0)) : 0;
+
+    row.innerHTML = `
+      <div class="item-field-group">
+        <label>Course</label>
+        <select name="item_course_id[]" class="course-select" data-course-name="${item?.course_name || ''}" onchange="handleCourseSelect(this)">
+          ${courseSelectOptions}
+        </select>
+        ${item?.course_name ? `<div style="font-size: 12px; color: #666; margin-top: 4px;">📌 ${item.course_name}</div>` : ''}
+        <input type="hidden" name="item_course_name[]" value="${item?.course_name || ''}">
+      </div>
+
+      <div class="item-field-group">
+        <label>Qty</label>
+        <input type="number" name="item_qty[]" class="item-qty" min="1" step="1" 
+               value="${item?.quantity || 1}" oninput="calculateInvoiceTotals()">
+      </div>
+
+      <div class="item-field-group">
+        <label>Rate</label>
+        <input type="number" name="item_rate[]" class="item-rate" min="0" step="0.01"
+               value="${item ? item.unit_price.toFixed(2) : 0}" oninput="calculateInvoiceTotals()">
+      </div>
+
+      <div class="item-field-group">
+        <label>Discount</label>
+        <input type="number" name="item_discount[]" class="item-discount" min="0" step="0.01"
+               value="${discount.toFixed(2)}" oninput="calculateInvoiceTotals()">
+      </div>
+
+      <div class="item-field-group">
+        <label>Amount</label>
+        <input type="number" name="item_amount[]" class="item-amount" readonly
+               value="${item ? item.line_total.toFixed(2) : 0}">
+      </div>
+
+      <button type="button" class="item-delete-btn" onclick="this.closest('.item-row').remove(); calculateInvoiceTotals();">
+        ✕
+      </button>
+    `;
+
+    // Initialize TomSelect and set course selection if item has course_id
+    const courseSelectElement = row.querySelector('.course-select');
+    if (courseSelectElement) {
+      setTimeout(() => {
+        initCourseSelect(courseSelectElement);
+        if (item && item.course_id) {
+          courseSelectElement.value = item.course_id;
+          if (courseSelectElement.tomselect) {
+            courseSelectElement.tomselect.sync();
+          }
+        }
+      }, 100);
+    }
+
+    return row;
+  }
+
+  // Add item row
+  function addItemRow() {
+    const container = document.getElementById("itemsContainer");
+    const newRow = createItemRow();
+    container.appendChild(newRow);
+  }
+
+  // Handle course selection
+  function handleCourseSelect(selectEl) {
+    const row = selectEl.closest('.item-row');
+    const selected = selectEl.options[selectEl.selectedIndex];
+    const rateInput = row.querySelector('input[name="item_rate[]"]');
+    const qtyInput = row.querySelector('input[name="item_qty[]"]');
+    const courseNameInput = row.querySelector('input[name="item_course_name[]"]');
+
+    const courseName = selected.getAttribute('data-name') || selected.textContent;
+    const courseFee = parseFloat(selected.getAttribute('data-fee')) || 0;
+
+    // Update course name hidden field
+    if (courseNameInput) {
+      courseNameInput.value = courseName;
+    }
+
+    // Update course name display
+    const courseNameDisplay = row.querySelector('[style*="color: #666"]');
+    if (courseNameDisplay && selected.value) {
+      courseNameDisplay.textContent = '📌 ' + courseName;
+    }
+
+    if (courseFee > 0) {
+      rateInput.value = courseFee.toFixed(2);
+    }
+    if (!qtyInput.value || parseFloat(qtyInput.value) <= 0) {
+      qtyInput.value = 1;
+    }
+
+    calculateInvoiceTotals();
+  }
+
+  // Calculate totals
+  function calculateInvoiceTotals() {
+    const rows = document.querySelectorAll('.item-row');
+    let subtotal = 0;
+    let totalDiscount = 0;
+    let netTotal = 0;
+
+    rows.forEach(row => {
+      const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+      const rate = parseFloat(row.querySelector('.item-rate').value) || 0;
+      let discount = parseFloat(row.querySelector('.item-discount').value) || 0;
+
+      const gross = qty * rate;
+      if (discount > gross) discount = gross;
+      const amount = gross - discount;
+
+      subtotal += gross;
+      totalDiscount += discount;
+      netTotal += amount;
+
+      row.querySelector('.item-amount').value = amount.toFixed(2);
+    });
+
+    document.getElementById('summary_subtotal').innerText = subtotal.toFixed(2);
+    document.getElementById('summary_discount').innerText = totalDiscount.toFixed(2);
+    document.getElementById('summary_total').innerText = netTotal.toFixed(2);
+
+    updateInstallmentSummary();
+  }
+
+  // Toggle installment type
+  function toggleInstallmentType() {
+    const type = document.querySelector('input[name="installment_type"]:checked').value;
+    const installmentSection = document.getElementById('installment_section');
+    const fullDueDateField = document.getElementById('full_due_date_field');
+
+    if (type === 'full') {
+      installmentSection.classList.remove('active');
+      fullDueDateField.style.display = 'grid';
+    } else {
+      installmentSection.classList.add('active');
+      fullDueDateField.style.display = 'none';
+      if (document.getElementById('installmentContainer').children.length === 0) {
+        renderInstallmentRows();
+      }
+    }
+
+    updateInstallmentSummary();
+  }
+
+  // Render installment rows
+  function renderInstallmentRows() {
+    const container = document.getElementById('installmentContainer');
+    const count = parseInt(document.getElementById('installment_count').value) || 1;
+    const invoiceDate = document.querySelector('input[name="invoice_date"]').value || "{{ today }}";
+
+    container.innerHTML = '';
+
+    for (let i = 1; i <= count; i++) {
+      const row = document.createElement('div');
+      row.className = 'installment-row';
+      row.innerHTML = `
+        <div>
+          <div style="font-size: 11px; color: #888; margin-bottom: 4px;">Installment #${i}</div>
+          <input type="date" name="due_date_${i}" value="${invoiceDate}">
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #888; margin-bottom: 4px;">Amount</div>
+          <input type="number" step="0.01" name="amount_due_${i}" class="installment-amount" value="0" oninput="updateInstallmentSummary()">
+        </div>
+        <div>
+          <div style="font-size: 11px; color: #888; margin-bottom: 4px;">Remarks</div>
+          <input type="text" name="remarks_${i}" placeholder="Optional notes">
+        </div>
+        <button type="button" class="item-delete-btn" onclick="this.closest('.installment-row').remove(); document.getElementById('installment_count').value = document.querySelectorAll('.installment-row').length; updateInstallmentSummary();">
+          ✕
+        </button>
+      `;
+      container.appendChild(row);
+    }
+
+    updateInstallmentSummary();
+  }
+
+  // Apply quick split with 30-day intervals between installments
+  function applyQuickSplit() {
+    const split = parseInt(document.getElementById('quick_split').value) || 0;
+    const finalTotalText = document.getElementById('summary_total')?.innerText || '0';
+    const finalTotal = parseFloat(finalTotalText) || 0;
+
+    if (!split) return;
+
+    // Set installment count
+    document.getElementById('installment_count').value = split;
+    renderInstallmentRows();
+
+    // Small delay to ensure DOM updates before we query the rows
+    setTimeout(() => {
+      const rows = document.querySelectorAll('.installment-row');
+      
+      if (rows.length === 0) return;
+
+      // Get base date - use invoice date from form
+      const invoiceDate = document.querySelector('input[name="invoice_date"]').value;
+      const baseDate = new Date(invoiceDate + 'T00:00:00');
+
+      // Calculate base amount only if we have a valid total
+      const baseAmount = finalTotal > 0 ? Math.floor((finalTotal / split) * 100) / 100 : 0;
+      let runningTotal = 0;
+
+      rows.forEach((row, index) => {
+        const amountInput = row.querySelector('.installment-amount');
+        const dateInput = row.querySelector('input[type="date"]');
+        
+        // Calculate due date with 30-day intervals
+        if (dateInput) {
+          const dueDate = new Date(baseDate);
+          dueDate.setDate(dueDate.getDate() + (index * 30));
+          // Format date locally (YYYY-MM-DD) without timezone conversion
+          const year = dueDate.getFullYear();
+          const month = String(dueDate.getMonth() + 1).padStart(2, '0');
+          const day = String(dueDate.getDate()).padStart(2, '0');
+          const dateString = `${year}-${month}-${day}`;
+          dateInput.value = dateString;
+        }
+        
+        // Calculate amounts
+        if (finalTotal > 0) {
+          if (index < split - 1) {
+            amountInput.value = baseAmount.toFixed(2);
+            runningTotal += baseAmount;
+          } else {
+            amountInput.value = (finalTotal - runningTotal).toFixed(2);
+          }
+        } else {
+          // If no total yet, leave as empty or 0 for user to fill manually
+          amountInput.value = '';
+        }
+      });
+
+      document.getElementById('quick_split').value = '';
+      updateInstallmentSummary();
+    }, 50);
+  }
+
+  // Update installment summary
+  function updateInstallmentSummary() {
+    const type = document.querySelector('input[name="installment_type"]:checked').value;
+    const finalTotal = parseFloat(document.getElementById('summary_total').innerText) || 0;
+
+    let installmentTotal = 0;
+
+    if (type === 'full') {
+      installmentTotal = finalTotal;
+    } else {
+      document.querySelectorAll('.installment-amount').forEach(input => {
+        installmentTotal += parseFloat(input.value) || 0;
+      });
+    }
+
+    const difference = finalTotal - installmentTotal;
+
+    document.getElementById('installment_total').innerText = installmentTotal.toFixed(2);
+    document.getElementById('difference_total').innerText = Math.abs(difference).toFixed(2);
+
+    const statusContainer = document.getElementById('balance_status_container');
+    if (Math.abs(difference) < 0.01) {
+      statusContainer.innerHTML = '<div class="installment-status balanced">✓ Installment plan is balanced</div>';
+    } else if (type === 'full') {
+      statusContainer.innerHTML = '';
+    } else {
+      statusContainer.innerHTML = `<div class="installment-status unbalanced">⚠ Difference: ₹ ${Math.abs(difference).toFixed(2)}</div>`;
+    }
+  }
+
+  // Form submission
+  document.getElementById('invoiceForm').addEventListener('submit', function(e) {
+    const rows = document.querySelectorAll('.item-row');
+    let validItems = 0;
+    let totalAmount = 0;
+
+    // Count only rows with a course selected and check amounts
+    rows.forEach(row => {
+      const courseSelect = row.querySelector('.course-select');
+      const amountInput = row.querySelector('.item-amount');
+      
+      if (courseSelect && courseSelect.value) {
+        validItems++;
+        const amount = parseFloat(amountInput.value) || 0;
+        totalAmount += amount;
+      }
+    });
+
+    if (validItems === 0 || totalAmount <= 0) {
+      e.preventDefault();
+      alert('❌ Please add at least one valid bill item with an amount greater than 0.');
+      return;
+    }
+
+    const type = document.querySelector('input[name="installment_type"]:checked').value;
+    if (type === 'custom') {
+      const installmentTotal = parseFloat(document.getElementById('installment_total').innerText) || 0;
+      if (Math.abs(totalAmount - installmentTotal) >= 0.01) {
+        e.preventDefault();
+        alert('⚠ Installment total must match the net invoice total. Adjust installment amounts.');
+        return;
+      }
+    }
+  });
+
+  // Initialize on page load
+  window.addEventListener('load', function() {
+    initStudentSelect();
+    
+    // Load existing items in edit mode
+    if (editModeData.items && editModeData.items.length > 0) {
+      const container = document.getElementById('itemsContainer');
+      editModeData.items.forEach(item => {
+        const row = createItemRow(item);
+        container.appendChild(row);
+        // Initialize course select after adding row
+        const courseSelect = row.querySelector('.course-select');
+        if (courseSelect) {
+          setTimeout(() => initCourseSelect(courseSelect), 150);
+        }
+      });
+    } else if (document.getElementById('itemsContainer').children.length === 0) {
+      addItemRow();
+    }
+
+    // Load existing installments in edit mode
+    if (editModeData.installments && editModeData.installments.length > 0) {
+      const type = document.querySelector('input[name="installment_type"]:checked').value;
+      if (type === 'custom') {
+        document.getElementById('installment_count').value = editModeData.installments.length;
+        const container = document.getElementById('installmentContainer');
+        container.innerHTML = '';
+        
+        editModeData.installments.forEach(inst => {
+          const row = document.createElement('div');
+          row.className = 'installment-row';
+          row.innerHTML = `
+            <div>
+              <div style="font-size: 11px; color: #888; margin-bottom: 4px;">Installment #${inst.installment_no}</div>
+              <input type="date" name="due_date_${inst.installment_no}" value="${inst.due_date}">
+            </div>
+            <div>
+              <div style="font-size: 11px; color: #888; margin-bottom: 4px;">Amount</div>
+              <input type="number" step="0.01" name="amount_due_${inst.installment_no}" class="installment-amount" value="${inst.amount_due.toFixed(2)}" oninput="updateInstallmentSummary()">
+            </div>
+            <div>
+              <div style="font-size: 11px; color: #888; margin-bottom: 4px;">Remarks</div>
+              <input type="text" name="remarks_${inst.installment_no}" placeholder="Optional notes" value="${inst.remarks || ''}">
+            </div>
+            <button type="button" class="item-delete-btn" onclick="this.closest('.installment-row').remove(); document.getElementById('installment_count').value = document.querySelectorAll('.installment-row').length; updateInstallmentSummary();">
+              ✕
+            </button>
+          `;
+          container.appendChild(row);
+        });
+      }
+    }
+
+    toggleInstallmentType();
+    calculateInvoiceTotals();
+  });
+</script>
+
+{% endblock %}

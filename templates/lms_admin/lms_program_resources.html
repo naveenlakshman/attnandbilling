@@ -388,9 +388,11 @@
 <div class="page-header">
     <h1 class="page-title">📚 Program Resources</h1>
     <div class="header-actions">
+        {% if session.get('role') == 'admin' %}
         <a href="{{ url_for('lms_admin.add_program_resource', program_id=data.program.id) }}" class="btn-add">
             + Add Resource
         </a>
+        {% endif %}
         <a href="{{ url_for('lms_admin.program_view', program_id=data.program.id) }}" class="btn-add" style="background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);">
             ← Back to Program
         </a>
@@ -459,14 +461,17 @@
                             <!-- Actions -->
                             <td>
                                 <div class="action-buttons">
+                                    {% if session.get('role') == 'admin' %}
                                     <a href="{{ url_for('lms_admin.edit_program_resource', resource_id=resource.id) }}" 
                                        class="btn-sm btn-edit">✏️ Edit</a>
                                     <form method="POST" 
                                           action="{{ url_for('lms_admin.delete_program_resource', resource_id=resource.id) }}" 
                                           style="display: inline;"
                                           onsubmit="return confirm('Delete this resource?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn-sm btn-delete">🗑️ Delete</button>
                                     </form>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -481,10 +486,12 @@
                 <div class="empty-text">
                     Add program-level resources like eBooks, workbooks, presentations, or reference materials for your entire course.
                 </div>
+                {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('lms_admin.add_program_resource', program_id=data.program.id) }}" 
                    class="btn-primary">
                     + Add Your First Resource
                 </a>
+                {% endif %}
             </div>
         {% endif %}
     </div>
@@ -512,10 +519,12 @@
                 <p style="margin-bottom: 0.75rem;">
                     Share program-level materials with all students.
                 </p>
+                {% if session.get('role') == 'admin' %}
                 <a href="{{ url_for('lms_admin.add_program_resource', program_id=data.program.id) }}" 
                    class="btn-primary" style="width: 100%; text-align: center; display: block; text-decoration: none;">
                     + Add Resource
                 </a>
+                {% endif %}
             </div>
         </div>
         
