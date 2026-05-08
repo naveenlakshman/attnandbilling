@@ -1,72 +1,95 @@
 {% extends "leads/base.html" %}
 {% block title %}Pipeline{% endblock %}
+
+{% block extra_css %}
+<style>
+  .kanban-wrap {
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+  .kanban-board {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(280px, 1fr));
+    gap: 14px;
+    min-width: 1980px;
+  }
+  .stage-column {
+    background: #f8fafc;
+    border: 1px solid #dbe4ef;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    max-height: 78vh;
+  }
+  .stage-header {
+    padding: 10px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 700;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .stage-body {
+    padding: 10px;
+    overflow-y: auto;
+  }
+  .lead-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #94a3b8;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, .07);
+  }
+  .lead-card.border-overdue { border-left-color: #dc2626; }
+  .lead-card.border-today { border-left-color: #ea580c; }
+  .lead-card.border-converted { border-left-color: #16a34a; }
+  .lead-card.border-lost { border-left-color: #6b7280; }
+
+  .meta-line {
+    font-size: 12px;
+    color: #475569;
+    line-height: 1.4;
+  }
+  .mini-badge {
+    font-size: 11px;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-weight: 700;
+    display: inline-block;
+  }
+  .status-overdue { background: #fee2e2; color: #b91c1c; }
+  .status-today { background: #fed7aa; color: #9a3412; }
+  .status-upcoming { background: #dbeafe; color: #1d4ed8; }
+  .status-none { background: #e2e8f0; color: #334155; }
+
+  .temp-hot { background: #fee2e2; color: #b91c1c; }
+  .temp-warm { background: #fef3c7; color: #92400e; }
+  .temp-cold { background: #dbeafe; color: #1d4ed8; }
+  .temp-converted { background: #dcfce7; color: #166534; }
+  .temp-lost { background: #e5e7eb; color: #374151; }
+
+  .empty-state {
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 12px;
+    color: #64748b;
+    font-size: 13px;
+    text-align: center;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-
-{% macro render_stage_column(st) %}
-<div class="col">
-  <div class="card h-100">
-    <div class="card-header fw-semibold">
-      {{ st }} <span class="badge bg-secondary">{{ data[st]|length }}</span>
-    </div>
-    <div class="card-body">
-      {% for l in data[st] %}
-        <div class="border rounded p-2 mb-2 bg-white">
-          <div class="fw-semibold">{{ l.name }}</div>
-          <div class="small text-muted">{{ l.phone }} | Score: {{ l.lead_score }}</div>
-
-          {% if l.owner_name or l.owner_username %}
-          <div class="small text-info">
-            {{ l.owner_name or l.owner_username }}
-            {% if l.last_contact_date_obj %}
-              | Last: {{ l.last_contact_date_obj.strftime('%d-%b') }}
-            {% endif %}
-          </div>
-          {% endif %}
-
-          <div class="d-flex gap-1 mt-2 flex-wrap">
-            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">
-              Open
-            </a>
-
-            {% set next_stages = get_next_stages(l.stage) %}
-
-            {% if next_stages|length == 1 %}
-              <form method="post" action="{{ url_for('leads.lead_set_stage', lead_id=l.id) }}" class="d-inline">
-                <input type="hidden" name="stage" value="{{ next_stages[0].name }}">
-                <button class="btn btn-sm btn-outline-{{ next_stages[0].color }}" type="submit">
-                  -> {{ next_stages[0].name }}
-                </button>
-              </form>
-
-            {% elif next_stages|length > 1 %}
-              {% for ns in next_stages %}
-                <form method="post" action="{{ url_for('leads.lead_set_stage', lead_id=l.id) }}" class="d-inline">
-                  <input type="hidden" name="stage" value="{{ ns.name }}">
-                  <button class="btn btn-sm btn-outline-{{ ns.color }}" type="submit">
-                    {{ ns.name }}
-                  </button>
-                </form>
-              {% endfor %}
-            {% endif %}
-          </div>
-        </div>
-      {% endfor %}
-
-      {% if not data[st] %}
-        <div class="text-muted small">No leads</div>
-      {% endif %}
-    </div>
-  </div>
-</div>
-{% endmacro %}
-
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h5 class="mb-0">Pipeline</h5>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h5 class="mb-0">Pipeline Kanban</h5>
 
   {% if is_admin %}
-    <div>
-      <label for="userFilter" class="form-label mb-0 me-2 d-inline-block">Filter by User:</label>
-      <select id="userFilter" class="form-select d-inline-block w-auto">
+    <div class="d-flex align-items-center gap-2">
+      <label for="userFilter" class="form-label mb-0">Counselor</label>
+      <select id="userFilter" class="form-select form-select-sm" style="min-width: 220px;">
         <option value="">All Leads</option>
         {% for user in all_users %}
           <option value="{{ user.id }}" {% if selected_user_id == user.id|string %}selected{% endif %}>
@@ -78,51 +101,94 @@
   {% endif %}
 </div>
 
-<div class="row g-3 row-cols-1 row-cols-md-2 row-cols-xl-5 mb-3">
-  {% for st in stages[:5] %}
-    {{ render_stage_column(st) }}
-  {% endfor %}
-</div>
+<div class="kanban-wrap">
+  <div class="kanban-board">
+    {% for st in stages %}
+      <div class="stage-column">
+        <div class="stage-header">
+          <span>{{ st }}</span>
+          <span class="badge bg-secondary">{{ data[st]|length }}</span>
+        </div>
+        <div class="stage-body">
+          {% for l in data[st] %}
+            {% set border_class = '' %}
+            {% if l.stage == 'Converted' %}
+              {% set border_class = 'border-converted' %}
+            {% elif l.stage == 'Lost' %}
+              {% set border_class = 'border-lost' %}
+            {% elif l.followup_status == 'overdue' %}
+              {% set border_class = 'border-overdue' %}
+            {% elif l.followup_status == 'today' %}
+              {% set border_class = 'border-today' %}
+            {% endif %}
 
-<div class="row g-3 row-cols-1 row-cols-md-2">
-  {% for st in stages[5:] %}
-    {{ render_stage_column(st) }}
-  {% endfor %}
+            {% set followup_badge_class = 'status-none' %}
+            {% if l.followup_status == 'overdue' %}
+              {% set followup_badge_class = 'status-overdue' %}
+            {% elif l.followup_status == 'today' %}
+              {% set followup_badge_class = 'status-today' %}
+            {% elif l.followup_status == 'upcoming' %}
+              {% set followup_badge_class = 'status-upcoming' %}
+            {% endif %}
+
+            {% set temp_class = 'temp-cold' %}
+            {% if l.temperature == 'Hot' %}
+              {% set temp_class = 'temp-hot' %}
+            {% elif l.temperature == 'Warm' %}
+              {% set temp_class = 'temp-warm' %}
+            {% elif l.temperature == 'Converted' %}
+              {% set temp_class = 'temp-converted' %}
+            {% elif l.temperature == 'Lost' %}
+              {% set temp_class = 'temp-lost' %}
+            {% endif %}
+
+            <div class="lead-card {{ border_class }}">
+              <div class="fw-semibold">{{ l.name }}</div>
+              <div class="meta-line">{{ l.phone or '-' }}</div>
+              <div class="meta-line">Course: {{ l.interested_courses or '-' }}</div>
+              <div class="meta-line">Score: {{ l.lead_score or 0 }}</div>
+              <div class="meta-line">Owner: {{ l.owner_name or l.owner_username or 'Unassigned' }}</div>
+              <div class="meta-line">Next: {{ l.next_followup_date or '-' }}</div>
+
+              <div class="d-flex gap-1 flex-wrap mt-2">
+                <span class="mini-badge {{ temp_class }}">{{ l.temperature }}</span>
+                <span class="mini-badge {{ followup_badge_class }}">{{ l.followup_status|capitalize }}</span>
+              </div>
+
+              <div class="d-flex gap-1 mt-2 flex-wrap">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">Open</a>
+                {% for ns in get_next_stages(l.stage) %}
+                  <form method="post" action="{{ url_for('leads.lead_set_stage', lead_id=l.id) }}" class="d-inline">
+                    <input type="hidden" name="stage" value="{{ ns.name }}">
+                    <button class="btn btn-sm btn-outline-{{ ns.color }}" type="submit">{{ ns.name }}</button>
+                  </form>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+
+          {% if not data[st] %}
+            <div class="empty-state">No leads in this stage.</div>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
 </div>
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    const userFilterSelect = document.getElementById('userFilter');
-    const currentSelectedUserId = "{{ selected_user_id if selected_user_id else '' }}";
+    var userFilterSelect = document.getElementById('userFilter');
+    if (!userFilterSelect) return;
 
-    if (userFilterSelect) {
-      const savedUserId = localStorage.getItem('pipelineUserFilter');
-
-      if (currentSelectedUserId) {
-        userFilterSelect.value = currentSelectedUserId;
-        localStorage.setItem('pipelineUserFilter', currentSelectedUserId);
-      } else if (savedUserId) {
-        window.location.href = `{{ url_for('leads.pipeline') }}?user_id=${encodeURIComponent(savedUserId)}`;
-        return;
+    userFilterSelect.addEventListener('change', function() {
+      var selectedUserId = this.value;
+      if (selectedUserId) {
+        window.location.href = `{{ url_for('leads.pipeline') }}?user_id=${encodeURIComponent(selectedUserId)}`;
+      } else {
+        window.location.href = `{{ url_for('leads.pipeline') }}`;
       }
-
-      userFilterSelect.addEventListener('change', function() {
-        const selectedUserId = this.value;
-
-        if (selectedUserId) {
-          localStorage.setItem('pipelineUserFilter', selectedUserId);
-        } else {
-          localStorage.removeItem('pipelineUserFilter');
-        }
-
-        if (selectedUserId) {
-          window.location.href = `{{ url_for('leads.pipeline') }}?user_id=${selectedUserId}`;
-        } else {
-          window.location.href = `{{ url_for('leads.pipeline') }}`;
-        }
-      });
-    }
+    });
   });
 </script>
-
 {% endblock %}

@@ -1210,5 +1210,20 @@ def init_db():
     except:
         pass
 
+    # ---------- SAFE INDEXES (CRM REDESIGN PHASE 2) ----------
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_assigned_to_id ON leads(assigned_to_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_stage ON leads(stage)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_next_followup_date ON leads(next_followup_date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_is_deleted ON leads(is_deleted)")
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_followups_lead_id ON followups(lead_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_followups_created_at ON followups(created_at)")
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_module_name ON activity_logs(module_name)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON activity_logs(user_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at)")
+
     conn.commit()
     conn.close()

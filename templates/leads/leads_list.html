@@ -136,9 +136,9 @@
   <!-- Filter toggles: collapsible on mobile -->
   <div class="d-flex align-items-center gap-2 mb-2">
     <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="false">
-      ⚙ Filters{% if stage or source or selected_user_id or date_from or date_to %} <span class="badge bg-primary ms-1">!</span>{% endif %}
+      ⚙ Filters{% if stage or source or selected_user_id or date_from or date_to or temperature or course or followup_due or status_filter or my_leads %} <span class="badge bg-primary ms-1">!</span>{% endif %}
     </button>
-    {% if stage or source or selected_user_id or q or date_from or date_to or hide_converted %}
+    {% if stage or source or selected_user_id or q or date_from or date_to or hide_converted or temperature or course or followup_due or status_filter or my_leads %}
     <a href="{{ url_for('leads.leads_list') }}" class="btn btn-sm btn-outline-danger">✕ Clear</a>
     {% endif %}
 
@@ -148,6 +148,10 @@
       <button type="button" onclick="toggleActiveOnly()" class="filter-chip {% if hide_converted == '1' %}active{% endif %}">
         Active Only
       </button>
+      <button type="submit" name="followup_due" value="overdue" class="filter-chip {% if followup_due == 'overdue' %}active{% endif %}">Overdue</button>
+      <button type="submit" name="followup_due" value="today" class="filter-chip {% if followup_due == 'today' %}active{% endif %}">Today Follow-up</button>
+      <button type="submit" name="status_filter" value="converted" class="filter-chip {% if status_filter == 'converted' %}active{% endif %}">Converted</button>
+      <button type="submit" name="status_filter" value="lost" class="filter-chip {% if status_filter == 'lost' %}active{% endif %}">Lost</button>
       {% for s in stages %}
         <button type="submit" name="stage" value="{{ s }}" class="filter-chip {% if stage == s %}active{% endif %}" title="{{ s }}">
           {{ s }}
@@ -156,11 +160,19 @@
     </div>
   </div>
 
-  <div class="collapse {% if stage or source or selected_user_id or date_from or date_to %}show{% endif %}" id="filterCollapse">
+  <div class="collapse {% if stage or source or selected_user_id or date_from or date_to or temperature or course or followup_due or status_filter or my_leads %}show{% endif %}" id="filterCollapse">
     <div class="card card-body p-2 mb-2" style="border-radius:10px; background:#f8f9fa; border:none;">
       <div class="row g-2">
         {% if is_admin %}
-        <div class="col-12 col-md-3">
+        <div class="col-6 col-md-2">
+          <select name="my_leads" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">All Scope</option>
+            <option value="1" {% if my_leads == '1' %}selected{% endif %}>My Leads</option>
+          </select>
+        </div>
+        {% endif %}
+        {% if is_admin %}
+        <div class="col-6 col-md-2">
           <select id="userFilter" name="user_id" class="form-select form-select-sm">
             <option value="">All Users</option>
             {% for user in all_users %}
@@ -177,6 +189,39 @@
             {% for s in stages %}
               <option value="{{ s }}" {% if stage == s %}selected{% endif %}>{{ s }}</option>
             {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <select name="temperature" id="temperatureFilter" class="form-select form-select-sm">
+            <option value="">All Priority</option>
+            <option value="Hot" {% if temperature == 'Hot' %}selected{% endif %}>Hot</option>
+            <option value="Warm" {% if temperature == 'Warm' %}selected{% endif %}>Warm</option>
+            <option value="Cold" {% if temperature == 'Cold' %}selected{% endif %}>Cold</option>
+            <option value="Converted" {% if temperature == 'Converted' %}selected{% endif %}>Converted</option>
+            <option value="Lost" {% if temperature == 'Lost' %}selected{% endif %}>Lost</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <select name="course" id="courseFilter" class="form-select form-select-sm">
+            <option value="">All courses</option>
+            {% for c in course_options %}
+              <option value="{{ c }}" {% if course == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <select name="followup_due" id="followupFilter" class="form-select form-select-sm">
+            <option value="">Any follow-up</option>
+            <option value="today" {% if followup_due == 'today' %}selected{% endif %}>Today Follow-up</option>
+            <option value="overdue" {% if followup_due == 'overdue' %}selected{% endif %}>Overdue Follow-up</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <select name="status_filter" id="statusFilter" class="form-select form-select-sm">
+            <option value="">All status</option>
+            <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+            <option value="converted" {% if status_filter == 'converted' %}selected{% endif %}>Converted</option>
+            <option value="lost" {% if status_filter == 'lost' %}selected{% endif %}>Lost</option>
           </select>
         </div>
         <div class="col-6 col-md-2">
@@ -208,21 +253,34 @@
     {% for l in leads %}
     {% set initials = (l.name[:1] | upper) if l.name else '?' %}
     {% set stage_lower = l.stage | lower | replace(' ', '-') if l.stage else '' %}
-    <a class="lead-card" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">
+    {% set wa_num = ((l.whatsapp or l.phone or '')|replace(' ', '')|replace('+', '')|replace('-', '')) %}
+    <div class="lead-card">
       <div class="lc-avatar">{{ initials }}</div>
       <div class="lc-body">
         <div class="lc-name">{{ l.name }}</div>
         <div class="lc-phone">{{ l.phone or '—' }}{% if l.interested_courses %} · <span style="color:#0d6efd;">{{ l.interested_courses }}</span>{% endif %}</div>
-        <div style="font-size:10px; color:#9ca3af; margin-top:1px;">{{ l.created_at[:10] if l.created_at else '' }}</div>
+        <div style="font-size:10px; color:#9ca3af; margin-top:1px;">Last: {{ l.last_contact_date or '—' }} | Next: {{ l.next_followup_date or '—' }}</div>
+        <div class="d-flex flex-wrap gap-1 mt-1">
+          <span class="lc-stage stage-{{ stage_lower }}">{{ l.stage }}</span>
+          <span class="badge {% if l.temperature == 'Hot' %}bg-danger{% elif l.temperature == 'Warm' %}bg-warning text-dark{% elif l.temperature == 'Cold' %}bg-primary{% elif l.temperature == 'Converted' %}bg-success{% else %}bg-secondary{% endif %}">{{ l.temperature }}</span>
+          {% if l.followup_status == 'overdue' %}
+            <span class="badge bg-danger">Overdue</span>
+          {% elif l.followup_status == 'today' %}
+            <span class="badge bg-warning text-dark">Today</span>
+          {% endif %}
+        </div>
+        <div class="d-flex flex-wrap gap-1 mt-2">
+          <a class="btn btn-sm btn-outline-primary" href="tel:{{ l.phone }}">Call</a>
+          {% if wa_num %}<a class="btn btn-sm btn-outline-success" target="_blank" href="https://wa.me/{{ wa_num }}">WhatsApp</a>{% endif %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}#followup-form">Add Follow-up</a>
+          <a class="btn btn-sm btn-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">Open</a>
+        </div>
       </div>
       <div class="lc-right">
-        <span class="lc-stage stage-{{ stage_lower }}">{{ l.stage }}</span>
         <div class="lc-owner">{{ l.owner_name or l.owner_username or 'Unassigned' }}</div>
-        {% if l.lead_score >= 60 %}
-          <span class="badge bg-danger mt-1" style="font-size:9px;">🔥 {{ l.lead_score }}</span>
-        {% endif %}
+        <span class="badge bg-dark mt-1" style="font-size:9px;">{{ l.lead_score }}</span>
       </div>
-    </a>
+    </div>
     {% endfor %}
   </div>
 
@@ -237,14 +295,17 @@
             <th>Phone</th>
             <th class="sortable" data-sort-key="course">Course</th>
             <th class="sortable" data-sort-key="stage">Stage</th>
+            <th class="sortable" data-sort-key="temperature">Temperature</th>
             <th class="sortable" data-sort-key="score">Score</th>
-            <th class="sortable" data-sort-key="created">Created</th>
+            <th class="sortable" data-sort-key="last_contact">Last Contact</th>
+            <th class="sortable" data-sort-key="next_followup">Next Follow-up</th>
             <th class="sortable" data-sort-key="owner">Owner</th>
-            <th></th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for l in leads %}
+          {% set wa_num = ((l.whatsapp or l.phone or '')|replace(' ', '')|replace('+', '')|replace('-', '')) %}
           <tr>
             <td class="row-num">{{ loop.index }}</td>
             <td data-sort-key="name" data-sort-value="{{ l.name }}">{{ l.name }}</td>
@@ -257,19 +318,37 @@
               {% endif %}
             </td>
             <td data-sort-key="stage" data-sort-value="{{ l.stage }}">{{ l.stage }}</td>
+            <td data-sort-key="temperature" data-sort-value="{{ l.temperature }}">
+              <span class="badge {% if l.temperature == 'Hot' %}bg-danger{% elif l.temperature == 'Warm' %}bg-warning text-dark{% elif l.temperature == 'Cold' %}bg-primary{% elif l.temperature == 'Converted' %}bg-success{% else %}bg-secondary{% endif %}">
+                {{ l.temperature }}
+              </span>
+              {% if l.followup_status == 'overdue' %}
+                <span class="badge bg-danger">Overdue</span>
+              {% elif l.followup_status == 'today' %}
+                <span class="badge bg-warning text-dark">Today</span>
+              {% endif %}
+            </td>
             <td data-sort-key="score" data-sort-value="{{ l.lead_score }}">
-              <span class="badge {% if l.lead_score >= 60 %}bg-danger{% else %}bg-secondary{% endif %}">
+              <span class="badge {% if l.lead_score >= 75 %}bg-danger{% elif l.lead_score >= 40 %}bg-warning text-dark{% else %}bg-primary{% endif %}">
                 {{ l.lead_score }}
               </span>
             </td>
-            <td data-sort-key="created" data-sort-value="{{ l.created_at[:10] if l.created_at else '' }}">
-              <small class="text-muted">{{ l.created_at[:10] if l.created_at else '—' }}</small>
+            <td data-sort-key="last_contact" data-sort-value="{{ l.last_contact_date or '' }}">
+              <small class="text-muted">{{ l.last_contact_date or '—' }}</small>
+            </td>
+            <td data-sort-key="next_followup" data-sort-value="{{ l.next_followup_date or '' }}">
+              <small class="text-muted">{{ l.next_followup_date or '—' }}</small>
             </td>
             <td data-sort-key="owner" data-sort-value="{{ l.owner_name or l.owner_username or '' }}">
               <small class="text-muted">{{ l.owner_name or l.owner_username or 'Unassigned' }}</small>
             </td>
             <td>
-              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">Open</a>
+              <div class="d-flex flex-wrap gap-1">
+                <a class="btn btn-sm btn-outline-primary" href="tel:{{ l.phone }}">Call</a>
+                {% if wa_num %}<a class="btn btn-sm btn-outline-success" target="_blank" href="https://wa.me/{{ wa_num }}">WhatsApp</a>{% endif %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}#followup-form">Add Follow-up</a>
+                <a class="btn btn-sm btn-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">Open</a>
+              </div>
             </td>
           </tr>
           {% endfor %}
@@ -293,6 +372,10 @@
     const filterForm = document.getElementById('filterForm');
     const userFilterSelect = document.getElementById('userFilter');
     const stageFilter = document.getElementById('stageFilter');
+    const temperatureFilter = document.getElementById('temperatureFilter');
+    const courseFilter = document.getElementById('courseFilter');
+    const followupFilter = document.getElementById('followupFilter');
+    const statusFilter = document.getElementById('statusFilter');
     const sourceFilter = document.getElementById('sourceFilter');
 
     if (userFilterSelect) {
@@ -315,6 +398,18 @@
     }
     if (sourceFilter) {
       sourceFilter.addEventListener('change', function() { filterForm.submit(); });
+    }
+    if (temperatureFilter) {
+      temperatureFilter.addEventListener('change', function() { filterForm.submit(); });
+    }
+    if (courseFilter) {
+      courseFilter.addEventListener('change', function() { filterForm.submit(); });
+    }
+    if (followupFilter) {
+      followupFilter.addEventListener('change', function() { filterForm.submit(); });
+    }
+    if (statusFilter) {
+      statusFilter.addEventListener('change', function() { filterForm.submit(); });
     }
 
     // Live search on mobile (debounced)

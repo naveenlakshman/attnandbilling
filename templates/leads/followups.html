@@ -3,386 +3,392 @@
 
 {% block extra_css %}
 <style>
-  /* Stage badge colors */
-  .stage-badge {
-    font-size: 11px;
+  .tab-chip {
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 13px;
     font-weight: 600;
+    border: 1px solid #d7dce2;
+    color: #334155;
+    text-decoration: none;
+    background: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tab-chip.active {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #ffffff;
+  }
+  .count-pill {
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    background: #eef2f7;
+    color: #0f172a;
+  }
+  .tab-chip.active .count-pill {
+    background: rgba(255,255,255,.2);
+    color: #ffffff;
+  }
+
+  .stage-badge,
+  .temp-badge,
+  .due-badge {
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
     padding: 3px 8px;
-    border-radius: 20px;
     display: inline-block;
-    white-space: nowrap;
   }
-  .stage-new-lead     { background: #e9ecef; color: #495057; }
-  .stage-contacted    { background: #cfe2ff; color: #084298; }
-  .stage-interested   { background: #d1ecf1; color: #0c5460; }
-  .stage-counseling   { background: #fff3cd; color: #664d03; }
-  .stage-follow-up    { background: #d1e7dd; color: #0a3622; }
+  .stage-new-lead { background: #e2e8f0; color: #334155; }
+  .stage-contacted { background: #dbeafe; color: #1e40af; }
+  .stage-interested { background: #d1fae5; color: #065f46; }
+  .stage-counseling-done { background: #fef3c7; color: #92400e; }
+  .stage-follow-up { background: #ede9fe; color: #5b21b6; }
+  .stage-converted { background: #dcfce7; color: #166534; }
+  .stage-lost { background: #e5e7eb; color: #374151; }
 
-  /* Date status badges */
-  .badge-overdue  { background: #dc3545; color: #fff; font-size: 11px; padding: 3px 7px; border-radius: 20px; }
-  .badge-today    { background: #fd7e14; color: #fff; font-size: 11px; padding: 3px 7px; border-radius: 20px; }
+  .temp-hot { background: #fee2e2; color: #b91c1c; }
+  .temp-warm { background: #fef3c7; color: #92400e; }
+  .temp-cold { background: #dbeafe; color: #1d4ed8; }
 
-  /* Quick action buttons */
-  .btn-call-q {
-    background: #2e7d32; color: #fff; border: none;
-    border-radius: 50%; width: 34px; height: 34px;
-    display: inline-flex; align-items: center; justify-content: center;
-    text-decoration: none; font-size: 15px; flex-shrink: 0;
-  }
-  .btn-wa-q {
-    background: #25D366; color: #fff; border: none;
-    border-radius: 50%; width: 34px; height: 34px;
-    display: inline-flex; align-items: center; justify-content: center;
-    text-decoration: none; font-size: 15px; flex-shrink: 0;
-  }
-  .btn-call-q:hover { background: #1b5e20; color: #fff; }
-  .btn-wa-q:hover   { background: #128C7E; color: #fff; }
+  .due-overdue { background: #fecaca; color: #991b1b; }
+  .due-today { background: #fed7aa; color: #9a3412; }
+  .due-normal { background: #e2e8f0; color: #334155; }
 
-  /* Mobile followup card */
-  .followup-card {
-    border-left: 4px solid #dee2e6;
-    border-radius: 10px;
-    background: #fff;
-    padding: 12px 14px;
-    margin-bottom: 10px;
-    box-shadow: 0 1px 4px rgba(0,0,0,.07);
-  }
-  .followup-card.overdue   { border-left-color: #dc3545; }
-  .followup-card.due-today { border-left-color: #fd7e14; }
-
-  /* Summary stats row */
-  .stat-pill {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: #fff; border-radius: 20px;
-    padding: 5px 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
-    font-size: 13px; font-weight: 600;
-  }
-  .stat-pill .dot { width: 10px; height: 10px; border-radius: 50%; }
-
-  /* Highlight search results */
   .followup-hidden { display: none !important; }
 
-  /* AI Script modal */
-  .ai-modal-result {
-    background: #f8f5ff; border-radius: 8px;
-    border: 1px solid #ddd6fe; padding: 12px;
-    font-size: 13px; line-height: 1.6; color: #1f2937;
-    white-space: pre-wrap; word-break: break-word;
-    min-height: 80px;
+  .mobile-card {
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 12px;
+    margin-bottom: 10px;
   }
-  .btn-ai-script {
-    background: #7c3aed; color: #fff; border: none;
-    border-radius: 6px; padding: 4px 10px;
-    font-size: 12px; cursor: pointer; white-space: nowrap;
+  .mobile-card.overdue { border-left-color: #ef4444; }
+  .mobile-card.today { border-left-color: #f59e0b; }
+
+  .last-note {
+    font-size: 12px;
+    color: #475569;
+    max-width: 340px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .btn-ai-script:hover { background: #6d28d9; color: #fff; }
 </style>
 {% endblock %}
 
 {% block content %}
-
-<!-- Page Header -->
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-    <h5 class="mb-0">📞 Follow-ups Due</h5>
-    <div class="text-muted small">As of {{ today }}</div>
+    <h5 class="mb-0">Daily Follow-up Console</h5>
+    <div class="text-muted small">Date: {{ today }}</div>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    <span class="stat-pill">
-      <span class="dot" style="background:#0d6efd;"></span>
-      {{ leads|length }} Total Due
-    </span>
-    {% if overdue_count > 0 %}
-    <span class="stat-pill">
-      <span class="dot" style="background:#dc3545;"></span>
-      {{ overdue_count }} Overdue
-    </span>
-    {% endif %}
+    <span class="badge text-bg-danger">Overdue {{ tab_counts.overdue }}</span>
+    <span class="badge text-bg-warning">Today {{ tab_counts.today }}</span>
+    <span class="badge text-bg-secondary">Completed {{ tab_counts.completed }}</span>
   </div>
 </div>
 
-<!-- Filters Row -->
-<div class="row g-2 mb-3">
-  <div class="{% if is_admin %}col-md-4{% else %}col-md-6{% endif %} col-12">
-    <input type="text" id="searchInput" class="form-control"
-           placeholder="🔍 Search name or phone…" autocomplete="off">
-  </div>
-  {% if is_admin %}
-  <div class="col-md-4 col-12">
-    <form method="get" id="userFilterForm">
-      <select name="user_id" class="form-select" onchange="this.form.submit()">
+<form method="get" id="filterForm" class="card card-body mb-3">
+  <div class="row g-2 align-items-center">
+    <div class="col-12 col-md-5">
+      <input type="text" id="searchInput" class="form-control" placeholder="Search name or phone" autocomplete="off">
+    </div>
+    {% if is_admin %}
+    <div class="col-12 col-md-3">
+      <select name="user_id" class="form-select" onchange="document.getElementById('filterForm').submit()">
         <option value="">All Counselors</option>
         {% for user in all_users %}
-          <option value="{{ user.id }}"
-                  {% if selected_user_id == user.id|string %}selected{% endif %}>
+          <option value="{{ user.id }}" {% if selected_user_id == user.id|string %}selected{% endif %}>
             {{ user.full_name or user.username }}
           </option>
         {% endfor %}
       </select>
-    </form>
+    </div>
+    {% endif %}
+    <input type="hidden" name="tab" value="{{ selected_tab }}">
   </div>
-  {% endif %}
+</form>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="tab-chip {% if selected_tab == 'overdue' %}active{% endif %}" href="{{ url_for('leads.followups_today', tab='overdue', user_id=selected_user_id) }}">Overdue <span class="count-pill">{{ tab_counts.overdue }}</span></a>
+  <a class="tab-chip {% if selected_tab == 'today' %}active{% endif %}" href="{{ url_for('leads.followups_today', tab='today', user_id=selected_user_id) }}">Today <span class="count-pill">{{ tab_counts.today }}</span></a>
+  <a class="tab-chip {% if selected_tab == 'tomorrow' %}active{% endif %}" href="{{ url_for('leads.followups_today', tab='tomorrow', user_id=selected_user_id) }}">Tomorrow <span class="count-pill">{{ tab_counts.tomorrow }}</span></a>
+  <a class="tab-chip {% if selected_tab == 'upcoming' %}active{% endif %}" href="{{ url_for('leads.followups_today', tab='upcoming', user_id=selected_user_id) }}">Upcoming <span class="count-pill">{{ tab_counts.upcoming }}</span></a>
+  <a class="tab-chip {% if selected_tab == 'completed' %}active{% endif %}" href="{{ url_for('leads.followups_today', tab='completed', user_id=selected_user_id) }}">Completed <span class="count-pill">{{ tab_counts.completed }}</span></a>
 </div>
 
-<!-- ===== DESKTOP TABLE (hidden on xs/sm) ===== -->
 <div class="card d-none d-md-block">
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0" id="desktopTable">
       <thead class="table-light">
         <tr>
-          <th>Name</th>
+          <th>Lead</th>
           <th>Phone</th>
-          {% if is_admin %}<th>Counselor</th>{% endif %}
+          <th>Course</th>
           <th>Stage</th>
-          <th>Due Date</th>
+          <th>Temp</th>
+          {% if is_admin %}<th>Counselor</th>{% endif %}
+          <th>{% if selected_tab == 'completed' %}Completed At{% else %}Due Date{% endif %}</th>
+          <th>Last Note</th>
           <th class="text-end">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for l in leads %}
-        {% set is_overdue = l.next_followup_date and l.next_followup_date < today %}
-        {% set is_today   = l.next_followup_date and l.next_followup_date == today %}
-        <tr class="followup-row"
-            data-search="{{ (l.name or '')|lower }} {{ (l.phone or '')|lower }}">
-          <td>
-            <div class="fw-semibold">{{ l.name }}</div>
-          </td>
-          <td>
-            <span class="text-muted">{{ l.phone or '—' }}</span>
-          </td>
-          {% if is_admin %}
-          <td>
-            <small class="text-muted">{{ l.owner_name or l.owner_username or 'Unassigned' }}</small>
-          </td>
-          {% endif %}
-          <td>
-            {% set stage_key = (l.stage or 'New Lead')|lower|replace(' ', '-') %}
-            <span class="stage-badge stage-{{ stage_key }}">{{ l.stage or 'New Lead' }}</span>
-          </td>
-          <td>
-            {% if is_overdue %}
-              <span class="badge-overdue">⚠ {{ l.next_followup_date }}</span>
-            {% elif is_today %}
-              <span class="badge-today">🔔 Today</span>
-            {% else %}
-              {{ l.next_followup_date }}
+          {% set lead_id = l.lead_id if selected_tab == 'completed' else l.id %}
+          {% set lead_name = l.name or '-' %}
+          {% set lead_phone = l.phone or '' %}
+          {% set stage_text = l.stage or 'New Lead' %}
+          {% set stage_key = stage_text|lower|replace(' ', '-') %}
+          {% set temperature = l.temperature or 'Cold' %}
+          {% set temp_key = temperature|lower %}
+          {% set due_date = l.next_followup_date if selected_tab != 'completed' else l.followup_created_at %}
+          {% set note_text = (l.note if selected_tab == 'completed' else l.last_note) or '-' %}
+          {% set due_status = 'due-normal' %}
+          {% if selected_tab != 'completed' %}
+            {% if l.next_followup_date and l.next_followup_date < today %}
+              {% set due_status = 'due-overdue' %}
+            {% elif l.next_followup_date == today %}
+              {% set due_status = 'due-today' %}
             {% endif %}
-          </td>
-          <td class="text-end">
-            <div class="d-flex justify-content-end align-items-center gap-2">
-              {% if l.phone %}
-              <a href="tel:{{ l.phone }}" class="btn-call-q" title="Call">📞</a>
-              <a href="https://wa.me/91{{ l.phone }}" target="_blank"
-                 class="btn-wa-q" title="WhatsApp">💬</a>
-              {% endif %}
-              <button class="btn-ai-script"
-                      onclick="openAiScriptModal({{ l.id }}, {{ l.name | tojson }})"
-                      title="Get AI call script">✨ Script</button>
-              <a class="btn btn-sm btn-outline-primary"
-                 href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">Open →</a>
-            </div>
-          </td>
-        </tr>
+          {% endif %}
+          <tr class="followup-row" data-search="{{ (lead_name + ' ' + lead_phone)|lower }}">
+            <td class="fw-semibold">{{ lead_name }}</td>
+            <td class="text-muted">{{ lead_phone or '-' }}</td>
+            <td>{{ l.course_interested or '-' }}</td>
+            <td><span class="stage-badge stage-{{ stage_key }}">{{ stage_text }}</span></td>
+            <td><span class="temp-badge temp-{{ temp_key }}">{{ temperature }}</span></td>
+            {% if is_admin %}<td class="text-muted">{{ l.owner_name or l.owner_username or 'Unassigned' }}</td>{% endif %}
+            <td><span class="due-badge {{ due_status }}">{{ due_date or '-' }}</span></td>
+            <td><div class="last-note" title="{{ note_text }}">{{ note_text }}</div></td>
+            <td class="text-end">
+              <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                {% if lead_phone %}
+                  <a class="btn btn-sm btn-outline-success" href="tel:{{ lead_phone }}">Call</a>
+                  <a class="btn btn-sm btn-outline-success" target="_blank" href="https://wa.me/91{{ lead_phone }}">WhatsApp</a>
+                {% endif %}
+                {% if selected_tab != 'completed' %}
+                  <button type="button" class="btn btn-sm btn-primary"
+                          data-mode="complete"
+                          data-lead-id="{{ lead_id }}"
+                          data-lead-name="{{ lead_name }}"
+                          data-next-followup="{{ l.next_followup_date or '' }}"
+                          data-bs-toggle="modal" data-bs-target="#quickCompleteModal">
+                    Complete
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-primary"
+                          data-mode="reschedule"
+                          data-lead-id="{{ lead_id }}"
+                          data-lead-name="{{ lead_name }}"
+                          data-next-followup="{{ l.next_followup_date or '' }}"
+                          data-bs-toggle="modal" data-bs-target="#quickCompleteModal">
+                    Reschedule
+                  </button>
+                {% endif %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.lead_detail', lead_id=lead_id) }}">Open</a>
+              </div>
+            </td>
+          </tr>
         {% endfor %}
-
         {% if not leads %}
-        <tr id="emptyRow">
-          <td colspan="{{ 6 if is_admin else 5 }}" class="text-center text-muted py-5">
-            🎉 No follow-ups due today!
-          </td>
-        </tr>
+          <tr>
+            <td colspan="{{ 9 if is_admin else 8 }}" class="text-center text-muted py-5">
+              No records in this tab.
+            </td>
+          </tr>
         {% endif %}
       </tbody>
     </table>
   </div>
-  <!-- No results found (search) -->
-  <div id="noResultsDesktop" class="text-center text-muted py-4" style="display:none;">
-    No leads match your search.
-  </div>
+  <div id="noResultsDesktop" class="text-center text-muted py-4" style="display:none;">No leads match your search.</div>
 </div>
 
-<!-- ===== MOBILE CARDS (visible on xs/sm only) ===== -->
 <div class="d-md-none" id="mobileCards">
   {% for l in leads %}
-  {% set is_overdue = l.next_followup_date and l.next_followup_date < today %}
-  {% set is_today   = l.next_followup_date and l.next_followup_date == today %}
-  <div class="followup-card {% if is_overdue %}overdue{% elif is_today %}due-today{% endif %} followup-card-item"
-       data-search="{{ (l.name or '')|lower }} {{ (l.phone or '')|lower }}">
-
-    <!-- Top row: name + Open button -->
-    <div class="d-flex justify-content-between align-items-start gap-2">
-      <div style="min-width:0; flex:1;">
-        <div class="fw-semibold" style="font-size:15px; line-height:1.3;">{{ l.name }}</div>
-        {% if is_admin %}
-        <div class="text-muted" style="font-size:12px;">{{ l.owner_name or l.owner_username or 'Unassigned' }}</div>
-        {% endif %}
-        <!-- Stage badge on its own line below name -->
-        <div class="mt-1">
-          {% set stage_key = (l.stage or 'New Lead')|lower|replace(' ', '-') %}
-          <span class="stage-badge stage-{{ stage_key }}">{{ l.stage or 'New Lead' }}</span>
+    {% set lead_id = l.lead_id if selected_tab == 'completed' else l.id %}
+    {% set lead_name = l.name or '-' %}
+    {% set lead_phone = l.phone or '' %}
+    {% set stage_text = l.stage or 'New Lead' %}
+    {% set stage_key = stage_text|lower|replace(' ', '-') %}
+    {% set temperature = l.temperature or 'Cold' %}
+    {% set temp_key = temperature|lower %}
+    {% set note_text = (l.note if selected_tab == 'completed' else l.last_note) or '-' %}
+    {% set card_state = '' %}
+    {% if selected_tab != 'completed' and l.next_followup_date and l.next_followup_date < today %}
+      {% set card_state = 'overdue' %}
+    {% elif selected_tab != 'completed' and l.next_followup_date == today %}
+      {% set card_state = 'today' %}
+    {% endif %}
+    <div class="mobile-card {{ card_state }} followup-card-item" data-search="{{ (lead_name + ' ' + lead_phone)|lower }}">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div>
+          <div class="fw-semibold">{{ lead_name }}</div>
+          <div class="text-muted small">{{ l.course_interested or '-' }}</div>
+          {% if is_admin %}
+            <div class="text-muted" style="font-size:12px;">{{ l.owner_name or l.owner_username or 'Unassigned' }}</div>
+          {% endif %}
         </div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.lead_detail', lead_id=lead_id) }}">Open</a>
       </div>
-      <div style="flex-shrink:0;">
-        <a href="{{ url_for('leads.lead_detail', lead_id=l.id) }}"
-           class="btn btn-sm btn-outline-primary">Open</a>
+      <div class="mt-2 d-flex gap-2 flex-wrap">
+        <span class="stage-badge stage-{{ stage_key }}">{{ stage_text }}</span>
+        <span class="temp-badge temp-{{ temp_key }}">{{ temperature }}</span>
+      </div>
+      <div class="mt-2 text-muted" style="font-size:13px;">{{ lead_phone or '-' }}</div>
+      <div class="mt-1 text-muted" style="font-size:12px;">Due: {{ l.next_followup_date if selected_tab != 'completed' else l.followup_created_at }}</div>
+      <div class="mt-1" style="font-size:12px; color:#475569;">Last note: {{ note_text }}</div>
+      <div class="mt-2 d-flex gap-1 flex-wrap">
+        {% if lead_phone %}
+          <a class="btn btn-sm btn-outline-success" href="tel:{{ lead_phone }}">Call</a>
+          <a class="btn btn-sm btn-outline-success" target="_blank" href="https://wa.me/91{{ lead_phone }}">WhatsApp</a>
+        {% endif %}
+        {% if selected_tab != 'completed' %}
+          <button type="button" class="btn btn-sm btn-primary"
+                  data-mode="complete"
+                  data-lead-id="{{ lead_id }}"
+                  data-lead-name="{{ lead_name }}"
+                  data-next-followup="{{ l.next_followup_date or '' }}"
+                  data-bs-toggle="modal" data-bs-target="#quickCompleteModal">
+            Complete
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-primary"
+                  data-mode="reschedule"
+                  data-lead-id="{{ lead_id }}"
+                  data-lead-name="{{ lead_name }}"
+                  data-next-followup="{{ l.next_followup_date or '' }}"
+                  data-bs-toggle="modal" data-bs-target="#quickCompleteModal">
+            Reschedule
+          </button>
+        {% endif %}
       </div>
     </div>
-
-    <!-- Middle row: phone + actions -->
-    <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
-      <span class="text-muted" style="font-size:13px;">{{ l.phone or '—' }}</span>
-      {% if l.phone %}
-      <a href="tel:{{ l.phone }}" class="btn-call-q" title="Call">📞</a>
-      <a href="https://wa.me/91{{ l.phone }}" target="_blank"
-         class="btn-wa-q" title="WhatsApp">💬</a>
-      {% endif %}
-      <button class="btn-ai-script"
-              onclick="openAiScriptModal({{ l.id }}, {{ l.name | tojson }})"
-              title="Get AI call script">✨ Script</button>
-    </div>
-
-    <!-- Bottom row: due date -->
-    <div class="mt-2" style="font-size:12px; color:#6c757d;">
-      Due:
-      {% if is_overdue %}
-        <span class="badge-overdue">⚠ {{ l.next_followup_date }} — Overdue</span>
-      {% elif is_today %}
-        <span class="badge-today">🔔 Today</span>
-      {% else %}
-        {{ l.next_followup_date }}
-      {% endif %}
-    </div>
-  </div>
   {% endfor %}
-
   {% if not leads %}
-  <div class="text-center text-muted py-5" id="mobileEmpty">
-    🎉 No follow-ups due today!
-  </div>
+    <div class="text-center text-muted py-4">No records in this tab.</div>
   {% endif %}
-  <div id="noResultsMobile" class="text-center text-muted py-4" style="display:none;">
-    No leads match your search.
+  <div id="noResultsMobile" class="text-center text-muted py-4" style="display:none;">No leads match your search.</div>
+</div>
+
+<div class="modal fade" id="quickCompleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('leads.followups_quick_complete') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="lead_id" id="qcLeadId">
+        <input type="hidden" name="tab" value="{{ selected_tab }}">
+        <input type="hidden" name="selected_user_id" value="{{ selected_user_id }}">
+        <input type="hidden" name="mode" id="qcMode" value="complete">
+
+        <div class="modal-header">
+          <h5 class="modal-title" id="qcTitle">Complete Follow-up</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2 small text-muted" id="qcLeadName"></div>
+
+          <div class="mb-2">
+            <label class="form-label">Method</label>
+            <select class="form-select" name="method">
+              <option value="Call">Call</option>
+              <option value="WhatsApp">WhatsApp</option>
+              <option value="Walk-in">Walk-in</option>
+              <option value="Email">Email</option>
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Outcome</label>
+            <select class="form-select" name="outcome" id="qcOutcome">
+              <option value="">Select outcome</option>
+              {% for out in outcomes %}
+                <option value="{{ out }}">{{ out }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Notes</label>
+            <textarea class="form-control" name="note" rows="3" placeholder="Key talking points, objection, intent"></textarea>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Next Follow-up Date</label>
+            <input type="date" class="form-control" name="next_followup_date" id="qcNextDate">
+          </div>
+
+          <div>
+            <label class="form-label">Next Action</label>
+            <input type="text" class="form-control" name="next_action" placeholder="Send fee details, call parent, schedule visit">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="qcSubmitBtn">Save</button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
 <script>
 (function () {
   var input = document.getElementById('searchInput');
-  if (!input) return;
+  if (input) {
+    input.addEventListener('input', function () {
+      var q = this.value.trim().toLowerCase();
 
-  input.addEventListener('input', function () {
-    var q = this.value.trim().toLowerCase();
+      var rows = document.querySelectorAll('#desktopTable .followup-row');
+      var rowVisible = 0;
+      rows.forEach(function (row) {
+        var val = row.getAttribute('data-search') || '';
+        var visible = (!q || val.indexOf(q) !== -1);
+        row.classList.toggle('followup-hidden', !visible);
+        if (visible) rowVisible++;
+      });
+      var noDesktop = document.getElementById('noResultsDesktop');
+      if (noDesktop) noDesktop.style.display = (rows.length > 0 && rowVisible === 0) ? 'block' : 'none';
 
-    // Desktop rows
-    var rows = document.querySelectorAll('#desktopTable .followup-row');
-    var visibleRows = 0;
-    rows.forEach(function (row) {
-      var val = row.getAttribute('data-search') || '';
-      if (!q || val.indexOf(q) !== -1) {
-        row.classList.remove('followup-hidden');
-        visibleRows++;
-      } else {
-        row.classList.add('followup-hidden');
-      }
+      var cards = document.querySelectorAll('#mobileCards .followup-card-item');
+      var cardVisible = 0;
+      cards.forEach(function (card) {
+        var val = card.getAttribute('data-search') || '';
+        var visible = (!q || val.indexOf(q) !== -1);
+        card.classList.toggle('followup-hidden', !visible);
+        if (visible) cardVisible++;
+      });
+      var noMobile = document.getElementById('noResultsMobile');
+      if (noMobile) noMobile.style.display = (cards.length > 0 && cardVisible === 0) ? 'block' : 'none';
     });
-    var noResultsD = document.getElementById('noResultsDesktop');
-    if (noResultsD) noResultsD.style.display = (rows.length > 0 && visibleRows === 0) ? 'block' : 'none';
+  }
 
-    // Mobile cards
-    var cards = document.querySelectorAll('.followup-card-item');
-    var visibleCards = 0;
-    cards.forEach(function (card) {
-      var val = card.getAttribute('data-search') || '';
-      if (!q || val.indexOf(q) !== -1) {
-        card.classList.remove('followup-hidden');
-        visibleCards++;
-      } else {
-        card.classList.add('followup-hidden');
-      }
-    });
-    var noResultsM = document.getElementById('noResultsMobile');
-    if (noResultsM) noResultsM.style.display = (cards.length > 0 && visibleCards === 0) ? 'block' : 'none';
+  var modal = document.getElementById('quickCompleteModal');
+  if (!modal) return;
+  modal.addEventListener('show.bs.modal', function (event) {
+    var btn = event.relatedTarget;
+    if (!btn) return;
+
+    var mode = btn.getAttribute('data-mode') || 'complete';
+    var leadId = btn.getAttribute('data-lead-id') || '';
+    var leadName = btn.getAttribute('data-lead-name') || '';
+    var nextDate = btn.getAttribute('data-next-followup') || '';
+
+    document.getElementById('qcMode').value = mode;
+    document.getElementById('qcLeadId').value = leadId;
+    document.getElementById('qcLeadName').textContent = 'Lead: ' + leadName;
+    document.getElementById('qcNextDate').value = nextDate;
+
+    var isReschedule = mode === 'reschedule';
+    document.getElementById('qcTitle').textContent = isReschedule ? 'Reschedule Follow-up' : 'Complete Follow-up';
+    document.getElementById('qcSubmitBtn').textContent = isReschedule ? 'Reschedule' : 'Complete';
   });
 })();
 </script>
-
-<!-- AI Script Modal -->
-<div class="modal fade" id="aiScriptModal" tabindex="-1" aria-labelledby="aiScriptModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header" style="border-bottom-color:#ddd6fe;">
-        <h6 class="modal-title fw-semibold" id="aiScriptModalLabel" style="color:#7c3aed;">✨ AI Call Script</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div id="aiScriptSpinner" class="text-center py-3" style="color:#7c3aed; display:none;">
-          ⏳ Generating script…
-        </div>
-        <div class="ai-modal-result" id="aiScriptResult" style="display:none;"></div>
-      </div>
-      <div class="modal-footer" style="gap:8px;">
-        <button class="btn btn-sm btn-outline-secondary" id="aiScriptCopyBtn"
-                onclick="copyAiScriptResult()" style="display:none;">📋 Copy</button>
-        <a id="aiScriptOpenBtn" href="#" class="btn btn-sm btn-outline-primary" style="display:none;">Open Lead →</a>
-        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-var _aiCsrfToken = document.querySelector('meta[name="csrf-token"]') ?
-  document.querySelector('meta[name="csrf-token"]').getAttribute('content') : '';
-
-function openAiScriptModal(leadId, leadName) {
-  var modal = new bootstrap.Modal(document.getElementById('aiScriptModal'));
-  document.getElementById('aiScriptModalLabel').textContent = '✨ AI Call Script — ' + leadName;
-  document.getElementById('aiScriptSpinner').style.display = 'block';
-  document.getElementById('aiScriptResult').style.display = 'none';
-  document.getElementById('aiScriptResult').textContent = '';
-  document.getElementById('aiScriptCopyBtn').style.display = 'none';
-  var openBtn = document.getElementById('aiScriptOpenBtn');
-  openBtn.href = '/leads/' + leadId;
-  openBtn.style.display = 'none';
-  modal.show();
-
-  fetch('/leads/' + leadId + '/ai-assist', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': _aiCsrfToken
-    },
-    body: JSON.stringify({ action: 'script' })
-  })
-  .then(function(res) { return res.json(); })
-  .then(function(data) {
-    document.getElementById('aiScriptSpinner').style.display = 'none';
-    var box = document.getElementById('aiScriptResult');
-    box.textContent = data.error ? ('⚠ ' + data.error) : data.result;
-    box.style.display = 'block';
-    if (!data.error) {
-      document.getElementById('aiScriptCopyBtn').style.display = 'inline-block';
-      openBtn.style.display = 'inline-block';
-    }
-  })
-  .catch(function() {
-    document.getElementById('aiScriptSpinner').style.display = 'none';
-    var box = document.getElementById('aiScriptResult');
-    box.textContent = '⚠ Network error. Please try again.';
-    box.style.display = 'block';
-  });
-}
-
-function copyAiScriptResult() {
-  var text = document.getElementById('aiScriptResult').textContent;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(function() {
-      var btn = document.getElementById('aiScriptCopyBtn');
-      btn.textContent = '✓ Copied!';
-      setTimeout(function() { btn.textContent = '📋 Copy'; }, 2000);
-    });
-  }
-}
-</script>
-
 {% endblock %}

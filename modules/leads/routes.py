@@ -1,8 +1,10 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from flask import Blueprint, render_template, session, flash, redirect, url_for, request, jsonify
 from db import get_conn, log_activity
 from modules.core.utils import login_required
 from modules.leads import ai_helper
+from modules.leads import services as lead_services
+from modules.leads.helpers import get_lead_or_404_with_access
 
 leads_bp = Blueprint("leads", __name__)
 
@@ -67,7 +69,10 @@ FOLLOWUP_METHODS = ["Call", "WhatsApp", "Walk-in", "Email"]
 
 FOLLOWUP_OUTCOMES = [
     "Interested",
-    "Callback Later",
+    "Call Later",
+    "Parent Discussion Pending",
+    "Fees Concern",
+    "Visited",
     "Not Interested",
     "No Response",
     "Joined Elsewhere",
@@ -75,19 +80,7 @@ FOLLOWUP_OUTCOMES = [
 ]
 
 def get_next_stages(current_stage):
-    stage_flow = {
-        "New Lead": [{"name": "Contacted", "color": "primary"}],
-        "Contacted": [{"name": "Interested", "color": "info"}],
-        "Interested": [{"name": "Counseling Done", "color": "warning"}],
-        "Counseling Done": [{"name": "Follow-up", "color": "secondary"}],
-        "Follow-up": [
-            {"name": "Converted", "color": "success"},
-            {"name": "Lost", "color": "danger"}
-        ],
-        "Converted": [],
-        "Lost": []
-    }
-    return stage_flow.get(current_stage, [])
+    return lead_services.get_next_stages(current_stage)
 
 def parse_date(value):
     value = (value or "").strip()
@@ -97,35 +90,12 @@ def parse_date(value):
 
 
 def compute_lead_score(lead_source, start_timeframe, education_status, career_goal):
-    score = 0
-
-    if lead_source in ["Walk-in", "Referral"]:
-        score += 25
-    elif lead_source in ["Instagram", "WhatsApp", "College Campaign"]:
-        score += 15
-    elif lead_source:
-        score += 10
-
-    if start_timeframe == "Immediately":
-        score += 25
-    elif start_timeframe == "Within 1 Week":
-        score += 20
-    elif start_timeframe == "Within 1 Month":
-        score += 10
-    elif start_timeframe == "Exploring":
-        score += 5
-
-    if education_status in ["Degree Student", "Graduate", "Job Seeker", "Working Professional"]:
-        score += 20
-    elif education_status:
-        score += 10
-
-    if career_goal in ["Job", "Skill Development", "Career Switch"]:
-        score += 20
-    elif career_goal:
-        score += 10
-
-    return min(score, 100)
+    return lead_services.compute_lead_score({
+        "lead_source": lead_source,
+        "start_timeframe": start_timeframe,
+        "education_status": education_status,
+        "career_goal": career_goal,
+    })
 
 @leads_bp.route("/")
 @login_required
@@ -133,6 +103,7 @@ def dashboard():
     today = date.today()
     today_str = today.strftime("%Y-%m-%d")
     month_str = today.strftime("%Y-%m")
+    inactive_cutoff = (today - timedelta(days=7)).strftime("%Y-%m-%d")
 
     conn = get_conn()
     cur = conn.cursor()
@@ -170,29 +141,58 @@ def dashboard():
 
     # Followups due
     cur.execute(f"""
-        SELECT *
-        FROM leads
-        WHERE status = 'active'
-          AND is_deleted = 0
-          AND next_followup_date IS NOT NULL
-          AND next_followup_date <= ?
+        SELECT l.*, u.full_name AS owner_name, u.username AS owner_username
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE l.status = 'active'
+          AND l.is_deleted = 0
+          AND l.next_followup_date IS NOT NULL
+          AND l.next_followup_date <= ?
           {assigned_filter_sql}
-        ORDER BY next_followup_date ASC
+        ORDER BY l.next_followup_date ASC, l.lead_score DESC
+        LIMIT 50
     """, [today_str] + assigned_params)
-    followups_due = cur.fetchall()
+    followups_due = [lead_services.enrich_lead_for_crm(row, today=today) for row in cur.fetchall()]
+    overdue_followups = [l for l in followups_due if l.get("followup_status") == "overdue"]
+    today_followups = [l for l in followups_due if l.get("followup_status") == "today"]
 
     # Hot leads
     cur.execute(f"""
-        SELECT *
+        SELECT l.*, u.full_name AS owner_name, u.username AS owner_username
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE l.status = 'active'
+          AND l.is_deleted = 0
+          AND l.lead_score >= 60
+          {assigned_filter_sql}
+        ORDER BY l.lead_score DESC, l.updated_at DESC
+        LIMIT 25
+    """, assigned_params)
+    hot_leads_all = [lead_services.enrich_lead_for_crm(row, today=today) for row in cur.fetchall()]
+    hot_leads = hot_leads_all[:10]
+
+    cur.execute(f"""
+        SELECT COUNT(*) AS cnt
         FROM leads
         WHERE status = 'active'
           AND is_deleted = 0
-          AND lead_score >= 60
+          AND (last_contact_date IS NULL OR last_contact_date = '' OR last_contact_date < ?)
           {assigned_filter_sql}
-        ORDER BY lead_score DESC
-        LIMIT 10
-    """, assigned_params)
-    hot_leads = cur.fetchall()
+    """, [inactive_cutoff] + assigned_params)
+    inactive_leads_count = cur.fetchone()["cnt"]
+
+    cur.execute(f"""
+        SELECT l.*, u.full_name AS owner_name, u.username AS owner_username
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE l.is_deleted = 0
+          AND substr(l.created_at, 1, 10) = ?
+          AND (l.last_contact_date IS NULL OR l.last_contact_date = '')
+          {assigned_filter_sql}
+        ORDER BY l.created_at DESC
+        LIMIT 5
+    """, [today_str] + assigned_params)
+    new_not_contacted = [lead_services.enrich_lead_for_crm(row, today=today) for row in cur.fetchall()]
 
     # Converted this month
     cur.execute(f"""
@@ -288,7 +288,7 @@ def dashboard():
             last_contact_date ASC
         LIMIT 5
     """, assigned_params)
-    high_risk_leads = cur.fetchall()
+    high_risk_leads = [lead_services.enrich_lead_for_crm(row, today=today) for row in cur.fetchall()]
 
     # Convert last_contact_date strings to Python date objects for template compatibility
     high_risk_leads_processed = []
@@ -351,6 +351,15 @@ def dashboard():
 
     return render_template(
         "leads/dashboard.html",
+        overdue_followups=overdue_followups,
+        overdue_followups_count=len(overdue_followups),
+        today_followups=today_followups,
+        today_followups_count=len(today_followups),
+        top_overdue_followups=overdue_followups[:5],
+        top_hot_leads=hot_leads_all[:5],
+        new_not_contacted=new_not_contacted,
+        hot_leads_count=len(hot_leads_all),
+        inactive_leads_count=inactive_leads_count,
         new_leads_today=new_leads_today,
         followups_due=followups_due[:10],
         followups_due_count=len(followups_due),
@@ -395,23 +404,18 @@ def lead_create():
         last_contact_date = parse_date(request.form.get("last_contact_date"))
         next_followup_date = parse_date(request.form.get("next_followup_date"))
 
-        lead_score = compute_lead_score(
-            lead_source,
-            start_timeframe,
-            education_status,
-            career_goal
-        )
+        lead_score = lead_services.compute_lead_score({
+            "lead_source": lead_source,
+            "start_timeframe": start_timeframe,
+            "education_status": education_status,
+            "career_goal": career_goal,
+        })
 
         assigned_to_id = session.get("user_id")
 
-        if stage == "Converted":
-            status = "converted"
+        status = lead_services.map_stage_to_status(stage)
+        if status in ("converted", "lost"):
             next_followup_date = None
-        elif stage == "Lost":
-            status = "lost"
-            next_followup_date = None
-        else:
-            status = "active"
 
         if not name or not phone:
             _conn2 = get_conn()
@@ -534,12 +538,22 @@ def lead_detail(lead_id):
     conn = get_conn()
     cur = conn.cursor()
 
+    _, access_error = get_lead_or_404_with_access(conn, lead_id, session)
+    if access_error == "not_found":
+        conn.close()
+        flash("Lead not found.", "danger")
+        return redirect(url_for("leads.dashboard"))
+    if access_error == "forbidden":
+        conn.close()
+        flash("Access denied for this lead.", "danger")
+        return redirect(url_for("leads.dashboard"))
+
     # Lead master data
     cur.execute("""
         SELECT l.*, u.full_name AS assigned_to_name, u.username AS assigned_to_username
         FROM leads l
         LEFT JOIN users u ON l.assigned_to_id = u.id
-        WHERE l.id = ? AND l.is_deleted = 0
+        WHERE l.id = ?
     """, (lead_id,))
     lead = cur.fetchone()
 
@@ -547,6 +561,8 @@ def lead_detail(lead_id):
         conn.close()
         flash("Lead not found.", "danger")
         return redirect(url_for("leads.dashboard"))
+
+    lead = lead_services.enrich_lead_for_crm(lead)
 
     # Active users for reassignment dropdown
     cur.execute("""
@@ -570,12 +586,63 @@ def lead_detail(lead_id):
     """, (lead_id,))
     followups = cur.fetchall()
 
+    cur.execute("""
+        SELECT
+            al.*,
+            u.username AS user_username,
+            u.full_name AS user_full_name
+        FROM activity_logs al
+        LEFT JOIN users u ON al.user_id = u.id
+        WHERE al.module_name = 'leads'
+          AND al.record_id = ?
+        ORDER BY al.created_at DESC
+        LIMIT 100
+    """, (lead_id,))
+    activity_items = cur.fetchall()
+
+    timeline_items = []
+    for f in followups:
+        f_dict = dict(f)
+        timeline_items.append({
+            "kind": "followup",
+            "created_at": f_dict.get("created_at"),
+            "actor": f_dict.get("user_full_name") or f_dict.get("user_username"),
+            "title": (f_dict.get("method") or "Follow-up") + (f" · {f_dict.get('outcome')}" if f_dict.get("outcome") else ""),
+            "note": f_dict.get("note"),
+            "next_followup_date": f_dict.get("next_followup_date"),
+        })
+
+    for a in activity_items:
+        a_dict = dict(a)
+        timeline_items.append({
+            "kind": "activity",
+            "created_at": a_dict.get("created_at"),
+            "actor": a_dict.get("user_full_name") or a_dict.get("user_username"),
+            "title": a_dict.get("action_type") or "Activity",
+            "note": a_dict.get("description"),
+            "next_followup_date": None,
+        })
+
+    timeline_items.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+
     # Linked student (if this lead was converted)
     cur.execute(
         "SELECT id, student_code, full_name FROM students WHERE lead_id = ?",
         (lead_id,)
     )
     linked_student = cur.fetchone()
+
+    alerts = []
+    if lead.get("followup_status") == "overdue":
+        alerts.append({"type": "danger", "text": "Follow-up is overdue. Call immediately."})
+    elif lead.get("followup_status") == "today":
+        alerts.append({"type": "warning", "text": "Follow-up is due today."})
+
+    if lead.get("inactive_days") is not None and lead.get("inactive_days") >= 7:
+        alerts.append({"type": "warning", "text": f"No contact for {lead.get('inactive_days')} days."})
+
+    if not lead.get("last_contact_date"):
+        alerts.append({"type": "info", "text": "This lead has never been contacted."})
 
     conn.close()
 
@@ -584,6 +651,8 @@ def lead_detail(lead_id):
         lead=lead,
         all_users=all_users,
         followups=followups,
+        timeline_items=timeline_items,
+        alerts=alerts,
         methods=FOLLOWUP_METHODS,
         outcomes=FOLLOWUP_OUTCOMES,
         linked_student=linked_student,
@@ -594,11 +663,17 @@ def lead_detail(lead_id):
 def leads_list():
     conn = get_conn()
     cur = conn.cursor()
+    today_str = date.today().strftime("%Y-%m-%d")
 
     q = request.args.get("q", "").strip()
     stage = request.args.get("stage", "").strip()
     source = request.args.get("source", "").strip()
     user_id = request.args.get("user_id", "").strip()
+    my_leads = request.args.get("my_leads", "").strip()
+    temperature = request.args.get("temperature", "").strip()
+    course = request.args.get("course", "").strip()
+    followup_due = request.args.get("followup_due", "").strip()
+    status_filter = request.args.get("status_filter", "").strip()
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
     hide_converted = request.args.get("hide_converted", "").strip()
@@ -619,6 +694,9 @@ def leads_list():
     if current_user_role != "admin":
         query += " AND l.assigned_to_id = ?"
         params.append(current_user_id)
+    elif my_leads == "1":
+        query += " AND l.assigned_to_id = ?"
+        params.append(current_user_id)
     elif user_id:
         query += " AND l.assigned_to_id = ?"
         params.append(user_id)
@@ -636,6 +714,21 @@ def leads_list():
         query += " AND l.lead_source = ?"
         params.append(source)
 
+    if course:
+        query += " AND l.interested_courses = ?"
+        params.append(course)
+
+    if status_filter in ("active", "converted", "lost"):
+        query += " AND l.status = ?"
+        params.append(status_filter)
+
+    if followup_due == "overdue":
+        query += " AND l.status = 'active' AND l.next_followup_date IS NOT NULL AND l.next_followup_date < ?"
+        params.append(today_str)
+    elif followup_due == "today":
+        query += " AND l.status = 'active' AND l.next_followup_date = ?"
+        params.append(today_str)
+
     if date_from:
         query += " AND substr(l.created_at, 1, 10) >= ?"
         params.append(date_from)
@@ -648,39 +741,61 @@ def leads_list():
     query += " ORDER BY l.updated_at DESC"
 
     cur.execute(query, params)
-    leads = cur.fetchall()
+    leads = [lead_services.enrich_lead_for_crm(row) for row in cur.fetchall()]
+
+    if temperature in ("Hot", "Warm", "Cold", "Converted", "Lost"):
+        leads = [lead for lead in leads if lead.get("temperature") == temperature]
 
     # Users (for admin filter dropdown)
     cur.execute("SELECT id, full_name, username FROM users ORDER BY full_name")
     all_users = cur.fetchall()
 
-    # Calculate metrics properly
+    # Calculate metrics with role-aware scope
     today = date.today()
     month_str = today.strftime("%Y-%m")
 
-    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0")
+    metrics_filter_sql = ""
+    metrics_params = []
+    if current_user_role != "admin" or my_leads == "1":
+        metrics_filter_sql = " AND assigned_to_id = ?"
+        metrics_params.append(current_user_id)
+    elif user_id:
+        metrics_filter_sql = " AND assigned_to_id = ?"
+        metrics_params.append(user_id)
+
+    cur.execute(f"SELECT COUNT(*) FROM leads WHERE is_deleted = 0 {metrics_filter_sql}", metrics_params)
     total_overall = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND substr(created_at, 1, 7) = ?", (month_str,))
+    cur.execute(f"SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND substr(created_at, 1, 7) = ? {metrics_filter_sql}", (month_str, *metrics_params))
     total_this_month = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'active'")
+    cur.execute(f"SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'active' {metrics_filter_sql}", metrics_params)
     active_overall = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'active' AND substr(created_at, 1, 7) = ?", (month_str,))
+    cur.execute(f"SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'active' AND substr(created_at, 1, 7) = ? {metrics_filter_sql}", (month_str, *metrics_params))
     active_this_month = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'converted'")
+    cur.execute(f"SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'converted' {metrics_filter_sql}", metrics_params)
     converted_overall = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'converted' AND substr(updated_at, 1, 7) = ?", (month_str,))
+    cur.execute(f"SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'converted' AND substr(updated_at, 1, 7) = ? {metrics_filter_sql}", (month_str, *metrics_params))
     converted_this_month = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'lost'")
+    cur.execute(f"SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'lost' {metrics_filter_sql}", metrics_params)
     lost_overall = cur.fetchone()[0]
 
-    cur.execute("SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'lost' AND substr(updated_at, 1, 7) = ?", (month_str,))
+    cur.execute(f"SELECT COUNT(*) FROM leads WHERE is_deleted = 0 AND status = 'lost' AND substr(updated_at, 1, 7) = ? {metrics_filter_sql}", (month_str, *metrics_params))
     lost_this_month = cur.fetchone()[0]
+
+    cur.execute("""
+        SELECT DISTINCT interested_courses
+        FROM leads
+        WHERE is_deleted = 0
+          AND interested_courses IS NOT NULL
+          AND TRIM(interested_courses) != ''
+        ORDER BY interested_courses
+    """)
+    course_options = [row["interested_courses"] for row in cur.fetchall()]
 
     metrics = {
         "total_overall": total_overall,
@@ -704,11 +819,17 @@ def leads_list():
         q=q,
         stage=stage,
         source=source,
+        course=course,
+        my_leads=my_leads,
+        followup_due=followup_due,
+        status_filter=status_filter,
+        temperature=temperature,
         date_from=date_from,
         date_to=date_to,
         hide_converted=hide_converted,
         stages=stages,
         sources=sources,
+        course_options=course_options,
         all_users=all_users,
         selected_user_id=user_id,
         is_admin=(current_user_role == "admin"),
@@ -721,17 +842,14 @@ def followup_add(lead_id):
     conn = get_conn()
     cur = conn.cursor()
 
-    # Check lead exists
-    cur.execute("""
-        SELECT *
-        FROM leads
-        WHERE id = ? AND is_deleted = 0
-    """, (lead_id,))
-    lead = cur.fetchone()
-
-    if not lead:
+    lead, access_error = get_lead_or_404_with_access(conn, lead_id, session)
+    if access_error == "not_found":
         conn.close()
         flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
+    if access_error == "forbidden":
+        conn.close()
+        flash("Access denied for this lead.", "danger")
         return redirect(url_for("leads.leads_list"))
 
     method = request.form.get("method", "").strip() or None
@@ -810,16 +928,14 @@ def lead_edit(lead_id):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT *
-        FROM leads
-        WHERE id = ? AND is_deleted = 0
-    """, (lead_id,))
-    lead = cur.fetchone()
-
-    if not lead:
+    lead, access_error = get_lead_or_404_with_access(conn, lead_id, session)
+    if access_error == "not_found":
         conn.close()
         flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
+    if access_error == "forbidden":
+        conn.close()
+        flash("Access denied for this lead.", "danger")
         return redirect(url_for("leads.leads_list"))
 
     if request.method == "POST":
@@ -846,21 +962,16 @@ def lead_edit(lead_id):
         last_contact_date = parse_date(request.form.get("last_contact_date"))
         next_followup_date = parse_date(request.form.get("next_followup_date"))
 
-        lead_score = compute_lead_score(
-            lead_source,
-            start_timeframe,
-            education_status,
-            career_goal
-        )
+        lead_score = lead_services.compute_lead_score({
+            "lead_source": lead_source,
+            "start_timeframe": start_timeframe,
+            "education_status": education_status,
+            "career_goal": career_goal,
+        })
 
-        if stage == "Converted":
-            status = "converted"
+        status = lead_services.map_stage_to_status(stage)
+        if status in ("converted", "lost"):
             next_followup_date = None
-        elif stage == "Lost":
-            status = "lost"
-            next_followup_date = None
-        else:
-            status = "active"
 
         if not name or not phone:
             _conn3 = get_conn()
@@ -974,75 +1085,42 @@ def lead_set_stage(lead_id):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT *
-        FROM leads
-        WHERE id = ? AND is_deleted = 0
-    """, (lead_id,))
-    lead = cur.fetchone()
-
-    if not lead:
+    lead, access_error = get_lead_or_404_with_access(conn, lead_id, session)
+    if access_error == "not_found":
         conn.close()
         flash("Lead not found.", "danger")
         return redirect(url_for("leads.leads_list"))
+    if access_error == "forbidden":
+        conn.close()
+        flash("Access denied for this lead.", "danger")
+        return redirect(request.referrer or url_for("leads.dashboard"))
 
     st = request.form.get("stage", "").strip()
 
-    valid_stages = [
-        "New Lead",
-        "Contacted",
-        "Interested",
-        "Counseling Done",
-        "Follow-up",
-        "Converted",
-        "Lost"
-    ]
-
-    if st not in valid_stages:
+    if st not in lead_services.VALID_STAGES:
         conn.close()
         flash("Invalid stage selected.", "danger")
         return redirect(request.referrer or url_for("leads.dashboard"))
 
-    old_stage = lead["stage"]
+    try:
+        update_result = lead_services.update_lead_stage(
+            conn=conn,
+            lead_id=lead_id,
+            new_stage=st,
+            user_id=session.get("user_id"),
+        )
+    except ValueError:
+        conn.close()
+        flash("Invalid stage selected.", "danger")
+        return redirect(request.referrer or url_for("leads.dashboard"))
 
-    if st == "Converted":
-        status = "converted"
-        next_followup_date = None
-    elif st == "Lost":
-        status = "lost"
-        next_followup_date = None
-    else:
-        status = "active"
-        next_followup_date = lead["next_followup_date"]
-
-    now = datetime.now().isoformat(timespec="seconds")
-
-    cur.execute("""
-        UPDATE leads
-        SET stage = ?,
-            status = ?,
-            next_followup_date = ?,
-            updated_at = ?
-        WHERE id = ?
-    """, (
-        st,
-        status,
-        next_followup_date,
-        now,
-        lead_id
-    ))
+    if not update_result:
+        conn.close()
+        flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
 
     conn.commit()
     conn.close()
-
-    log_activity(
-        user_id=session.get("user_id"),
-        branch_id=session.get("branch_id"),
-        action_type="stage_changed",
-        module_name="leads",
-        record_id=lead_id,
-        description=f"Lead stage changed: {lead['name']} - {old_stage} → {st}"
-    )
 
     flash("Lead stage updated.", "success")
     return redirect(request.referrer or url_for("leads.dashboard"))
@@ -1053,17 +1131,14 @@ def lead_reassign(lead_id):
     conn = get_conn()
     cur = conn.cursor()
 
-    # Check lead exists
-    cur.execute("""
-        SELECT *
-        FROM leads
-        WHERE id = ? AND is_deleted = 0
-    """, (lead_id,))
-    lead = cur.fetchone()
-
-    if not lead:
+    lead, access_error = get_lead_or_404_with_access(conn, lead_id, session)
+    if access_error == "not_found":
         conn.close()
         flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
+    if access_error == "forbidden":
+        conn.close()
+        flash("Access denied for this lead.", "danger")
         return redirect(url_for("leads.leads_list"))
 
     assigned_to_id = request.form.get("assigned_to_id", "").strip() or None
@@ -1132,24 +1207,35 @@ def followups_today():
     conn = get_conn()
     cur = conn.cursor()
 
-    today = date.today().strftime("%Y-%m-%d")
+    today_date = date.today()
+    today = today_date.strftime("%Y-%m-%d")
+    tomorrow = (today_date + timedelta(days=1)).strftime("%Y-%m-%d")
     current_user_id = session.get("user_id")
     current_user_role = session.get("role")
     user_filter = request.args.get("user_id", "").strip()
+    selected_tab = request.args.get("tab", "overdue").strip().lower()
+    if selected_tab not in {"overdue", "today", "tomorrow", "upcoming", "completed"}:
+        selected_tab = "overdue"
 
     query = """
         SELECT
             l.*,
             u.full_name AS owner_name,
-            u.username AS owner_username
+            u.username AS owner_username,
+            (
+                SELECT f2.note
+                FROM followups f2
+                WHERE f2.lead_id = l.id
+                ORDER BY f2.created_at DESC
+                LIMIT 1
+            ) AS last_note
         FROM leads l
         LEFT JOIN users u ON l.assigned_to_id = u.id
         WHERE l.status = 'active'
           AND l.is_deleted = 0
           AND l.next_followup_date IS NOT NULL
-          AND l.next_followup_date <= ?
     """
-    params = [today]
+    params = []
 
     # Counselors see only their own leads
     if current_user_role != "admin":
@@ -1164,10 +1250,71 @@ def followups_today():
         except (ValueError, TypeError):
             pass
 
-    query += " ORDER BY l.next_followup_date ASC"
+    query += " ORDER BY l.next_followup_date ASC, l.lead_score DESC"
 
     cur.execute(query, params)
-    leads = cur.fetchall()
+    due_leads = [lead_services.enrich_lead_for_crm(row, today=today_date) for row in cur.fetchall()]
+
+    overdue_items = []
+    today_items = []
+    tomorrow_items = []
+    upcoming_items = []
+
+    for lead in due_leads:
+        due_date = (lead.get("next_followup_date") or "").strip()
+        if not due_date:
+            continue
+        if due_date < today:
+            overdue_items.append(lead)
+        elif due_date == today:
+            today_items.append(lead)
+        elif due_date == tomorrow:
+            tomorrow_items.append(lead)
+        else:
+            upcoming_items.append(lead)
+
+    completed_query = """
+        SELECT
+            f.id AS followup_id,
+            f.lead_id,
+            f.method,
+            f.outcome,
+            f.note,
+            f.next_followup_date AS followup_next_followup_date,
+            f.created_at AS followup_created_at,
+            l.name,
+            l.phone,
+            l.interested_courses AS course_interested,
+            l.stage,
+            l.lead_score,
+            l.next_followup_date,
+            u.full_name AS owner_name,
+            u.username AS owner_username
+        FROM followups f
+        JOIN leads l ON l.id = f.lead_id
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE substr(f.created_at, 1, 10) = ?
+          AND l.is_deleted = 0
+    """
+    completed_params = [today]
+
+    if current_user_role != "admin":
+        completed_query += " AND l.assigned_to_id = ?"
+        completed_params.append(current_user_id)
+    elif user_filter:
+        try:
+            completed_query += " AND l.assigned_to_id = ?"
+            completed_params.append(int(user_filter))
+        except (ValueError, TypeError):
+            pass
+
+    completed_query += " ORDER BY f.created_at DESC"
+    cur.execute(completed_query, completed_params)
+    completed_items = []
+    for row in cur.fetchall():
+        item = dict(row)
+        item["temperature"] = lead_services.get_lead_temperature(item, today=today_date)
+        completed_items.append(item)
 
     # Admin dropdown users
     if current_user_role == "admin":
@@ -1183,17 +1330,161 @@ def followups_today():
 
     conn.close()
 
-    overdue_count = sum(1 for l in leads if l["next_followup_date"] and l["next_followup_date"] < today)
+    tab_counts = {
+        "overdue": len(overdue_items),
+        "today": len(today_items),
+        "tomorrow": len(tomorrow_items),
+        "upcoming": len(upcoming_items),
+        "completed": len(completed_items),
+    }
+
+    tab_items = {
+        "overdue": overdue_items,
+        "today": today_items,
+        "tomorrow": tomorrow_items,
+        "upcoming": upcoming_items,
+        "completed": completed_items,
+    }
 
     return render_template(
         "leads/followups.html",
-        leads=leads,
+        leads=tab_items[selected_tab],
+        tab_items=tab_items,
+        tab_counts=tab_counts,
+        selected_tab=selected_tab,
         today=today,
+        tomorrow=tomorrow,
         all_users=all_users,
         selected_user_id=user_filter,
         is_admin=(current_user_role == "admin"),
-        overdue_count=overdue_count
+        outcomes=[
+            "Interested",
+            "Call Later",
+            "No Response",
+            "Parent Discussion Pending",
+            "Fees Concern",
+            "Visited",
+            "Not Interested",
+            "Converted",
+        ]
     )
+
+@leads_bp.route("/followups/complete", methods=["POST"])
+@login_required
+def followups_quick_complete():
+    lead_id_raw = request.form.get("lead_id", "").strip()
+    if not lead_id_raw.isdigit():
+        flash("Invalid lead selected.", "danger")
+        return redirect(url_for("leads.followups_today"))
+
+    lead_id = int(lead_id_raw)
+    tab = request.form.get("tab", "overdue").strip().lower()
+    if tab not in {"overdue", "today", "tomorrow", "upcoming", "completed"}:
+        tab = "overdue"
+
+    selected_user_id = request.form.get("selected_user_id", "").strip()
+    mode = request.form.get("mode", "complete").strip().lower()
+    method = request.form.get("method", "Call").strip() or "Call"
+    outcome = request.form.get("outcome", "").strip()
+    note = request.form.get("note", "").strip()
+    next_dt = parse_date(request.form.get("next_followup_date"))
+    next_action = request.form.get("next_action", "").strip() or None
+    followup_note = note
+    if next_action:
+        followup_note = (note + "\n" if note else "") + f"Next action: {next_action}"
+
+    if mode == "reschedule" and not next_dt:
+        flash("Next follow-up date is required for reschedule.", "danger")
+        if selected_user_id:
+            return redirect(url_for("leads.followups_today", tab=tab, user_id=selected_user_id))
+        return redirect(url_for("leads.followups_today", tab=tab))
+
+    if mode == "reschedule" and not outcome:
+        outcome = "Call Later"
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    lead, access_error = get_lead_or_404_with_access(conn, lead_id, session)
+    if access_error == "not_found":
+        conn.close()
+        flash("Lead not found.", "danger")
+        if selected_user_id:
+            return redirect(url_for("leads.followups_today", tab=tab, user_id=selected_user_id))
+        return redirect(url_for("leads.followups_today", tab=tab))
+    if access_error == "forbidden":
+        conn.close()
+        flash("Access denied for this lead.", "danger")
+        if selected_user_id:
+            return redirect(url_for("leads.followups_today", tab=tab, user_id=selected_user_id))
+        return redirect(url_for("leads.followups_today", tab=tab))
+
+    now = datetime.now().isoformat(timespec="seconds")
+    today_str = date.today().strftime("%Y-%m-%d")
+
+    cur.execute("""
+        INSERT INTO followups (
+            lead_id,
+            user_id,
+            method,
+            outcome,
+            note,
+            next_followup_date,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        lead_id,
+        session.get("user_id"),
+        method,
+        outcome or None,
+        followup_note or None,
+        next_dt,
+        now
+    ))
+
+    current_followup_count = lead["followup_count"] or 0
+    current_stage = lead["stage"] or "New Lead"
+    new_stage = "Contacted" if current_stage == "New Lead" else current_stage
+
+    cur.execute("""
+        UPDATE leads
+        SET last_contact_date = ?,
+            followup_count = ?,
+            next_followup_date = ?,
+            stage = ?,
+            updated_at = ?
+        WHERE id = ?
+    """, (
+        today_str,
+        current_followup_count + 1,
+        next_dt,
+        new_stage,
+        now,
+        lead_id
+    ))
+
+    conn.commit()
+    conn.close()
+
+    action_label = "Follow-up rescheduled" if mode == "reschedule" else "Follow-up completed"
+    log_activity(
+        user_id=session.get("user_id"),
+        branch_id=session.get("branch_id"),
+        action_type="followup_completed",
+        module_name="leads",
+        record_id=lead_id,
+        description=(
+            f"{action_label} for {lead['name']} - Method: {method}, "
+            f"Outcome: {outcome or 'Not specified'}, Next: {next_dt or 'Not set'}, "
+            f"Next action: {next_action or 'Not specified'}"
+        )
+    )
+
+    flash(action_label + ".", "success")
+    if selected_user_id:
+        return redirect(url_for("leads.followups_today", tab=tab, user_id=selected_user_id))
+    return redirect(url_for("leads.followups_today", tab=tab))
 @leads_bp.route("/pipeline")
 @login_required
 def pipeline():
@@ -1249,7 +1540,7 @@ def pipeline():
 
         processed_rows = []
         for row in rows:
-            row_dict = dict(row)
+            row_dict = lead_services.enrich_lead_for_crm(row)
             lcd = row_dict.get("last_contact_date")
             if lcd:
                 try:
@@ -1331,6 +1622,54 @@ def reports():
 
     conversion_rate = round((converted_total / total_leads * 100), 1) if total_leads > 0 else 0
 
+    # Follow-up completion rate (leads that have at least one followup entry)
+    followup_where_parts = [where_sql]
+    followup_params = list(params)
+    if date_from:
+        followup_where_parts.append("substr(f.created_at, 1, 10) >= ?")
+        followup_params.append(date_from)
+    if date_to:
+        followup_where_parts.append("substr(f.created_at, 1, 10) <= ?")
+        followup_params.append(date_to)
+    followup_where_sql = " AND ".join(followup_where_parts)
+
+    cur.execute(f"""
+        SELECT COUNT(DISTINCT f.lead_id) AS cnt
+        FROM followups f
+        JOIN leads l ON l.id = f.lead_id
+        WHERE {followup_where_sql}
+    """, followup_params)
+    leads_with_followups = cur.fetchone()["cnt"]
+    followup_completion_rate = round((leads_with_followups / total_leads * 100), 1) if total_leads > 0 else 0
+
+    # Hot lead conversion rate
+    cur.execute(f"""
+        SELECT COUNT(*) AS cnt
+        FROM leads l
+        WHERE {where_sql} AND l.lead_score >= 75
+    """, params)
+    hot_total = cur.fetchone()["cnt"]
+
+    cur.execute(f"""
+        SELECT COUNT(*) AS cnt
+        FROM leads l
+        WHERE {where_sql} AND l.lead_score >= 75 AND l.status = 'converted'
+    """, params)
+    hot_converted = cur.fetchone()["cnt"]
+    hot_lead_conversion_rate = round((hot_converted / hot_total * 100), 1) if hot_total > 0 else 0
+
+    # Average days to conversion (approx using created_at -> updated_at)
+    cur.execute(f"""
+        SELECT AVG(julianday(l.updated_at) - julianday(l.created_at)) AS avg_days
+        FROM leads l
+        WHERE {where_sql}
+          AND l.status = 'converted'
+          AND l.created_at IS NOT NULL
+          AND l.updated_at IS NOT NULL
+    """, params)
+    avg_days_to_conversion_raw = cur.fetchone()["avg_days"]
+    avg_days_to_conversion = round(avg_days_to_conversion_raw, 1) if avg_days_to_conversion_raw is not None else None
+
     # Lead source performance
     cur.execute(f"""
         SELECT
@@ -1373,6 +1712,46 @@ def reports():
         converted = row["converted_count"]
         conv_rate = round((converted / total * 100), 1) if total > 0 else 0
         course_rows.append((course, total, converted, conv_rate))
+
+    # Lost reason report
+    cur.execute(f"""
+        SELECT
+            COALESCE(NULLIF(TRIM(l.lost_reason), ''), 'Unknown') AS reason,
+            COUNT(*) AS cnt
+        FROM leads l
+        WHERE {where_sql}
+          AND l.status = 'lost'
+        GROUP BY COALESCE(NULLIF(TRIM(l.lost_reason), ''), 'Unknown')
+        ORDER BY cnt DESC
+    """, params)
+    lost_reason_rows = cur.fetchall()
+
+    # Monthly conversion trend
+    trend_where = ["l.is_deleted = 0", "l.status = 'converted'", "l.updated_at IS NOT NULL"]
+    trend_params = []
+
+    if user_id_filter:
+        trend_where.append("l.assigned_to_id = ?")
+        trend_params.append(int(user_id_filter))
+
+    if date_from:
+        trend_where.append("substr(l.updated_at, 1, 10) >= ?")
+        trend_params.append(date_from)
+    if date_to:
+        trend_where.append("substr(l.updated_at, 1, 10) <= ?")
+        trend_params.append(date_to)
+
+    trend_where_sql = " AND ".join(trend_where)
+    cur.execute(f"""
+        SELECT
+            substr(l.updated_at, 1, 7) AS month,
+            COUNT(*) AS converted_count
+        FROM leads l
+        WHERE {trend_where_sql}
+        GROUP BY substr(l.updated_at, 1, 7)
+        ORDER BY month ASC
+    """, trend_params)
+    monthly_conversion_rows = cur.fetchall()
 
     # Users dropdown
     cur.execute("""
@@ -1458,8 +1837,16 @@ def reports():
         converted=converted_total,
         lost=lost,
         conversion_rate=conversion_rate,
+        leads_with_followups=leads_with_followups,
+        followup_completion_rate=followup_completion_rate,
+        hot_total=hot_total,
+        hot_converted=hot_converted,
+        hot_lead_conversion_rate=hot_lead_conversion_rate,
+        avg_days_to_conversion=avg_days_to_conversion,
         source_rows=source_rows,
         course_rows=course_rows,
+        lost_reason_rows=lost_reason_rows,
+        monthly_conversion_rows=monthly_conversion_rows,
         all_users=all_users,
         selected_user_id=user_id_filter if user_id_filter else None,
         date_from=date_from,
@@ -1572,16 +1959,14 @@ def lead_delete(lead_id):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT *
-        FROM leads
-        WHERE id = ? AND is_deleted = 0
-    """, (lead_id,))
-    lead = cur.fetchone()
-
-    if not lead:
+    lead, access_error = get_lead_or_404_with_access(conn, lead_id, session)
+    if access_error == "not_found":
         conn.close()
         flash("Lead not found.", "danger")
+        return redirect(url_for("leads.leads_list"))
+    if access_error == "forbidden":
+        conn.close()
+        flash("Access denied for this lead.", "danger")
         return redirect(url_for("leads.leads_list"))
 
     now = datetime.now().isoformat(timespec="seconds")
@@ -1659,16 +2044,14 @@ def lead_restore(lead_id):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT *
-        FROM leads
-        WHERE id = ? AND is_deleted = 1
-    """, (lead_id,))
-    lead = cur.fetchone()
-
-    if not lead:
+    lead, access_error = get_lead_or_404_with_access(conn, lead_id, session, include_deleted=True)
+    if access_error == "not_found" or (lead and lead["is_deleted"] != 1):
         conn.close()
         flash("Deleted lead not found.", "danger")
+        return redirect(url_for("leads.deleted_leads"))
+    if access_error == "forbidden":
+        conn.close()
+        flash("Access denied for this lead.", "danger")
         return redirect(url_for("leads.deleted_leads"))
 
     now = datetime.now().isoformat(timespec="seconds")
@@ -1701,17 +2084,15 @@ def lead_mark_lost(lead_id):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT *
-        FROM leads
-        WHERE id = ? AND is_deleted = 0
-    """, (lead_id,))
-    lead = cur.fetchone()
-
-    if not lead:
+    lead, access_error = get_lead_or_404_with_access(conn, lead_id, session)
+    if access_error == "not_found":
         conn.close()
         flash("Lead not found.", "danger")
         return redirect(url_for("leads.leads_list"))
+    if access_error == "forbidden":
+        conn.close()
+        flash("Access denied for this lead.", "danger")
+        return redirect(url_for("leads.lead_detail", lead_id=lead_id))
 
     lost_reason = request.form.get("lost_reason", "").strip()
 
@@ -1721,6 +2102,7 @@ def lead_mark_lost(lead_id):
         return redirect(url_for("leads.lead_detail", lead_id=lead_id))
 
     now = datetime.now().isoformat(timespec="seconds")
+    lost_status = lead_services.map_stage_to_status("Lost")
 
     cur.execute("""
         UPDATE leads
@@ -1732,23 +2114,22 @@ def lead_mark_lost(lead_id):
         WHERE id = ?
     """, (
         "Lost",
-        "lost",
+        lost_status,
         lost_reason,
         now,
         lead_id
     ))
 
-    conn.commit()
-    conn.close()
-
-    log_activity(
+    lead_services.log_lead_activity(
+        conn=conn,
+        lead_id=lead_id,
         user_id=session.get("user_id"),
-        branch_id=session.get("branch_id"),
         action_type="lead_lost",
-        module_name="leads",
-        record_id=lead_id,
         description=f"Lead marked as lost: {lead['name']} - Reason: {lost_reason}"
     )
+
+    conn.commit()
+    conn.close()
 
     flash("Lead marked as lost.", "warning")
     return redirect(url_for("leads.lead_detail", lead_id=lead_id))
@@ -1760,16 +2141,13 @@ def ai_assist(lead_id):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT *
-        FROM leads
-        WHERE id = ? AND is_deleted = 0
-    """, (lead_id,))
-    lead = cur.fetchone()
-
-    if not lead:
+    lead, access_error = get_lead_or_404_with_access(conn, lead_id, session)
+    if access_error == "not_found":
         conn.close()
         return jsonify({"error": "Lead not found."}), 404
+    if access_error == "forbidden":
+        conn.close()
+        return jsonify({"error": "Access denied for this lead."}), 403
 
     cur.execute("""
         SELECT f.*, u.full_name AS user_full_name
