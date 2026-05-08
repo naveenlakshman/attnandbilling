@@ -824,8 +824,53 @@ def init_db():
     add_column_if_not_exists(cur, "students", "portal_enabled", "INTEGER NOT NULL DEFAULT 0")
     # Lead-to-student linkage
     add_column_if_not_exists(cur, "students", "lead_id", "INTEGER")
+    add_column_if_not_exists(cur, "leads", "branch_id", "INTEGER")
+    add_column_if_not_exists(cur, "leads", "conversion_date", "TEXT")
+    add_column_if_not_exists(cur, "leads", "parent_discussion_status", "TEXT DEFAULT 'Pending'")
+    add_column_if_not_exists(cur, "leads", "visit_status", "TEXT DEFAULT 'Not Visited'")
     add_column_if_not_exists(cur, "leads", "lead_location", "TEXT")
     add_column_if_not_exists(cur, "leads", "email", "TEXT")
+
+    # ---------- SAFE BACKFILL (CRM REDESIGN PHASE 11C) ----------
+    # Fill branch_id from assigned user when possible (legacy leads).
+    cur.execute("""
+        UPDATE leads
+        SET branch_id = (
+            SELECT u.branch_id
+            FROM users u
+            WHERE u.id = leads.assigned_to_id
+        )
+        WHERE branch_id IS NULL
+          AND assigned_to_id IS NOT NULL
+          AND EXISTS (
+              SELECT 1
+              FROM users u2
+              WHERE u2.id = leads.assigned_to_id
+                AND u2.branch_id IS NOT NULL
+          )
+    """)
+
+    # Approximate historical conversion date for existing converted leads.
+    cur.execute("""
+        UPDATE leads
+        SET conversion_date = COALESCE(substr(updated_at, 1, 10), substr(created_at, 1, 10))
+        WHERE conversion_date IS NULL
+          AND (status = 'converted' OR stage = 'Converted')
+    """)
+
+    cur.execute("""
+        UPDATE leads
+        SET parent_discussion_status = 'Pending'
+        WHERE parent_discussion_status IS NULL
+           OR TRIM(parent_discussion_status) = ''
+    """)
+
+    cur.execute("""
+        UPDATE leads
+        SET visit_status = 'Not Visited'
+        WHERE visit_status IS NULL
+           OR TRIM(visit_status) = ''
+    """)
 
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")
     add_column_if_not_exists(cur, "courses", "course_domain", "TEXT")
@@ -1217,6 +1262,11 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_next_followup_date ON leads(next_followup_date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_is_deleted ON leads(is_deleted)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_branch_id ON leads(branch_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_conversion_date ON leads(conversion_date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_lost_reason ON leads(lost_reason)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_parent_discussion_status ON leads(parent_discussion_status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_leads_visit_status ON leads(visit_status)")
 
     cur.execute("CREATE INDEX IF NOT EXISTS idx_followups_lead_id ON followups(lead_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_followups_created_at ON followups(created_at)")

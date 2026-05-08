@@ -79,6 +79,12 @@
     font-size: 13px;
     text-align: center;
   }
+
+  /* CRM priority badges */
+  .crm-badge-parent  { background: #fef9c3; color: #78350f; }
+  .crm-badge-visit   { background: #dbeafe; color: #1e40af; }
+  .crm-badge-visited { background: #dcfce7; color: #166534; }
+  .crm-badge-demo    { background: #ede9fe; color: #5b21b6; }
 </style>
 {% endblock %}
 
@@ -146,13 +152,24 @@
               <div class="fw-semibold">{{ l.name }}</div>
               <div class="meta-line">{{ l.phone or '-' }}</div>
               <div class="meta-line">Course: {{ l.interested_courses or '-' }}</div>
-              <div class="meta-line">Score: {{ l.lead_score or 0 }}</div>
+              <div class="meta-line">Parent: {{ l.parent_discussion_status or '-' }}</div>
+              <div class="meta-line">Visit: {{ l.visit_status or '-' }}</div>
               <div class="meta-line">Owner: {{ l.owner_name or l.owner_username or 'Unassigned' }}</div>
               <div class="meta-line">Next: {{ l.next_followup_date or '-' }}</div>
 
               <div class="d-flex gap-1 flex-wrap mt-2">
                 <span class="mini-badge {{ temp_class }}">{{ l.temperature }}</span>
                 <span class="mini-badge {{ followup_badge_class }}">{{ l.followup_status|capitalize }}</span>
+                {% if l.parent_discussion_status == 'Pending' %}
+                  <span class="mini-badge crm-badge-parent">Parent Pending</span>
+                {% endif %}
+                {% if l.visit_status == 'Visit Scheduled' %}
+                  <span class="mini-badge crm-badge-visit">Visit Scheduled</span>
+                {% elif l.visit_status == 'Demo Attended' %}
+                  <span class="mini-badge crm-badge-demo">Demo Attended</span>
+                {% elif l.visit_status in ('Visited', 'Visited - Not Converted') %}
+                  <span class="mini-badge crm-badge-visited">Visited</span>
+                {% endif %}
               </div>
 
               <div class="d-flex gap-1 mt-2 flex-wrap">

@@ -1176,9 +1176,10 @@ def student_new():
         # ── Lead linkage ────────────────────────────────────────────
         if form_lead_id:
             # Mark the originating lead as converted
+            today_str = now[:10]
             cur.execute(
-                "UPDATE leads SET stage = 'Converted', status = 'converted', updated_at = ? WHERE id = ?",
-                (now, form_lead_id)
+                "UPDATE leads SET stage = 'Converted', status = 'converted', conversion_date = ?, updated_at = ? WHERE id = ?",
+                (today_str, now, form_lead_id)
             )
             conn.commit()
             conn.close()
@@ -1196,9 +1197,9 @@ def student_new():
             cur.execute(
                 """INSERT INTO leads
                        (name, phone, gender, education_status, lead_location,
-                        stage, status, lead_source, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, 'Converted', 'converted', 'Walk-in', ?, ?)""",
-                (full_name, phone, gender, lead_edu, student_location, now, now)
+                        stage, status, lead_source, conversion_date, branch_id, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, 'Converted', 'converted', 'Walk-in', ?, ?, ?, ?)""",
+                (full_name, phone, gender, lead_edu, student_location, now[:10], branch_id, now, now)
             )
             new_lead_id = cur.lastrowid
             cur.execute("UPDATE students SET lead_id = ? WHERE id = ?", (new_lead_id, student_id))
@@ -1216,6 +1217,16 @@ def student_new():
             record_id=student_id,
             description=f"Created student {full_name} (Reg No: {next_reg_no})"
         )
+
+        if form_lead_id:
+            log_activity(
+                user_id=session["user_id"],
+                branch_id=branch_id,
+                action_type="lead_converted",
+                module_name="leads",
+                record_id=form_lead_id,
+                description=f"Lead converted on {now[:10]} - Student: {full_name} (Reg No: {next_reg_no})",
+            )
 
         flash("Student added successfully.", "success")
         return redirect(url_for("billing.students"))

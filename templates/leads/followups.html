@@ -161,7 +161,21 @@
             {% endif %}
           {% endif %}
           <tr class="followup-row" data-search="{{ (lead_name + ' ' + lead_phone)|lower }}">
-            <td class="fw-semibold">{{ lead_name }}</td>
+            <td class="fw-semibold">
+              {{ lead_name }}
+              <div class="d-flex flex-wrap gap-1 mt-1">
+                {% if l.parent_discussion_status == 'Pending' %}
+                  <span class="badge bg-warning text-dark" style="font-size:9px;">Parent Pending</span>
+                {% endif %}
+                {% if l.visit_status == 'Visit Scheduled' %}
+                  <span class="badge bg-info text-dark" style="font-size:9px;">Visit Scheduled</span>
+                {% elif l.visit_status == 'Visited' %}
+                  <span class="badge bg-primary" style="font-size:9px;">Visited</span>
+                {% elif l.visit_status == 'Demo Attended' %}
+                  <span class="badge bg-success" style="font-size:9px;">Demo Attended</span>
+                {% endif %}
+              </div>
+            </td>
             <td class="text-muted">{{ lead_phone or '-' }}</td>
             <td>{{ l.course_interested or '-' }}</td>
             <td><span class="stage-badge stage-{{ stage_key }}">{{ stage_text }}</span></td>
@@ -241,6 +255,16 @@
       <div class="mt-2 d-flex gap-2 flex-wrap">
         <span class="stage-badge stage-{{ stage_key }}">{{ stage_text }}</span>
         <span class="temp-badge temp-{{ temp_key }}">{{ temperature }}</span>
+        {% if l.parent_discussion_status == 'Pending' %}
+          <span class="badge bg-warning text-dark" style="font-size:9px;">Parent Pending</span>
+        {% endif %}
+        {% if l.visit_status == 'Visit Scheduled' %}
+          <span class="badge bg-info text-dark" style="font-size:9px;">Visit Scheduled</span>
+        {% elif l.visit_status == 'Visited' %}
+          <span class="badge bg-primary" style="font-size:9px;">Visited</span>
+        {% elif l.visit_status == 'Demo Attended' %}
+          <span class="badge bg-success" style="font-size:9px;">Demo Attended</span>
+        {% endif %}
       </div>
       <div class="mt-2 text-muted" style="font-size:13px;">{{ lead_phone or '-' }}</div>
       <div class="mt-1 text-muted" style="font-size:12px;">Due: {{ l.next_followup_date if selected_tab != 'completed' else l.followup_created_at }}</div>

@@ -173,6 +173,54 @@
   </div>
 </div>
 
+<!-- CRM Action Cards Row -->
+<div class="row g-2 mb-3">
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('leads.leads_list', parent_discussion_status='Pending') }}" class="text-decoration-none">
+      <div class="card action-card border-start border-4 border-warning">
+        <div class="card-body">
+          <div class="label">Parent Discussion Pending</div>
+          <div class="value text-warning">{{ parent_pending_count }}</div>
+          <div class="hint">Active leads awaiting parent</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('leads.leads_list', visit_status='Visit Scheduled') }}" class="text-decoration-none">
+      <div class="card action-card border-start border-4 border-info">
+        <div class="card-body">
+          <div class="label">Visit Scheduled</div>
+          <div class="value text-info">{{ visit_scheduled_count }}</div>
+          <div class="hint">Awaiting campus visit</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('leads.leads_list', visit_status='Visited') }}" class="text-decoration-none">
+      <div class="card action-card border-start border-4 border-primary">
+        <div class="card-body">
+          <div class="label">Visited, Not Converted</div>
+          <div class="value text-primary">{{ visited_not_converted_count }}</div>
+          <div class="hint">Visited/demo, still pending</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('leads.leads_list', status_filter='lost') }}" class="text-decoration-none">
+      <div class="card action-card border-start border-4 border-danger">
+        <div class="card-body">
+          <div class="label">Lost This Month</div>
+          <div class="value text-danger">{{ lost_this_month }}</div>
+          <div class="hint">Review lost reasons</div>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
 <div class="row g-2 mb-3">
   <div class="col-12 col-lg-4">
     <div class="card section-card h-100">
