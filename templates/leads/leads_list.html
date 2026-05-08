@@ -136,9 +136,9 @@
   <!-- Filter toggles: collapsible on mobile -->
   <div class="d-flex align-items-center gap-2 mb-2">
     <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterCollapse" aria-expanded="false">
-      ⚙ Filters{% if stage or source or selected_user_id or date_from or date_to or temperature or course or followup_due or status_filter or my_leads %} <span class="badge bg-primary ms-1">!</span>{% endif %}
+      ⚙ Filters{% if stage or source or selected_user_id or date_from or date_to or temperature or course or followup_due or status_filter or my_leads or filter_branch_id or parent_discussion_status or visit_status or lost_reason_filter %} <span class="badge bg-primary ms-1">!</span>{% endif %}
     </button>
-    {% if stage or source or selected_user_id or q or date_from or date_to or hide_converted or temperature or course or followup_due or status_filter or my_leads %}
+    {% if stage or source or selected_user_id or q or date_from or date_to or hide_converted or temperature or course or followup_due or status_filter or my_leads or filter_branch_id or parent_discussion_status or visit_status or lost_reason_filter %}
     <a href="{{ url_for('leads.leads_list') }}" class="btn btn-sm btn-outline-danger">✕ Clear</a>
     {% endif %}
 
@@ -160,7 +160,7 @@
     </div>
   </div>
 
-  <div class="collapse {% if stage or source or selected_user_id or date_from or date_to or temperature or course or followup_due or status_filter or my_leads %}show{% endif %}" id="filterCollapse">
+  <div class="collapse {% if stage or source or selected_user_id or date_from or date_to or temperature or course or followup_due or status_filter or my_leads or filter_branch_id or parent_discussion_status or visit_status or lost_reason_filter %}show{% endif %}" id="filterCollapse">
     <div class="card card-body p-2 mb-2" style="border-radius:10px; background:#f8f9fa; border:none;">
       <div class="row g-2">
         {% if is_admin %}
@@ -242,6 +242,45 @@
           <button class="btn btn-primary btn-sm w-100" type="submit">Apply Filters</button>
         </div>
       </div>
+      <!-- CRM Filters Row -->
+      <div class="row g-2 mt-1">
+        {% if is_admin and branch_options %}
+        <div class="col-6 col-md-2">
+          <select name="branch_id" class="form-select form-select-sm">
+            <option value="">All Branches</option>
+            {% for b in branch_options %}
+              <option value="{{ b.id }}" {% if filter_branch_id == b.id|string %}selected{% endif %}>{{ b.branch_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="col-6 col-md-2">
+          <select name="parent_discussion_status" class="form-select form-select-sm">
+            <option value="">All Parent Status</option>
+            {% for opt in parent_discussion_status_options %}
+              <option value="{{ opt }}" {% if parent_discussion_status == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-6 col-md-2">
+          <select name="visit_status" class="form-select form-select-sm">
+            <option value="">All Visit Status</option>
+            {% for opt in visit_status_options %}
+              <option value="{{ opt }}" {% if visit_status == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if lost_reason_options %}
+        <div class="col-6 col-md-2">
+          <select name="lost_reason" class="form-select form-select-sm">
+            <option value="">All Lost Reasons</option>
+            {% for r in lost_reason_options %}
+              <option value="{{ r }}" {% if lost_reason_filter == r %}selected{% endif %}>{{ r }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 </form>
@@ -267,6 +306,12 @@
             <span class="badge bg-danger">Overdue</span>
           {% elif l.followup_status == 'today' %}
             <span class="badge bg-warning text-dark">Today</span>
+          {% endif %}
+          {% if l.parent_discussion_status == 'Pending' %}
+            <span class="badge bg-warning text-dark">Parent Pending</span>
+          {% endif %}
+          {% if l.visit_status and l.visit_status != 'Not Visited' %}
+            <span class="badge bg-info text-dark">{{ l.visit_status }}</span>
           {% endif %}
         </div>
         <div class="d-flex flex-wrap gap-1 mt-2">
@@ -308,7 +353,15 @@
           {% set wa_num = ((l.whatsapp or l.phone or '')|replace(' ', '')|replace('+', '')|replace('-', '')) %}
           <tr>
             <td class="row-num">{{ loop.index }}</td>
-            <td data-sort-key="name" data-sort-value="{{ l.name }}">{{ l.name }}</td>
+            <td data-sort-key="name" data-sort-value="{{ l.name }}">
+              {{ l.name }}
+              {% if l.parent_discussion_status == 'Pending' %}
+                <br><span class="badge bg-warning text-dark" style="font-size:9px;">Parent Pending</span>
+              {% endif %}
+              {% if l.visit_status and l.visit_status != 'Not Visited' %}
+                <span class="badge bg-info text-dark" style="font-size:9px;">{{ l.visit_status }}</span>
+              {% endif %}
+            </td>
             <td>{{ l.phone }}</td>
             <td data-sort-key="course" data-sort-value="{{ l.interested_courses or '' }}">
               {% if l.interested_courses %}

@@ -79,6 +79,36 @@ FOLLOWUP_OUTCOMES = [
     "Converted"
 ]
 
+PARENT_DISCUSSION_STATUS_OPTIONS = [
+    "Pending",
+    "Not Required",
+    "Scheduled",
+    "Completed",
+    "Parent Not Responding",
+    "Parent Rejected",
+]
+
+VISIT_STATUS_OPTIONS = [
+    "Not Visited",
+    "Visit Scheduled",
+    "Visited",
+    "Demo Attended",
+    "Not Interested After Visit",
+]
+
+LOST_REASONS = [
+    "Fees High",
+    "Joined Other Institute",
+    "Parent Rejected",
+    "No Response",
+    "Course Not Required",
+    "Timing Issue",
+    "Location Issue",
+    "Not Eligible",
+    "Duplicate Lead",
+    "Other",
+]
+
 def get_next_stages(current_stage):
     return lead_services.get_next_stages(current_stage)
 
@@ -87,6 +117,33 @@ def parse_date(value):
     if not value:
         return None
     return value  # HTML date input already gives YYYY-MM-DD
+
+
+def _to_int_or_none(value):
+    text = str(value).strip() if value is not None else ""
+    return int(text) if text.isdigit() else None
+
+
+def _load_active_branches():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, branch_name, branch_code
+        FROM branches
+        WHERE is_active = 1
+        ORDER BY branch_name
+    """)
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
+def _get_branch_form_access():
+    role = (session.get("role") or "").strip().lower()
+    can_view_all = int(session.get("can_view_all_branches", 0) or 0)
+    can_select_branch = role == "admin" or can_view_all == 1
+    session_branch_id = _to_int_or_none(session.get("branch_id"))
+    return can_select_branch, session_branch_id
 
 
 def compute_lead_score(lead_source, start_timeframe, education_status, career_goal):
@@ -194,16 +251,49 @@ def dashboard():
     """, [today_str] + assigned_params)
     new_not_contacted = [lead_services.enrich_lead_for_crm(row, today=today) for row in cur.fetchall()]
 
-    # Converted this month
+    # Converted this month (prefer conversion_date, fall back to updated_at)
     cur.execute(f"""
         SELECT COUNT(*) AS cnt
         FROM leads
         WHERE status = 'converted'
           AND is_deleted = 0
-          AND substr(updated_at, 1, 7) = ?
+          AND substr(COALESCE(conversion_date, updated_at), 1, 7) = ?
           {assigned_filter_sql}
     """, [month_str] + assigned_params)
     converted_this_month = cur.fetchone()["cnt"]
+
+    # Parent discussion pending (active leads)
+    cur.execute(f"""
+        SELECT COUNT(*) AS cnt
+        FROM leads
+        WHERE is_deleted = 0
+          AND status = 'active'
+          AND parent_discussion_status = 'Pending'
+          {assigned_filter_sql}
+    """, assigned_params)
+    parent_pending_count = cur.fetchone()["cnt"]
+
+    # Visit scheduled
+    cur.execute(f"""
+        SELECT COUNT(*) AS cnt
+        FROM leads
+        WHERE is_deleted = 0
+          AND status = 'active'
+          AND visit_status = 'Visit Scheduled'
+          {assigned_filter_sql}
+    """, assigned_params)
+    visit_scheduled_count = cur.fetchone()["cnt"]
+
+    # Visited but not converted
+    cur.execute(f"""
+        SELECT COUNT(*) AS cnt
+        FROM leads
+        WHERE is_deleted = 0
+          AND status != 'converted'
+          AND visit_status IN ('Visited', 'Demo Attended')
+          {assigned_filter_sql}
+    """, assigned_params)
+    visited_not_converted_count = cur.fetchone()["cnt"]
 
     # Active totals
     cur.execute(f"""
@@ -377,12 +467,17 @@ def dashboard():
         high_risk_leads=high_risk_leads_processed,
         team_stats=team_stats,
         is_admin=(role == "admin"),
-        now=today
+        now=today,
+        parent_pending_count=parent_pending_count,
+        visit_scheduled_count=visit_scheduled_count,
+        visited_not_converted_count=visited_not_converted_count,
     )
 
 @leads_bp.route("/new", methods=["GET", "POST"])
 @login_required
 def lead_create():
+    can_select_branch, session_branch_id = _get_branch_form_access()
+
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         phone = request.form.get("phone", "").strip()
@@ -399,7 +494,15 @@ def lead_create():
         lead_location = request.form.get("lead_location", "").strip() or None
         start_timeframe = request.form.get("start_timeframe", "").strip() or None
         stage = request.form.get("stage", "New Lead").strip() or "New Lead"
+        parent_discussion_status = request.form.get("parent_discussion_status", "Pending").strip() or "Pending"
+        visit_status = request.form.get("visit_status", "Not Visited").strip() or "Not Visited"
         notes = request.form.get("notes", "").strip() or None
+
+        form_branch_id = _to_int_or_none(request.form.get("branch_id"))
+        if can_select_branch:
+            branch_id = form_branch_id
+        else:
+            branch_id = session_branch_id
 
         last_contact_date = parse_date(request.form.get("last_contact_date"))
         next_followup_date = parse_date(request.form.get("next_followup_date"))
@@ -436,6 +539,11 @@ def lead_create():
                 decision_makers=DECISION_MAKER_OPTIONS,
                 timeframes=TIMEFRAME_OPTIONS,
                 active_courses=_active_courses,
+                parent_discussion_status_options=PARENT_DISCUSSION_STATUS_OPTIONS,
+                visit_status_options=VISIT_STATUS_OPTIONS,
+                branches=_load_active_branches(),
+                can_select_branch=can_select_branch,
+                session_branch_id=session_branch_id,
             )
 
         conn = get_conn()
@@ -456,6 +564,9 @@ def lead_create():
                 interested_courses,
                 lead_source,
                 decision_maker,
+                branch_id,
+                parent_discussion_status,
+                visit_status,
                 lead_location,
                 start_timeframe,
                 lead_score,
@@ -469,7 +580,7 @@ def lead_create():
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             name,
             phone,
@@ -483,6 +594,9 @@ def lead_create():
             interested_courses,
             lead_source,
             decision_maker,
+            branch_id,
+            parent_discussion_status,
+            visit_status,
             lead_location,
             start_timeframe,
             lead_score,
@@ -531,6 +645,11 @@ def lead_create():
         decision_makers=DECISION_MAKER_OPTIONS,
         timeframes=TIMEFRAME_OPTIONS,
         active_courses=active_courses,
+        parent_discussion_status_options=PARENT_DISCUSSION_STATUS_OPTIONS,
+        visit_status_options=VISIT_STATUS_OPTIONS,
+        branches=_load_active_branches(),
+        can_select_branch=can_select_branch,
+        session_branch_id=session_branch_id,
     )
 @leads_bp.route("/<int:lead_id>")
 @login_required
@@ -550,9 +669,15 @@ def lead_detail(lead_id):
 
     # Lead master data
     cur.execute("""
-        SELECT l.*, u.full_name AS assigned_to_name, u.username AS assigned_to_username
+        SELECT
+            l.*, 
+            u.full_name AS assigned_to_name,
+            u.username AS assigned_to_username,
+            b.branch_name AS branch_name,
+            b.branch_code AS branch_code
         FROM leads l
         LEFT JOIN users u ON l.assigned_to_id = u.id
+        LEFT JOIN branches b ON l.branch_id = b.id
         WHERE l.id = ?
     """, (lead_id,))
     lead = cur.fetchone()
@@ -563,6 +688,8 @@ def lead_detail(lead_id):
         return redirect(url_for("leads.dashboard"))
 
     lead = lead_services.enrich_lead_for_crm(lead)
+    if lead.get("branch_id") and not lead.get("branch_name"):
+        lead["branch_name"] = f"Branch #{lead.get('branch_id')}"
 
     # Active users for reassignment dropdown
     cur.execute("""
@@ -644,6 +771,21 @@ def lead_detail(lead_id):
     if not lead.get("last_contact_date"):
         alerts.append({"type": "info", "text": "This lead has never been contacted."})
 
+    parent_status = (lead.get("parent_discussion_status") or "").strip()
+    visit_status = (lead.get("visit_status") or "").strip()
+    lead_stage = (lead.get("stage") or "").strip()
+
+    if parent_status == "Pending":
+        alerts.append({"type": "warning", "text": "Parent discussion pending."})
+
+    if visit_status == "Visited" and lead_stage != "Converted":
+        alerts.append({"type": "warning", "text": "Visited but not converted yet."})
+    elif visit_status == "Visit Scheduled":
+        alerts.append({"type": "info", "text": "Visit scheduled - follow up after visit."})
+
+    if lead_stage == "Lost" and lead.get("lost_reason"):
+        alerts.append({"type": "danger", "text": f"Lost reason: {lead.get('lost_reason')}"})
+
     conn.close()
 
     return render_template(
@@ -656,6 +798,7 @@ def lead_detail(lead_id):
         methods=FOLLOWUP_METHODS,
         outcomes=FOLLOWUP_OUTCOMES,
         linked_student=linked_student,
+        lost_reasons=LOST_REASONS,
     )
 
 @leads_bp.route("/list")
@@ -677,6 +820,10 @@ def leads_list():
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
     hide_converted = request.args.get("hide_converted", "").strip()
+    filter_branch_id = request.args.get("branch_id", "").strip()
+    parent_discussion_status = request.args.get("parent_discussion_status", "").strip()
+    visit_status = request.args.get("visit_status", "").strip()
+    lost_reason_filter = request.args.get("lost_reason", "").strip()
 
     current_user_id = session.get("user_id")
     current_user_role = session.get("role")
@@ -738,6 +885,22 @@ def leads_list():
     if hide_converted == "1":
         query += " AND l.status NOT IN ('converted', 'lost')"
 
+    if filter_branch_id and current_user_role == "admin":
+        query += " AND l.branch_id = ?"
+        params.append(filter_branch_id)
+
+    if parent_discussion_status:
+        query += " AND l.parent_discussion_status = ?"
+        params.append(parent_discussion_status)
+
+    if visit_status:
+        query += " AND l.visit_status = ?"
+        params.append(visit_status)
+
+    if lost_reason_filter:
+        query += " AND l.lost_reason = ?"
+        params.append(lost_reason_filter)
+
     query += " ORDER BY l.updated_at DESC"
 
     cur.execute(query, params)
@@ -797,6 +960,18 @@ def leads_list():
     """)
     course_options = [row["interested_courses"] for row in cur.fetchall()]
 
+    cur.execute("""
+        SELECT DISTINCT lost_reason
+        FROM leads
+        WHERE is_deleted = 0
+          AND lost_reason IS NOT NULL
+          AND TRIM(lost_reason) != ''
+        ORDER BY lost_reason
+    """)
+    lost_reason_options = [row["lost_reason"] for row in cur.fetchall()]
+
+    branch_options = _load_active_branches() if current_user_role == "admin" else []
+
     metrics = {
         "total_overall": total_overall,
         "total_this_month": total_this_month,
@@ -827,13 +1002,21 @@ def leads_list():
         date_from=date_from,
         date_to=date_to,
         hide_converted=hide_converted,
+        filter_branch_id=filter_branch_id,
+        parent_discussion_status=parent_discussion_status,
+        visit_status=visit_status,
+        lost_reason_filter=lost_reason_filter,
         stages=stages,
         sources=sources,
         course_options=course_options,
+        lost_reason_options=lost_reason_options,
+        branch_options=branch_options,
         all_users=all_users,
         selected_user_id=user_id,
         is_admin=(current_user_role == "admin"),
-        metrics=metrics
+        metrics=metrics,
+        parent_discussion_status_options=PARENT_DISCUSSION_STATUS_OPTIONS,
+        visit_status_options=VISIT_STATUS_OPTIONS,
     )
 
 @leads_bp.route("/<int:lead_id>/followups/new", methods=["POST"])
@@ -938,6 +1121,8 @@ def lead_edit(lead_id):
         flash("Access denied for this lead.", "danger")
         return redirect(url_for("leads.leads_list"))
 
+    can_select_branch, session_branch_id = _get_branch_form_access()
+
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         phone = request.form.get("phone", "").strip()
@@ -955,9 +1140,17 @@ def lead_edit(lead_id):
         decision_maker = request.form.get("decision_maker", "Self").strip() or "Self"
         lead_location = request.form.get("lead_location", "").strip() or None
         start_timeframe = request.form.get("start_timeframe", "").strip() or None
+        parent_discussion_status = request.form.get("parent_discussion_status", "Pending").strip() or "Pending"
+        visit_status = request.form.get("visit_status", "Not Visited").strip() or "Not Visited"
 
         stage = request.form.get("stage", lead["stage"]).strip() or lead["stage"]
         notes = request.form.get("notes", "").strip() or None
+
+        form_branch_id = _to_int_or_none(request.form.get("branch_id"))
+        if can_select_branch:
+            branch_id = form_branch_id
+        else:
+            branch_id = session_branch_id
 
         last_contact_date = parse_date(request.form.get("last_contact_date"))
         next_followup_date = parse_date(request.form.get("next_followup_date"))
@@ -993,6 +1186,11 @@ def lead_edit(lead_id):
                 decision_makers=DECISION_MAKER_OPTIONS,
                 timeframes=TIMEFRAME_OPTIONS,
                 active_courses=_active_courses_edit,
+                parent_discussion_status_options=PARENT_DISCUSSION_STATUS_OPTIONS,
+                visit_status_options=VISIT_STATUS_OPTIONS,
+                branches=_load_active_branches(),
+                can_select_branch=can_select_branch,
+                session_branch_id=session_branch_id,
             )
 
         now = datetime.now().isoformat(timespec="seconds")
@@ -1011,6 +1209,9 @@ def lead_edit(lead_id):
                 interested_courses = ?,
                 lead_source = ?,
                 decision_maker = ?,
+                branch_id = ?,
+                parent_discussion_status = ?,
+                visit_status = ?,
                 lead_location = ?,
                 start_timeframe = ?,
                 stage = ?,
@@ -1034,6 +1235,9 @@ def lead_edit(lead_id):
             interested_courses,
             lead_source,
             decision_maker,
+            branch_id,
+            parent_discussion_status,
+            visit_status,
             lead_location,
             start_timeframe,
             stage,
@@ -1049,6 +1253,19 @@ def lead_edit(lead_id):
         conn.commit()
         conn.close()
 
+        field_changes = []
+        if str(lead.get("parent_discussion_status") or "") != str(parent_discussion_status or ""):
+            field_changes.append(
+                f"Parent discussion status changed from {lead.get('parent_discussion_status') or 'None'} to {parent_discussion_status or 'None'}"
+            )
+        if str(lead.get("visit_status") or "") != str(visit_status or ""):
+            field_changes.append(
+                f"Visit status changed from {lead.get('visit_status') or 'None'} to {visit_status or 'None'}"
+            )
+        old_branch = _to_int_or_none(lead.get("branch_id"))
+        if old_branch != branch_id:
+            field_changes.append(f"Lead branch changed from {old_branch or 'None'} to {branch_id or 'None'}")
+
         log_activity(
             user_id=session.get("user_id"),
             branch_id=session.get("branch_id"),
@@ -1057,6 +1274,16 @@ def lead_edit(lead_id):
             record_id=lead_id,
             description=f"Lead updated: {name} - Current Stage: {stage}"
         )
+
+        for msg in field_changes:
+            log_activity(
+                user_id=session.get("user_id"),
+                branch_id=session.get("branch_id"),
+                action_type="lead_field_updated",
+                module_name="leads",
+                record_id=lead_id,
+                description=msg,
+            )
 
         flash("Lead updated.", "success")
         return redirect(url_for("leads.lead_detail", lead_id=lead_id))
@@ -1077,6 +1304,11 @@ def lead_edit(lead_id):
         decision_makers=DECISION_MAKER_OPTIONS,
         timeframes=TIMEFRAME_OPTIONS,
         active_courses=active_courses,
+        parent_discussion_status_options=PARENT_DISCUSSION_STATUS_OPTIONS,
+        visit_status_options=VISIT_STATUS_OPTIONS,
+        branches=_load_active_branches(),
+        can_select_branch=can_select_branch,
+        session_branch_id=session_branch_id,
     )
 
 @leads_bp.route("/<int:lead_id>/stage", methods=["POST"])
@@ -1726,8 +1958,9 @@ def reports():
     """, params)
     lost_reason_rows = cur.fetchall()
 
-    # Monthly conversion trend
-    trend_where = ["l.is_deleted = 0", "l.status = 'converted'", "l.updated_at IS NOT NULL"]
+    # Monthly conversion trend (use conversion_date, fall back to updated_at)
+    trend_where = ["l.is_deleted = 0", "l.status = 'converted'",
+                   "COALESCE(l.conversion_date, substr(l.updated_at,1,10)) IS NOT NULL"]
     trend_params = []
 
     if user_id_filter:
@@ -1735,23 +1968,76 @@ def reports():
         trend_params.append(int(user_id_filter))
 
     if date_from:
-        trend_where.append("substr(l.updated_at, 1, 10) >= ?")
+        trend_where.append("COALESCE(l.conversion_date, substr(l.updated_at,1,10)) >= ?")
         trend_params.append(date_from)
     if date_to:
-        trend_where.append("substr(l.updated_at, 1, 10) <= ?")
+        trend_where.append("COALESCE(l.conversion_date, substr(l.updated_at,1,10)) <= ?")
         trend_params.append(date_to)
 
     trend_where_sql = " AND ".join(trend_where)
     cur.execute(f"""
         SELECT
-            substr(l.updated_at, 1, 7) AS month,
+            substr(COALESCE(l.conversion_date, l.updated_at), 1, 7) AS month,
             COUNT(*) AS converted_count
         FROM leads l
         WHERE {trend_where_sql}
-        GROUP BY substr(l.updated_at, 1, 7)
+        GROUP BY substr(COALESCE(l.conversion_date, l.updated_at), 1, 7)
         ORDER BY month ASC
     """, trend_params)
     monthly_conversion_rows = cur.fetchall()
+
+    # Branch-wise report
+    cur.execute(f"""
+        SELECT
+            COALESCE(b.branch_name, 'Unassigned') AS branch_name,
+            COUNT(l.id) AS total_count,
+            SUM(CASE WHEN l.status = 'converted' THEN 1 ELSE 0 END) AS converted_count,
+            SUM(CASE WHEN l.status = 'lost' THEN 1 ELSE 0 END) AS lost_count
+        FROM leads l
+        LEFT JOIN branches b ON l.branch_id = b.id
+        WHERE {where_sql}
+        GROUP BY COALESCE(b.branch_name, 'Unassigned')
+        ORDER BY total_count DESC
+    """, params)
+    raw_branch_rows = cur.fetchall()
+    branch_wise_rows = []
+    for row in raw_branch_rows:
+        total = row["total_count"]
+        converted = row["converted_count"]
+        rate = round((converted / total * 100), 1) if total > 0 else 0
+        branch_wise_rows.append({
+            "branch_name": row["branch_name"],
+            "total": total,
+            "converted": converted,
+            "lost": row["lost_count"],
+            "rate": rate,
+        })
+
+    # Parent discussion status report
+    cur.execute(f"""
+        SELECT
+            COALESCE(NULLIF(TRIM(l.parent_discussion_status), ''), 'Unknown') AS status_label,
+            COUNT(*) AS cnt,
+            SUM(CASE WHEN l.status = 'converted' THEN 1 ELSE 0 END) AS converted_count
+        FROM leads l
+        WHERE {where_sql}
+        GROUP BY status_label
+        ORDER BY cnt DESC
+    """, params)
+    parent_discussion_rows = cur.fetchall()
+
+    # Visit status conversion report
+    cur.execute(f"""
+        SELECT
+            COALESCE(NULLIF(TRIM(l.visit_status), ''), 'Unknown') AS status_label,
+            COUNT(*) AS cnt,
+            SUM(CASE WHEN l.status = 'converted' THEN 1 ELSE 0 END) AS converted_count
+        FROM leads l
+        WHERE {where_sql}
+        GROUP BY status_label
+        ORDER BY cnt DESC
+    """, params)
+    visit_status_rows = cur.fetchall()
 
     # Users dropdown
     cur.execute("""
@@ -1847,6 +2133,9 @@ def reports():
         course_rows=course_rows,
         lost_reason_rows=lost_reason_rows,
         monthly_conversion_rows=monthly_conversion_rows,
+        branch_wise_rows=branch_wise_rows,
+        parent_discussion_rows=parent_discussion_rows,
+        visit_status_rows=visit_status_rows,
         all_users=all_users,
         selected_user_id=user_id_filter if user_id_filter else None,
         date_from=date_from,
@@ -2095,10 +2384,16 @@ def lead_mark_lost(lead_id):
         return redirect(url_for("leads.lead_detail", lead_id=lead_id))
 
     lost_reason = request.form.get("lost_reason", "").strip()
+    lost_note = request.form.get("lost_note", "").strip()
 
     if not lost_reason:
         conn.close()
-        flash("Lost reason is required.", "danger")
+        flash("Please select a lost reason.", "danger")
+        return redirect(url_for("leads.lead_detail", lead_id=lead_id))
+
+    if lost_reason not in LOST_REASONS:
+        conn.close()
+        flash("Invalid lost reason selected.", "danger")
         return redirect(url_for("leads.lead_detail", lead_id=lead_id))
 
     now = datetime.now().isoformat(timespec="seconds")
@@ -2125,7 +2420,10 @@ def lead_mark_lost(lead_id):
         lead_id=lead_id,
         user_id=session.get("user_id"),
         action_type="lead_lost",
-        description=f"Lead marked as lost: {lead['name']} - Reason: {lost_reason}"
+        description=(
+            f"Lead marked as lost: {lead['name']} - Reason: {lost_reason}"
+            + (f". Note: {lost_note}" if lost_note else "")
+        )
     )
 
     conn.commit()

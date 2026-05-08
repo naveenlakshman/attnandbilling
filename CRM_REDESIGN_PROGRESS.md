@@ -620,4 +620,501 @@ Status: Completed
 8. Verify non-admin cannot access reports route.
 
 ---
-Next planned phase: Phase 11 - Optional database enrichment (only if needed)
+## Phase 11A - Pre-Migration Safety
+Date: 2026-05-08
+Status: Completed
+
+### Safety actions completed
+- Database backup created:
+    - Source: `instance/database.db`
+    - Backup: `instance/database_backup_before_phase_11.db`
+- App initialization check passed (`app_init_ok`).
+- Core leads template compile checks passed:
+    - `leads/leads_list.html`
+    - `leads/lead_detail.html`
+
+### Schema inspection completed
+Tables inspected:
+- `leads`
+- `followups`
+- `students`
+- `users`
+- `branches`
+
+Current `leads` columns confirmed:
+- `id, name, phone, whatsapp, gender, age, education_status, stream, institute_name, career_goal, interested_courses, lead_source, decision_maker, start_timeframe, lead_score, stage, status, lost_reason, last_contact_date, next_followup_date, followup_count, notes, is_deleted, assigned_to_id, created_at, updated_at, lead_location, email`
+
+### Phase 11 target columns status
+- `branch_id` -> missing
+- `conversion_date` -> missing
+- `lost_reason` -> already exists
+- `parent_discussion_status` -> missing
+- `visit_status` -> missing
+
+### Suggested ALTER statements (missing columns only)
+```sql
+ALTER TABLE leads ADD COLUMN branch_id INTEGER;
+ALTER TABLE leads ADD COLUMN conversion_date TEXT;
+ALTER TABLE leads ADD COLUMN parent_discussion_status TEXT DEFAULT 'Pending';
+ALTER TABLE leads ADD COLUMN visit_status TEXT DEFAULT 'Not Visited';
+```
+
+### Notes
+- `lost_reason` must not be added again.
+- Migration should be implemented in `db.py` `init_db()` with `add_column_if_not_exists(...)` for safety.
+- Pre-Phase 11 git commit is still pending (not created in this step).
+
+---
+## Phase 11B - Add Columns Safely
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `db.py`
+
+### Migration implementation
+- Added safe migration columns in `init_db()` using `add_column_if_not_exists(...)` for `leads`:
+    - `branch_id INTEGER`
+    - `conversion_date TEXT`
+    - `parent_discussion_status TEXT DEFAULT 'Pending'`
+    - `visit_status TEXT DEFAULT 'Not Visited'`
+- Confirmed `lost_reason` is not re-added (already exists).
+
+### Indexes added
+- `idx_leads_branch_id`
+- `idx_leads_conversion_date`
+- `idx_leads_lost_reason`
+- `idx_leads_parent_discussion_status`
+- `idx_leads_visit_status`
+
+### Validation
+- `db.py` has no editor errors.
+- App init passed after migration logic update (`app_init_ok`).
+- Database schema re-check confirms required Phase 11 fields now exist:
+    - `branch_id`
+    - `conversion_date`
+    - `lost_reason`
+    - `parent_discussion_status`
+    - `visit_status`
+
+### Safety guarantees kept
+- No destructive data migration in this step.
+- No route URL changes.
+- No billing conversion flow changes in this step.
+
+---
+## Phase 11C - Backfill Existing Data
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `db.py`
+
+### Backfill logic implemented (idempotent)
+- Added safe backfill in `init_db()` for `leads`:
+    - `branch_id` from `users.branch_id` where lead has `assigned_to_id` and branch is available
+    - `conversion_date` for legacy converted leads using `COALESCE(substr(updated_at,1,10), substr(created_at,1,10))`
+    - `parent_discussion_status` defaulted to `Pending` where null/blank
+    - `visit_status` defaulted to `Not Visited` where null/blank
+- `lost_reason` left untouched (no guessed backfill).
+
+### Validation
+- `db.py` has no editor errors.
+- App initialization passed (`app_init_ok`).
+- Live DB sanity checks after startup:
+    - `parent_null=0`
+    - `visit_null=0`
+    - `converted_without_conversion_date=0`
+    - `assigned_without_branch=0`
+
+### Safety guarantees kept
+- Backfill is non-destructive and repeat-safe.
+- No route URL changes.
+- No billing conversion flow changes in this step.
+
+---
+## Phase 11D - Update Add/Edit Lead Form
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `modules/leads/routes.py`
+- `templates/leads/lead_form.html`
+
+### Form/UI updates
+- Added `Branch` field to lead form with role-safe behavior:
+    - admin / all-branch users: selectable active branch dropdown
+    - staff with mapped branch: auto-mapped and locked display
+    - staff without mapped branch: nullable branch allowed with info hint
+- Added `Parent Discussion Status` dropdown options:
+    - Pending
+    - Not Required
+    - Scheduled
+    - Completed
+    - Parent Not Responding
+    - Parent Rejected
+- Added `Visit Status` dropdown options:
+    - Not Visited
+    - Visit Scheduled
+    - Visited
+    - Demo Attended
+    - Not Interested After Visit
+
+### Route logic updates
+- Create flow (`/leads/new`) now saves:
+    - `branch_id`
+    - `parent_discussion_status`
+    - `visit_status`
+- Edit flow (`/leads/<id>/edit`) now updates these fields safely.
+- Added targeted activity logs on edit when these fields change:
+    - parent discussion status changes
+    - visit status changes
+    - branch changes
+
+### Safety guarantees kept
+- No route URL changes.
+- Existing required validation (name/phone) preserved.
+- Existing lead score/stage/status update behavior preserved.
+
+### Validation
+- No editor errors in modified files.
+- Lead form template compile check passed (`lead_form_template_ok`).
+- App initialization passed (`app_init_ok`).
+
+---
+## Phase 11E - Update Lead Detail Page
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `modules/leads/routes.py`
+- `templates/leads/lead_detail.html`
+
+### Route updates
+- Lead detail query now includes branch metadata via `branches` join:
+    - `branch_name`
+    - `branch_code`
+- Added fallback display label when `branch_id` exists but branch name is unavailable.
+- Added new alert rules for CRM fields:
+    - parent discussion pending
+    - visit scheduled
+    - visited but not converted
+    - lost reason prominent alert when stage is lost
+
+### UI updates
+- Lead summary badges now include:
+    - Parent discussion status
+    - Visit status
+- Lead details section now shows:
+    - Branch (name/code)
+    - Parent Discussion Status
+    - Visit Status
+    - Conversion Date (for converted leads)
+    - Lost Reason (existing, retained)
+- Existing action bar, follow-up form, timeline, and AI assist blocks preserved.
+
+### Safety guarantees kept
+- No route URL changes.
+- No schema changes.
+- No conversion-flow changes.
+- Existing lead actions and timeline behavior preserved.
+
+### Validation
+- No editor errors in modified files.
+- Lead detail template compile check passed (`lead_detail_template_ok`).
+- App initialization passed (`app_init_ok`).
+
+---
+## Phase 11F - Update Mark Lost Flow
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `modules/leads/routes.py`
+- `templates/leads/lead_detail.html`
+
+### Route updates
+- Added `LOST_REASONS` constant with 10 defined options:
+  Fees High, Joined Other Institute, Parent Rejected, No Response,
+  Course Not Required, Timing Issue, Location Issue, Not Eligible,
+  Duplicate Lead, Other
+- `lead_mark_lost` route now:
+  - Validates `lost_reason` is non-empty and must be one of the defined options (whitelist)
+  - Accepts optional `lost_note` from form
+  - Appends note to activity log description when provided
+- Flash message updated to "Please select a lost reason."
+
+### Template updates
+- Mark Lost panel replaced plain text input with:
+  - Required `<select>` dropdown pre-selecting current `lead.lost_reason` if already lost
+  - Optional `<textarea>` for additional notes
+  - Properly labeled fields with required marker on reason
+
+### Safety guarantees kept
+- No schema changes.
+- No route URL changes.
+- Empty/invalid reason still blocked server-side.
+
+### Validation
+- No editor errors in modified files.
+- Lead detail template compile passed (`lead_detail_template_ok`).
+- App initialization passed (`app_init_ok`).
+
+---
+Next planned phase: Phase 11G - Update conversion flow
+---
+## Phase 11G - Update Conversion Flow
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `modules/billing/routes.py`
+
+### Route updates
+- When an existing lead is converted via student admission:
+  - `UPDATE leads` now also sets `conversion_date = today` (from `now[:10]`)
+- When direct admission creates a synthetic lead record:
+  - `INSERT INTO leads` now includes `conversion_date` (today) and `branch_id` (student's branch)
+- No second synthetic-lead path introduced — existing auto-create block enriched only.
+
+### Safety guarantees kept
+- No schema changes.
+- No route URL changes.
+- `students.lead_id` linking behavior preserved.
+- Billing conversion flow behavior preserved.
+
+### Validation
+- No editor errors in modified files.
+- `syntax_ok: billing`, `syntax_ok: leads`.
+- App initialization passed (`app_init_ok`).
+
+---
+## Phase 11H - Update Dashboard Action Cards
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `modules/leads/routes.py`
+- `templates/leads/dashboard.html`
+
+### Route updates
+- `converted_this_month` now uses `COALESCE(conversion_date, updated_at)` for accuracy.
+- Added 3 new CRM action counts (role-aware, respects assigned_filter_sql):
+  - `parent_pending_count` — active leads with `parent_discussion_status = 'Pending'`
+  - `visit_scheduled_count` — active leads with `visit_status = 'Visit Scheduled'`
+  - `visited_not_converted_count` — leads visited/demo-attended but not converted
+- All 3 passed to template.
+
+### UI updates
+- New **CRM Action Cards Row** added below existing priority cards:
+  - Parent Discussion Pending (warning/orange) → links to filtered list
+  - Visit Scheduled (info/blue) → links to filtered list
+  - Visited, Not Converted (primary/blue) → links to filtered list
+  - Lost This Month (danger/red) → links to filtered list
+- All cards are clickable links.
+
+### Validation
+- No editor errors in modified files.
+- Dashboard template compile passed (`dashboard_template_ok`).
+- App initialization passed (`app_init_ok`).
+
+---
+## Phase 11I - Update Leads List Filters
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `modules/leads/routes.py`
+- `templates/leads/leads_list.html`
+
+### Route updates
+- Added 4 new filter params: `branch_id`, `parent_discussion_status`, `visit_status`, `lost_reason`
+- All filters applied to SQL query (branch restricted to admin only)
+- `lost_reason_options` — distinct values from DB for dynamic dropdown
+- `branch_options` — loaded via `_load_active_branches()` for admin only
+- `PARENT_DISCUSSION_STATUS_OPTIONS` + `VISIT_STATUS_OPTIONS` constants passed to template
+
+### UI updates
+- Filter active badge `!` and collapse `show` state updated for new params
+- Clear button condition updated
+- New **CRM Filters Row** added inside collapsible panel:
+  - Branch (admin only)
+  - Parent Discussion Status dropdown
+  - Visit Status dropdown
+  - Lost Reason dropdown (shown only if data exists)
+- **Mobile card**: Parent Pending + Visit Status badges added under stage/temp
+- **Desktop table**: secondary badges under lead name (no extra columns)
+
+### Validation
+- No editor errors in modified files.
+- Leads list template compile passed (`leads_list_template_ok`).
+- App initialization passed (`app_init_ok`).
+
+---
+## Phase 11J - Update Follow-up Page Priority
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `templates/leads/followups.html`
+
+### Route updates
+- No route changes needed — existing query uses `l.*` so `parent_discussion_status` and `visit_status` are already available via `enrich_lead_for_crm`.
+
+### UI updates
+- **Desktop table** — lead name cell now shows priority badges below name:
+  - Parent Pending (warning/orange)
+  - Visit Scheduled (info/teal)
+  - Visited (primary/blue)
+  - Demo Attended (success/green)
+- **Mobile card** — same 4 badges added alongside stage/temperature badges
+- Badge display rules: only shown when status is relevant (e.g. `Not Visited` shows nothing)
+
+### Safety guarantees kept
+- No route URL changes.
+- No schema changes.
+- Staff/admin access restrictions preserved.
+
+### Validation
+- No editor errors in modified file.
+- Followups template compile passed (`followups_template_ok`).
+- App initialization passed (`app_init_ok`).
+
+---
+Next planned phase: Phase 11K - Update Reports
+---
+## Phase 11K - Update Reports
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `modules/leads/routes.py`
+- `templates/leads/reports.html`
+
+### Route updates
+- Monthly conversion trend now uses `COALESCE(conversion_date, updated_at)` instead of `updated_at` — accurate with Phase 11G field.
+- Added 3 new report queries (respecting existing date/user filters):
+  - **Branch-wise report**: total/converted/lost/rate per branch (Unassigned for null)
+  - **Parent Discussion report**: count + converted count per `parent_discussion_status` value
+  - **Visit Conversion report**: count + converted count + conversion % per `visit_status` value
+- All 3 passed to template.
+
+### UI updates
+- 3 new report sections added after existing Lost Reason / Monthly Trend row:
+  - **Branch-wise Lead Report** — table with Branch, Total, Converted, Lost, Conv %
+  - **Parent Discussion Report** — table with Status, Count, Converted
+  - **Visit Conversion Report** — table with Visit Status, Count, Converted, Conv %
+
+### Safety guarantees kept
+- Existing report sections (User Performance, Source, Course, Lost Reason, Monthly Trend) preserved.
+- No schema changes.
+- No route URL changes.
+- Admin-only access policy preserved.
+
+### Validation
+- No editor errors in modified files.
+- Reports template compile passed (`reports_template_ok`).
+- App initialization passed (`app_init_ok`).
+
+---
+## Phase 11L - Update Pipeline Cards
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `templates/leads/pipeline.html`
+
+### Changes
+- No route changes needed — `enrich_lead_for_crm` already passes `parent_discussion_status` and `visit_status` fields.
+- Added 4 CSS badge styles: `crm-badge-parent`, `crm-badge-visit`, `crm-badge-visited`, `crm-badge-demo`.
+- Each card now shows **Parent** and **Visit** status meta lines (replacing Score line).
+- Conditional CRM priority badges added to the badge row:
+  - **Parent Pending** (yellow) — `parent_discussion_status == 'Pending'`
+  - **Visit Scheduled** (blue) — `visit_status == 'Visit Scheduled'`
+  - **Demo Attended** (purple) — `visit_status == 'Demo Attended'`
+  - **Visited** (green) — `visit_status` in `('Visited', 'Visited - Not Converted')`
+
+### Validation
+- No editor errors.
+- Template compile passed (`pipeline_template_ok`).
+- App initialization passed (`app_init_ok`).
+
+---
+## Phase 11M - Activity Logging
+Date: 2026-05-08
+Status: Completed
+
+### Files changed
+- `modules/billing/routes.py`
+
+### Changes
+- `lead_edit` already logged `parent_discussion_status`, `visit_status`, and `branch_id` changes — no changes needed.
+- `lead_mark_lost` already logged lost reason — no changes needed.
+- **Added**: `log_activity` call in billing student creation route after `form_lead_id` conversion, logging `action_type="lead_converted"` with description `"Lead converted on {date} - Student: {name} (Reg No: {reg})"`.
+
+### Full logging coverage after 11M
+| Event | Where | Action type |
+|---|---|---|
+| parent_discussion_status changed | lead_edit | lead_field_updated |
+| visit_status changed | lead_edit | lead_field_updated |
+| branch changed | lead_edit | lead_field_updated |
+| Lead marked lost + reason | lead_mark_lost | lead_lost |
+| conversion_date set | billing student create | lead_converted |
+
+### Validation
+- No editor errors.
+- App initialization passed (`app_init_ok`).
+
+---
+Next planned phase: Phase 11N - Final Test Plan
+
+---
+## Phase 11N - Final Test Plan
+Date: 2026-05-08
+Status: Completed
+
+### Automated Checks Run
+
+**Schema — all 5 CRM columns present:**
+- branch_id: OK
+- conversion_date: OK
+- lost_reason: OK
+- parent_discussion_status: OK
+- visit_status: OK
+
+**Data integrity:**
+- Converted leads with conversion_date set: 83 / 83 (0 missing)
+- Lost leads with lost_reason set: 25 / 25 (0 missing)
+- Active leads: 23 | Converted: 79 | Lost: 25
+
+**Template compile — all 7 leads templates OK:**
+- leads/dashboard.html
+- leads/leads_list.html
+- leads/lead_detail.html
+- leads/lead_form.html
+- leads/followups.html
+- leads/pipeline.html
+- leads/reports.html
+
+**App initialization: OK**
+
+### Manual Test Checklist (to verify in browser)
+**Admin:**
+- [ ] Add lead with branch, parent status, visit status
+- [ ] Edit lead — check field change activity logs
+- [ ] Mark lost with reason — check activity log
+- [ ] Convert lead to student — check conversion_date set + activity log
+- [ ] Check dashboard CRM action cards
+- [ ] Check reports (branch-wise, parent discussion, visit conversion)
+- [ ] Check pipeline — parent/visit badges on cards
+
+**Staff:**
+- [ ] Add assigned lead
+- [ ] Edit own lead
+- [ ] Confirm cannot access another staff's lead
+- [ ] Add follow-up
+- [ ] Update parent/visit status — verify activity logged
+- [ ] Confirm only own leads appear in list/dashboard/followups
+
+---
+Next planned phase: Phase 11O - Production Deployment Checklist

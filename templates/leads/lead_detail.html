@@ -186,6 +186,12 @@
     <span class="badge bg-white text-dark">Last: {{ lead.last_contact_date or '-' }}</span>
     <span class="badge bg-white text-dark">Next: {{ lead.next_followup_date or '-' }}</span>
     <span class="badge bg-info text-dark">Action: {{ lead.next_action or '-' }}</span>
+    {% if lead.parent_discussion_status %}
+      <span class="badge bg-warning text-dark">Parent: {{ lead.parent_discussion_status }}</span>
+    {% endif %}
+    {% if lead.visit_status %}
+      <span class="badge bg-secondary">Visit: {{ lead.visit_status }}</span>
+    {% endif %}
     {% if lead.lead_source %}
       <span class="badge bg-white bg-opacity-25 text-white">{{ lead.lead_source }}</span>
     {% endif %}
@@ -229,14 +235,23 @@
 
 <!-- Mark Lost panel (collapsible) -->
 <div class="collapse {% if lead.stage == 'Lost' %}show{% endif %} mb-2" id="markLostPanel">
-  <div class="card card-body p-2" style="border-radius:10px; background:#fff8f0; border-color:#fde68a;">
+  <div class="card card-body p-3" style="border-radius:10px; background:#fff8f0; border-color:#fde68a;">
     <form method="post" action="{{ url_for('leads.lead_mark_lost', lead_id=lead.id) }}">
-      <div class="d-flex gap-2">
-        <input class="form-control form-control-sm" name="lost_reason"
-               placeholder="Lost reason (e.g. too expensive, joined elsewhere…)" required
-               value="{{ lead.lost_reason or '' }}">
-        <button class="btn btn-warning btn-sm" type="submit">Mark Lost</button>
+      <div class="mb-2">
+        <label class="form-label fw-semibold mb-1" style="font-size:13px;">Lost Reason <span class="text-danger">*</span></label>
+        <select class="form-select form-select-sm" name="lost_reason" required>
+          <option value="" disabled {% if not lead.lost_reason %}selected{% endif %}>— Select reason —</option>
+          {% for reason in lost_reasons %}
+            <option value="{{ reason }}" {% if lead.lost_reason == reason %}selected{% endif %}>{{ reason }}</option>
+          {% endfor %}
+        </select>
       </div>
+      <div class="mb-2">
+        <label class="form-label mb-1" style="font-size:13px;">Note <span class="text-muted">(optional)</span></label>
+        <textarea class="form-control form-control-sm" name="lost_note" rows="2"
+                  placeholder="Any additional notes about why the lead was lost…"></textarea>
+      </div>
+      <button class="btn btn-warning btn-sm" type="submit">Mark as Lost</button>
     </form>
   </div>
 </div>
@@ -286,6 +301,27 @@
           <span class="ir-value">{{ lead.interested_courses }}</span>
         </div>
         {% endif %}
+        {% if lead.branch_name or lead.branch_id %}
+        <div class="info-row">
+          <span class="ir-label">Branch</span>
+          <span class="ir-value">
+            {{ lead.branch_name or ('Branch #' ~ lead.branch_id) }}
+            {% if lead.branch_code %}<span class="text-muted">({{ lead.branch_code }})</span>{% endif %}
+          </span>
+        </div>
+        {% endif %}
+        {% if lead.parent_discussion_status %}
+        <div class="info-row">
+          <span class="ir-label">Parent Status</span>
+          <span class="ir-value">{{ lead.parent_discussion_status }}</span>
+        </div>
+        {% endif %}
+        {% if lead.visit_status %}
+        <div class="info-row">
+          <span class="ir-label">Visit Status</span>
+          <span class="ir-value">{{ lead.visit_status }}</span>
+        </div>
+        {% endif %}
         {% if lead.lead_source %}
         <div class="info-row">
           <span class="ir-label">Source</span>
@@ -318,6 +354,12 @@
         <div class="info-row">
           <span class="ir-label">Next Follow-up</span>
           <span class="ir-value text-primary fw-semibold">{{ lead.next_followup_date }}</span>
+        </div>
+        {% endif %}
+        {% if lead.status == 'converted' and lead.conversion_date %}
+        <div class="info-row">
+          <span class="ir-label">Conversion Date</span>
+          <span class="ir-value text-success fw-semibold">{{ lead.conversion_date }}</span>
         </div>
         {% endif %}
         {% if lead.lost_reason %}

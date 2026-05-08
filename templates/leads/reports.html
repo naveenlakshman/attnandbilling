@@ -227,6 +227,105 @@
   </div>
 </div>
 
+<!-- CRM Report Sections -->
+<div class="row g-3 mt-1">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header fw-semibold">Branch-wise Lead Report</div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Branch</th>
+              <th class="text-end">Total</th>
+              <th class="text-end">Converted</th>
+              <th class="text-end">Lost</th>
+              <th class="text-end">Conv %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in branch_wise_rows %}
+              <tr>
+                <td>{{ row.branch_name }}</td>
+                <td class="text-end">{{ row.total }}</td>
+                <td class="text-end"><span class="badge bg-success">{{ row.converted }}</span></td>
+                <td class="text-end"><span class="badge bg-secondary">{{ row.lost }}</span></td>
+                <td class="text-end">{{ row.rate }}%</td>
+              </tr>
+            {% endfor %}
+            {% if not branch_wise_rows %}
+              <tr><td colspan="5" class="text-center text-muted">No branch data.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header fw-semibold">Parent Discussion Report</div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th class="text-end">Count</th>
+              <th class="text-end">Converted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in parent_discussion_rows %}
+              <tr>
+                <td>{{ row.status_label }}</td>
+                <td class="text-end"><span class="badge bg-secondary">{{ row.cnt }}</span></td>
+                <td class="text-end"><span class="badge bg-success">{{ row.converted_count }}</span></td>
+              </tr>
+            {% endfor %}
+            {% if not parent_discussion_rows %}
+              <tr><td colspan="3" class="text-center text-muted">No data.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header fw-semibold">Visit Conversion Report</div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Visit Status</th>
+              <th class="text-end">Count</th>
+              <th class="text-end">Converted</th>
+              <th class="text-end">Conv %</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in visit_status_rows %}
+              {% set conv_rate = ((row.converted_count / row.cnt * 100) | round(1)) if row.cnt > 0 else 0 %}
+              <tr>
+                <td>{{ row.status_label }}</td>
+                <td class="text-end"><span class="badge bg-secondary">{{ row.cnt }}</span></td>
+                <td class="text-end"><span class="badge bg-success">{{ row.converted_count }}</span></td>
+                <td class="text-end">{{ conv_rate }}%</td>
+              </tr>
+            {% endfor %}
+            {% if not visit_status_rows %}
+              <tr><td colspan="4" class="text-center text-muted">No data.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     const reportFilterForm = document.getElementById('reportFilterForm');

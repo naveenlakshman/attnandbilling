@@ -140,6 +140,53 @@
     </div>
 
     <div class="col-md-4">
+      <label class="form-label">Branch</label>
+      {% set selected_branch_id = lead.branch_id if lead and lead.branch_id else session_branch_id %}
+      {% if can_select_branch %}
+        <select class="form-select" name="branch_id">
+          <option value="">(none)</option>
+          {% for b in branches %}
+            <option value="{{ b.id }}" {% if selected_branch_id and selected_branch_id|string == b.id|string %}selected{% endif %}>
+              {{ b.branch_name }}{% if b.branch_code %} ({{ b.branch_code }}){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      {% elif session_branch_id %}
+        <select class="form-select" disabled>
+          {% for b in branches %}
+            {% if b.id|string == session_branch_id|string %}
+              <option selected>{{ b.branch_name }}{% if b.branch_code %} ({{ b.branch_code }}){% endif %}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+        <div class="form-text">Branch is auto-mapped from your user profile.</div>
+      {% else %}
+        <input class="form-control" value="No branch mapped for current user" disabled>
+        <div class="form-text">Lead can be saved without branch.</div>
+      {% endif %}
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Parent Discussion Status</label>
+      {% set selected_parent_status = lead.parent_discussion_status if lead and lead.parent_discussion_status else 'Pending' %}
+      <select class="form-select" name="parent_discussion_status">
+        {% for s in parent_discussion_status_options %}
+          <option value="{{ s }}" {% if selected_parent_status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Visit Status</label>
+      {% set selected_visit_status = lead.visit_status if lead and lead.visit_status else 'Not Visited' %}
+      <select class="form-select" name="visit_status">
+        {% for s in visit_status_options %}
+          <option value="{{ s }}" {% if selected_visit_status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-md-4">
       <label class="form-label">Lead From</label>
       <select class="form-select" name="lead_location">
         <option value="">(none)</option>
