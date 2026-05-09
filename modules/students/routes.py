@@ -236,33 +236,57 @@ def dashboard():
             programs = conn.execute("""
                 SELECT DISTINCT
                     lp.id, lp.program_name, lp.description,
-                    (
-                        (SELECT COUNT(*)
-                         FROM lms_chapters lc
-                         WHERE lc.program_id = lp.id AND lc.is_active = 1)
-                        +
-                        (SELECT COUNT(DISTINCT pc.master_chapter_id)
-                         FROM lms_program_chapters pc
-                         JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
-                         WHERE pc.program_id = lp.id
-                           AND pc.is_visible = 1
-                           AND mc.status = 'active')
-                    ) AS chapter_count,
-                    (
-                        (SELECT COUNT(*)
-                         FROM lms_topics lt
-                         JOIN lms_chapters lc2 ON lt.chapter_id = lc2.id
-                         WHERE lc2.program_id = lp.id AND lt.is_active = 1)
-                        +
-                        (SELECT COUNT(*)
-                         FROM lms_master_topics mt
-                         JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
-                         JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
-                         WHERE pc.program_id = lp.id
-                           AND pc.is_visible = 1
-                           AND mc.status = 'active'
-                           AND mt.status = 'active')
-                    ) AS topic_count,
+                    CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM lms_program_chapters pcx
+                            JOIN lms_master_chapters mcx ON mcx.id = pcx.master_chapter_id
+                            JOIN lms_master_topics mtx ON mtx.master_chapter_id = mcx.id
+                            WHERE pcx.program_id = lp.id
+                              AND pcx.is_visible = 1
+                              AND mcx.status = 'active'
+                              AND mtx.status = 'active'
+                        ) THEN (
+                            SELECT COUNT(DISTINCT pc.master_chapter_id)
+                            FROM lms_program_chapters pc
+                            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                            WHERE pc.program_id = lp.id
+                              AND pc.is_visible = 1
+                              AND mc.status = 'active'
+                        )
+                        ELSE (
+                            SELECT COUNT(*)
+                            FROM lms_chapters lc
+                            WHERE lc.program_id = lp.id AND lc.is_active = 1
+                        )
+                    END AS chapter_count,
+                    CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM lms_program_chapters pcx
+                            JOIN lms_master_chapters mcx ON mcx.id = pcx.master_chapter_id
+                            JOIN lms_master_topics mtx ON mtx.master_chapter_id = mcx.id
+                            WHERE pcx.program_id = lp.id
+                              AND pcx.is_visible = 1
+                              AND mcx.status = 'active'
+                              AND mtx.status = 'active'
+                        ) THEN (
+                            SELECT COUNT(*)
+                            FROM lms_master_topics mt
+                            JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                            WHERE pc.program_id = lp.id
+                              AND pc.is_visible = 1
+                              AND mc.status = 'active'
+                              AND mt.status = 'active'
+                        )
+                        ELSE (
+                            SELECT COUNT(*)
+                            FROM lms_topics lt
+                            JOIN lms_chapters lc2 ON lt.chapter_id = lc2.id
+                            WHERE lc2.program_id = lp.id AND lt.is_active = 1
+                        )
+                    END AS topic_count,
                     0 AS completed_count,
                     NULL AS last_topic_id,
                     (SELECT lt4.id FROM lms_topics lt4 JOIN lms_chapters lc5 ON lt4.chapter_id = lc5.id
@@ -278,53 +302,89 @@ def dashboard():
             programs = conn.execute("""
                 SELECT DISTINCT
                     lp.id, lp.program_name, lp.description,
-                    (
-                        (SELECT COUNT(*)
-                         FROM lms_chapters lc
-                         WHERE lc.program_id = lp.id AND lc.is_active = 1)
-                        +
-                        (SELECT COUNT(DISTINCT pc.master_chapter_id)
-                         FROM lms_program_chapters pc
-                         JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
-                         WHERE pc.program_id = lp.id
-                           AND pc.is_visible = 1
-                           AND mc.status = 'active')
-                    ) AS chapter_count,
-                    (
-                        (SELECT COUNT(*)
-                         FROM lms_topics lt
-                         JOIN lms_chapters lc2 ON lt.chapter_id = lc2.id
-                         WHERE lc2.program_id = lp.id AND lt.is_active = 1)
-                        +
-                        (SELECT COUNT(*)
-                         FROM lms_master_topics mt
-                         JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
-                         JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
-                         WHERE pc.program_id = lp.id
-                           AND pc.is_visible = 1
-                           AND mc.status = 'active'
-                           AND mt.status = 'active')
-                    ) AS topic_count,
-                    (
-                        (SELECT COUNT(*)
-                         FROM lms_topic_progress tp2
-                         JOIN lms_topics lt2 ON tp2.topic_id = lt2.id
-                         JOIN lms_chapters lc3 ON lt2.chapter_id = lc3.id
-                         WHERE lc3.program_id = lp.id AND tp2.student_id = ? AND tp2.is_completed = 1)
-                        +
-                        (SELECT COUNT(*)
-                         FROM lms_master_topic_progress mp
-                         JOIN lms_master_topics mt ON mt.id = mp.master_topic_id
-                         JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
-                         JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
-                         WHERE mp.program_id = lp.id
-                           AND mp.student_id = ?
-                           AND mp.is_completed = 1
-                           AND pc.program_id = lp.id
-                           AND pc.is_visible = 1
-                           AND mc.status = 'active'
-                           AND mt.status = 'active')
-                    ) AS completed_count,
+                    CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM lms_program_chapters pcx
+                            JOIN lms_master_chapters mcx ON mcx.id = pcx.master_chapter_id
+                            JOIN lms_master_topics mtx ON mtx.master_chapter_id = mcx.id
+                            WHERE pcx.program_id = lp.id
+                              AND pcx.is_visible = 1
+                              AND mcx.status = 'active'
+                              AND mtx.status = 'active'
+                        ) THEN (
+                            SELECT COUNT(DISTINCT pc.master_chapter_id)
+                            FROM lms_program_chapters pc
+                            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                            WHERE pc.program_id = lp.id
+                              AND pc.is_visible = 1
+                              AND mc.status = 'active'
+                        )
+                        ELSE (
+                            SELECT COUNT(*)
+                            FROM lms_chapters lc
+                            WHERE lc.program_id = lp.id AND lc.is_active = 1
+                        )
+                    END AS chapter_count,
+                    CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM lms_program_chapters pcx
+                            JOIN lms_master_chapters mcx ON mcx.id = pcx.master_chapter_id
+                            JOIN lms_master_topics mtx ON mtx.master_chapter_id = mcx.id
+                            WHERE pcx.program_id = lp.id
+                              AND pcx.is_visible = 1
+                              AND mcx.status = 'active'
+                              AND mtx.status = 'active'
+                        ) THEN (
+                            SELECT COUNT(*)
+                            FROM lms_master_topics mt
+                            JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                            WHERE pc.program_id = lp.id
+                              AND pc.is_visible = 1
+                              AND mc.status = 'active'
+                              AND mt.status = 'active'
+                        )
+                        ELSE (
+                            SELECT COUNT(*)
+                            FROM lms_topics lt
+                            JOIN lms_chapters lc2 ON lt.chapter_id = lc2.id
+                            WHERE lc2.program_id = lp.id AND lt.is_active = 1
+                        )
+                    END AS topic_count,
+                    CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM lms_program_chapters pcx
+                            JOIN lms_master_chapters mcx ON mcx.id = pcx.master_chapter_id
+                            JOIN lms_master_topics mtx ON mtx.master_chapter_id = mcx.id
+                            WHERE pcx.program_id = lp.id
+                              AND pcx.is_visible = 1
+                              AND mcx.status = 'active'
+                              AND mtx.status = 'active'
+                        ) THEN (
+                            SELECT COUNT(*)
+                            FROM lms_master_topic_progress mp
+                            JOIN lms_master_topics mt ON mt.id = mp.master_topic_id
+                            JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                            WHERE mp.program_id = lp.id
+                              AND mp.student_id = ?
+                              AND mp.is_completed = 1
+                              AND pc.program_id = lp.id
+                              AND pc.is_visible = 1
+                              AND mc.status = 'active'
+                              AND mt.status = 'active'
+                        )
+                        ELSE (
+                            SELECT COUNT(*)
+                            FROM lms_topic_progress tp2
+                            JOIN lms_topics lt2 ON tp2.topic_id = lt2.id
+                            JOIN lms_chapters lc3 ON lt2.chapter_id = lc3.id
+                            WHERE lc3.program_id = lp.id AND tp2.student_id = ? AND tp2.is_completed = 1
+                        )
+                    END AS completed_count,
                     (
                         SELECT lt3.id FROM lms_topic_progress tp3
                         JOIN lms_topics lt3 ON tp3.topic_id = lt3.id
