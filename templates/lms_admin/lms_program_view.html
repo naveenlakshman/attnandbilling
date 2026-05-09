@@ -576,7 +576,7 @@
 <div class="section-card">
   <div class="section-header">
     <h3 class="section-title">📑 Chapters ({{ summary.total_chapters }})</h3>
-    {% if summary.chapters %}
+    {% if summary.total_chapters > 0 %}
     <a href="{{ url_for('lms_admin.list_chapters', program_id=summary.program.id) }}" style="color: #0d6efd; text-decoration: none; font-size: 13px; font-weight: 600;">
       View All →
     </a>
@@ -635,7 +635,11 @@
     {% else %}
       <div class="empty-state-small">
         <div class="empty-state-icon-small">📑</div>
+        {% if summary.linked_master_chapters > 0 %}
+        <p class="empty-state-text-small">This program currently uses {{ summary.linked_master_chapters }} linked master {{ 'chapter' if summary.linked_master_chapters == 1 else 'chapters' }}. Use Manage Chapters to view linked content.</p>
+        {% else %}
         <p class="empty-state-text-small">No chapters yet. Create chapters to organize topics.</p>
+        {% endif %}
         <a href="{{ url_for('lms_admin.list_chapters', program_id=summary.program.id) }}" style="display: inline-block; background: #0d6efd; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 13px; margin-top: 12px;">
           Manage Chapters →
         </a>

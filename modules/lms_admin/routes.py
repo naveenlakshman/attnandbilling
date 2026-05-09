@@ -601,7 +601,8 @@ def list_programs():
     try:
         cur = conn.cursor()
         
-        # Get all programs with related information and content coverage
+        # Get all programs with related information and content coverage.
+        # Counts include both legacy chapters/topics and linked master chapters/topics.
         cur.execute("""
             SELECT 
                 lp.id,
@@ -613,18 +614,44 @@ def list_programs():
                 lp.created_at,
                 lp.updated_at,
                 c.course_name,
-                COUNT(DISTINCT lc.id) as chapter_count,
-                (SELECT COUNT(*) FROM lms_topics WHERE chapter_id IN
-                    (SELECT id FROM lms_chapters WHERE program_id = lp.id)) as total_topics,
-                (SELECT COUNT(DISTINCT lt.id) FROM lms_topics lt
-                    JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
-                    WHERE lt.chapter_id IN
-                    (SELECT id FROM lms_chapters WHERE program_id = lp.id)) as topics_with_content
+                (
+                    (SELECT COUNT(DISTINCT lc2.id)
+                     FROM lms_chapters lc2
+                     WHERE lc2.program_id = lp.id)
+                    +
+                    (SELECT COUNT(DISTINCT pc.master_chapter_id)
+                     FROM lms_program_chapters pc
+                     WHERE pc.program_id = lp.id)
+                ) as chapter_count,
+                (
+                    (SELECT COUNT(*)
+                     FROM lms_topics lt
+                     JOIN lms_chapters lc2 ON lc2.id = lt.chapter_id
+                     WHERE lc2.program_id = lp.id)
+                    +
+                    (SELECT COUNT(*)
+                     FROM lms_master_topics mt
+                     JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                     WHERE pc.program_id = lp.id
+                       AND mt.status = 'active')
+                ) as total_topics,
+                (
+                    (SELECT COUNT(DISTINCT lt.id)
+                     FROM lms_topics lt
+                     JOIN lms_chapters lc2 ON lc2.id = lt.chapter_id
+                     JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
+                     WHERE lc2.program_id = lp.id)
+                    +
+                    (SELECT COUNT(DISTINCT mt.id)
+                     FROM lms_master_topics mt
+                     JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                     JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
+                     WHERE pc.program_id = lp.id
+                       AND mt.status = 'active')
+                ) as topics_with_content
             FROM lms_programs lp
             LEFT JOIN courses c ON lp.course_id = c.id
-            LEFT JOIN lms_chapters lc ON lp.id = lc.program_id
             WHERE lp.slug != ?
-            GROUP BY lp.id
             ORDER BY lp.created_at DESC
         """, (_MASTER_BRIDGE_PROGRAM_SLUG,))
         programs = cur.fetchall()
@@ -1534,16 +1561,29 @@ def program_view(program_id):
             ORDER BY chapter_order ASC
         """, (program_id,))
         chapters = cur.fetchall()
-        total_chapters = len(chapters)
+        # Include master-linked chapters in the top-level chapter metric.
+        cur.execute(
+            "SELECT COUNT(*) as count FROM lms_program_chapters WHERE program_id = ?",
+            (program_id,)
+        )
+        linked_master_chapters = cur.fetchone()['count']
+        total_chapters = len(chapters) + (linked_master_chapters or 0)
         
         # Get total topics count
         cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_topics
-            WHERE chapter_id IN (
-                SELECT id FROM lms_chapters WHERE program_id = ?
-            )
-        """, (program_id,))
+            SELECT (
+                (SELECT COUNT(*)
+                 FROM lms_topics lt
+                 JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                 WHERE lc.program_id = ?)
+                +
+                (SELECT COUNT(*)
+                 FROM lms_master_topics mt
+                 JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                 WHERE pc.program_id = ?
+                   AND mt.status = 'active')
+            ) as count
+        """, (program_id, program_id))
         total_topics = cur.fetchone()['count']
         
         # Get total students assigned
@@ -1604,6 +1644,7 @@ def program_view(program_id):
             'program': program,
             'chapters': chapters,
             'total_chapters': total_chapters,
+            'linked_master_chapters': linked_master_chapters or 0,
             'total_topics': total_topics,
             'total_students': total_students,
             'total_tests': total_tests,
@@ -1635,23 +1676,55 @@ def program_view(program_id):
         if total_topics > 0:
             cur.execute("""
                 SELECT
-                    SUM(CASE WHEN EXISTS (
-                        SELECT 1 FROM lms_topic_contents
-                        WHERE topic_id = lt.id AND content_mode = 'youtube'
-                    ) THEN 1 ELSE 0 END) AS topics_with_video,
-                    SUM(CASE WHEN EXISTS (
-                        SELECT 1 FROM lms_topic_contents
-                        WHERE topic_id = lt.id AND content_mode = 'pdf'
-                    ) THEN 1 ELSE 0 END) AS topics_with_pdf,
-                    SUM(CASE WHEN EXISTS (
-                        SELECT 1 FROM lms_topic_contents
-                        WHERE topic_id = lt.id AND content_mode = 'download'
-                    ) THEN 1 ELSE 0 END) AS topics_with_download
-                FROM lms_topics lt
-                WHERE lt.chapter_id IN (
-                    SELECT id FROM lms_chapters WHERE program_id = ?
-                )
-            """, (program_id,))
+                    (
+                        (SELECT COUNT(DISTINCT lt.id)
+                         FROM lms_topics lt
+                         JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                         JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
+                         WHERE lc.program_id = ?
+                           AND ltc.content_mode = 'youtube')
+                        +
+                        (SELECT COUNT(DISTINCT mt.id)
+                         FROM lms_master_topics mt
+                         JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                         JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
+                         WHERE pc.program_id = ?
+                           AND mt.status = 'active'
+                           AND ltc.content_mode = 'youtube')
+                    ) AS topics_with_video,
+                    (
+                        (SELECT COUNT(DISTINCT lt.id)
+                         FROM lms_topics lt
+                         JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                         JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
+                         WHERE lc.program_id = ?
+                           AND ltc.content_mode = 'pdf')
+                        +
+                        (SELECT COUNT(DISTINCT mt.id)
+                         FROM lms_master_topics mt
+                         JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                         JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
+                         WHERE pc.program_id = ?
+                           AND mt.status = 'active'
+                           AND ltc.content_mode = 'pdf')
+                    ) AS topics_with_pdf,
+                    (
+                        (SELECT COUNT(DISTINCT lt.id)
+                         FROM lms_topics lt
+                         JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                         JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
+                         WHERE lc.program_id = ?
+                           AND ltc.content_mode = 'download')
+                        +
+                        (SELECT COUNT(DISTINCT mt.id)
+                         FROM lms_master_topics mt
+                         JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                         JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
+                         WHERE pc.program_id = ?
+                           AND mt.status = 'active'
+                           AND ltc.content_mode = 'download')
+                    ) AS topics_with_download
+            """, (program_id, program_id, program_id, program_id, program_id, program_id))
             coverage = cur.fetchone()
             summary['topics_with_video'] = coverage['topics_with_video'] or 0
             summary['topics_with_pdf'] = coverage['topics_with_pdf'] or 0
