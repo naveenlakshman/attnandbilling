@@ -1698,7 +1698,7 @@ def program_view(program_id):
                          JOIN lms_chapters lc ON lc.id = lt.chapter_id
                          JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
                          WHERE lc.program_id = ?
-                           AND ltc.content_mode = 'pdf')
+                                                     AND ltc.content_mode IN ('pdf', 'rich_text', 'interactive_image'))
                         +
                         (SELECT COUNT(DISTINCT mt.id)
                          FROM lms_master_topics mt
@@ -1706,7 +1706,7 @@ def program_view(program_id):
                          JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
                          WHERE pc.program_id = ?
                            AND mt.status = 'active'
-                           AND ltc.content_mode = 'pdf')
+                                                     AND ltc.content_mode IN ('pdf', 'rich_text', 'interactive_image'))
                     ) AS topics_with_pdf,
                     (
                         (SELECT COUNT(DISTINCT lt.id)
