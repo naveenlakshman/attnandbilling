@@ -88,7 +88,7 @@ EOF
 ## 10) Check Error Log
 
 ```bash
-tail -n 80 /var/log/<your-username>.pythonanywhere.com.error.log
+tail -n 80 /var/log/<globaliterp>.pythonanywhere.com.error.log
 ```
 
 Look for ImportError, sqlite3.OperationalError, or traceback entries.
