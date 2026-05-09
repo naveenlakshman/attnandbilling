@@ -1,0 +1,63 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}{% if topic %}Edit Master Topic{% else %}New Master Topic{% endif %}{% endblock %}
+{% block page_title %}Master Topic Form{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}">{{ chapter.title }}</a></li>
+      <li class="breadcrumb-item active" aria-current="page">{% if topic %}Edit{% else %}Create{% endif %} Topic</li>
+    </ol>
+  </nav>
+
+  <div class="row">
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="mb-3">
+              <label class="form-label">Topic Title <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="title" required maxlength="255" value="{{ topic.title if topic else '' }}" placeholder="e.g., Introduction to Excel Interface">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Short Description</label>
+              <textarea class="form-control" name="short_description" rows="3" maxlength="1200" placeholder="Optional summary for topic list">{{ topic.short_description if topic else '' }}</textarea>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Topic Order</label>
+              <input type="number" class="form-control" name="topic_order" min="1" value="{% if topic %}{{ topic.topic_order }}{% else %}{{ next_order }}{% endif %}">
+            </div>
+
+            <div class="mb-4">
+              <label class="form-label">Status</label>
+              <select class="form-select" name="status">
+                <option value="active" {% if not topic or topic.status == 'active' %}selected{% endif %}>Active</option>
+                <option value="archived" {% if topic and topic.status == 'archived' %}selected{% endif %}>Archived</option>
+              </select>
+            </div>
+
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary">{% if topic %}Save Changes{% else %}Create Topic{% endif %}</button>
+              <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="alert alert-warning">
+        <strong>Phase 2 Note:</strong> this form saves master topic metadata now.
+        Lesson/video/assignment slot editing will be wired on the next compatibility step so legacy topic flow remains unchanged.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

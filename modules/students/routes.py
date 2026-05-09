@@ -81,6 +81,94 @@ def _youtube_embed(url):
     return None
 
 
+def _program_has_master_content(conn, program_id):
+    """Return True when program has at least one visible linked active master chapter/topic."""
+    row = conn.execute(
+        """
+            SELECT 1
+            FROM lms_program_chapters pc
+            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+            JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+            WHERE pc.program_id = ?
+              AND pc.is_visible = 1
+              AND mc.status = 'active'
+              AND mt.status = 'active'
+            LIMIT 1
+        """,
+        (program_id,)
+    ).fetchone()
+    return bool(row)
+
+
+def _first_master_topic_for_program(conn, program_id):
+    """Return first master topic id for a program by linked chapter/topic order."""
+    return conn.execute(
+        """
+            SELECT mt.id
+            FROM lms_program_chapters pc
+            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+            JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+            WHERE pc.program_id = ?
+              AND pc.is_visible = 1
+              AND mc.status = 'active'
+              AND mt.status = 'active'
+            ORDER BY pc.chapter_order ASC, mt.topic_order ASC, mt.id ASC
+            LIMIT 1
+        """,
+        (program_id,)
+    ).fetchone()
+
+
+def _master_curriculum_sidebar(conn, program_id, student_id):
+    """Return chapters/topics/progress data for master-topic sidebar in one program."""
+    chapters = conn.execute(
+        """
+            SELECT
+                pc.id AS link_id,
+                pc.chapter_order,
+                pc.master_chapter_id AS id,
+                COALESCE(pc.custom_title, mc.title) AS chapter_title
+            FROM lms_program_chapters pc
+            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+            WHERE pc.program_id = ?
+              AND pc.is_visible = 1
+              AND mc.status = 'active'
+            ORDER BY pc.chapter_order ASC, pc.id ASC
+        """,
+        (program_id,)
+    ).fetchall()
+
+    topics = conn.execute(
+        """
+            SELECT
+                mt.id,
+                mt.title AS topic_title,
+                mt.topic_order,
+                mt.master_chapter_id AS chapter_id,
+                CASE WHEN mp.is_completed = 1 THEN 1 ELSE 0 END AS is_completed
+            FROM lms_program_chapters pc
+            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+            JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+            LEFT JOIN lms_master_topic_progress mp
+                ON mp.master_topic_id = mt.id
+               AND mp.student_id = ?
+               AND mp.program_id = ?
+            WHERE pc.program_id = ?
+              AND pc.is_visible = 1
+              AND mc.status = 'active'
+              AND mt.status = 'active'
+            ORDER BY pc.chapter_order ASC, mt.topic_order ASC, mt.id ASC
+        """,
+        (student_id, program_id, program_id)
+    ).fetchall()
+
+    topics_by_chapter = {}
+    for t in topics:
+        topics_by_chapter.setdefault(t['chapter_id'], []).append(t)
+
+    return chapters, topics, topics_by_chapter
+
+
 # ---------------------------------------------------------------------------
 # Login / Logout
 # ---------------------------------------------------------------------------
@@ -260,31 +348,63 @@ def program_view(program_id):
 
         program = conn.execute("SELECT * FROM lms_programs WHERE id = ?", (program_id,)).fetchone()
 
-        # Find the first topic in the program (redirect Tally-style directly into viewer)
-        first_topic = conn.execute("""
-            SELECT lt.id FROM lms_topics lt
-            JOIN lms_chapters lc ON lt.chapter_id = lc.id
-            WHERE lc.program_id = ? AND lc.is_active = 1 AND lt.is_active = 1
-            ORDER BY lc.chapter_order, lt.topic_order
-            LIMIT 1
-        """, (program_id,)).fetchone()
+        has_master = _program_has_master_content(conn, program_id)
 
-        # Also get chapters for fallback
-        chapters = conn.execute("""
-            SELECT lc.*,
-                (
-                    SELECT COUNT(*) FROM lms_topics lt
-                    WHERE lt.chapter_id = lc.id AND lt.is_active = 1
-                ) AS topic_count
-            FROM lms_chapters lc
-            WHERE lc.program_id = ? AND lc.is_active = 1
-            ORDER BY lc.chapter_order
-        """, (program_id,)).fetchall()
+        if has_master:
+            first_master_topic = _first_master_topic_for_program(conn, program_id)
+            first_topic = None
+            chapters = conn.execute(
+                """
+                    SELECT
+                        pc.master_chapter_id AS id,
+                        COALESCE(pc.custom_title, mc.title) AS chapter_title,
+                        pc.chapter_order,
+                        mc.description,
+                        (
+                            SELECT COUNT(*)
+                            FROM lms_master_topics mt
+                            WHERE mt.master_chapter_id = pc.master_chapter_id
+                              AND mt.status = 'active'
+                        ) AS topic_count
+                    FROM lms_program_chapters pc
+                    JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                    WHERE pc.program_id = ?
+                      AND pc.is_visible = 1
+                      AND mc.status = 'active'
+                    ORDER BY pc.chapter_order ASC
+                """,
+                (program_id,)
+            ).fetchall()
+        else:
+            first_master_topic = None
+            # Find the first topic in the legacy program flow
+            first_topic = conn.execute("""
+                SELECT lt.id FROM lms_topics lt
+                JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                WHERE lc.program_id = ? AND lc.is_active = 1 AND lt.is_active = 1
+                ORDER BY lc.chapter_order, lt.topic_order
+                LIMIT 1
+            """, (program_id,)).fetchone()
+
+            # Legacy fallback chapters list
+            chapters = conn.execute("""
+                SELECT lc.*,
+                    (
+                        SELECT COUNT(*) FROM lms_topics lt
+                        WHERE lt.chapter_id = lc.id AND lt.is_active = 1
+                    ) AS topic_count
+                FROM lms_chapters lc
+                WHERE lc.program_id = ? AND lc.is_active = 1
+                ORDER BY lc.chapter_order
+            """, (program_id,)).fetchall()
 
     finally:
         conn.close()
 
     # Redirect directly to first topic (Tally LMS style — sidebar shows full curriculum)
+    if first_master_topic:
+        return redirect(url_for('students.master_topic_view', program_id=program_id, master_topic_id=first_master_topic['id']))
+
     if first_topic:
         return redirect(url_for('students.topic_view', topic_id=first_topic['id']))
 
@@ -452,7 +572,119 @@ def topic_view(topic_id):
                            total_topics=total_topics,
                            completed_topics=completed_topics,
                            is_completed=is_completed,
+                           is_master_topic=False,
+                           progress_endpoint=url_for('students.mark_complete', topic_id=topic_id),
+                           topic_base_route='legacy',
                            company=company)
+
+
+@students_bp.route('/program/<int:program_id>/master-topic/<int:master_topic_id>')
+@student_login_required
+def master_topic_view(program_id, master_topic_id):
+    """Student topic viewer for reusable master topics (program-scoped progress)."""
+    student_id = session['student_id']
+    conn = get_conn()
+    try:
+        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+
+        access = _has_program_access(conn, program_id, student_id)
+        if not access:
+            flash('You do not have access to this program.', 'danger')
+            return redirect(url_for('students.dashboard'))
+
+        topic = conn.execute(
+            """
+                SELECT
+                    mt.id,
+                    mt.title AS topic_title,
+                    mt.short_description,
+                    mt.topic_order,
+                    mt.master_chapter_id AS chapter_id,
+                    COALESCE(pc.custom_title, mc.title) AS chapter_title,
+                    pc.chapter_order,
+                    lp.id AS program_id,
+                    lp.program_name
+                FROM lms_master_topics mt
+                JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                JOIN lms_program_chapters pc
+                    ON pc.master_chapter_id = mt.master_chapter_id
+                   AND pc.program_id = ?
+                JOIN lms_programs lp ON lp.id = pc.program_id
+                WHERE mt.id = ?
+                  AND pc.is_visible = 1
+                  AND mc.status = 'active'
+                  AND mt.status = 'active'
+                LIMIT 1
+            """,
+            (program_id, master_topic_id)
+        ).fetchone()
+
+        if not topic:
+            flash('Topic not found in this program.', 'danger')
+            return redirect(url_for('students.program_view', program_id=program_id))
+
+        contents = conn.execute(
+            """
+                SELECT *
+                FROM lms_topic_contents
+                WHERE master_topic_id = ?
+                ORDER BY display_order
+            """,
+            (master_topic_id,)
+        ).fetchall()
+
+        video_content = next((c for c in contents if c['content_mode'] == 'youtube'), None)
+        lesson_content = next((c for c in contents if c['content_mode'] in ('pdf', 'rich_text', 'interactive_image')), None)
+        download_content = next((c for c in contents if c['content_mode'] == 'download'), None)
+
+        chapters_sidebar, sidebar_topics, topics_by_chapter = _master_curriculum_sidebar(conn, program_id, student_id)
+
+        ordered_topic_ids = [r['id'] for r in sidebar_topics]
+        idx = ordered_topic_ids.index(master_topic_id) if master_topic_id in ordered_topic_ids else -1
+        prev_topic_id = ordered_topic_ids[idx - 1] if idx > 0 else None
+        next_topic_id = ordered_topic_ids[idx + 1] if idx >= 0 and idx < len(ordered_topic_ids) - 1 else None
+
+        embed_urls = {}
+        for c in contents:
+            if c['content_mode'] == 'youtube':
+                embed_urls[c['id']] = _youtube_embed(c['external_url'])
+
+        total_topics = len(sidebar_topics)
+        completed_topics = sum(1 for t in sidebar_topics if t['is_completed'])
+
+        current_completed = conn.execute(
+            """
+                SELECT is_completed
+                FROM lms_master_topic_progress
+                WHERE student_id = ? AND program_id = ? AND master_topic_id = ?
+            """,
+            (student_id, program_id, master_topic_id)
+        ).fetchone()
+        is_completed = current_completed and current_completed['is_completed'] == 1
+
+    finally:
+        conn.close()
+
+    return render_template(
+        'students/topic.html',
+        topic=topic,
+        contents=contents,
+        embed_urls=embed_urls,
+        video_content=video_content,
+        lesson_content=lesson_content,
+        download_content=download_content,
+        prev_topic_id=prev_topic_id,
+        next_topic_id=next_topic_id,
+        chapters_sidebar=chapters_sidebar,
+        topics_by_chapter=topics_by_chapter,
+        total_topics=total_topics,
+        completed_topics=completed_topics,
+        is_completed=is_completed,
+        is_master_topic=True,
+        progress_endpoint=url_for('students.mark_master_complete', program_id=program_id, master_topic_id=master_topic_id),
+        topic_base_route='master',
+        company=company,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -480,6 +712,75 @@ def mark_complete(topic_id):
                 VALUES (?, ?, 0)
                 ON CONFLICT(student_id, topic_id) DO UPDATE SET is_completed=0, completed_at=NULL
             """, (student_id, topic_id))
+        conn.commit()
+        return jsonify({'status': 'ok', 'action': action})
+    finally:
+        conn.close()
+
+
+@students_bp.route('/program/<int:program_id>/master-topic/<int:master_topic_id>/complete', methods=['POST'])
+@student_login_required
+def mark_master_complete(program_id, master_topic_id):
+    from flask import jsonify
+    if _is_demo():
+        return jsonify({'status': 'demo', 'message': 'Read-only in demo mode'})
+
+    student_id = session['student_id']
+    action = request.form.get('action', 'complete')
+    conn = get_conn()
+    try:
+        access = _has_program_access(conn, program_id, student_id)
+        if not access:
+            return jsonify({'status': 'error', 'message': 'No access'}), 403
+
+        in_program = conn.execute(
+            """
+                SELECT 1
+                FROM lms_program_chapters pc
+                JOIN lms_master_topics mt ON mt.master_chapter_id = pc.master_chapter_id
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                WHERE pc.program_id = ?
+                  AND mt.id = ?
+                  AND pc.is_visible = 1
+                  AND mc.status = 'active'
+                  AND mt.status = 'active'
+                LIMIT 1
+            """,
+            (program_id, master_topic_id)
+        ).fetchone()
+
+        if not in_program:
+            return jsonify({'status': 'error', 'message': 'Topic not in program'}), 404
+
+        if action == 'complete':
+            conn.execute(
+                """
+                    INSERT INTO lms_master_topic_progress (
+                        student_id, program_id, master_topic_id, is_completed, completed_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, 1, datetime('now'), datetime('now'), datetime('now'))
+                    ON CONFLICT(student_id, program_id, master_topic_id)
+                    DO UPDATE SET
+                        is_completed = 1,
+                        completed_at = datetime('now'),
+                        updated_at = datetime('now')
+                """,
+                (student_id, program_id, master_topic_id)
+            )
+        else:
+            conn.execute(
+                """
+                    INSERT INTO lms_master_topic_progress (
+                        student_id, program_id, master_topic_id, is_completed, completed_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, 0, NULL, datetime('now'), datetime('now'))
+                    ON CONFLICT(student_id, program_id, master_topic_id)
+                    DO UPDATE SET
+                        is_completed = 0,
+                        completed_at = NULL,
+                        updated_at = datetime('now')
+                """,
+                (student_id, program_id, master_topic_id)
+            )
+
         conn.commit()
         return jsonify({'status': 'ok', 'action': action})
     finally:

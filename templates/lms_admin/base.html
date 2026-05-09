@@ -119,12 +119,25 @@
         📖 Programs
       </a>
 
+      <!-- Master Content Library -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint in ['lms_admin.list_master_chapters', 'lms_admin.master_chapter_new', 'lms_admin.master_chapter_edit', 'lms_admin.list_master_topics', 'lms_admin.master_topic_new', 'lms_admin.master_topic_edit'] else '' }}"
+        href="{{ url_for('lms_admin.list_master_chapters') }}">
+        🧩 Master Library
+      </a>
+
       <!-- Batch Assignments -->
       {% if session.get('role') == 'admin' %}
       <a
         class="nav-link {{ 'active' if request.endpoint == 'lms_admin.list_batch_programs' else '' }}"
         href="{{ url_for('lms_admin.list_batch_programs') }}">
         🎓 Batch Access
+      </a>
+
+      <a
+        class="nav-link {{ 'active' if request.endpoint in ['lms_admin.phase6_rollout_view'] else '' }}"
+        href="{{ url_for('lms_admin.phase6_rollout_view') }}">
+        🚀 Phase 6 Rollout
       </a>
 
       <!-- Course–Program Mapping -->

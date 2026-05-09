@@ -799,6 +799,102 @@ def init_db():
         )
     """)
 
+    # Reusable LMS content library tables (additive, backward-compatible)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_master_chapters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_by INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (created_by) REFERENCES users(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_master_topics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            master_chapter_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            short_description TEXT,
+            topic_order INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (master_chapter_id) REFERENCES lms_master_chapters(id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_program_chapters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            program_id INTEGER NOT NULL,
+            master_chapter_id INTEGER NOT NULL,
+            chapter_order INTEGER NOT NULL DEFAULT 1,
+            custom_title TEXT,
+            is_visible INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            UNIQUE(program_id, master_chapter_id),
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id) ON DELETE CASCADE,
+            FOREIGN KEY (master_chapter_id) REFERENCES lms_master_chapters(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_master_topic_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            program_id INTEGER NOT NULL,
+            master_topic_id INTEGER NOT NULL,
+            is_completed INTEGER NOT NULL DEFAULT 0,
+            completed_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(student_id, program_id, master_topic_id),
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id),
+            FOREIGN KEY (master_topic_id) REFERENCES lms_master_topics(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_master_topic_bridge (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            master_topic_id INTEGER NOT NULL UNIQUE,
+            legacy_topic_id INTEGER NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (master_topic_id) REFERENCES lms_master_topics(id) ON DELETE CASCADE,
+            FOREIGN KEY (legacy_topic_id) REFERENCES lms_topics(id) ON DELETE CASCADE
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_master_topics_chapter
+        ON lms_master_topics(master_chapter_id)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_program_chapters_program
+        ON lms_program_chapters(program_id)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_program_chapters_chapter
+        ON lms_program_chapters(master_chapter_id)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_master_topic_progress_lookup
+        ON lms_master_topic_progress(student_id, program_id, master_topic_id)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_master_topic_bridge_master
+        ON lms_master_topic_bridge(master_topic_id)
+    """)
+
     # ---------- SAFE MIGRATIONS ----------
     add_column_if_not_exists(cur, "users", "phone", "TEXT")
     add_column_if_not_exists(cur, "users", "branch_id", "INTEGER")
@@ -894,6 +990,21 @@ def init_db():
 
     # LMS rich text and interactive image support
     add_column_if_not_exists(cur, "lms_topic_contents", "hotspots_json", "TEXT")
+    add_column_if_not_exists(cur, "lms_topic_contents", "master_topic_id", "INTEGER")
+    add_column_if_not_exists(cur, "lms_topic_attachments", "master_topic_id", "INTEGER")
+
+    # Phase 8: soft-archive flag for fully-migrated legacy chapters
+    add_column_if_not_exists(cur, "lms_chapters", "is_archived", "INTEGER NOT NULL DEFAULT 0")
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_topic_contents_master_topic
+        ON lms_topic_contents(master_topic_id)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_topic_attachments_master_topic
+        ON lms_topic_attachments(master_topic_id)
+    """)
 
     # LMS topic progress tracking
     cur.execute("""

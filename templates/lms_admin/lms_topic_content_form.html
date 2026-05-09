@@ -10,10 +10,23 @@
 
 {% block content %}
 {% set locked_type = content.content_mode if content else preset_type %}
+{% set is_master = is_master_topic if is_master_topic is defined else false %}
+{% set back_url = url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) if is_master else url_for('lms_admin.list_topic_contents', topic_id=topic.id) %}
 <div class="container-fluid py-4">
     <!-- Breadcrumb Navigation -->
     <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb">
+            {% if is_master %}
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_master_chapters') }}" class="text-decoration-none">Master Library</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}" class="text-decoration-none">{{ chapter.chapter_title }}</a>
+            </li>
+            <li class="breadcrumb-item">
+                <a href="{{ back_url }}" class="text-decoration-none">{{ topic.topic_title }}</a>
+            </li>
+            {% else %}
             <li class="breadcrumb-item">
                 <a href="{{ url_for('lms_admin.list_programs') }}" class="text-decoration-none">Programs</a>
             </li>
@@ -30,10 +43,11 @@
                 <a href="{{ url_for('lms_admin.list_topics', chapter_id=chapter.id) }}" class="text-decoration-none">Topics</a>
             </li>
             <li class="breadcrumb-item">
-                <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" class="text-decoration-none">{{ topic.topic_title }}</a>
+                <a href="{{ back_url }}" class="text-decoration-none">{{ topic.topic_title }}</a>
             </li>
+            {% endif %}
             <li class="breadcrumb-item">
-                <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" class="text-decoration-none">Contents</a>
+                <a href="{{ back_url }}" class="text-decoration-none">Contents</a>
             </li>
             <li class="breadcrumb-item active" aria-current="page">
                 {% if content %}
@@ -59,7 +73,7 @@
                     </h1>
                     <p class="text-muted mb-0">Topic: <strong>{{ topic.topic_title }}</strong> → Chapter: <strong>{{ chapter.chapter_title }}</strong></p>
                 </div>
-                <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}" class="btn btn-outline-secondary">
+                <a href="{{ back_url }}" class="btn btn-outline-secondary">
                     ← Back to Contents
                 </a>
             </div>
@@ -160,7 +174,7 @@
                             <button type="submit" class="btn btn-primary btn-lg">
                                 {% if content %}💾 Save Changes{% else %}✅ Add Content{% endif %}
                             </button>
-                            <a href="{{ url_for('lms_admin.list_topic_contents', topic_id=topic.id) }}"
+                            <a href="{{ back_url }}"
                                class="btn btn-outline-secondary btn-lg">Cancel</a>
                         </div>
                     </form>

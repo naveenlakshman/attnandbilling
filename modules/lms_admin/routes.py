@@ -7,10 +7,11 @@ from datetime import datetime
 import re
 import os
 import json
+import sqlite3
 import bleach
 from bleach.css_sanitizer import CSSSanitizer
 from werkzeug.utils import secure_filename
-from config import Config
+from config import Config, DB_PATH
 from modules.core.utils import login_required, admin_required, lms_content_manager_required
 
 # ── Rich text sanitization config ──────────────────────────────────────────
@@ -74,6 +75,9 @@ _CSS_SANITIZER = CSSSanitizer(allowed_css_properties=[
 ])
 
 _ALLOWED_IMAGE_EXTS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+_MASTER_BRIDGE_PROGRAM_SLUG = '__lms_master_bridge__'
+_MASTER_BRIDGE_PROGRAM_NAME = 'LMS Master Bridge (System)'
+_MASTER_BRIDGE_CHAPTER_TITLE = 'Master Topic Bridge Chapter'
 
 
 def sanitize_rich_text(html):
@@ -153,6 +157,307 @@ def _renumber_chapter_topics(cur, chapter_id, ordered_topic_ids=None):
         )
 
     return ordered_ids
+
+
+def _renumber_program_chapter_links(cur, program_id, ordered_link_ids=None):
+    """Normalize lms_program_chapters.chapter_order to sequential values for one program."""
+    rows = cur.execute(
+        """
+            SELECT id
+            FROM lms_program_chapters
+            WHERE program_id = ?
+            ORDER BY chapter_order ASC, id ASC
+        """,
+        (program_id,)
+    ).fetchall()
+
+    if not rows:
+        return []
+
+    existing_ids = [row['id'] for row in rows]
+    ordered_ids = []
+
+    if ordered_link_ids:
+        seen = set()
+        for link_id in ordered_link_ids:
+            if link_id in existing_ids and link_id not in seen:
+                ordered_ids.append(link_id)
+                seen.add(link_id)
+        for link_id in existing_ids:
+            if link_id not in seen:
+                ordered_ids.append(link_id)
+    else:
+        ordered_ids = existing_ids
+
+    for next_order, link_id in enumerate(ordered_ids, start=1):
+        cur.execute(
+            """
+                UPDATE lms_program_chapters
+                SET chapter_order = ?
+                WHERE id = ?
+            """,
+            (next_order, link_id)
+        )
+
+    return ordered_ids
+
+
+def _create_db_backup_snapshot(conn, label='phase5'):
+    """Create SQLite backup snapshot using native backup API and return backup file path."""
+    backup_dir = os.path.join(os.path.dirname(DB_PATH), 'backup')
+    os.makedirs(backup_dir, exist_ok=True)
+    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    backup_path = os.path.join(backup_dir, f'{label}_{stamp}.db')
+
+    backup_conn = sqlite3.connect(backup_path)
+    try:
+        conn.backup(backup_conn)
+    finally:
+        backup_conn.close()
+    return backup_path
+
+
+def _migrate_legacy_chapter_to_master(cur, program_id, chapter_id, actor_user_id):
+    """Non-destructive chapter migration: create master rows + link, map existing content/attachments by master_topic_id."""
+    now = datetime.now().isoformat(timespec='seconds')
+
+    chapter = cur.execute(
+        """
+            SELECT id, program_id, chapter_title, chapter_order, description, is_active
+            FROM lms_chapters
+            WHERE id = ? AND program_id = ?
+        """,
+        (chapter_id, program_id)
+    ).fetchone()
+    if not chapter:
+        return None, 'Chapter not found for this program.'
+
+    topics = cur.execute(
+        """
+            SELECT id, topic_title, topic_order, short_description, is_active
+            FROM lms_topics
+            WHERE chapter_id = ?
+            ORDER BY topic_order ASC, id ASC
+        """,
+        (chapter_id,)
+    ).fetchall()
+    if not topics:
+        return None, 'Chapter has no topics to migrate.'
+
+    # Guard against repeat migration of the same legacy chapter topics.
+    already_migrated = cur.execute(
+        """
+            SELECT 1
+            FROM lms_master_topic_bridge b
+            JOIN lms_topics t ON t.id = b.legacy_topic_id
+            WHERE t.chapter_id = ?
+            LIMIT 1
+        """,
+        (chapter_id,)
+    ).fetchone()
+    if already_migrated:
+        return None, 'This chapter appears to be already migrated (bridge mapping exists).'
+
+    master_status = 'active' if chapter['is_active'] else 'archived'
+    cur.execute(
+        """
+            INSERT INTO lms_master_chapters (
+                title, description, status, created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            chapter['chapter_title'],
+            chapter['description'] or '',
+            master_status,
+            actor_user_id,
+            now,
+            now,
+        )
+    )
+    master_chapter_id = cur.lastrowid
+
+    cur.execute(
+        """
+            INSERT INTO lms_program_chapters (
+                program_id, master_chapter_id, chapter_order, custom_title, is_visible, created_at
+            ) VALUES (?, ?, ?, ?, 1, ?)
+        """,
+        (
+            program_id,
+            master_chapter_id,
+            chapter['chapter_order'] if chapter['chapter_order'] else 1,
+            None,
+            now,
+        )
+    )
+    link_id = cur.lastrowid
+
+    migrated_count = 0
+    for topic in topics:
+        topic_status = 'active' if topic['is_active'] else 'archived'
+        cur.execute(
+            """
+                INSERT INTO lms_master_topics (
+                    master_chapter_id, title, short_description, topic_order,
+                    status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                master_chapter_id,
+                topic['topic_title'],
+                topic['short_description'] or '',
+                topic['topic_order'] if topic['topic_order'] else 1,
+                topic_status,
+                now,
+                now,
+            )
+        )
+        master_topic_id = cur.lastrowid
+
+        # Reuse existing content rows by tagging them with master_topic_id.
+        cur.execute(
+            """
+                UPDATE lms_topic_contents
+                SET master_topic_id = ?
+                WHERE topic_id = ?
+                  AND (master_topic_id IS NULL OR master_topic_id = '')
+            """,
+            (master_topic_id, topic['id'])
+        )
+        cur.execute(
+            """
+                UPDATE lms_topic_attachments
+                SET master_topic_id = ?
+                WHERE topic_id = ?
+                  AND (master_topic_id IS NULL OR master_topic_id = '')
+            """,
+            (master_topic_id, topic['id'])
+        )
+
+        # Bridge map points master topic to original legacy topic for future edits/uploads.
+        cur.execute(
+            """
+                INSERT INTO lms_master_topic_bridge (master_topic_id, legacy_topic_id, created_at)
+                VALUES (?, ?, ?)
+            """,
+            (master_topic_id, topic['id'], now)
+        )
+        migrated_count += 1
+
+    _renumber_program_chapter_links(cur, program_id)
+
+    return {
+        'master_chapter_id': master_chapter_id,
+        'program_link_id': link_id,
+        'migrated_topics': migrated_count,
+        'legacy_chapter_title': chapter['chapter_title'],
+    }, None
+
+
+def _ensure_master_bridge_topic(cur, master_topic_id, master_topic_title):
+    """Return a dedicated legacy topic_id used only to satisfy FK/topic_id NOT NULL for master-topic content rows."""
+    existing = cur.execute(
+        "SELECT legacy_topic_id FROM lms_master_topic_bridge WHERE master_topic_id = ?",
+        (master_topic_id,)
+    ).fetchone()
+    if existing:
+        return existing['legacy_topic_id']
+
+    now = datetime.now().isoformat(timespec='seconds')
+
+    bridge_program = cur.execute(
+        "SELECT id FROM lms_programs WHERE slug = ?",
+        (_MASTER_BRIDGE_PROGRAM_SLUG,)
+    ).fetchone()
+    if bridge_program:
+        bridge_program_id = bridge_program['id']
+    else:
+        cur.execute(
+            """
+                INSERT INTO lms_programs (
+                    course_id, program_name, slug, description, thumbnail_path,
+                    is_published, is_active, created_by, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                None,
+                _MASTER_BRIDGE_PROGRAM_NAME,
+                _MASTER_BRIDGE_PROGRAM_SLUG,
+                'System-only bridge program for reusable master-topic content compatibility.',
+                '',
+                0,
+                0,
+                session.get('user_id'),
+                now,
+                now,
+            )
+        )
+        bridge_program_id = cur.lastrowid
+
+    bridge_chapter = cur.execute(
+        """
+            SELECT id
+            FROM lms_chapters
+            WHERE program_id = ? AND chapter_title = ?
+            ORDER BY id ASC
+            LIMIT 1
+        """,
+        (bridge_program_id, _MASTER_BRIDGE_CHAPTER_TITLE)
+    ).fetchone()
+    if bridge_chapter:
+        bridge_chapter_id = bridge_chapter['id']
+    else:
+        cur.execute(
+            """
+                INSERT INTO lms_chapters (
+                    program_id, chapter_title, chapter_order, description,
+                    is_active, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                bridge_program_id,
+                _MASTER_BRIDGE_CHAPTER_TITLE,
+                1,
+                'System bridge chapter for master-topic content compatibility.',
+                0,
+                now,
+                now,
+            )
+        )
+        bridge_chapter_id = cur.lastrowid
+
+    cur.execute(
+        """
+            INSERT INTO lms_topics (
+                chapter_id, topic_title, topic_order, short_description,
+                estimated_minutes, content_type, is_preview, is_active,
+                is_required, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            bridge_chapter_id,
+            f'[MASTER BRIDGE] {master_topic_title}',
+            1,
+            'System bridge topic for master content rows.',
+            None,
+            'lesson',
+            0,
+            0,
+            0,
+            now,
+            now,
+        )
+    )
+    legacy_topic_id = cur.lastrowid
+
+    cur.execute(
+        """
+            INSERT INTO lms_master_topic_bridge (master_topic_id, legacy_topic_id, created_at)
+            VALUES (?, ?, ?)
+        """,
+        (master_topic_id, legacy_topic_id, now)
+    )
+    return legacy_topic_id
 
 
 # File Upload Handler
@@ -318,12 +623,666 @@ def list_programs():
             FROM lms_programs lp
             LEFT JOIN courses c ON lp.course_id = c.id
             LEFT JOIN lms_chapters lc ON lp.id = lc.program_id
+            WHERE lp.slug != ?
             GROUP BY lp.id
             ORDER BY lp.created_at DESC
-        """)
+        """, (_MASTER_BRIDGE_PROGRAM_SLUG,))
         programs = cur.fetchall()
         
         return render_template('lms_programs.html', programs=programs)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/chapters', methods=['GET'])
+@login_required
+def list_master_chapters():
+    """List reusable master chapters for the content library."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+                SELECT
+                    mc.id,
+                    mc.title,
+                    mc.description,
+                    mc.status,
+                    mc.created_at,
+                    mc.updated_at,
+                    COUNT(mt.id) AS topic_count
+                FROM lms_master_chapters mc
+                LEFT JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+                GROUP BY mc.id
+                ORDER BY mc.created_at DESC
+            """
+        )
+        chapters = cur.fetchall()
+        return render_template('master_chapters.html', chapters=chapters)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/chapter/new', methods=['GET', 'POST'])
+@lms_content_manager_required
+def master_chapter_new():
+    """Create a reusable master chapter."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        if request.method == 'POST':
+            title = request.form.get('title', '').strip()
+            description = request.form.get('description', '').strip()
+            status = request.form.get('status', 'active').strip().lower()
+
+            if not title:
+                flash('Chapter title is required.', 'danger')
+                return redirect(url_for('lms_admin.master_chapter_new'))
+
+            if status not in ('active', 'archived'):
+                status = 'active'
+
+            now = datetime.now().isoformat(timespec='seconds')
+            cur.execute(
+                """
+                    INSERT INTO lms_master_chapters (
+                        title,
+                        description,
+                        status,
+                        created_by,
+                        created_at,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (title, description, status, session.get('user_id'), now, now)
+            )
+            chapter_id = cur.lastrowid
+            conn.commit()
+
+            log_activity(
+                user_id=session['user_id'],
+                branch_id=session.get('branch_id'),
+                action_type='create',
+                module_name='lms_master_chapters',
+                record_id=chapter_id,
+                description=f'Created master chapter: {title}'
+            )
+            flash('Master chapter created successfully.', 'success')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        return render_template('master_chapter_form.html', chapter=None)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/chapter/<int:master_chapter_id>/edit', methods=['GET', 'POST'])
+@lms_content_manager_required
+def master_chapter_edit(master_chapter_id):
+    """Edit reusable master chapter metadata."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        chapter = cur.execute(
+            """
+                SELECT id, title, description, status, created_at, updated_at
+                FROM lms_master_chapters
+                WHERE id = ?
+            """,
+            (master_chapter_id,)
+        ).fetchone()
+
+        if not chapter:
+            flash('Master chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        if request.method == 'POST':
+            title = request.form.get('title', '').strip()
+            description = request.form.get('description', '').strip()
+            status = request.form.get('status', 'active').strip().lower()
+
+            if not title:
+                flash('Chapter title is required.', 'danger')
+                return redirect(url_for('lms_admin.master_chapter_edit', master_chapter_id=master_chapter_id))
+
+            if status not in ('active', 'archived'):
+                status = 'active'
+
+            now = datetime.now().isoformat(timespec='seconds')
+            cur.execute(
+                """
+                    UPDATE lms_master_chapters
+                    SET title = ?,
+                        description = ?,
+                        status = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                """,
+                (title, description, status, now, master_chapter_id)
+            )
+            conn.commit()
+
+            log_activity(
+                user_id=session['user_id'],
+                branch_id=session.get('branch_id'),
+                action_type='update',
+                module_name='lms_master_chapters',
+                record_id=master_chapter_id,
+                description=f'Updated master chapter: {title}'
+            )
+            flash('Master chapter updated successfully.', 'success')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        return render_template('master_chapter_form.html', chapter=chapter)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/chapter/<int:master_chapter_id>/archive', methods=['POST'])
+@admin_required
+def master_chapter_archive(master_chapter_id):
+    """Archive a master chapter (soft delete)."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        chapter = cur.execute(
+            "SELECT id, title FROM lms_master_chapters WHERE id = ?",
+            (master_chapter_id,)
+        ).fetchone()
+        if not chapter:
+            flash('Master chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        now = datetime.now().isoformat(timespec='seconds')
+        cur.execute(
+            """
+                UPDATE lms_master_chapters
+                SET status = 'archived',
+                    updated_at = ?
+                WHERE id = ?
+            """,
+            (now, master_chapter_id)
+        )
+        conn.commit()
+
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='archive',
+            module_name='lms_master_chapters',
+            record_id=master_chapter_id,
+            description=f'Archived master chapter: {chapter["title"]}'
+        )
+        flash('Master chapter archived.', 'success')
+        return redirect(url_for('lms_admin.list_master_chapters'))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/chapter/<int:master_chapter_id>/topics', methods=['GET'])
+@login_required
+def list_master_topics(master_chapter_id):
+    """List master topics under one master chapter."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        chapter = cur.execute(
+            """
+                SELECT id, title, description, status, created_at, updated_at
+                FROM lms_master_chapters
+                WHERE id = ?
+            """,
+            (master_chapter_id,)
+        ).fetchone()
+        if not chapter:
+            flash('Master chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        topics = cur.execute(
+            """
+                SELECT
+                    mt.id,
+                    mt.master_chapter_id,
+                    mt.title,
+                    mt.short_description,
+                    mt.topic_order,
+                    mt.status,
+                    mt.created_at,
+                    mt.updated_at,
+                    COUNT(ltc.id) AS content_count
+                FROM lms_master_topics mt
+                LEFT JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
+                WHERE mt.master_chapter_id = ?
+                GROUP BY mt.id
+                ORDER BY mt.topic_order ASC, mt.id ASC
+            """,
+            (master_chapter_id,)
+        ).fetchall()
+
+        return render_template('master_topics.html', chapter=chapter, topics=topics)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/topic/<int:master_topic_id>/contents', methods=['GET'])
+@login_required
+def list_master_topic_contents(master_topic_id):
+    """List one-per-type content slots for a master topic."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        topic = cur.execute(
+            """
+                SELECT
+                    mt.id,
+                    mt.master_chapter_id,
+                    mt.title,
+                    mt.topic_order,
+                    mt.short_description,
+                    mt.status,
+                    mc.title AS chapter_title
+                FROM lms_master_topics mt
+                JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                WHERE mt.id = ?
+            """,
+            (master_topic_id,)
+        ).fetchone()
+        if not topic:
+            flash('Master topic not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        video_content = cur.execute(
+            """
+                SELECT * FROM lms_topic_contents
+                WHERE master_topic_id = ? AND content_mode = 'youtube'
+                ORDER BY display_order ASC LIMIT 1
+            """,
+            (master_topic_id,)
+        ).fetchone()
+        lesson_content = cur.execute(
+            """
+                SELECT * FROM lms_topic_contents
+                WHERE master_topic_id = ? AND content_mode IN ('pdf', 'rich_text', 'interactive_image')
+                ORDER BY display_order ASC LIMIT 1
+            """,
+            (master_topic_id,)
+        ).fetchone()
+        download_content = cur.execute(
+            """
+                SELECT * FROM lms_topic_contents
+                WHERE master_topic_id = ? AND content_mode = 'download'
+                ORDER BY display_order ASC LIMIT 1
+            """,
+            (master_topic_id,)
+        ).fetchone()
+
+        data = {
+            'chapter': {
+                'id': topic['master_chapter_id'],
+                'title': topic['chapter_title'],
+            },
+            'topic': topic,
+            'video_content': video_content,
+            'lesson_content': lesson_content,
+            'download_content': download_content,
+        }
+        return render_template('master_topic_contents.html', data=data)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/topic/<int:master_topic_id>/content/new', methods=['GET', 'POST'])
+@lms_content_manager_required
+def master_content_new(master_topic_id):
+    """Add content to master topic using compatibility bridge topic_id + master_topic_id."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        topic = cur.execute(
+            """
+                SELECT
+                    mt.id,
+                    mt.master_chapter_id,
+                    mt.title,
+                    mc.title AS chapter_title
+                FROM lms_master_topics mt
+                JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                WHERE mt.id = ?
+            """,
+            (master_topic_id,)
+        ).fetchone()
+        if not topic:
+            flash('Master topic not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        if request.method == 'POST':
+            title = request.form.get('title', '').strip()
+            content_mode = request.form.get('content_mode', 'youtube')
+            description = request.form.get('content_body', '').strip()
+            display_order = request.form.get('display_order', '1')
+            external_url = request.form.get('external_url', '').strip()
+
+            if content_mode == 'rich_text' and not title:
+                title = topic['title']
+
+            if not title:
+                flash('Content title is required.', 'danger')
+                return redirect(url_for('lms_admin.master_content_new', master_topic_id=master_topic_id))
+
+            if content_mode not in ['youtube', 'pdf', 'rich_text', 'download']:
+                content_mode = 'youtube'
+
+            try:
+                display_order = int(display_order) if display_order else 1
+            except ValueError:
+                display_order = 1
+
+            file_path = ''
+            hotspots_json = ''
+
+            if content_mode == 'youtube':
+                if not external_url:
+                    flash('YouTube URL is required.', 'danger')
+                    return redirect(url_for('lms_admin.master_content_new', master_topic_id=master_topic_id))
+            elif content_mode in ['pdf', 'download']:
+                file_field = 'pdf_file' if content_mode == 'pdf' else 'download_file'
+                if file_field not in request.files or not request.files[file_field].filename:
+                    flash('Please select a file to upload.', 'danger')
+                    return redirect(url_for('lms_admin.master_content_new', master_topic_id=master_topic_id))
+                success, result = upload_file(request.files[file_field], content_mode)
+                if not success:
+                    flash(f'Upload failed: {result}', 'danger')
+                    return redirect(url_for('lms_admin.master_content_new', master_topic_id=master_topic_id))
+                file_path = result
+            elif content_mode == 'rich_text':
+                description = sanitize_rich_text(description)
+                if not description.strip():
+                    flash('Rich text content cannot be empty.', 'danger')
+                    return redirect(url_for('lms_admin.master_content_new', master_topic_id=master_topic_id))
+
+            if content_mode in ('pdf', 'rich_text'):
+                existing = cur.execute(
+                    """
+                        SELECT id FROM lms_topic_contents
+                        WHERE master_topic_id = ? AND content_mode IN ('pdf', 'rich_text', 'interactive_image')
+                    """,
+                    (master_topic_id,)
+                ).fetchone()
+            else:
+                existing = cur.execute(
+                    """
+                        SELECT id FROM lms_topic_contents
+                        WHERE master_topic_id = ? AND content_mode = ?
+                    """,
+                    (master_topic_id, content_mode)
+                ).fetchone()
+
+            if existing:
+                flash('This content slot is already configured for the master topic. Edit or remove it first.', 'danger')
+                return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=master_topic_id))
+
+            bridge_topic_id = _ensure_master_bridge_topic(cur, master_topic_id, topic['title'])
+            now = datetime.now().isoformat(timespec='seconds')
+            cur.execute(
+                """
+                    INSERT INTO lms_topic_contents (
+                        topic_id, master_topic_id, content_title, content_mode,
+                        content_body, external_url, file_path, hotspots_json,
+                        display_order, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    bridge_topic_id,
+                    master_topic_id,
+                    title,
+                    content_mode,
+                    description,
+                    external_url if content_mode == 'youtube' else '',
+                    file_path,
+                    hotspots_json,
+                    display_order,
+                    now,
+                    now,
+                )
+            )
+            content_id = cur.lastrowid
+            conn.commit()
+
+            log_activity(
+                user_id=session['user_id'],
+                branch_id=session.get('branch_id'),
+                action_type='create',
+                module_name='lms_topic_contents',
+                record_id=content_id,
+                description=f'Created master-topic content: {title} for master topic {topic["title"]}'
+            )
+
+            flash('Master topic content added successfully.', 'success')
+            return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=master_topic_id))
+
+        next_order_row = cur.execute(
+            "SELECT MAX(display_order) AS max_order FROM lms_topic_contents WHERE master_topic_id = ?",
+            (master_topic_id,)
+        ).fetchone()
+        next_order = (next_order_row['max_order'] or 0) + 1
+
+        program = {'id': 0, 'program_name': 'Master Library'}
+        chapter = {'id': topic['master_chapter_id'], 'chapter_title': topic['chapter_title']}
+        template_topic = {'id': topic['id'], 'topic_title': topic['title']}
+        preset_type = request.args.get('type', '')
+        if preset_type not in ['youtube', 'pdf', 'rich_text', 'interactive_image', 'download']:
+            preset_type = ''
+
+        return render_template(
+            'lms_admin/lms_topic_content_form.html',
+            program=program,
+            chapter=chapter,
+            topic=template_topic,
+            content=None,
+            next_order=next_order,
+            preset_type=preset_type,
+            is_master_topic=True,
+        )
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/chapter/<int:master_chapter_id>/topic/new', methods=['GET', 'POST'])
+@lms_content_manager_required
+def master_topic_new(master_chapter_id):
+    """Create a reusable master topic (metadata only in Phase 2)."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        chapter = cur.execute(
+            "SELECT id, title, status FROM lms_master_chapters WHERE id = ?",
+            (master_chapter_id,)
+        ).fetchone()
+        if not chapter:
+            flash('Master chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        if request.method == 'POST':
+            title = request.form.get('title', '').strip()
+            short_description = request.form.get('short_description', '').strip()
+            topic_order = request.form.get('topic_order', '1').strip()
+            status = request.form.get('status', 'active').strip().lower()
+
+            if not title:
+                flash('Topic title is required.', 'danger')
+                return redirect(url_for('lms_admin.master_topic_new', master_chapter_id=master_chapter_id))
+
+            try:
+                topic_order = int(topic_order) if topic_order else 1
+            except ValueError:
+                topic_order = 1
+
+            if status not in ('active', 'archived'):
+                status = 'active'
+
+            now = datetime.now().isoformat(timespec='seconds')
+            cur.execute(
+                """
+                    INSERT INTO lms_master_topics (
+                        master_chapter_id,
+                        title,
+                        short_description,
+                        topic_order,
+                        status,
+                        created_at,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (master_chapter_id, title, short_description, topic_order, status, now, now)
+            )
+            topic_id = cur.lastrowid
+            conn.commit()
+
+            log_activity(
+                user_id=session['user_id'],
+                branch_id=session.get('branch_id'),
+                action_type='create',
+                module_name='lms_master_topics',
+                record_id=topic_id,
+                description=f'Created master topic: {title} in chapter {chapter["title"]}'
+            )
+
+            flash('Master topic created. Content slots will be enabled in the next compatibility step.', 'success')
+            return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
+
+        next_order_row = cur.execute(
+            "SELECT MAX(topic_order) AS max_order FROM lms_master_topics WHERE master_chapter_id = ?",
+            (master_chapter_id,)
+        ).fetchone()
+        next_order = (next_order_row['max_order'] or 0) + 1
+
+        return render_template('master_topic_form.html', chapter=chapter, topic=None, next_order=next_order)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/topic/<int:master_topic_id>/edit', methods=['GET', 'POST'])
+@lms_content_manager_required
+def master_topic_edit(master_topic_id):
+    """Edit reusable master topic metadata."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        topic = cur.execute(
+            """
+                SELECT
+                    mt.id,
+                    mt.master_chapter_id,
+                    mt.title,
+                    mt.short_description,
+                    mt.topic_order,
+                    mt.status,
+                    mt.created_at,
+                    mt.updated_at,
+                    mc.title AS chapter_title
+                FROM lms_master_topics mt
+                JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                WHERE mt.id = ?
+            """,
+            (master_topic_id,)
+        ).fetchone()
+        if not topic:
+            flash('Master topic not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        chapter = {
+            'id': topic['master_chapter_id'],
+            'title': topic['chapter_title'],
+        }
+
+        if request.method == 'POST':
+            title = request.form.get('title', '').strip()
+            short_description = request.form.get('short_description', '').strip()
+            topic_order = request.form.get('topic_order', str(topic['topic_order'])).strip()
+            status = request.form.get('status', 'active').strip().lower()
+
+            if not title:
+                flash('Topic title is required.', 'danger')
+                return redirect(url_for('lms_admin.master_topic_edit', master_topic_id=master_topic_id))
+
+            try:
+                topic_order = int(topic_order) if topic_order else 1
+            except ValueError:
+                topic_order = 1
+
+            if status not in ('active', 'archived'):
+                status = 'active'
+
+            now = datetime.now().isoformat(timespec='seconds')
+            cur.execute(
+                """
+                    UPDATE lms_master_topics
+                    SET title = ?,
+                        short_description = ?,
+                        topic_order = ?,
+                        status = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                """,
+                (title, short_description, topic_order, status, now, master_topic_id)
+            )
+            conn.commit()
+
+            log_activity(
+                user_id=session['user_id'],
+                branch_id=session.get('branch_id'),
+                action_type='update',
+                module_name='lms_master_topics',
+                record_id=master_topic_id,
+                description=f'Updated master topic: {title}'
+            )
+
+            flash('Master topic updated.', 'success')
+            return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=topic['master_chapter_id']))
+
+        return render_template('master_topic_form.html', chapter=chapter, topic=topic, next_order=None)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/topic/<int:master_topic_id>/archive', methods=['POST'])
+@admin_required
+def master_topic_archive(master_topic_id):
+    """Archive a master topic (soft delete)."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        topic = cur.execute(
+            "SELECT id, master_chapter_id, title FROM lms_master_topics WHERE id = ?",
+            (master_topic_id,)
+        ).fetchone()
+        if not topic:
+            flash('Master topic not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        now = datetime.now().isoformat(timespec='seconds')
+        cur.execute(
+            """
+                UPDATE lms_master_topics
+                SET status = 'archived',
+                    updated_at = ?
+                WHERE id = ?
+            """,
+            (now, master_topic_id)
+        )
+        conn.commit()
+
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='archive',
+            module_name='lms_master_topics',
+            record_id=master_topic_id,
+            description=f'Archived master topic: {topic["title"]}'
+        )
+
+        flash('Master topic archived.', 'success')
+        return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=topic['master_chapter_id']))
     finally:
         conn.close()
 
@@ -727,7 +1686,7 @@ def list_chapters(program_id):
             flash('Program not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
         
-        # Get all chapters with topic count and content coverage
+        # Get all legacy chapters with topic count and content coverage
         cur.execute("""
             SELECT 
                 lc.id,
@@ -738,7 +1697,8 @@ def list_chapters(program_id):
                 lc.created_at,
                 lc.updated_at,
                 COUNT(DISTINCT lt.id) as topic_count,
-                COUNT(DISTINCT CASE WHEN ltc.id IS NOT NULL THEN lt.id END) as topics_with_content
+                COUNT(DISTINCT CASE WHEN ltc.id IS NOT NULL THEN lt.id END) as topics_with_content,
+                COUNT(DISTINCT CASE WHEN ltc.master_topic_id IS NOT NULL THEN lt.id END) as topics_mapped_master
             FROM lms_chapters lc
             LEFT JOIN lms_topics lt ON lc.id = lt.chapter_id
             LEFT JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
@@ -747,14 +1707,519 @@ def list_chapters(program_id):
             ORDER BY lc.chapter_order ASC
         """, (program_id,))
         chapters = cur.fetchall()
+
+        # Get linked master chapters for this program
+        cur.execute(
+            """
+                SELECT
+                    pc.id AS link_id,
+                    pc.program_id,
+                    pc.master_chapter_id,
+                    pc.chapter_order,
+                    pc.custom_title,
+                    pc.is_visible,
+                    pc.created_at,
+                    mc.title AS master_title,
+                    mc.description,
+                    mc.status,
+                    COUNT(DISTINCT mt.id) AS topic_count,
+                    COUNT(DISTINCT CASE WHEN ltc.id IS NOT NULL THEN mt.id END) AS topics_with_content
+                FROM lms_program_chapters pc
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                LEFT JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id AND mt.status = 'active'
+                LEFT JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
+                WHERE pc.program_id = ?
+                GROUP BY pc.id
+                ORDER BY pc.chapter_order ASC, pc.id ASC
+            """,
+            (program_id,)
+        )
+        linked_master_chapters = cur.fetchall()
+
+        # Get available active master chapters not yet linked to this program
+        cur.execute(
+            """
+                SELECT
+                    mc.id,
+                    mc.title,
+                    mc.description,
+                    mc.status,
+                    COUNT(mt.id) AS topic_count
+                FROM lms_master_chapters mc
+                LEFT JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id AND mt.status = 'active'
+                WHERE mc.status = 'active'
+                  AND mc.id NOT IN (
+                      SELECT master_chapter_id
+                      FROM lms_program_chapters
+                      WHERE program_id = ?
+                  )
+                GROUP BY mc.id
+                ORDER BY mc.title ASC
+            """,
+            (program_id,)
+        )
+        available_master_chapters = cur.fetchall()
         
         data = {
             'program': program,
             'chapters': chapters,
-            'total_chapters': len(chapters)
+            'linked_master_chapters': linked_master_chapters,
+            'available_master_chapters': available_master_chapters,
+            'legacy_chapter_count': len(chapters),
+            'linked_master_chapter_count': len(linked_master_chapters),
+            'total_chapters': len(chapters) + len(linked_master_chapters),
         }
         
         return render_template('lms_chapters.html', data=data)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/program/<int:program_id>/chapter/<int:chapter_id>/migrate-to-master-pilot', methods=['POST'])
+@admin_required
+def migrate_legacy_chapter_pilot(program_id, chapter_id):
+    """Phase 5 pilot: migrate one legacy chapter to master tables for one program."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        program = cur.execute(
+            "SELECT id, program_name FROM lms_programs WHERE id = ?",
+            (program_id,)
+        ).fetchone()
+        if not program:
+            flash('Program not found.', 'danger')
+            return redirect(url_for('lms_admin.list_programs'))
+
+        # Snapshot backup before any write.
+        backup_path = _create_db_backup_snapshot(conn, label='phase5_pilot')
+
+        migration, error = _migrate_legacy_chapter_to_master(
+            cur,
+            program_id=program_id,
+            chapter_id=chapter_id,
+            actor_user_id=session.get('user_id'),
+        )
+
+        if error:
+            conn.rollback()
+            flash(error, 'warning')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        conn.commit()
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='migrate',
+            module_name='lms_phase5_pilot',
+            record_id=migration['master_chapter_id'],
+            description=(
+                f"Phase 5 pilot migrated chapter '{migration['legacy_chapter_title']}' "
+                f"to master chapter id {migration['master_chapter_id']} with "
+                f"{migration['migrated_topics']} topics; backup={os.path.basename(backup_path)}"
+            )
+        )
+
+        flash(
+            f"Pilot migration completed: '{migration['legacy_chapter_title']}' -> master chapter "
+            f"({migration['migrated_topics']} topics). Backup: {os.path.basename(backup_path)}",
+            'success'
+        )
+        return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+    except Exception as e:
+        conn.rollback()
+        flash(f'Pilot migration failed: {str(e)}', 'danger')
+        return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/phase6/rollout', methods=['GET'])
+@admin_required
+def phase6_rollout_view():
+    """Phase 6 rollout dashboard: discover unmigrated legacy chapters by program."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        programs = cur.execute(
+            """
+                SELECT id, program_name, slug
+                FROM lms_programs
+                WHERE is_active = 1
+                  AND slug != ?
+                ORDER BY program_name ASC
+            """,
+            (_MASTER_BRIDGE_PROGRAM_SLUG,)
+        ).fetchall()
+
+        rollout_rows = []
+        for p in programs:
+            legacy_chapters = cur.execute(
+                """
+                    SELECT
+                        lc.id,
+                        lc.chapter_title,
+                        lc.chapter_order,
+                        (
+                            SELECT COUNT(*)
+                            FROM lms_topics lt
+                            WHERE lt.chapter_id = lc.id
+                        ) AS topic_count
+                    FROM lms_chapters lc
+                    WHERE lc.program_id = ?
+                    ORDER BY lc.chapter_order ASC, lc.id ASC
+                """,
+                (p['id'],)
+            ).fetchall()
+
+            unmigrated = []
+            for ch in legacy_chapters:
+                mapped = cur.execute(
+                    """
+                        SELECT 1
+                        FROM lms_master_topic_bridge b
+                        JOIN lms_topics t ON t.id = b.legacy_topic_id
+                        WHERE t.chapter_id = ?
+                        LIMIT 1
+                    """,
+                    (ch['id'],)
+                ).fetchone()
+                if not mapped:
+                    unmigrated.append(ch)
+
+            linked_master_count = cur.execute(
+                "SELECT COUNT(*) AS c FROM lms_program_chapters WHERE program_id = ?",
+                (p['id'],)
+            ).fetchone()['c']
+
+            rollout_rows.append({
+                'program': p,
+                'linked_master_count': linked_master_count,
+                'legacy_total': len(legacy_chapters),
+                'unmigrated': unmigrated,
+            })
+
+        return render_template('lms_admin/phase6_rollout.html', rows=rollout_rows)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/phase6/rollout/migrate', methods=['POST'])
+@admin_required
+def phase6_rollout_migrate():
+    """Phase 6 controlled migration for selected legacy chapters of one program."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        program_id = _strict_positive_int(request.form.get('program_id'))
+        if program_id is None:
+            flash('Invalid program selected.', 'danger')
+            return redirect(url_for('lms_admin.phase6_rollout_view'))
+
+        program = cur.execute(
+            "SELECT id, program_name FROM lms_programs WHERE id = ?",
+            (program_id,)
+        ).fetchone()
+        if not program:
+            flash('Program not found.', 'danger')
+            return redirect(url_for('lms_admin.phase6_rollout_view'))
+
+        selected_raw = request.form.getlist('chapter_ids')
+        selected_ids = []
+        for value in selected_raw:
+            parsed = _strict_positive_int(value)
+            if parsed is not None:
+                selected_ids.append(parsed)
+
+        if not selected_ids:
+            flash('No chapters selected for migration.', 'warning')
+            return redirect(url_for('lms_admin.phase6_rollout_view'))
+
+        # Validate chapter ownership
+        owned_ids = {
+            row['id']
+            for row in cur.execute(
+                "SELECT id FROM lms_chapters WHERE program_id = ?",
+                (program_id,)
+            ).fetchall()
+        }
+        chapter_ids = [cid for cid in selected_ids if cid in owned_ids]
+        if not chapter_ids:
+            flash('Selected chapters are not valid for this program.', 'danger')
+            return redirect(url_for('lms_admin.phase6_rollout_view'))
+
+        backup_path = _create_db_backup_snapshot(conn, label='phase6_rollout')
+
+        migrated = []
+        skipped = []
+        for chapter_id in chapter_ids:
+            migration, error = _migrate_legacy_chapter_to_master(
+                cur,
+                program_id=program_id,
+                chapter_id=chapter_id,
+                actor_user_id=session.get('user_id'),
+            )
+            if error:
+                skipped.append({'chapter_id': chapter_id, 'reason': error})
+                continue
+            migrated.append(migration)
+
+        if not migrated:
+            conn.rollback()
+            flash('No chapters were migrated. ' + ('; '.join(s['reason'] for s in skipped[:2]) if skipped else ''), 'warning')
+            return redirect(url_for('lms_admin.phase6_rollout_view'))
+
+        conn.commit()
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='migrate',
+            module_name='lms_phase6_rollout',
+            record_id=program_id,
+            description=(
+                f"Phase 6 rollout migrated {len(migrated)} chapter(s) in program {program['program_name']}; "
+                f"skipped {len(skipped)}; backup={os.path.basename(backup_path)}"
+            )
+        )
+
+        flash(
+            f"Phase 6 rollout complete for {program['program_name']}: migrated {len(migrated)} chapter(s), "
+            f"skipped {len(skipped)}. Backup: {os.path.basename(backup_path)}",
+            'success'
+        )
+        return redirect(url_for('lms_admin.phase6_rollout_view'))
+    except Exception as e:
+        conn.rollback()
+        flash(f'Phase 6 rollout failed: {str(e)}', 'danger')
+        return redirect(url_for('lms_admin.phase6_rollout_view'))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/program/<int:program_id>/attach-chapter', methods=['POST'])
+@lms_content_manager_required
+def attach_master_chapter_to_program(program_id):
+    """Attach an existing active master chapter to a program."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        program = cur.execute(
+            "SELECT id, program_name FROM lms_programs WHERE id = ?",
+            (program_id,)
+        ).fetchone()
+        if not program:
+            flash('Program not found.', 'danger')
+            return redirect(url_for('lms_admin.list_programs'))
+
+        master_chapter_id = _strict_positive_int(request.form.get('master_chapter_id'))
+        custom_title = request.form.get('custom_title', '').strip()
+        desired_order = _strict_positive_int(request.form.get('chapter_order'))
+
+        if master_chapter_id is None:
+            flash('Please select a master chapter.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        master_chapter = cur.execute(
+            "SELECT id, title, status FROM lms_master_chapters WHERE id = ?",
+            (master_chapter_id,)
+        ).fetchone()
+        if not master_chapter:
+            flash('Master chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+        if master_chapter['status'] != 'active':
+            flash('Only active master chapters can be attached.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        already_linked = cur.execute(
+            """
+                SELECT id
+                FROM lms_program_chapters
+                WHERE program_id = ? AND master_chapter_id = ?
+            """,
+            (program_id, master_chapter_id)
+        ).fetchone()
+        if already_linked:
+            flash('This master chapter is already linked to the program.', 'warning')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        max_row = cur.execute(
+            "SELECT MAX(chapter_order) AS max_order FROM lms_program_chapters WHERE program_id = ?",
+            (program_id,)
+        ).fetchone()
+        next_order = (max_row['max_order'] or 0) + 1
+        insert_order = desired_order if desired_order else next_order
+
+        now = datetime.now().isoformat(timespec='seconds')
+        cur.execute(
+            """
+                INSERT INTO lms_program_chapters (
+                    program_id,
+                    master_chapter_id,
+                    chapter_order,
+                    custom_title,
+                    is_visible,
+                    created_at
+                ) VALUES (?, ?, ?, ?, 1, ?)
+            """,
+            (program_id, master_chapter_id, insert_order, custom_title if custom_title else None, now)
+        )
+        new_link_id = cur.lastrowid
+
+        link_ids = [
+            row['id']
+            for row in cur.execute(
+                """
+                    SELECT id
+                    FROM lms_program_chapters
+                    WHERE program_id = ? AND id != ?
+                    ORDER BY chapter_order ASC, id ASC
+                """,
+                (program_id, new_link_id)
+            ).fetchall()
+        ]
+        insert_index = min(max(insert_order, 1) - 1, len(link_ids))
+        ordered_ids = link_ids[:insert_index] + [new_link_id] + link_ids[insert_index:]
+        _renumber_program_chapter_links(cur, program_id, ordered_ids)
+
+        conn.commit()
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='create',
+            module_name='lms_program_chapters',
+            record_id=new_link_id,
+            description=f'Attached master chapter {master_chapter["title"]} to program {program["program_name"]}'
+        )
+        flash('Master chapter attached successfully.', 'success')
+        return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/program/<int:program_id>/chapter-link/<int:link_id>/remove', methods=['POST'])
+@lms_content_manager_required
+def unlink_master_chapter_from_program(program_id, link_id):
+    """Unlink a master chapter from a program without deleting master content."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        link_row = cur.execute(
+            """
+                SELECT pc.id, pc.program_id, mc.title AS master_title
+                FROM lms_program_chapters pc
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                WHERE pc.id = ? AND pc.program_id = ?
+            """,
+            (link_id, program_id)
+        ).fetchone()
+        if not link_row:
+            flash('Linked chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        cur.execute("DELETE FROM lms_program_chapters WHERE id = ?", (link_id,))
+        _renumber_program_chapter_links(cur, program_id)
+        conn.commit()
+
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='delete',
+            module_name='lms_program_chapters',
+            record_id=link_id,
+            description=f'Unlinked master chapter {link_row["master_title"]} from program id {program_id}'
+        )
+        flash('Master chapter unlinked from program.', 'success')
+        return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/program/<int:program_id>/chapter-links/reorder', methods=['POST'])
+@lms_content_manager_required
+def reorder_program_master_chapters(program_id):
+    """Reorder linked master chapters for one program."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        link_id = _strict_positive_int(request.form.get('link_id'))
+        desired_order = _strict_positive_int(request.form.get('chapter_order'))
+
+        if link_id is None or desired_order is None:
+            flash('Invalid reorder request.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        rows = cur.execute(
+            """
+                SELECT id
+                FROM lms_program_chapters
+                WHERE program_id = ?
+                ORDER BY chapter_order ASC, id ASC
+            """,
+            (program_id,)
+        ).fetchall()
+        existing_ids = [row['id'] for row in rows]
+        if link_id not in existing_ids:
+            flash('Linked chapter not found for this program.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        remaining_ids = [row_id for row_id in existing_ids if row_id != link_id]
+        insert_index = min(max(desired_order, 1) - 1, len(remaining_ids))
+        ordered_ids = remaining_ids[:insert_index] + [link_id] + remaining_ids[insert_index:]
+        _renumber_program_chapter_links(cur, program_id, ordered_ids)
+        conn.commit()
+
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='update',
+            module_name='lms_program_chapters',
+            record_id=link_id,
+            description=f'Reordered linked master chapter in program id {program_id}'
+        )
+        flash('Linked chapter order updated.', 'success')
+        return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/program/<int:program_id>/chapter-link/<int:link_id>/toggle-visibility', methods=['POST'])
+@lms_content_manager_required
+def toggle_program_master_chapter_visibility(program_id, link_id):
+    """Toggle visibility for a linked master chapter in one program."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        row = cur.execute(
+            """
+                SELECT id, is_visible
+                FROM lms_program_chapters
+                WHERE id = ? AND program_id = ?
+            """,
+            (link_id, program_id)
+        ).fetchone()
+        if not row:
+            flash('Linked chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        new_visibility = 0 if row['is_visible'] else 1
+        cur.execute(
+            "UPDATE lms_program_chapters SET is_visible = ? WHERE id = ?",
+            (new_visibility, link_id)
+        )
+        conn.commit()
+
+        state_word = 'visible' if new_visibility else 'hidden'
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='update',
+            module_name='lms_program_chapters',
+            record_id=link_id,
+            description=f'Set linked master chapter {link_id} to {state_word} in program id {program_id}'
+        )
+        flash(f'Linked chapter is now {state_word}.', 'success')
+        return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
     finally:
         conn.close()
 
@@ -1991,53 +3456,96 @@ def content_edit(content_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
-        
-        # Get content, topic, chapter and program details
-        cur.execute("""
-            SELECT 
-                ltc.id,
-                ltc.topic_id,
-                ltc.content_mode,
-                ltc.content_title,
-                ltc.external_url,
-                ltc.file_path,
-                ltc.content_body,
-                ltc.hotspots_json,
-                ltc.display_order,
-                ltc.created_at,
-                ltc.updated_at,
-                lt.topic_title,
-                lt.chapter_id,
-                lc.chapter_title,
-                lc.program_id,
-                lp.program_name
-            FROM lms_topic_contents ltc
-            JOIN lms_topics lt ON ltc.topic_id = lt.id
-            JOIN lms_chapters lc ON lt.chapter_id = lc.id
-            JOIN lms_programs lp ON lc.program_id = lp.id
-            WHERE ltc.id = ?
-        """, (content_id,))
-        content = cur.fetchone()
+        content = cur.execute(
+            """
+                SELECT
+                    id,
+                    topic_id,
+                    master_topic_id,
+                    content_mode,
+                    content_title,
+                    external_url,
+                    file_path,
+                    content_body,
+                    hotspots_json,
+                    display_order,
+                    created_at,
+                    updated_at
+                FROM lms_topic_contents
+                WHERE id = ?
+            """,
+            (content_id,)
+        ).fetchone()
         
         if not content:
             flash('Content not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
-        
-        # Format topic data
-        topic = {
-            'id': content['topic_id'],
-            'topic_title': content['topic_title']
-        }
-        
-        chapter = {
-            'id': content['chapter_id'],
-            'chapter_title': content['chapter_title']
-        }
-        
-        program = {
-            'id': content['program_id'],
-            'program_name': content['program_name']
-        }
+
+        is_master_topic = bool(content['master_topic_id'])
+
+        if is_master_topic:
+            master_meta = cur.execute(
+                """
+                    SELECT
+                        mt.id AS topic_id,
+                        mt.title AS topic_title,
+                        mt.master_chapter_id AS chapter_id,
+                        mc.title AS chapter_title
+                    FROM lms_master_topics mt
+                    JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                    WHERE mt.id = ?
+                """,
+                (content['master_topic_id'],)
+            ).fetchone()
+            if not master_meta:
+                flash('Master topic not found for this content row.', 'danger')
+                return redirect(url_for('lms_admin.list_master_chapters'))
+
+            topic = {
+                'id': master_meta['topic_id'],
+                'topic_title': master_meta['topic_title']
+            }
+            chapter = {
+                'id': master_meta['chapter_id'],
+                'chapter_title': master_meta['chapter_title']
+            }
+            program = {
+                'id': 0,
+                'program_name': 'Master Library'
+            }
+        else:
+            legacy_meta = cur.execute(
+                """
+                    SELECT
+                        lt.id AS topic_id,
+                        lt.topic_title,
+                        lc.id AS chapter_id,
+                        lc.chapter_title,
+                        lp.id AS program_id,
+                        lp.program_name
+                    FROM lms_topics lt
+                    JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                    JOIN lms_programs lp ON lc.program_id = lp.id
+                    WHERE lt.id = ?
+                """,
+                (content['topic_id'],)
+            ).fetchone()
+            if not legacy_meta:
+                flash('Topic not found for this content row.', 'danger')
+                return redirect(url_for('lms_admin.list_programs'))
+
+            topic = {
+                'id': legacy_meta['topic_id'],
+                'topic_title': legacy_meta['topic_title']
+            }
+            chapter = {
+                'id': legacy_meta['chapter_id'],
+                'chapter_title': legacy_meta['chapter_title']
+            }
+            program = {
+                'id': legacy_meta['program_id'],
+                'program_name': legacy_meta['program_name']
+            }
         
         if request.method == 'POST':
             title = request.form.get('title', '').strip()
@@ -2123,13 +3631,23 @@ def content_edit(content_id):
                 )
 
                 flash('Content updated successfully.', 'success')
+                if is_master_topic:
+                    return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=content['master_topic_id']))
                 return redirect(url_for('lms_admin.list_topic_contents', topic_id=content['topic_id']))
 
             except Exception as e:
                 flash(f'Error updating content: {str(e)}', 'danger')
                 return redirect(url_for('lms_admin.content_edit', content_id=content_id))
         
-        return render_template('lms_admin/lms_topic_content_form.html', program=program, chapter=chapter, topic=topic, content=content, next_order=None)
+        return render_template(
+            'lms_admin/lms_topic_content_form.html',
+            program=program,
+            chapter=chapter,
+            topic=topic,
+            content=content,
+            next_order=None,
+            is_master_topic=is_master_topic,
+        )
     finally:
         conn.close()
 
@@ -2144,9 +3662,8 @@ def delete_content(content_id):
         
         # Get content and topic details
         cur.execute("""
-            SELECT ltc.id, ltc.content_title, ltc.topic_id, lt.topic_title
+            SELECT ltc.id, ltc.content_title, ltc.topic_id, ltc.master_topic_id
             FROM lms_topic_contents ltc
-            JOIN lms_topics lt ON ltc.topic_id = lt.id
             WHERE ltc.id = ?
         """, (content_id,))
         content = cur.fetchone()
@@ -2167,10 +3684,12 @@ def delete_content(content_id):
             action_type='delete',
             module_name='lms_topic_contents',
             record_id=content_id,
-            description=f'Deleted content: {content["content_title"]} from topic {content["topic_title"]}'
+            description=f'Deleted content: {content["content_title"]}'
         )
         
         flash('Content deleted successfully.', 'success')
+        if content['master_topic_id']:
+            return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=content['master_topic_id']))
         return redirect(url_for('lms_admin.list_topic_contents', topic_id=content['topic_id']))
     except Exception as e:
         flash(f'Error deleting content: {str(e)}', 'danger')

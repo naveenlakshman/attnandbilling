@@ -1,0 +1,89 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}Master Topics - {{ chapter.title }}{% endblock %}
+{% block page_title %}Master Topics{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a></li>
+      <li class="breadcrumb-item active" aria-current="page">{{ chapter.title }}</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="h4 mb-1">{{ chapter.title }}</h2>
+      <p class="text-muted mb-0">Reusable topics for linked programs.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.list_master_chapters') }}">Back</a>
+      <a class="btn btn-primary" href="{{ url_for('lms_admin.master_topic_new', master_chapter_id=chapter.id) }}">+ New Master Topic</a>
+    </div>
+  </div>
+
+  <div class="alert alert-info" role="alert">
+    Content rows are prepared for master topics through <strong>master_topic_id</strong>. Full editor wiring is introduced in the next compatibility step to keep legacy behavior safe.
+  </div>
+
+  {% if topics %}
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 90px;">Order</th>
+            <th>Topic</th>
+            <th style="width: 120px;">Content</th>
+            <th style="width: 140px;">Status</th>
+            <th style="width: 280px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for topic in topics %}
+          <tr>
+            <td>{{ topic.topic_order }}</td>
+            <td>
+              <div class="fw-semibold">{{ topic.title }}</div>
+              {% if topic.short_description %}
+              <div class="text-muted small">{{ topic.short_description|truncate(120) }}</div>
+              {% endif %}
+            </td>
+            <td><span class="badge bg-primary">{{ topic.content_count }}</span></td>
+            <td>
+              {% if topic.status == 'active' %}
+              <span class="badge bg-success">Active</span>
+              {% else %}
+              <span class="badge bg-secondary">Archived</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) }}">Manage Content</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.master_topic_edit', master_topic_id=topic.id) }}">Edit</a>
+                {% if topic.status != 'archived' and session.get('role') == 'admin' %}
+                <form method="POST" action="{{ url_for('lms_admin.master_topic_archive', master_topic_id=topic.id) }}" onsubmit="return confirm('Archive this master topic?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Archive</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card shadow-sm">
+    <div class="card-body text-center py-5">
+      <h3 class="h5">No master topics yet</h3>
+      <p class="text-muted">Add reusable topics once, then attach this chapter to any program.</p>
+      <a class="btn btn-primary" href="{{ url_for('lms_admin.master_topic_new', master_chapter_id=chapter.id) }}">Create First Topic</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

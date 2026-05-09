@@ -1,0 +1,46 @@
+<div class="modal fade" id="attachChapterModal" tabindex="-1" aria-labelledby="attachChapterModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('lms_admin.attach_master_chapter_to_program', program_id=data.program.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-header">
+          <h5 class="modal-title" id="attachChapterModalLabel">Attach Existing Master Chapter</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          {% if data.available_master_chapters %}
+          <div class="mb-3">
+            <label for="master_chapter_id" class="form-label">Select Master Chapter <span class="text-danger">*</span></label>
+            <select class="form-select" id="master_chapter_id" name="master_chapter_id" required>
+              <option value="">-- Select --</option>
+              {% for ch in data.available_master_chapters %}
+              <option value="{{ ch.id }}">{{ ch.title }} ({{ ch.topic_count }} topics)</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="chapter_order" class="form-label">Chapter Order (optional)</label>
+            <input type="number" class="form-control" id="chapter_order" name="chapter_order" min="1" placeholder="Leave empty to append at end">
+          </div>
+
+          <div class="mb-0">
+            <label for="custom_title" class="form-label">Custom Title (optional)</label>
+            <input type="text" class="form-control" id="custom_title" name="custom_title" maxlength="255" placeholder="Leave empty to use master chapter title">
+          </div>
+          {% else %}
+          <div class="alert alert-info mb-0">
+            All active master chapters are already linked to this program, or no active master chapters are available.
+          </div>
+          {% endif %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          {% if data.available_master_chapters %}
+          <button type="submit" class="btn btn-primary">Attach Chapter</button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
