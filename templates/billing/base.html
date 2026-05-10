@@ -76,21 +76,23 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 1px;
+      gap: 2px;
       text-decoration: none;
       color: #6c757d;
       font-size: 10px;
-      padding: 4px 2px;
+      font-weight: 600;
+      padding: 6px 2px;
       border-radius: 8px;
-      transition: color .15s;
+      transition: color .15s, background-color .15s;
     }
     .mobile-bottom-nav a .nav-icon {
-      font-size: 20px;
+      font-size: 19px;
       line-height: 1;
     }
     .mobile-bottom-nav a.active,
     .mobile-bottom-nav a:hover {
       color: #0d6efd;
+      background: #eaf2ff;
     }
     .mobile-bottom-nav a.add-btn {
       color: #fff;
@@ -99,7 +101,7 @@
       width: 44px;
       height: 44px;
       justify-content: center;
-      margin-top: -12px;
+      margin-top: -18px;
       box-shadow: 0 2px 8px rgba(13,110,253,.4);
       flex: none;
       padding: 0;
@@ -123,7 +125,7 @@
     .fab-menu-overlay.show { display: block; }
     .fab-menu {
       position: fixed;
-      bottom: 72px;
+      bottom: 78px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 1035;
@@ -173,7 +175,10 @@
     }
     @media (max-width: 991.98px) {
       .mobile-bottom-nav { display: flex; }
-      .main-content-pad { padding-bottom: 72px !important; }
+      .main-content-pad { padding-bottom: 112px !important; }
+    }
+    @media (max-width: 767px) {
+      .top-home-btn { display: none !important; }
     }
   </style>
 
@@ -305,7 +310,7 @@
           <span class="fw-semibold">{{ session.get("username", "User") }}</span>
           <span class="d-none d-md-inline">({{ session.get("role", "staff") }})</span>
         </div>
-        <a href="{{ url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary" title="Back to Main Dashboard">🏠 Home</a>
+        <a href="{{ url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary top-home-btn" title="Back to Main Dashboard">🏠 Home</a>
       </div>
     </div>
 

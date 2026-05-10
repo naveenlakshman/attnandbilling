@@ -11,6 +11,82 @@ import os
 import base64
 
 
+def _parse_display_datetime(value):
+    if not value:
+        return None, False
+
+    if isinstance(value, datetime):
+        return value, True
+
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time()), False
+
+    if isinstance(value, str):
+        raw_value = value.strip()
+        if not raw_value:
+            return None, False
+
+        normalized = raw_value.replace('Z', '+00:00')
+        try:
+            parsed = datetime.fromisoformat(normalized)
+            has_time = ('T' in raw_value) or (' ' in raw_value and ':' in raw_value)
+            return parsed, has_time
+        except ValueError:
+            pass
+
+        for fmt, has_time in (
+            ("%Y-%m-%d %H:%M:%S", True),
+            ("%Y-%m-%d %H:%M", True),
+            ("%Y-%m-%d", False),
+            ("%d-%m-%Y", False),
+        ):
+            try:
+                return datetime.strptime(raw_value, fmt), has_time
+            except ValueError:
+                continue
+
+    return None, False
+
+
+def _format_display_datetime(value):
+    parsed, has_time = _parse_display_datetime(value)
+    if not parsed:
+        return value or "-"
+    if not has_time:
+        return parsed.strftime("%d %b %Y")
+    return parsed.strftime("%d %b %Y, %I:%M %p")
+
+
+def _format_display_date(value):
+    parsed, _ = _parse_display_datetime(value)
+    if not parsed:
+        return value or "-"
+    return parsed.strftime("%d %b %Y")
+
+
+def _format_inr(amount):
+    try:
+        amount_value = float(amount or 0)
+    except (TypeError, ValueError):
+        amount_value = 0.0
+
+    sign = "-" if amount_value < 0 else ""
+    whole_part, fractional_part = f"{abs(amount_value):.2f}".split('.')
+
+    if len(whole_part) > 3:
+        last_three = whole_part[-3:]
+        remaining = whole_part[:-3]
+        groups = []
+        while len(remaining) > 2:
+            groups.insert(0, remaining[-2:])
+            remaining = remaining[:-2]
+        if remaining:
+            groups.insert(0, remaining)
+        whole_part = ','.join(groups + [last_three])
+
+    return f"{sign}{whole_part}.{fractional_part}"
+
+
 def _auto_enable_portal(student_id):
     """Set portal_enabled=1 and default password (=student_code) if not already set."""
     try:
@@ -846,6 +922,53 @@ def students():
                 'batch_name': row['batch_name']
             })
 
+    # Build course lookups for all returned students (single query, no N+1)
+    student_batch_courses_map = {}
+    student_invoiced_courses_map = {}
+    if students:
+        student_ids = [s['id'] for s in students]
+        placeholders = ','.join('?' * len(student_ids))
+
+        # 1) Active batch course mappings
+        cur.execute(f"""
+            SELECT DISTINCT sb.student_id, c.course_name
+            FROM student_batches sb
+            JOIN batches b ON sb.batch_id = b.id
+            LEFT JOIN courses c ON b.course_id = c.id
+            WHERE sb.student_id IN ({placeholders})
+              AND sb.status = 'active'
+              AND c.course_name IS NOT NULL
+              AND TRIM(c.course_name) <> ''
+            ORDER BY sb.student_id, c.course_name
+        """, student_ids)
+
+        for row in cur.fetchall():
+            sid = row['student_id']
+            if sid not in student_batch_courses_map:
+                student_batch_courses_map[sid] = []
+            student_batch_courses_map[sid].append(row['course_name'])
+
+        # 2) Invoiced course lines
+        cur.execute(f"""
+            SELECT DISTINCT i.student_id,
+                   COALESCE(c.course_name, ii.description) AS course_name
+            FROM invoices i
+            JOIN invoice_items ii ON i.id = ii.invoice_id
+            LEFT JOIN courses c ON ii.course_id = c.id
+            WHERE i.student_id IN ({placeholders})
+              AND COALESCE(c.course_name, ii.description) IS NOT NULL
+              AND TRIM(COALESCE(c.course_name, ii.description)) <> ''
+            ORDER BY i.student_id, course_name
+        """, student_ids)
+
+        for row in cur.fetchall():
+            sid = row['student_id']
+            cname = row['course_name']
+            if sid not in student_invoiced_courses_map:
+                student_invoiced_courses_map[sid] = []
+            if cname not in student_invoiced_courses_map[sid]:
+                student_invoiced_courses_map[sid].append(cname)
+
     # Branches for filter dropdown
     cur.execute("""
         SELECT id, branch_name, branch_code
@@ -876,7 +999,9 @@ def students():
         batch_filter=batch_filter,
         stats=stats,
         branch_stats=branch_stats,
-        student_batches_map=student_batches_map
+        student_batches_map=student_batches_map,
+        student_batch_courses_map=student_batch_courses_map,
+        student_invoiced_courses_map=student_invoiced_courses_map
     )
 
 @billing_bp.route("/student/check-duplicate", methods=["POST"])
@@ -1734,6 +1859,18 @@ def student_profile(student_id):
     """, (student_id,))
     installment_plans = cur.fetchall()
 
+    installment_summary = {
+        "total": len(installment_plans),
+        "paid": 0,
+        "pending": 0,
+    }
+    for plan in installment_plans:
+        plan_status = (plan["status"] or "").lower()
+        if plan_status in ("paid", "completed"):
+            installment_summary["paid"] += 1
+        else:
+            installment_summary["pending"] += 1
+
     cur.execute("""
         SELECT COALESCE(SUM(bw.amount_written_off), 0) AS total_written_off
         FROM bad_debt_writeoffs bw
@@ -1760,6 +1897,161 @@ def student_profile(student_id):
     """, (student_id,))
     student_batches = cur.fetchall()
 
+    current_batch = None
+    for batch in student_batches:
+        if (batch["enroll_status"] or "").lower() == "active":
+            current_batch = batch
+            break
+    if not current_batch and student_batches:
+        current_batch = student_batches[0]
+
+    current_course = None
+    if current_batch and current_batch["course_name"]:
+        current_course = current_batch["course_name"].strip()
+    elif student_invoiced_courses:
+        current_course = student_invoiced_courses[0]
+
+    attendance_summary = {
+        "total_marked": 0,
+        "present": 0,
+        "absent": 0,
+        "late": 0,
+        "leave": 0,
+    }
+    attendance_query = """
+        SELECT
+            COUNT(*) AS total_marked,
+            COALESCE(SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END), 0) AS present,
+            COALESCE(SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END), 0) AS absent,
+            COALESCE(SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END), 0) AS late,
+            COALESCE(SUM(CASE WHEN status = 'leave' THEN 1 ELSE 0 END), 0) AS leave
+        FROM attendance_records
+        WHERE student_id = ?
+    """
+    attendance_params = [student_id]
+    if student["branch_id"]:
+        attendance_query += " AND branch_id = ?"
+        attendance_params.append(student["branch_id"])
+
+    cur.execute(attendance_query, attendance_params)
+    attendance_row = cur.fetchone()
+    if attendance_row:
+        attendance_summary = {
+            "total_marked": int(attendance_row["total_marked"] or 0),
+            "present": int(attendance_row["present"] or 0),
+            "absent": int(attendance_row["absent"] or 0),
+            "late": int(attendance_row["late"] or 0),
+            "leave": int(attendance_row["leave"] or 0),
+        }
+
+    attendance_percentage = 0
+    if attendance_summary["total_marked"]:
+        attendance_percentage = round((attendance_summary["present"] / attendance_summary["total_marked"]) * 100, 1)
+
+    recent_activity_rows = []
+
+    cur.execute("""
+        SELECT
+            al.id,
+            al.user_id,
+            al.branch_id,
+            al.action_type,
+            al.module_name,
+            al.record_id,
+            al.description,
+            al.created_at,
+            u.full_name AS actor_name,
+            u.username AS actor_username
+        FROM activity_logs al
+        LEFT JOIN users u ON al.user_id = u.id
+        WHERE al.module_name = 'students' AND al.record_id = ?
+        ORDER BY al.id DESC
+        LIMIT 5
+    """, (student_id,))
+    recent_activity_rows.extend(cur.fetchall())
+
+    cur.execute("""
+        SELECT
+            al.id,
+            al.user_id,
+            al.branch_id,
+            al.action_type,
+            al.module_name,
+            al.record_id,
+            al.description,
+            al.created_at,
+            u.full_name AS actor_name,
+            u.username AS actor_username
+        FROM activity_logs al
+        LEFT JOIN users u ON al.user_id = u.id
+        JOIN invoices i ON i.id = al.record_id
+        WHERE al.module_name = 'billing' AND i.student_id = ?
+        ORDER BY al.id DESC
+        LIMIT 5
+    """, (student_id,))
+    recent_activity_rows.extend(cur.fetchall())
+
+    if student_batches:
+        cur.execute("""
+            SELECT
+                al.id,
+                al.user_id,
+                al.branch_id,
+                al.action_type,
+                al.module_name,
+                al.record_id,
+                al.description,
+                al.created_at,
+                u.full_name AS actor_name,
+                u.username AS actor_username
+            FROM activity_logs al
+            LEFT JOIN users u ON al.user_id = u.id
+            JOIN student_batches sb ON sb.batch_id = al.record_id
+            WHERE al.module_name = 'attendance' AND sb.student_id = ?
+            ORDER BY al.id DESC
+            LIMIT 5
+        """, (student_id,))
+        recent_activity_rows.extend(cur.fetchall())
+
+    if student["lead_id"]:
+        cur.execute("""
+            SELECT
+                al.id,
+                al.user_id,
+                al.branch_id,
+                al.action_type,
+                al.module_name,
+                al.record_id,
+                al.description,
+                al.created_at,
+                u.full_name AS actor_name,
+                u.username AS actor_username
+            FROM activity_logs al
+            LEFT JOIN users u ON al.user_id = u.id
+            WHERE al.module_name = 'leads' AND al.record_id = ?
+            ORDER BY al.id DESC
+            LIMIT 5
+        """, (student["lead_id"],))
+        recent_activity_rows.extend(cur.fetchall())
+
+    recent_activity_map = {}
+    for row in recent_activity_rows:
+        recent_activity_map[row["id"]] = row
+    recent_activity = sorted(recent_activity_map.values(), key=lambda row: row["id"], reverse=True)[:8]
+
+    # Split course sources for explicit labeling in UI
+    student_invoiced_courses = []
+    for item in invoice_items:
+        course_name = (item['description'] or '').strip()
+        if course_name and course_name not in student_invoiced_courses:
+            student_invoiced_courses.append(course_name)
+
+    student_batch_courses = []
+    for b in student_batches:
+        course_name = (b['course_name'] or '').strip()
+        if course_name and course_name not in student_batch_courses:
+            student_batch_courses.append(course_name)
+
     # Originating lead (if student was converted from or auto-linked to a lead)
     origin_lead = None
     if student["lead_id"]:
@@ -1782,7 +2074,18 @@ def student_profile(student_id):
         total_paid=total_paid,
         total_balance=total_balance,
         student_batches=student_batches,
-        origin_lead=origin_lead
+        student_invoiced_courses=student_invoiced_courses,
+        student_batch_courses=student_batch_courses,
+        current_batch=current_batch,
+        current_course=current_course,
+        installment_summary=installment_summary,
+        attendance_summary=attendance_summary,
+        attendance_percentage=attendance_percentage,
+        recent_activity=recent_activity,
+        origin_lead=origin_lead,
+        format_datetime=_format_display_datetime,
+        format_date=_format_display_date,
+        format_inr=_format_inr,
     )
 
 @billing_bp.route("/students/export-csv")

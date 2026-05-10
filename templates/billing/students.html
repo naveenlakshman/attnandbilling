@@ -10,24 +10,76 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 18px;
     flex-wrap: wrap;
     gap: 12px;
   }
   .students-page-header h2 {
     margin: 0;
-    font-size: 26px;
+    font-size: 24px;
     font-weight: 700;
     color: #1a1f36;
   }
   .header-actions {
     display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
+    gap: 8px;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  .export-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 8px;
+    white-space: nowrap;
   }
 
-  /* ── Stats grid: 2-col on mobile ── */
-  @media (max-width: 767px) {
+  /* ── Stats cards ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    margin-bottom: 20px;
+  }
+  .stats-card {
+    color: #fff;
+    padding: 16px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+    min-height: 122px;
+  }
+  .stats-card-title-row {
+    font-size: 12px;
+    text-transform: uppercase;
+    font-weight: 700;
+    opacity: 0.95;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .stats-card-number {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .stats-card-breakup {
+    font-size: 11px;
+  }
+  .stats-card-breakup-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3px;
+    gap: 6px;
+  }
+  .stats-active { background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); }
+  .stats-completed { background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%); }
+  .stats-dropped { background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); }
+  .stats-total { background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); }
+
+  /* ── Stats grid: 2-col on tablet/mobile ── */
+  @media (max-width: 1023px) {
     .stats-grid {
       grid-template-columns: repeat(2, 1fr) !important;
       gap: 10px !important;
@@ -64,6 +116,7 @@
   }
   .form-group-inline input,
   .form-group-inline select {
+    height: 38px;
     padding: 9px 12px;
     border: 1.5px solid #d1d5db;
     border-radius: 7px;
@@ -87,13 +140,24 @@
   .button-group {
     display: flex;
     gap: 8px;
+    align-items: stretch;
   }
   .button-group .btn {
-    padding: 9px 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 9px 14px;
     cursor: pointer;
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
     border-radius: 7px;
+    min-height: 38px;
+  }
+  .filter-reset-btn {
+    padding: 9px 12px;
+    background-color: #6c757d;
+    color: #fff;
+    text-decoration: none;
   }
   .filters-applied {
     background: #eff6ff;
@@ -189,6 +253,7 @@
 
   /* ── Mobile card list ── */
   .mobile-card-list { display: none; }
+  .student-mobile-list { padding-bottom: 8px; }
   .student-card {
     background: #fff;
     border: 1px solid #e5e7eb;
@@ -198,11 +263,10 @@
     gap: 12px;
     align-items: flex-start;
     box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-    text-decoration: none;
-    color: inherit;
-    transition: box-shadow 0.15s;
+    transition: box-shadow 0.15s, transform 0.12s;
   }
-  .student-card:active { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+  .student-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.10); }
+  .student-card:active { transform: scale(0.98); }
   .student-card-photo {
     width: 52px;
     height: 52px;
@@ -230,58 +294,207 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: 6px;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
   }
-  .student-card-name {
-    font-weight: 700;
-    font-size: 14px;
-    color: #1a1f36;
-    line-height: 1.3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .student-card-info {
+    display: grid;
+    gap: 4px;
+    margin-bottom: 4px;
   }
-  .student-card-regno {
+  .student-card-regno,
+  .student-card-branch {
     font-size: 11px;
     color: #6b7280;
-    margin-bottom: 6px;
   }
   .student-card-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 5px;
+    gap: 6px;
+    margin-top: 6px;
     align-items: center;
   }
   .student-card-phone {
     font-size: 12px;
-    color: #374151;
+    color: #1f2937;
+    font-weight: 600;
+  }
+  .student-card-section {
+    margin-top: 8px;
+  }
+  .student-card-section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #6b7280;
+    margin-bottom: 5px;
+    font-weight: 700;
+  }
+  .student-card-pill-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
   }
   .batch-pill {
     background: #eff6ff;
     color: #1d4ed8;
-    border-radius: 20px;
-    padding: 2px 9px;
+    border-radius: 14px;
+    padding: 3px 8px;
     font-size: 11px;
+    line-height: 1.3;
     font-weight: 500;
-    white-space: nowrap;
+    white-space: normal;
+    word-break: break-word;
+    max-width: 100%;
+    display: inline-block;
+  }
+  .course-pill {
+    background: #eef2ff;
+    color: #4338ca;
+    border-radius: 14px;
+    padding: 3px 8px;
+    font-size: 11px;
+    line-height: 1.3;
+    font-weight: 500;
+    white-space: normal;
+    word-break: break-word;
+    max-width: 100%;
+    display: inline-block;
   }
 
-  /* ── Mobile ── */
+  /* ── Card action buttons ── */
+  .student-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .sca-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1.5px solid;
+    transition: background 0.15s, color 0.15s;
+  }
+  .sca-view  { border-color: #3b82f6; color: #2563eb; background: #eff6ff; }
+  .sca-view:hover  { background: #3b82f6; color: #fff; }
+  .sca-edit  { border-color: #f59e0b; color: #b45309; background: #fffbeb; }
+  .sca-edit:hover  { background: #f59e0b; color: #fff; }
+  .sca-invoice { border-color: #10b981; color: #065f46; background: #ecfdf5; }
+  .sca-invoice:hover { background: #10b981; color: #fff; }
+  .student-card-name-link {
+    font-weight: 700;
+    font-size: 15px;
+    color: #1a1f36;
+    text-decoration: none;
+    line-height: 1.3;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .student-card-name-link:hover { color: #2563eb; text-decoration: underline; }
+
+  .table-cell-stack {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .table-avatar-photo {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid #e5e7eb;
+  }
+  .table-avatar-fallback {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #dbeafe;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1d4ed8;
+  }
+  .courses-cell-wrap,
+  .batches-cell-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* ── Tablet: 768px–1023px → card view ── */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .students-page-header h2 { font-size: 22px; }
+    .stats-card {
+      min-height: 110px;
+      padding: 14px;
+    }
+    .stats-card-number { font-size: 28px; }
+
+    .search-filter-form {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .search-group { grid-column: span 2; }
+    .batch-group { grid-column: span 2; }
+    .button-group { grid-column: span 2; }
+
+    .card.table-wrapper { display: none; }
+    .mobile-card-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-bottom: 120px;
+    }
+
+    .mobile-sub { display: block; font-size: 11px; color: #9ca3af; margin-top: 2px; font-weight: 400; }
+    .add-student-desktop { display: inline-flex; }
+  }
+
+  /* ── Mobile: < 768px ── */
   @media (max-width: 767px) {
     .students-page-header h2 { font-size: 20px; }
     .header-actions .btn { font-size: 12px; padding: 8px 10px; }
     .search-filter-section { padding: 14px; }
+
+    .stats-card {
+      min-height: 110px;
+      padding: 14px;
+    }
+    .stats-card-number { font-size: 28px; }
+
     .search-filter-form {
-      grid-template-columns: 1fr;
+      grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
-    .button-group { margin-top: 2px; }
+    .search-group { grid-column: span 2; }
+    .batch-group { grid-column: span 2; }
+    .button-group { grid-column: span 2; }
+
     .button-group .btn { width: 100%; text-align: center; }
+
     /* Hide table, show cards */
     .card.table-wrapper { display: none; }
-    .mobile-card-list { display: flex; flex-direction: column; gap: 10px; }
+    .mobile-card-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-bottom: 120px;
+    }
+
     .mobile-sub { display: block; font-size: 11px; color: #9ca3af; margin-top: 2px; font-weight: 400; }
+    .add-student-desktop { display: none !important; }
+    .student-card { padding: 12px; }
+    .student-card-avatar { width: 44px; height: 44px; font-size: 17px; }
+    .student-card-photo { width: 44px; height: 44px; }
+    .filter-reset-btn { width: 100%; }
   }
 </style>
 
@@ -289,27 +502,27 @@
   <h2>Students</h2>
   <div class="header-actions">
     {% if session.get('role') == 'admin' %}
-    <a class="btn btn-warning" href="{{ url_for('billing.export_students_csv') }}" title="Export all students to CSV">
+    <a class="btn btn-warning export-btn" href="{{ url_for('billing.export_students_csv') }}" title="Export all students to CSV">
       📥 Export CSV
     </a>
     {% endif %}
-    <a href="{{ url_for('billing.student_new') }}" class="btn btn-primary">
+    <a href="{{ url_for('billing.student_new') }}" class="btn btn-primary add-student-desktop">
       + Add Student
     </a>
   </div>
 </div>
 
-<div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px;">
+<div class="stats-grid">
   <!-- Active Students Card -->
-  <div style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+  <div class="stats-card stats-active">
+    <div class="stats-card-title-row">
       <span>Active Students</span>
-      <span style="font-size: 28px; font-weight: bold;">{{ stats.active_count or 0 }}</span>
+      <span class="stats-card-number">{{ stats.active_count or 0 }}</span>
     </div>
-    <div style="font-size: 11px;">
+    <div class="stats-card-breakup">
       {% for branch in branch_stats %}
         {% if branch.active_count > 0 %}
-        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+        <div class="stats-card-breakup-row">
           <span>{{ branch.branch_code }}:</span>
           <strong>{{ branch.active_count }}</strong>
         </div>
@@ -319,15 +532,15 @@
   </div>
 
   <!-- Completed Students Card -->
-  <div style="background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+  <div class="stats-card stats-completed">
+    <div class="stats-card-title-row">
       <span>Completed Students</span>
-      <span style="font-size: 28px; font-weight: bold;">{{ stats.completed_count or 0 }}</span>
+      <span class="stats-card-number">{{ stats.completed_count or 0 }}</span>
     </div>
-    <div style="font-size: 11px;">
+    <div class="stats-card-breakup">
       {% for branch in branch_stats %}
         {% if branch.completed_count > 0 %}
-        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+        <div class="stats-card-breakup-row">
           <span>{{ branch.branch_code }}:</span>
           <strong>{{ branch.completed_count }}</strong>
         </div>
@@ -337,15 +550,15 @@
   </div>
 
   <!-- Dropped Students Card -->
-  <div style="background: linear-gradient(135deg, #F44336 0%, #D32F2F 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+  <div class="stats-card stats-dropped">
+    <div class="stats-card-title-row">
       <span>Dropped Students</span>
-      <span style="font-size: 28px; font-weight: bold;">{{ stats.dropped_count or 0 }}</span>
+      <span class="stats-card-number">{{ stats.dropped_count or 0 }}</span>
     </div>
-    <div style="font-size: 11px;">
+    <div class="stats-card-breakup">
       {% for branch in branch_stats %}
         {% if branch.dropped_count > 0 %}
-        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+        <div class="stats-card-breakup-row">
           <span>{{ branch.branch_code }}:</span>
           <strong>{{ branch.dropped_count }}</strong>
         </div>
@@ -355,15 +568,15 @@
   </div>
 
   <!-- Total Students Card -->
-  <div style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-    <div style="font-size: 13px; text-transform: uppercase; font-weight: 600; opacity: 0.9; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+  <div class="stats-card stats-total">
+    <div class="stats-card-title-row">
       <span>Total Students</span>
-      <span style="font-size: 28px; font-weight: bold;">{{ stats.total_count or 0 }}</span>
+      <span class="stats-card-number">{{ stats.total_count or 0 }}</span>
     </div>
-    <div style="font-size: 11px;">
+    <div class="stats-card-breakup">
       {% for branch in branch_stats %}
         {% if branch.total_count > 0 %}
-        <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+        <div class="stats-card-breakup-row">
           <span>{{ branch.branch_code }}:</span>
           <strong>{{ branch.total_count }}</strong>
         </div>
@@ -376,12 +589,12 @@
 <div class="search-filter-section">
   <form method="get">
     <div class="search-filter-form">
-      <div class="form-group-inline">
+      <div class="form-group-inline search-group">
         <label for="search">Search</label>
         <input type="text" id="search" name="search" placeholder="Name, phone, email, reg no" value="{{ search_query }}">
       </div>
 
-      <div class="form-group-inline">
+      <div class="form-group-inline branch-group">
         <label for="branch">Branch</label>
         <select id="branch" name="branch">
           <option value="">All</option>
@@ -399,7 +612,7 @@
         </select>
       </div>
 
-      <div class="form-group-inline">
+      <div class="form-group-inline status-group">
         <label for="status">Status</label>
         <select id="status" name="status">
           <option value="">All</option>
@@ -409,7 +622,7 @@
         </select>
       </div>
 
-      <div class="form-group-inline">
+      <div class="form-group-inline batch-group">
         <label for="batch">Batch</label>
         <select id="batch" name="batch">
           <option value="">All Batches</option>
@@ -421,7 +634,7 @@
       </div>
 
       <div class="button-group">
-        <a href="{{ url_for('billing.students') }}" class="btn" style="padding: 8px 12px; background-color: #6c757d; color: white;">Reset</a>
+        <a href="{{ url_for('billing.students') }}" class="btn filter-reset-btn">Reset</a>
       </div>
     </div>
 
@@ -470,37 +683,84 @@
 </div>
 
 <!-- ── Mobile card list (visible only on mobile) ── -->
-<div class="mobile-card-list">
+<div class="mobile-card-list student-mobile-list">
   {% if students %}
     {% for s in students %}
-    <a href="{{ url_for('billing.student_profile', student_id=s.id) }}" class="student-card">
+    <div class="student-card">
       {% if s.photo_filename %}
-        <img src="/static/images/student_photos/{{ s.photo_filename }}" alt="" class="student-card-photo">
+        <img src="/static/images/student_photos/{{ s.photo_filename }}" alt="" class="student-card-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="student-card-avatar" style="display:none;">{{ (s.full_name or '?')[0] | upper }}</div>
       {% else %}
         <div class="student-card-avatar">{{ (s.full_name or '?')[0] | upper }}</div>
       {% endif %}
       <div class="student-card-body">
         <div class="student-card-top">
-          <div class="student-card-name">{{ s.full_name }}</div>
+          <a href="{{ url_for('billing.student_profile', student_id=s.id) }}" class="student-card-name-link">{{ s.full_name }}</a>
           <span class="status-badge {% if s.status == 'active' %}status-active{% elif s.status == 'completed' %}status-completed{% elif s.status == 'dropped' %}status-dropped{% endif %}" style="flex-shrink:0;">
             {{ s.status | capitalize }}
           </span>
         </div>
-        <div class="student-card-regno">
-          {{ s.student_code or '' }}
-          {% if s.branch_name %} &nbsp;·&nbsp; {{ s.branch_name }}{% endif %}
+
+        <div class="student-card-info">
+          <div class="student-card-regno">Reg No: {{ s.student_code or '—' }}</div>
+          <div class="student-card-branch">Branch: {{ s.branch_name or '—' }}</div>
         </div>
+
+        {% if s.phone %}
         <div class="student-card-meta">
-          {% if s.phone %}
-            <span class="student-card-phone">📞 {{ s.phone }}</span>
-          {% endif %}
+          <span class="student-card-phone">Phone: {{ s.phone }}</span>
+        </div>
+        {% endif %}
+
+        {% set invoiced_courses = student_invoiced_courses_map.get(s.id, []) %}
+        <div class="student-card-section">
+          <div class="student-card-section-label">Invoiced Courses</div>
+          <div class="student-card-pill-wrap">
+            {% if invoiced_courses %}
+              {% for cname in invoiced_courses %}
+                <span class="course-pill">{{ cname }}</span>
+              {% endfor %}
+            {% else %}
+              <span style="color:#9ca3af;font-size:12px;">No invoiced courses</span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% set batch_courses = student_batch_courses_map.get(s.id, []) %}
+        <div class="student-card-section">
+          <div class="student-card-section-label">Batch Courses</div>
+          <div class="student-card-pill-wrap">
+            {% if batch_courses %}
+              {% for cname in batch_courses %}
+                <span class="course-pill">{{ cname }}</span>
+              {% endfor %}
+            {% else %}
+              <span style="color:#9ca3af;font-size:12px;">No batch courses</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="student-card-section">
+          <div class="student-card-section-label">Batches</div>
+          <div class="student-card-pill-wrap">
           {% set batches = student_batches_map.get(s.id, []) %}
-          {% for b in batches %}
-            <span class="batch-pill">{{ b.batch_name }}</span>
-          {% endfor %}
+            {% if batches %}
+              {% for b in batches %}
+                <span class="batch-pill">{{ b.batch_name }}</span>
+              {% endfor %}
+            {% else %}
+              <span style="color:#9ca3af;font-size:12px;">No active batches</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="student-card-actions">
+          <a href="{{ url_for('billing.student_profile', student_id=s.id) }}" class="sca-btn sca-view">👁 View</a>
+          <a href="{{ url_for('billing.student_edit', student_id=s.id) }}" class="sca-btn sca-edit">✏ Edit</a>
+          <a href="{{ url_for('billing.invoice_new') }}?student_id={{ s.id }}" class="sca-btn sca-invoice">🧾 Invoice</a>
         </div>
       </div>
-    </a>
+    </div>
     {% endfor %}
   {% else %}
     <div style="padding: 40px; text-align: center; color: #999;">
@@ -521,6 +781,8 @@
           <th class="sortable" data-sort-key="name" style="width: 150px;">Name <span class="sort-icon">⇅</span></th>
           <th class="sortable hide-mobile" data-sort-key="phone" style="width: 120px;">Phone <span class="sort-icon">⇅</span></th>
           <th class="sortable hide-mobile" data-sort-key="gender" style="width: 70px;">Gender <span class="sort-icon">⇅</span></th>
+          <th style="min-width: 170px;">Invoiced Courses</th>
+          <th style="min-width: 170px;">Batch Courses</th>
           <th style="min-width: 140px;">Batches</th>
           <th class="sortable hide-mobile" data-sort-key="education" style="width: 110px;">Education <span class="sort-icon">⇅</span></th>
           <th class="sortable hide-mobile" data-sort-key="qualification" style="width: 100px;">Qualification <span class="sort-icon">⇅</span></th>
@@ -534,13 +796,15 @@
           <td class="hide-mobile" style="text-align: center; color: #9ca3af; font-size: 12px;">{{ loop.index }}</td>
           <td data-sort-key="regno" data-sort-value="{{ s.student_code or '' }}" class="hide-mobile" style="font-weight: 600; color: #1a1f36; font-size: 12px;">{{ s.student_code or "—" }}</td>
           <td data-sort-key="name" data-sort-value="{{ s.full_name or '' }}">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="table-cell-stack">
               {% if s.photo_filename %}
                 <img src="/static/images/student_photos/{{ s.photo_filename }}"
                      alt=""
-                     style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid #e5e7eb;">
+                     class="table-avatar-photo"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="table-avatar-fallback" style="display:none;">{{ (s.full_name or '?')[0] | upper }}</div>
               {% else %}
-                <div style="width: 36px; height: 36px; border-radius: 50%; background: #dbeafe; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; font-weight: 700; color: #1d4ed8;">
+                <div class="table-avatar-fallback">
                   {{ (s.full_name or '?')[0] | upper }}
                 </div>
               {% endif %}
@@ -555,18 +819,46 @@
           </td>
           <td data-sort-key="phone" data-sort-value="{{ s.phone or '' }}" class="hide-mobile">{{ s.phone or "—" }}</td>
           <td data-sort-key="gender" data-sort-value="{{ s.gender or '' }}" class="hide-mobile" style="text-align: center;">{{ s.gender or "—" }}</td>
+
+          <td>
+            {% set invoiced_courses = student_invoiced_courses_map.get(s.id, []) %}
+            {% if invoiced_courses %}
+              <div class="courses-cell-wrap">
+              {% for cname in invoiced_courses %}
+                <span class="course-pill">{{ cname }}</span>
+              {% endfor %}
+              </div>
+            {% else %}
+              <span style="color: #d1d5db;">—</span>
+            {% endif %}
+          </td>
+
+          <td>
+            {% set batch_courses = student_batch_courses_map.get(s.id, []) %}
+            {% if batch_courses %}
+              <div class="courses-cell-wrap">
+              {% for cname in batch_courses %}
+                <span class="course-pill">{{ cname }}</span>
+              {% endfor %}
+              </div>
+            {% else %}
+              <span style="color: #d1d5db;">—</span>
+            {% endif %}
+          </td>
+
           <td>
             {% set batches = student_batches_map.get(s.id, []) %}
             {% if batches %}
+              <div class="batches-cell-wrap">
               {% for b in batches %}
-                <div style="{% if not loop.first %}margin-top: 4px; padding-top: 4px; border-top: 1px solid #f1f3f5;{% endif %}">
-                  <a href="{{ url_for('attendance.view_batch', batch_id=b.batch_id) }}"
-                     style="color: #2563eb; text-decoration: none; font-size: 12px; font-weight: 500;"
-                     title="{{ b.batch_name }}">
-                    {{ b.batch_name }}
-                  </a>
-                </div>
+                <a href="{{ url_for('attendance.view_batch', batch_id=b.batch_id) }}"
+                   class="batch-pill"
+                   style="text-decoration:none;"
+                   title="{{ b.batch_name }}">
+                  {{ b.batch_name }}
+                </a>
               {% endfor %}
+              </div>
             {% else %}
               <span style="color: #d1d5db;">—</span>
             {% endif %}

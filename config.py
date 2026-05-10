@@ -15,6 +15,13 @@ for content_type in ['videos', 'pdfs', 'images', 'downloads', 'html']:
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+
+def _env_bool(name, default=False):
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    return str(val).strip().lower() in {"1", "true", "yes", "on"}
+
 _secret_key = os.environ.get("SECRET_KEY")
 if not _secret_key:
     raise RuntimeError(
@@ -33,7 +40,8 @@ class Config:
     SESSION_REFRESH_EACH_REQUEST = True
 
     # Secure cookie flags
-    SESSION_COOKIE_SECURE = True    # HTTPS only
+    # Keep False for local http://127.0.0.1 development, set True in production HTTPS.
+    SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", default=False)
     SESSION_COOKIE_HTTPONLY = True  # Prevent JS access
     SESSION_COOKIE_SAMESITE = "Lax" # CSRF mitigation
 
