@@ -1,0 +1,75 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}Master Chapters - LMS{% endblock %}
+{% block page_title %}Master Content Library{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="h4 mb-1">Reusable Chapters</h2>
+      <p class="text-muted mb-0">Create once, attach to many programs.</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('lms_admin.master_chapter_new') }}">+ New Master Chapter</a>
+  </div>
+
+  {% if chapters %}
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Title</th>
+            <th style="width: 120px;">Topics</th>
+            <th style="width: 140px;">Status</th>
+            <th style="width: 140px;">Updated</th>
+            <th style="width: 300px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for chapter in chapters %}
+          <tr>
+            <td>
+              <div class="fw-semibold">{{ chapter.title }}</div>
+              {% if chapter.description %}
+              <div class="text-muted small">{{ chapter.description|truncate(120) }}</div>
+              {% endif %}
+            </td>
+            <td><span class="badge bg-primary">{{ chapter.topic_count }}</span></td>
+            <td>
+              {% if chapter.status == 'active' %}
+              <span class="badge bg-success">Active</span>
+              {% else %}
+              <span class="badge bg-secondary">Archived</span>
+              {% endif %}
+            </td>
+            <td class="small text-muted">{{ chapter.updated_at[:10] if chapter.updated_at else '-' }}</td>
+            <td>
+              <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}">Topics</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.master_chapter_edit', master_chapter_id=chapter.id) }}">Edit</a>
+                {% if chapter.status != 'archived' and session.get('role') == 'admin' %}
+                <form method="POST" action="{{ url_for('lms_admin.master_chapter_archive', master_chapter_id=chapter.id) }}" onsubmit="return confirm('Archive this master chapter?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Archive</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card shadow-sm">
+    <div class="card-body text-center py-5">
+      <h3 class="h5">No master chapters yet</h3>
+      <p class="text-muted">Start by creating reusable chapters like MS Excel.</p>
+      <a class="btn btn-primary" href="{{ url_for('lms_admin.master_chapter_new') }}">Create First Master Chapter</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

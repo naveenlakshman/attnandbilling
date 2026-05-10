@@ -289,7 +289,7 @@ def dashboard():
         SELECT COUNT(*) AS cnt
         FROM leads
         WHERE is_deleted = 0
-          AND status != 'converted'
+          AND status = 'active'
           AND visit_status IN ('Visited', 'Demo Attended')
           {assigned_filter_sql}
     """, assigned_params)
@@ -760,28 +760,32 @@ def lead_detail(lead_id):
     linked_student = cur.fetchone()
 
     alerts = []
-    if lead.get("followup_status") == "overdue":
-        alerts.append({"type": "danger", "text": "Follow-up is overdue. Call immediately."})
-    elif lead.get("followup_status") == "today":
-        alerts.append({"type": "warning", "text": "Follow-up is due today."})
-
-    if lead.get("inactive_days") is not None and lead.get("inactive_days") >= 7:
-        alerts.append({"type": "warning", "text": f"No contact for {lead.get('inactive_days')} days."})
-
-    if not lead.get("last_contact_date"):
-        alerts.append({"type": "info", "text": "This lead has never been contacted."})
-
     parent_status = (lead.get("parent_discussion_status") or "").strip()
     visit_status = (lead.get("visit_status") or "").strip()
     lead_stage = (lead.get("stage") or "").strip()
+    lead_status = (lead.get("status") or "").strip()
 
-    if parent_status == "Pending":
-        alerts.append({"type": "warning", "text": "Parent discussion pending."})
+    is_closed = lead_status in ("converted", "lost")
 
-    if visit_status == "Visited" and lead_stage != "Converted":
-        alerts.append({"type": "warning", "text": "Visited but not converted yet."})
-    elif visit_status == "Visit Scheduled":
-        alerts.append({"type": "info", "text": "Visit scheduled - follow up after visit."})
+    if not is_closed:
+        if lead.get("followup_status") == "overdue":
+            alerts.append({"type": "danger", "text": "Follow-up is overdue. Call immediately."})
+        elif lead.get("followup_status") == "today":
+            alerts.append({"type": "warning", "text": "Follow-up is due today."})
+
+        if lead.get("inactive_days") is not None and lead.get("inactive_days") >= 7:
+            alerts.append({"type": "warning", "text": f"No contact for {lead.get('inactive_days')} days."})
+
+        if not lead.get("last_contact_date"):
+            alerts.append({"type": "info", "text": "This lead has never been contacted."})
+
+        if parent_status == "Pending":
+            alerts.append({"type": "warning", "text": "Parent discussion pending."})
+
+        if visit_status == "Visited":
+            alerts.append({"type": "warning", "text": "Visited but not converted yet."})
+        elif visit_status == "Visit Scheduled":
+            alerts.append({"type": "info", "text": "Visit scheduled - follow up after visit."})
 
     if lead_stage == "Lost" and lead.get("lost_reason"):
         alerts.append({"type": "danger", "text": f"Lost reason: {lead.get('lost_reason')}"})

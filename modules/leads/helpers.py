@@ -40,4 +40,6 @@ def get_lead_or_404_with_access(conn, lead_id: int, session_obj, include_deleted
     ):
         return None, "forbidden"
 
-    return lead, None
+    # Normalize sqlite3.Row to plain dict so callers can safely use both
+    # lead["field"] and lead.get("field") access styles.
+    return dict(lead), None

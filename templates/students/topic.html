@@ -33,6 +33,33 @@
   .rich-text-content h2 { font-size: 1.55em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.25; }
   .rich-text-content h3 { font-size: 1.25em; font-weight: 600; margin: 0.55em 0 0.25em; line-height: 1.3; }
   .rich-text-content h4 { font-size: 1.05em; font-weight: 600; margin: 0.5em 0 0.2em; line-height: 1.35; }
+  /* ── Code Block Styling ── */
+  .lesson-content pre,
+  .rich-text-content pre {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid #3e3e42;
+    overflow-x: auto;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 12px 0;
+  }
+  .lesson-content code,
+  .rich-text-content code {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+  }
+  /* Prevent code blocks from horizontal scrolling unless necessary */
+  .lesson-content pre code,
+  .rich-text-content pre code {
+    display: block;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
   .lms-hotspot-embed {
     display: block;
     position: relative;
@@ -236,6 +263,7 @@
 {% endblock %}
 
 {% block content %}
+{% set is_master = is_master_topic if is_master_topic is defined else false %}
 <div class="lms-layout">
 
   <!-- ── Left: Content ── -->
@@ -390,12 +418,20 @@
       <!-- Right: Previous + Next -->
       <div class="btn-nav-group">
         {% if prev_topic_id %}
+          {% if is_master %}
+          <a href="{{ url_for('students.master_topic_view', program_id=topic.program_id, master_topic_id=prev_topic_id) }}" class="btn-nav">‹ Previous</a>
+          {% else %}
           <a href="{{ url_for('students.topic_view', topic_id=prev_topic_id) }}" class="btn-nav">‹ Previous</a>
+          {% endif %}
         {% else %}
           <span class="btn-nav" style="opacity:.4;pointer-events:none;">‹ Previous</span>
         {% endif %}
         {% if next_topic_id %}
+          {% if is_master %}
+          <a href="{{ url_for('students.master_topic_view', program_id=topic.program_id, master_topic_id=next_topic_id) }}" class="btn-nav btn-nav-next">Next ›</a>
+          {% else %}
           <a href="{{ url_for('students.topic_view', topic_id=next_topic_id) }}" class="btn-nav btn-nav-next">Next ›</a>
+          {% endif %}
         {% else %}
           <span class="btn-nav btn-nav-next" style="opacity:.4;pointer-events:none;">Next ›</span>
         {% endif %}
@@ -426,8 +462,13 @@
       </div>
       <div class="chapter-topics {% if chapter.id == topic.chapter_id %}open{% endif %}">
         {% for t in topics_by_chapter.get(chapter.id, []) %}
+        {% if is_master %}
+        <a href="{{ url_for('students.master_topic_view', program_id=topic.program_id, master_topic_id=t.id) }}"
+           class="topic-item {% if t.id == topic.id %}active{% endif %} {% if t.is_completed %}done{% endif %}">
+        {% else %}
         <a href="{{ url_for('students.topic_view', topic_id=t.id) }}"
            class="topic-item {% if t.id == topic.id %}active{% endif %} {% if t.is_completed %}done{% endif %}">
+        {% endif %}
           <span class="check">{% if t.is_completed %}✓{% endif %}</span>
           <span>{{ t.topic_order }}. {{ t.topic_title }}</span>
         </a>
@@ -725,6 +766,7 @@ var topicId = {{ topic.id }};
 var totalTopics = {{ total_topics }};
 var completedTopics = {{ completed_topics }};
 var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+var progressEndpoint = '{{ progress_endpoint if progress_endpoint is defined else url_for("students.mark_complete", topic_id=topic.id) }}';
 
 function toggleComplete() {
   var action = isCompleted ? 'incomplete' : 'complete';
@@ -732,7 +774,7 @@ function toggleComplete() {
   formData.append('action', action);
   formData.append('csrf_token', csrfToken);
 
-  fetch('/student/topic/' + topicId + '/complete', {
+  fetch(progressEndpoint, {
     method: 'POST', body: formData
   }).then(function(r){ return r.json(); }).then(function(data){
     if(data.status === 'ok' || data.status === 'demo') {
