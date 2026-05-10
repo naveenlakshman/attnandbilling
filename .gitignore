@@ -1,6 +1,10 @@
 # Environment secrets - never commit
 .env
 
+# Ignore local images
+static/lms/images/inline/20260429_043130_1731598994103.jpg
+static/lms/images/inline/20260429_152445_1000439151.jpg
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
