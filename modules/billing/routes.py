@@ -473,14 +473,14 @@ def dashboard():
     """)
     branches = cur.fetchall()
 
-    student_query = "SELECT COUNT(*) AS total_students FROM students"
-    student_params = []
+    student_query = "SELECT COUNT(*) AS total_students FROM students WHERE substr(created_at, 1, 10) BETWEEN ? AND ?"
+    student_params = [start_date, end_date]
 
-    invoice_count_query = "SELECT COUNT(*) AS total_invoices FROM invoices"
-    invoice_count_params = []
+    invoice_count_query = "SELECT COUNT(*) AS total_invoices FROM invoices WHERE parse_date(invoice_date) BETWEEN ? AND ?"
+    invoice_count_params = [start_date, end_date]
 
-    sales_query = "SELECT IFNULL(SUM(total_amount), 0) AS total_sales FROM invoices"
-    sales_params = []
+    sales_query = "SELECT IFNULL(SUM(total_amount), 0) AS total_sales FROM invoices WHERE parse_date(invoice_date) BETWEEN ? AND ?"
+    sales_params = [start_date, end_date]
 
     receipt_query = """
         SELECT IFNULL(SUM(amount_received), 0) AS total_receipts
@@ -498,13 +498,13 @@ def dashboard():
     expense_params = [start_date, end_date]
 
     if branch_id:
-        student_query += " WHERE branch_id = ?"
+        student_query += " AND branch_id = ?"
         student_params.append(branch_id)
 
-        invoice_count_query += " WHERE branch_id = ?"
+        invoice_count_query += " AND branch_id = ?"
         invoice_count_params.append(branch_id)
 
-        sales_query += " WHERE (branch_id = ? OR branch_id IS NULL)"
+        sales_query += " AND (branch_id = ? OR branch_id IS NULL)"
         sales_params.append(branch_id)
 
         receipt_query += " AND (invoices.branch_id = ? OR invoices.branch_id IS NULL)"
@@ -628,11 +628,12 @@ def dashboard():
             invoice_date,
             total_amount
         FROM invoices
+        WHERE parse_date(invoice_date) BETWEEN ? AND ?
     """
-    monthly_sales_params = []
+    monthly_sales_params = [start_date, end_date]
 
     if branch_id:
-        monthly_sales_query += " WHERE branch_id = ?"
+        monthly_sales_query += " AND branch_id = ?"
         monthly_sales_params.append(branch_id)
 
     cur.execute(monthly_sales_query, monthly_sales_params)
