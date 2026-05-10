@@ -4,6 +4,7 @@ import calendar
 import uuid
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
+from modules.core.sms import send_sms
 from werkzeug.security import generate_password_hash
 import io
 import csv
@@ -1354,6 +1355,18 @@ def student_new():
                 description=f"Lead converted on {now[:10]} - Student: {full_name} (Reg No: {next_reg_no})",
             )
 
+        # Send welcome SMS with registration number
+        try:
+            sms_phone = "+91" + phone  # phone is already validated 10-digit
+            sms_message = (
+                f"Welcome to Global IT Education, {full_name}! "
+                f"Your Registration Number is {next_reg_no}. "
+                "Keep this number safe for future reference."
+            )
+            send_sms(sms_phone, sms_message)
+        except Exception:
+            pass  # Never block registration if SMS fails
+
         flash("Student added successfully.", "success")
         return redirect(url_for("billing.students"))
 
@@ -1909,8 +1922,6 @@ def student_profile(student_id):
     current_course = None
     if current_batch and current_batch["course_name"]:
         current_course = current_batch["course_name"].strip()
-    elif student_invoiced_courses:
-        current_course = student_invoiced_courses[0]
 
     attendance_summary = {
         "total_marked": 0,
@@ -2046,6 +2057,9 @@ def student_profile(student_id):
         course_name = (item['description'] or '').strip()
         if course_name and course_name not in student_invoiced_courses:
             student_invoiced_courses.append(course_name)
+
+    if current_course is None and student_invoiced_courses:
+        current_course = student_invoiced_courses[0]
 
     student_batch_courses = []
     for b in student_batches:

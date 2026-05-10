@@ -58,6 +58,10 @@ class Config:
     # TinyMCE Rich Text Editor
     TINYMCE_API_KEY = os.environ.get("TINYMCE_API_KEY", "no-api-key")
 
+    # SMS Gateway (api.sms-gate.app cloud relay)
+    SMS_GATEWAY_USER = os.environ.get("SMS_GATEWAY_USER", "SJDFUJ")
+    SMS_GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "2_new7cfd8f20u")
+
     # LMS File Uploads
     UPLOAD_FOLDER = UPLOAD_DIR
 

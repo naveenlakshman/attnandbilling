@@ -1,9 +1,10 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
 import os
 from db import get_conn, get_company_profile, clear_company_cache
 from .utils import login_required, admin_required
+from .sms import send_sms
 from extensions import limiter
 
 core_bp = Blueprint("core", __name__)
@@ -1038,3 +1039,36 @@ def company_profile_remove_logo():
     clear_company_cache()
     flash("Logo removed.", "success")
     return redirect(url_for("core.company_profile"))
+
+
+# ── SMS Gateway ───────────────────────────────────────────────────────────────
+
+@core_bp.route("/admin/sms/send", methods=["POST"])
+@admin_required
+def sms_send():
+    """
+    Admin JSON endpoint to send an SMS.
+    Body: { "phone": "+91XXXXXXXXXX", "message": "Hello!" }
+    """
+    data = request.get_json(silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    message = (data.get("message") or "").strip()
+
+    if not phone or not message:
+        return jsonify({"success": False, "error": "phone and message are required"}), 400
+
+    result = send_sms(phone, message)
+    status_code = 200 if result["success"] else 502
+    return jsonify(result), status_code
+
+
+@core_bp.route("/admin/sms/test", methods=["GET"])
+@admin_required
+def sms_test():
+    """Quick admin GET route to fire a test SMS to the configured number."""
+    result = send_sms("+919071717162", "Test SMS from Flask ERP — if you received this, the gateway is working!")
+    if result["success"]:
+        flash(f"Test SMS sent successfully (id: {result.get('message_id')}).", "success")
+    else:
+        flash(f"SMS failed: {result.get('error')}", "danger")
+    return redirect(url_for("core.dashboard"))
