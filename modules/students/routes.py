@@ -367,6 +367,7 @@ def dashboard():
                               AND mcx.status = 'active'
                               AND mtx.status = 'active'
                         ) THEN (
+                            -- Count master progress
                             SELECT COUNT(*)
                             FROM lms_master_topic_progress mp
                             JOIN lms_master_topics mt ON mt.id = mp.master_topic_id
@@ -379,6 +380,15 @@ def dashboard():
                               AND pc.is_visible = 1
                               AND mc.status = 'active'
                               AND mt.status = 'active'
+                        ) + (
+                            -- Also count any legacy progress not yet in master table
+                            SELECT COUNT(*)
+                            FROM lms_topic_progress tp2
+                            JOIN lms_topics lt2 ON tp2.topic_id = lt2.id
+                            JOIN lms_chapters lc3 ON lt2.chapter_id = lc3.id
+                            WHERE lc3.program_id = lp.id
+                              AND tp2.student_id = ?
+                              AND tp2.is_completed = 1
                         )
                         ELSE (
                             SELECT COUNT(*)
@@ -439,7 +449,7 @@ def dashboard():
                     )
                 )
                 ORDER BY CASE WHEN map_order IS NULL THEN 1 ELSE 0 END, map_order, lp.program_name
-            """, (student_id, student_id, student_id, student_id, student_id, student_id, student_id, student_id)).fetchall()
+            """, (student_id, student_id, student_id, student_id, student_id, student_id, student_id, student_id, student_id)).fetchall()
 
     finally:
         conn.close()
@@ -610,6 +620,26 @@ def topic_view(topic_id):
         if not access:
             flash('You do not have access to this program.', 'danger')
             return redirect(url_for('students.dashboard'))
+
+        # If this program uses the master library, find the matching master topic
+        # and redirect there so progress is stored in the correct table.
+        if _program_has_master_content(conn, topic['program_id']):
+            master_topic = conn.execute("""
+                SELECT mt.id
+                FROM lms_master_topics mt
+                JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                WHERE pc.program_id = ?
+                  AND mt.title = ?
+                  AND mt.status = 'active'
+                  AND mc.status = 'active'
+                  AND pc.is_visible = 1
+                LIMIT 1
+            """, (topic['program_id'], topic['topic_title'])).fetchone()
+            if master_topic:
+                return redirect(url_for('students.master_topic_view',
+                                        program_id=topic['program_id'],
+                                        master_topic_id=master_topic['id']))
 
         contents = conn.execute("""
             SELECT * FROM lms_topic_contents
