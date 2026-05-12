@@ -367,7 +367,6 @@ def dashboard():
                               AND mcx.status = 'active'
                               AND mtx.status = 'active'
                         ) THEN (
-                            -- Count master progress
                             SELECT COUNT(*)
                             FROM lms_master_topic_progress mp
                             JOIN lms_master_topics mt ON mt.id = mp.master_topic_id
@@ -380,15 +379,6 @@ def dashboard():
                               AND pc.is_visible = 1
                               AND mc.status = 'active'
                               AND mt.status = 'active'
-                        ) + (
-                            -- Also count any legacy progress not yet in master table
-                            SELECT COUNT(*)
-                            FROM lms_topic_progress tp2
-                            JOIN lms_topics lt2 ON tp2.topic_id = lt2.id
-                            JOIN lms_chapters lc3 ON lt2.chapter_id = lc3.id
-                            WHERE lc3.program_id = lp.id
-                              AND tp2.student_id = ?
-                              AND tp2.is_completed = 1
                         )
                         ELSE (
                             SELECT COUNT(*)
@@ -449,7 +439,7 @@ def dashboard():
                     )
                 )
                 ORDER BY CASE WHEN map_order IS NULL THEN 1 ELSE 0 END, map_order, lp.program_name
-            """, (student_id, student_id, student_id, student_id, student_id, student_id, student_id, student_id, student_id)).fetchall()
+            """, (student_id, student_id, student_id, student_id, student_id, student_id, student_id, student_id)).fetchall()
 
     finally:
         conn.close()
