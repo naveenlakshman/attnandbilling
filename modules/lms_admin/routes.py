@@ -600,10 +600,8 @@ def list_programs():
     conn = get_conn()
     try:
         cur = conn.cursor()
-        
-        # Get all programs with related information and content coverage.
-        # Counts include both legacy chapters/topics and linked master chapters/topics.
-        cur.execute("""
+
+        _program_select = """
             SELECT 
                 lp.id,
                 lp.program_name,
@@ -651,12 +649,67 @@ def list_programs():
                 ) as topics_with_content
             FROM lms_programs lp
             LEFT JOIN courses c ON lp.course_id = c.id
-            WHERE lp.slug != ?
+        """
+
+        # Active programs
+        cur.execute(_program_select + """
+            WHERE lp.slug != ? AND lp.is_deleted = 0
             ORDER BY lp.created_at DESC
         """, (_MASTER_BRIDGE_PROGRAM_SLUG,))
         programs = cur.fetchall()
-        
-        return render_template('lms_programs.html', programs=programs)
+
+        # Deleted programs (admin only)
+        deleted_programs = []
+        if session.get('role') == 'admin':
+            cur.execute(_program_select + """
+                WHERE lp.slug != ? AND lp.is_deleted = 1
+                ORDER BY lp.updated_at DESC
+            """, (_MASTER_BRIDGE_PROGRAM_SLUG,))
+            deleted_programs = cur.fetchall()
+
+        return render_template('lms_programs.html', programs=programs, deleted_programs=deleted_programs)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/program/<int:program_id>/restore', methods=['POST'])
+@admin_required
+def restore_program(program_id):
+    """Restore a soft-deleted LMS program."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, program_name FROM lms_programs
+            WHERE id = ? AND is_deleted = 1
+        """, (program_id,))
+        program = cur.fetchone()
+
+        if not program:
+            flash('Program not found or not deleted.', 'danger')
+            return redirect(url_for('lms_admin.list_programs'))
+
+        now = datetime.now().isoformat(timespec='seconds')
+        cur.execute("""
+            UPDATE lms_programs SET is_deleted = 0, updated_at = ? WHERE id = ?
+        """, (now, program_id))
+        conn.commit()
+
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='restore',
+            module_name='lms_programs',
+            record_id=program_id,
+            description=f'Restored deleted program: {program["program_name"]}'
+        )
+
+        flash(f'Program "{program["program_name"]}" has been restored.', 'success')
+        return redirect(url_for('lms_admin.list_programs'))
+    except Exception as e:
+        flash(f'Error restoring program: {str(e)}', 'danger')
+        return redirect(url_for('lms_admin.list_programs'))
     finally:
         conn.close()
 
@@ -1539,7 +1592,7 @@ def program_view(program_id):
                 c.fee as course_fee
             FROM lms_programs lp
             LEFT JOIN courses c ON lp.course_id = c.id
-            WHERE lp.id = ?
+            WHERE lp.id = ? AND lp.is_deleted = 0
         """, (program_id,))
         program = cur.fetchone()
         
@@ -1735,6 +1788,51 @@ def program_view(program_id):
             summary['topics_with_download'] = 0
 
         return render_template('lms_program_view.html', summary=summary)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/program/<int:program_id>/delete', methods=['POST'])
+@admin_required
+def delete_program(program_id):
+    """Soft-delete an LMS program (sets is_deleted = 1)."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, program_name, slug
+            FROM lms_programs
+            WHERE id = ? AND is_deleted = 0
+        """, (program_id,))
+        program = cur.fetchone()
+
+        if not program:
+            flash('Program not found or already deleted.', 'danger')
+            return redirect(url_for('lms_admin.list_programs'))
+
+        now = datetime.now().isoformat(timespec='seconds')
+        cur.execute("""
+            UPDATE lms_programs
+            SET is_deleted = 1, updated_at = ?
+            WHERE id = ?
+        """, (now, program_id))
+        conn.commit()
+
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='delete',
+            module_name='lms_programs',
+            record_id=program_id,
+            description=f'Soft-deleted program: {program["program_name"]}'
+        )
+
+        flash(f'Program "{program["program_name"]}" has been deleted.', 'success')
+        return redirect(url_for('lms_admin.list_programs'))
+    except Exception as e:
+        flash(f'Error deleting program: {str(e)}', 'danger')
+        return redirect(url_for('lms_admin.program_view', program_id=program_id))
     finally:
         conn.close()
 

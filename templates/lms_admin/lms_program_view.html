@@ -93,6 +93,18 @@
     color: #667eea;
   }
 
+  .btn-danger-header {
+    background: rgba(220, 53, 69, 0.85);
+    color: white;
+    border: 2px solid rgba(255, 255, 255, 0.7);
+  }
+
+  .btn-danger-header:hover {
+    background: #dc3545;
+    border-color: white;
+    color: white;
+  }
+
   .btn-back {
     background: rgba(255, 255, 255, 0.2);
     color: white;
@@ -486,6 +498,37 @@
       <a href="{{ url_for('lms_admin.list_programs') }}" class="btn-header btn-back">
         ← Back to Programs
       </a>
+      {% if session.get('role') == 'admin' %}
+      <button type="button" class="btn-header btn-danger-header" onclick="document.getElementById('deleteProgramModal').style.display='flex'">
+        🗑️ Delete Program
+      </button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteProgramModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; padding:32px; max-width:440px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+    <h4 style="margin:0 0 12px; color:#dc3545;">⚠️ Delete Program</h4>
+    <p style="color:#333; margin-bottom:8px;">You are about to delete:</p>
+    <p style="font-weight:700; font-size:16px; margin-bottom:16px;">{{ summary.program.program_name }}</p>
+    <p style="color:#6c757d; font-size:13px; margin-bottom:24px;">
+      This will soft-delete the program — it will no longer appear in the program list. 
+      Chapters, topics, and student access records are preserved.
+    </p>
+    <div style="display:flex; gap:12px; justify-content:flex-end;">
+      <button type="button" onclick="document.getElementById('deleteProgramModal').style.display='none'"
+              style="padding:10px 20px; border-radius:6px; border:1px solid #dee2e6; background:#fff; cursor:pointer; font-size:14px;">
+        Cancel
+      </button>
+      <form method="POST" action="{{ url_for('lms_admin.delete_program', program_id=summary.program.id) }}" style="margin:0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit"
+                style="padding:10px 20px; border-radius:6px; border:none; background:#dc3545; color:#fff; cursor:pointer; font-size:14px; font-weight:600;">
+          Yes, Delete
+        </button>
+      </form>
     </div>
   </div>
 </div>
