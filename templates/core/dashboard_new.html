@@ -48,7 +48,28 @@
     🔄 Classic Dashboard
   </a>
 </div>
-
+{% if pending_leave_count > 0 %}
+<div class="alert mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2"
+     style="background:#fff8e1;border:1px solid #ffe082;border-left:5px solid #f59e0b;
+            border-radius:10px;padding:14px 18px;">
+  <div class="d-flex align-items-center gap-3">
+    <span style="font-size:26px;">🔔</span>
+    <div>
+      <div class="fw-bold" style="color:#92400e;font-size:15px;">
+        {{ pending_leave_count }} Pending Leave Request{{ 's' if pending_leave_count != 1 else '' }}
+      </div>
+      <div class="text-muted" style="font-size:13px;">
+        Student{{ 's' if pending_leave_count != 1 else '' }} {{ 'have' if pending_leave_count != 1 else 'has' }} submitted leave {{ 'requests' if pending_leave_count != 1 else 'request' }} awaiting your review.
+      </div>
+    </div>
+  </div>
+  <a href="{{ url_for('attendance.leave_requests') }}"
+     class="btn btn-sm fw-semibold"
+     style="background:#f59e0b;color:#fff;border:none;border-radius:7px;white-space:nowrap;">
+    Review Now →
+  </a>
+</div>
+{% endif %}
 <!-- ════════════════════════════════════════════════════════
      ROW 1 — HERO KPIs
      ════════════════════════════════════════════════════════ -->

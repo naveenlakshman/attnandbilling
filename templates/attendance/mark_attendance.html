@@ -776,7 +776,27 @@
                 </div>
               </td>
               <td>
-                {% set cur_status = attendance_data.get(student.student_id, {}).get('status', 'not_marked') %}
+                {# Determine effective status: use saved record if it exists, otherwise
+                   pre-fill 'leave' for students with an approved leave on this date. #}
+                {% set _saved_status = attendance_data.get(student.student_id, {}).get('status') %}
+                {% if _saved_status %}
+                  {% set cur_status = _saved_status %}
+                {% elif approved_leave_student_ids is defined and student.student_id in approved_leave_student_ids %}
+                  {% set cur_status = 'leave' %}
+                {% else %}
+                  {% set cur_status = 'not_marked' %}
+                {% endif %}
+
+                {# Show approved-leave badge when pre-filling so staff is aware #}
+                {% if not _saved_status and approved_leave_student_ids is defined and student.student_id in approved_leave_student_ids %}
+                  <div class="mb-1">
+                    <span style="background:#d1e7dd;color:#0f5132;font-size:11px;font-weight:600;
+                                 padding:2px 8px;border-radius:8px;display:inline-block;">
+                      📋 Approved Leave
+                    </span>
+                  </div>
+                {% endif %}
+
                 <select class="status-select {{ cur_status }}"
                         name="status_{{ student.student_id }}"
                         id="status_{{ student.student_id }}"

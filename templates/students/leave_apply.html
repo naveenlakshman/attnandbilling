@@ -1,0 +1,171 @@
+{% extends "students/base.html" %}
+{% block title %}Apply for Leave{% endblock %}
+{% block page_title %}📋 Apply for Leave{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/flatpickr.min.css') }}">
+<style>
+  .form-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    padding: 28px 32px;
+    max-width: 640px;
+  }
+  .form-card h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #212529;
+    margin-bottom: 6px;
+  }
+  .form-card .subtitle {
+    font-size: 13px;
+    color: #6c757d;
+    margin-bottom: 24px;
+  }
+  label { font-weight: 500; font-size: 14px; }
+  .form-text { font-size: 12px; }
+  .btn-submit {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border: none;
+    color: #fff;
+    padding: 10px 28px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-submit:hover { opacity: 0.9; color: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-card">
+  <h2>📋 Leave Application</h2>
+  <p class="subtitle">Fill in the details below. Your request will be reviewed by the staff.</p>
+
+  <!-- Flash messages scoped to success only (danger/warning already shown in base) -->
+  {% with messages = get_flashed_messages(with_categories=true, category_filter=['success']) %}
+    {% for category, message in messages %}
+      <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST" enctype="multipart/form-data" id="leaveForm" novalidate>
+    <!-- CSRF token for security -->
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <!-- Date range -->
+    <div class="row g-3 mb-3">
+      <div class="col-sm-6">
+        <label for="from_date" class="form-label">From Date <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="from_date" name="from_date"
+               placeholder="YYYY-MM-DD" required autocomplete="off">
+      </div>
+      <div class="col-sm-6">
+        <label for="to_date" class="form-label">To Date <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="to_date" name="to_date"
+               placeholder="YYYY-MM-DD" required autocomplete="off">
+      </div>
+    </div>
+    <div class="mb-1" id="date-error" style="display:none;">
+      <span class="text-danger small">⚠️ "From" date cannot be later than "To" date.</span>
+    </div>
+
+    <!-- Reason -->
+    <div class="mb-3">
+      <label for="reason" class="form-label">Reason <span class="text-danger">*</span></label>
+      <textarea class="form-control" id="reason" name="reason" rows="4"
+                maxlength="1000" placeholder="Describe the reason for your leave request…" required></textarea>
+      <div class="form-text">Maximum 1000 characters.</div>
+    </div>
+
+    <!-- Optional document -->
+    <div class="mb-4">
+      <label for="document" class="form-label">Supporting Document <span class="text-muted">(optional)</span></label>
+      <input type="file" class="form-control" id="document" name="document"
+             accept=".jpg,.jpeg,.png,.pdf">
+      <div class="form-text">Accepted formats: JPG, JPEG, PNG, PDF. Maximum size: 5 MB.</div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn-submit" id="submitBtn">Submit Leave Request</button>
+      <a href="{{ url_for('students.leave_history') }}" class="btn btn-outline-secondary btn-sm align-self-center">
+        View History
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/flatpickr.min.js') }}"></script>
+<script>
+  // Today's date string (YYYY-MM-DD) used as minimum allowed date
+  var todayStr = new Date().toISOString().split('T')[0];
+
+  // Initialise date pickers — both limited to today or later
+  var fromPicker = flatpickr("#from_date", {
+    dateFormat: "Y-m-d",
+    minDate: todayStr,
+    onChange: function(selectedDates, dateStr) {
+      // Keep To date minimum in sync with From date selection
+      if (dateStr) {
+        toPicker.set('minDate', dateStr);
+        // If To date is now before From date, reset it
+        var toVal = document.getElementById('to_date').value;
+        if (toVal && toVal < dateStr) {
+          toPicker.setDate(dateStr);
+        }
+      }
+      validateDates();
+    }
+  });
+  var toPicker = flatpickr("#to_date", {
+    dateFormat: "Y-m-d",
+    minDate: todayStr,
+    onChange: validateDates
+  });
+
+  function validateDates() {
+    var from = document.getElementById('from_date').value;
+    var to   = document.getElementById('to_date').value;
+    var errEl = document.getElementById('date-error');
+    if (from && to && from > to) {
+      errEl.style.display = 'block';
+      document.getElementById('submitBtn').disabled = true;
+    } else {
+      errEl.style.display = 'none';
+      document.getElementById('submitBtn').disabled = false;
+    }
+  }
+
+  // Client-side form validation before submit
+  document.getElementById('leaveForm').addEventListener('submit', function(e) {
+    var from   = document.getElementById('from_date').value.trim();
+    var to     = document.getElementById('to_date').value.trim();
+    var reason = document.getElementById('reason').value.trim();
+
+    if (!from || !to) {
+      e.preventDefault();
+      alert('Please select both From and To dates.');
+      return;
+    }
+    if (from > to) {
+      e.preventDefault();
+      alert('"From" date cannot be later than "To" date.');
+      return;
+    }
+    if (!reason) {
+      e.preventDefault();
+      alert('Please provide a reason for your leave.');
+      return;
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,176 @@
+{% extends "attendance/base.html" %}
+{% block title %}Leave Requests{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+  <!-- Page heading -->
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h4 class="fw-bold mb-0">📋 Student Leave Requests</h4>
+    <span class="text-muted small">Review and action pending leave requests from students.</span>
+  </div>
+
+  <!-- ─── Pending requests ─────────────────────────────────────── -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center gap-2">
+      <span class="fw-bold">⏳ Pending Requests</span>
+      <span class="badge bg-warning text-dark">{{ pending | length }}</span>
+    </div>
+    <div class="card-body p-0">
+      {% if pending %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle" style="font-size:14px;">
+          <thead class="table-light">
+            <tr>
+              <th>Student</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Reason</th>
+              <th>Document</th>
+              <th>Submitted</th>
+              <th style="width:300px;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for req in pending %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ req.student_name }}</div>
+                <div class="text-muted" style="font-size:12px;">{{ req.student_code }}</div>
+              </td>
+              <td>{{ req.from_date }}</td>
+              <td>{{ req.to_date }}</td>
+              <td style="max-width:220px;">
+                <div style="white-space:pre-wrap;word-break:break-word;max-height:60px;overflow:hidden;"
+                     title="{{ req.reason }}">{{ req.reason }}</div>
+              </td>
+              <td>
+                {% if req.document_filename %}
+                  <a href="{{ url_for('serve_leave_doc', filename=req.document_filename) }}"
+                     target="_blank" class="btn btn-sm btn-outline-secondary">
+                    📎 View
+                  </a>
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+              <td class="text-muted small">{{ req.created_at[:10] }}</td>
+              <td>
+                <!-- Approve / Reject form with optional note -->
+                <form method="POST"
+                      action="{{ url_for('attendance.leave_request_action', leave_id=req.id) }}"
+                      class="d-flex flex-column gap-1"
+                      onsubmit="return confirmAction(this)">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="text"
+                         name="review_notes"
+                         class="form-control form-control-sm"
+                         placeholder="Optional note to student…"
+                         maxlength="500">
+                  <div class="d-flex gap-1">
+                    <button type="submit" name="action" value="approve"
+                            class="btn btn-sm btn-success flex-fill">
+                      ✅ Approve
+                    </button>
+                    <button type="submit" name="action" value="reject"
+                            class="btn btn-sm btn-danger flex-fill">
+                      ❌ Reject
+                    </button>
+                  </div>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-5 text-muted">
+        <div style="font-size:40px;">✅</div>
+        <p class="mt-2 mb-0">No pending leave requests at the moment.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ─── History (approved / rejected) ───────────────────────── -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-light d-flex align-items-center gap-2">
+      <span class="fw-bold">📜 Reviewed History</span>
+      <span class="badge bg-secondary">{{ history | length }}</span>
+    </div>
+    <div class="card-body p-0">
+      {% if history %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle" style="font-size:13px;">
+          <thead class="table-light">
+            <tr>
+              <th>Student</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Reason</th>
+              <th>Document</th>
+              <th>Status</th>
+              <th>Reviewed By</th>
+              <th>Reviewed On</th>
+              <th>Staff Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for req in history %}
+            <tr>
+              <td>
+                <div class="fw-semibold">{{ req.student_name }}</div>
+                <div class="text-muted" style="font-size:11px;">{{ req.student_code }}</div>
+              </td>
+              <td>{{ req.from_date }}</td>
+              <td>{{ req.to_date }}</td>
+              <td style="max-width:180px;">
+                <div style="white-space:pre-wrap;word-break:break-word;max-height:48px;overflow:hidden;"
+                     title="{{ req.reason }}">{{ req.reason }}</div>
+              </td>
+              <td>
+                {% if req.document_filename %}
+                  <a href="{{ url_for('serve_leave_doc', filename=req.document_filename) }}"
+                     target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2">📎</a>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td>
+                {% if req.status == 'approved' %}
+                  <span class="badge bg-success">Approved</span>
+                {% else %}
+                  <span class="badge bg-danger">Rejected</span>
+                {% endif %}
+              </td>
+              <td class="text-muted">{{ req.reviewed_by_name or '—' }}</td>
+              <td class="text-muted">{{ req.reviewed_at[:10] if req.reviewed_at else '—' }}</td>
+              <td class="text-muted" style="max-width:160px;word-break:break-word;">
+                {{ req.review_notes or '—' }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-4 text-muted">
+        <p class="mb-0">No reviewed requests yet.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Ask for confirmation before approving or rejecting
+  function confirmAction(form) {
+    var btn = document.activeElement;
+    var action = btn ? btn.value : '';
+    var label  = action === 'approve' ? 'approve' : 'reject';
+    return confirm('Are you sure you want to ' + label + ' this leave request?');
+  }
+</script>
+{% endblock %}

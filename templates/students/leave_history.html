@@ -1,0 +1,154 @@
+{% extends "students/base.html" %}
+{% block title %}My Leave Requests{% endblock %}
+{% block page_title %}📋 My Leave Requests{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .page-header h2 { font-size: 20px; font-weight: 700; margin: 0; }
+
+  .leave-card {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .leave-card-header {
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .leave-dates {
+    font-weight: 700;
+    font-size: 15px;
+    color: #212529;
+  }
+  .leave-card-body {
+    padding: 14px 20px;
+    font-size: 14px;
+    color: #495057;
+  }
+  .leave-card-body .reason-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #6c757d;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .leave-card-footer {
+    padding: 10px 20px;
+    background: #f8f9fa;
+    border-top: 1px solid #f0f0f0;
+    font-size: 12px;
+    color: #6c757d;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Status badges */
+  .badge-pending  { background: #fff3cd; color: #856404; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+  .badge-approved { background: #d1e7dd; color: #0f5132; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+  .badge-rejected { background: #f8d7da; color: #842029; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; }
+
+  .btn-apply {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border: none;
+    color: #fff;
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    text-decoration: none;
+    transition: opacity 0.15s;
+  }
+  .btn-apply:hover { opacity: 0.9; color: #fff; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+  }
+  .empty-state .icon { font-size: 56px; margin-bottom: 16px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>My Leave Requests</h2>
+  <a href="{{ url_for('students.leave_apply') }}" class="btn-apply">+ Apply for Leave</a>
+</div>
+
+{% if leaves %}
+  {% for leave in leaves %}
+  <div class="leave-card">
+    <div class="leave-card-header">
+      <div class="leave-dates">
+        📅 {{ leave.from_date }} → {{ leave.to_date }}
+      </div>
+      <div>
+        {% if leave.status == 'pending' %}
+          <span class="badge-pending">⏳ Pending</span>
+        {% elif leave.status == 'approved' %}
+          <span class="badge-approved">✅ Approved</span>
+        {% else %}
+          <span class="badge-rejected">❌ Rejected</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="leave-card-body">
+      <div class="reason-label">Reason</div>
+      <div>{{ leave.reason }}</div>
+
+      {% if leave.review_notes %}
+      <div class="mt-3">
+        <div class="reason-label">Staff Note</div>
+        <div>{{ leave.review_notes }}</div>
+      </div>
+      {% endif %}
+
+      {% if leave.document_filename %}
+      <div class="mt-3">
+        <a href="{{ url_for('serve_leave_doc', filename=leave.document_filename) }}"
+           target="_blank"
+           class="btn btn-sm btn-outline-secondary">
+          📎 View Document
+        </a>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="leave-card-footer">
+      <span>Submitted: {{ leave.created_at[:10] }}</span>
+      {% if leave.reviewed_at %}
+        <span>Reviewed by {{ leave.reviewed_by_name }} on {{ leave.reviewed_at[:10] }}</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+
+{% else %}
+  <div class="empty-state">
+    <div class="icon">📭</div>
+    <h4>No leave requests yet</h4>
+    <p>You haven't applied for any leave. Click the button above to submit your first request.</p>
+    <a href="{{ url_for('students.leave_apply') }}" class="btn-apply">Apply for Leave</a>
+  </div>
+{% endif %}
+{% endblock %}

@@ -77,6 +77,15 @@ def create_app():
         except Exception as e:
             return f"File not found: {str(e)}", 404
 
+    @app.route('/uploads/leave_docs/<path:filename>')
+    def serve_leave_doc(filename):
+        """Serve student leave request document uploads"""
+        try:
+            from config import LEAVE_DOCS_DIR
+            return send_from_directory(LEAVE_DOCS_DIR, filename)
+        except Exception as e:
+            return f"File not found: {str(e)}", 404
+
     # Register Jinja2 filters
     app.jinja_env.filters['format_datetime'] = format_datetime
     app.jinja_env.filters['to_ist_time'] = to_ist_time

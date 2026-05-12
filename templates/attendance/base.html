@@ -332,6 +332,13 @@
         📋 Follow-ups
       </a>
 
+      <!-- Leave Requests -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint == 'attendance.leave_requests' else '' }}"
+        href="{{ url_for('attendance.leave_requests') }}">
+        🗒️ Leave Requests
+      </a>
+
       <div class="section-title mt-3">🔗 Quick Links</div>
 
       <!-- Back to ERP -->

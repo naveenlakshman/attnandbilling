@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, jsonify, session
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify, session, flash
 from datetime import datetime, timedelta, timezone
 from db import get_conn, log_activity
 from functools import wraps
@@ -1271,6 +1271,20 @@ def mark_attendance():
                     history_7days[sid] = {}
                 history_7days[sid][row['attendance_date']] = row['status']
 
+        # Find students who have an approved leave covering the selected date.
+        # Used to pre-fill the attendance dropdown as 'leave' for those students.
+        approved_leave_student_ids = set()
+        if attendance_date:
+            cur.execute("""
+                SELECT student_id
+                FROM leave_requests
+                WHERE status = 'approved'
+                  AND date(from_date) <= date(?)
+                  AND date(to_date)   >= date(?)
+            """, (attendance_date, attendance_date))
+            for row in cur.fetchall():
+                approved_leave_student_ids.add(row['student_id'])
+
         if request.method == 'POST':
             action = request.form.get('action')
 
@@ -1381,6 +1395,7 @@ def mark_attendance():
                              attendance_date=attendance_date,
                              batch_info=batch_info, students=students,
                              attendance_data=attendance_data,
+                             approved_leave_student_ids=approved_leave_student_ids,
                              payment_dues=payment_dues,
                              history_7days=history_7days,
                              history_dates=history_dates,
@@ -2792,3 +2807,96 @@ def attendance_pattern():
                                user=user)
     finally:
         conn.close()
+
+
+# ============ LEAVE REQUESTS (STAFF / ADMIN) ============
+
+@attendance_bp.route('/leave-requests')
+@login_required
+def leave_requests():
+    """Staff/admin view all leave requests."""
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        # Fetch all leave requests, newest first; join student info for display
+        cur.execute("""
+            SELECT lr.*,
+                   s.full_name AS student_name,
+                   s.student_code,
+                   u.full_name AS reviewed_by_name
+            FROM leave_requests lr
+            JOIN students s ON s.id = lr.student_id
+            LEFT JOIN users u ON u.id = lr.reviewed_by
+            ORDER BY
+                CASE lr.status WHEN 'pending' THEN 0 ELSE 1 END,
+                lr.created_at DESC
+        """)
+        all_requests = cur.fetchall()
+
+        # Split into pending and non-pending for template convenience
+        pending = [r for r in all_requests if r['status'] == 'pending']
+        history = [r for r in all_requests if r['status'] != 'pending']
+
+    finally:
+        conn.close()
+
+    return render_template('attendance/leave_requests.html',
+                           pending=pending, history=history)
+
+
+@attendance_bp.route('/leave-requests/<int:leave_id>/action', methods=['POST'])
+@login_required
+def leave_request_action(leave_id):
+    """Staff/admin approves or rejects a leave request."""
+    user_id = session.get('user_id')
+    action = request.form.get('action', '').strip()
+    review_notes = request.form.get('review_notes', '').strip()
+
+    # Only allow valid actions
+    if action not in ('approve', 'reject'):
+        flash('Invalid action.', 'danger')
+        return redirect(url_for('attendance.leave_requests'))
+
+    # Map form action to DB status
+    new_status = 'approved' if action == 'approve' else 'rejected'
+    now = datetime.now().isoformat(timespec="seconds")
+
+    conn = get_conn()
+    try:
+        # Confirm the leave request exists before updating
+        row = conn.execute(
+            "SELECT id, student_id FROM leave_requests WHERE id = ?", (leave_id,)
+        ).fetchone()
+
+        if not row:
+            flash('Leave request not found.', 'danger')
+            return redirect(url_for('attendance.leave_requests'))
+
+        conn.execute("""
+            UPDATE leave_requests
+            SET status = ?,
+                reviewed_by = ?,
+                reviewed_at = ?,
+                review_notes = ?,
+                updated_at = ?
+            WHERE id = ?
+        """, (new_status, user_id, now, review_notes, now, leave_id))
+        conn.commit()
+
+        log_activity(
+            user_id=user_id,
+            branch_id=session.get('branch_id'),
+            action_type='UPDATE',
+            module_name='leave_requests',
+            record_id=leave_id,
+            description=f'Leave request {leave_id} {new_status} for student {row["student_id"]}',
+            conn=None
+        )
+
+    finally:
+        conn.close()
+
+    label = 'approved' if new_status == 'approved' else 'rejected'
+    flash(f'Leave request has been {label}.', 'success')
+    return redirect(url_for('attendance.leave_requests'))
+

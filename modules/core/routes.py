@@ -230,6 +230,9 @@ def dashboard():
     """)
     recent_activity = cur.fetchall()
 
+    cur.execute("SELECT COUNT(*) AS cnt FROM leave_requests WHERE status = 'pending'")
+    pending_leave_count = cur.fetchone()["cnt"]
+
     conn.close()
 
     return render_template(
@@ -268,6 +271,7 @@ def dashboard():
         today_due_leads=today_due_leads,
         # Activity
         recent_activity=recent_activity,
+        pending_leave_count=pending_leave_count,
     )
 
 
@@ -414,6 +418,10 @@ def _staff_dashboard():
     """, [user_id])
     recent_activity = cur.fetchall()
 
+    # ── Pending leave requests ──────────────────────────────────
+    cur.execute("SELECT COUNT(*) AS cnt FROM leave_requests WHERE status = 'pending'")
+    pending_leave_count = cur.fetchone()["cnt"]
+
     conn.close()
 
     return render_template(
@@ -435,6 +443,7 @@ def _staff_dashboard():
         total_past_due=total_past_due,
         total_today_due=total_today_due,
         recent_activity=recent_activity,
+        pending_leave_count=pending_leave_count,
     )
 
 

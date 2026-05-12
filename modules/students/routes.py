@@ -1,8 +1,11 @@
 from flask import render_template, request, redirect, url_for, session, flash
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 from functools import wraps
 from datetime import datetime
 import urllib.parse
+import os
+import uuid
 from db import get_conn
 from . import students_bp
 
@@ -1041,3 +1044,128 @@ def profile():
                            student=student, batches=batches,
                            invoice_courses=invoice_courses,
                            invoices=invoices, company=company)
+
+
+# ---------------------------------------------------------------------------
+# Leave Requests — Apply
+# ---------------------------------------------------------------------------
+@students_bp.route('/leave/apply', methods=['GET', 'POST'])
+@student_login_required
+def leave_apply():
+    """Student applies for leave."""
+    student_id = session['student_id']
+
+    if request.method == 'POST':
+        from_date = request.form.get('from_date', '').strip()
+        to_date   = request.form.get('to_date', '').strip()
+        reason    = request.form.get('reason', '').strip()
+
+        # --- Basic validation ---
+        if not from_date or not to_date:
+            flash('Please select a valid date range.', 'danger')
+            return redirect(url_for('students.leave_apply'))
+
+        if not reason:
+            flash('Please provide a reason for the leave.', 'danger')
+            return redirect(url_for('students.leave_apply'))
+
+        today = datetime.now().strftime('%Y-%m-%d')
+        if from_date < today:
+            flash('Leave start date cannot be in the past.', 'danger')
+            return redirect(url_for('students.leave_apply'))
+
+        if from_date > to_date:
+            flash('From date cannot be later than To date.', 'danger')
+            return redirect(url_for('students.leave_apply'))
+
+        # --- Duplicate / overlap check ---
+        # Block new requests that overlap any existing pending or approved leave.
+        # Overlap condition: existing.from_date <= new.to_date AND existing.to_date >= new.from_date
+        conn = get_conn()
+        try:
+            overlap = conn.execute("""
+                SELECT id FROM leave_requests
+                WHERE student_id = ?
+                  AND status IN ('pending', 'approved')
+                  AND date(from_date) <= date(?)
+                  AND date(to_date)   >= date(?)
+            """, (student_id, to_date, from_date)).fetchone()
+        finally:
+            conn.close()
+
+        if overlap:
+            flash(
+                'You already have a pending or approved leave request that overlaps these dates. '
+                'Please check your leave history.',
+                'danger'
+            )
+            return redirect(url_for('students.leave_apply'))
+
+        # --- Optional document upload ---
+        document_filename = None
+        doc_file = request.files.get('document')
+        if doc_file and doc_file.filename:
+            allowed_ext = {'jpg', 'jpeg', 'png', 'pdf'}
+            ext = doc_file.filename.rsplit('.', 1)[-1].lower() if '.' in doc_file.filename else ''
+            if ext not in allowed_ext:
+                flash('Invalid file type. Allowed: jpg, jpeg, png, pdf.', 'danger')
+                return redirect(url_for('students.leave_apply'))
+
+            # Check file size (5 MB max) — read into memory once
+            doc_file.seek(0, 2)   # seek to end
+            file_size = doc_file.tell()
+            doc_file.seek(0)       # reset
+            if file_size > 5 * 1024 * 1024:
+                flash('Document too large. Maximum size is 5 MB.', 'danger')
+                return redirect(url_for('students.leave_apply'))
+
+            from config import LEAVE_DOCS_DIR
+            safe_name = secure_filename(doc_file.filename)
+            unique_name = f"{uuid.uuid4().hex}_{safe_name}"
+            doc_file.save(os.path.join(LEAVE_DOCS_DIR, unique_name))
+            document_filename = unique_name
+
+        # --- Save to DB ---
+        now = datetime.now().isoformat(timespec="seconds")
+        conn = get_conn()
+        try:
+            conn.execute("""
+                INSERT INTO leave_requests
+                    (student_id, from_date, to_date, reason, document_filename,
+                     status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
+            """, (student_id, from_date, to_date, reason, document_filename, now, now))
+            conn.commit()
+        finally:
+            conn.close()
+
+        flash('Leave request submitted successfully! You will be notified once it is reviewed.', 'success')
+        return redirect(url_for('students.leave_history'))
+
+    return render_template('students/leave_apply.html')
+
+
+# ---------------------------------------------------------------------------
+# Leave Requests — History
+# ---------------------------------------------------------------------------
+@students_bp.route('/leave/history')
+@student_login_required
+def leave_history():
+    """Student views their own leave request history."""
+    student_id = session['student_id']
+    conn = get_conn()
+    try:
+        # Only fetch this student's own requests — never expose other students' data
+        leaves = conn.execute("""
+            SELECT lr.*,
+                   u.full_name AS reviewed_by_name
+            FROM leave_requests lr
+            LEFT JOIN users u ON u.id = lr.reviewed_by
+            WHERE lr.student_id = ?
+            ORDER BY lr.created_at DESC
+        """, (student_id,)).fetchall()
+    finally:
+        conn.close()
+
+    return render_template('students/leave_history.html', leaves=leaves)
+

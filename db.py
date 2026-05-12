@@ -606,6 +606,27 @@ def init_db():
         )
     """)
 
+    # ---------- LEAVE REQUESTS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS leave_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            from_date TEXT NOT NULL,
+            to_date TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            document_filename TEXT,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(status IN ('pending', 'approved', 'rejected')),
+            reviewed_by INTEGER,
+            reviewed_at TEXT,
+            review_notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+            FOREIGN KEY (reviewed_by) REFERENCES users(id)
+        )
+    """)
+
     # ---------- LMS TABLES ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_programs (
