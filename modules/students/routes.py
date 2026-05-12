@@ -1055,6 +1055,11 @@ def leave_apply():
     """Student applies for leave."""
     student_id = session['student_id']
 
+    # Demo mode — block all writes; just show the form as a preview
+    if _is_demo() and request.method == 'POST':
+        flash('Demo mode is read-only. Leave requests cannot be submitted.', 'warning')
+        return redirect(url_for('students.leave_apply'))
+
     if request.method == 'POST':
         from_date = request.form.get('from_date', '').strip()
         to_date   = request.form.get('to_date', '').strip()
@@ -1153,6 +1158,51 @@ def leave_apply():
 def leave_history():
     """Student views their own leave request history."""
     student_id = session['student_id']
+
+    # Demo mode — show sample leave records so the UI is visible
+    if _is_demo():
+        from datetime import date, timedelta
+        today = date.today()
+        demo_leaves = [
+            {
+                'id': 1,
+                'from_date': (today - timedelta(days=20)).isoformat(),
+                'to_date':   (today - timedelta(days=18)).isoformat(),
+                'reason': 'Family function \u2014 attending a relatives wedding.',
+                'document_filename': None,
+                'status': 'approved',
+                'review_notes': 'Approved. Enjoy the occasion!',
+                'reviewed_by_name': 'Staff (Demo)',
+                'reviewed_at': (today - timedelta(days=19)).isoformat(),
+                'created_at': (today - timedelta(days=21)).isoformat(),
+            },
+            {
+                'id': 2,
+                'from_date': (today - timedelta(days=5)).isoformat(),
+                'to_date':   (today - timedelta(days=4)).isoformat(),
+                'reason': 'Medical appointment and rest.',
+                'document_filename': None,
+                'status': 'rejected',
+                'review_notes': 'Insufficient notice. Please apply at least 3 days in advance.',
+                'reviewed_by_name': 'Staff (Demo)',
+                'reviewed_at': (today - timedelta(days=5)).isoformat(),
+                'created_at': (today - timedelta(days=6)).isoformat(),
+            },
+            {
+                'id': 3,
+                'from_date': (today + timedelta(days=3)).isoformat(),
+                'to_date':   (today + timedelta(days=5)).isoformat(),
+                'reason': 'Personal work — need a few days off.',
+                'document_filename': None,
+                'status': 'pending',
+                'review_notes': None,
+                'reviewed_by_name': None,
+                'reviewed_at': None,
+                'created_at': today.isoformat(),
+            },
+        ]
+        return render_template('students/leave_history.html', leaves=demo_leaves, is_demo=True)
+
     conn = get_conn()
     try:
         # Only fetch this student's own requests — never expose other students' data
@@ -1168,4 +1218,70 @@ def leave_history():
         conn.close()
 
     return render_template('students/leave_history.html', leaves=leaves)
+
+
+# ---------------------------------------------------------------------------
+# Attendance Calendar
+# ---------------------------------------------------------------------------
+@students_bp.route('/attendance')
+@student_login_required
+def attendance_calendar():
+    """Student views their complete attendance history in calendar format."""
+    import json
+    student_id = session['student_id']
+    conn = get_conn()
+    try:
+        # Demo mode — use the first real student's attendance so the calendar is meaningful
+        if _is_demo():
+            demo_row = conn.execute("""
+                SELECT student_id FROM attendance_records
+                ORDER BY attendance_date DESC LIMIT 1
+            """).fetchone()
+            student_id = demo_row['student_id'] if demo_row else 0
+
+        records = conn.execute("""
+            SELECT ar.attendance_date,
+                   ar.status,
+                   ar.remarks,
+                   b.batch_name
+            FROM attendance_records ar
+            JOIN batches b ON b.id = ar.batch_id
+            WHERE ar.student_id = ?
+            ORDER BY ar.attendance_date ASC
+        """, (student_id,)).fetchall()
+
+        # Summary counts
+        total = len(records)
+        present = sum(1 for r in records if r['status'] == 'present')
+        late    = sum(1 for r in records if r['status'] == 'late')
+        leave   = sum(1 for r in records if r['status'] == 'leave')
+        absent  = sum(1 for r in records if r['status'] == 'absent')
+
+        # Build a dict keyed by date for JS consumption
+        # If a student has 2 batches on same day, concatenate
+        cal_data = {}
+        for r in records:
+            d = r['attendance_date']
+            if d not in cal_data:
+                cal_data[d] = {'status': r['status'], 'batches': [r['batch_name']]}
+            else:
+                # If statuses differ, prefer: present > late > leave > absent
+                priority = {'present': 4, 'late': 3, 'leave': 2, 'absent': 1}
+                if priority.get(r['status'], 0) > priority.get(cal_data[d]['status'], 0):
+                    cal_data[d]['status'] = r['status']
+                cal_data[d]['batches'].append(r['batch_name'])
+
+        cal_json = json.dumps(cal_data)
+    finally:
+        conn.close()
+
+    return render_template(
+        'students/attendance_calendar.html',
+        cal_json=cal_json,
+        total=total,
+        present=present,
+        late=late,
+        leave=leave,
+        absent=absent,
+    )
 

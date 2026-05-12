@@ -91,8 +91,19 @@
 {% block content %}
 <div class="page-header">
   <h2>My Leave Requests</h2>
+  {% if not session.get('demo_mode') %}
   <a href="{{ url_for('students.leave_apply') }}" class="btn-apply">+ Apply for Leave</a>
+  {% endif %}
 </div>
+
+{% if session.get('demo_mode') %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-3" style="border-radius:10px;">
+  <span style="font-size:18px;">🎓</span>
+  <div>
+    <strong>Demo Mode</strong> — Showing sample leave records for preview. New requests cannot be submitted.
+  </div>
+</div>
+{% endif %}
 
 {% if leaves %}
   {% for leave in leaves %}

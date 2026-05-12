@@ -123,6 +123,10 @@
      class="{% if request.endpoint in ('students.leave_history', 'students.leave_apply') %}active{% endif %}">
     <span class="nav-icon">📋</span><span class="nav-label">My Leaves</span>
   </a>
+  <a href="{{ url_for('students.attendance_calendar') }}"
+     class="{% if request.endpoint == 'students.attendance_calendar' %}active{% endif %}">
+    <span class="nav-icon">📅</span><span class="nav-label">My Attendance</span>
+  </a>
 
   <hr style="border-color:rgba(255,255,255,0.1); margin: 12px 0;">
   <a href="{{ url_for('students.logout') }}" class="logout-link">

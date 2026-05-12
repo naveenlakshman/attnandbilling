@@ -46,6 +46,16 @@
   <h2>📋 Leave Application</h2>
   <p class="subtitle">Fill in the details below. Your request will be reviewed by the staff.</p>
 
+  {% if session.get('demo_mode') %}
+  <div class="alert alert-warning d-flex align-items-center gap-2 mb-3" style="border-radius:8px;">
+    <span style="font-size:18px;">🔒</span>
+    <div>
+      <strong>Demo Mode — Read Only.</strong>
+      You can preview the form but leave requests cannot be submitted.
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Flash messages scoped to success only (danger/warning already shown in base) -->
   {% with messages = get_flashed_messages(with_categories=true, category_filter=['success']) %}
     {% for category, message in messages %}
@@ -94,7 +104,10 @@
     </div>
 
     <div class="d-flex gap-2">
-      <button type="submit" class="btn-submit" id="submitBtn">Submit Leave Request</button>
+      <button type="submit" class="btn-submit" id="submitBtn"
+              {% if session.get('demo_mode') %}disabled title="Not available in demo mode"{% endif %}>
+        Submit Leave Request
+      </button>
       <a href="{{ url_for('students.leave_history') }}" class="btn btn-outline-secondary btn-sm align-self-center">
         View History
       </a>
