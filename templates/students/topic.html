@@ -8,10 +8,7 @@
     <span id="btnTopicsIcon">📋</span>
     <span id="btnTopicsLabel">Topics</span>
   </button>
-  <button class="btn-lms-ctrl" id="btnFocus" onclick="toggleFocusMode()" title="Focus Mode: hide all sidebars">
-    <span>🎯</span>
-    <span id="btnFocusLabel">Focus</span>
-  </button>
+
 </div>
 {% endblock %}
 
@@ -100,10 +97,10 @@
   .lms-content-inner {
     flex: 1;
     overflow-y: auto;
-    padding: 28px 32px;
-    max-width: 900px;
+    padding: 20px 24px;
+    max-width: 100%;
     width: 100%;
-    margin: 0 auto;
+    margin: 0;
     min-height: 0;
   }
 
@@ -252,8 +249,7 @@
   .btn-lms-ctrl:hover { background: #e9ecef; color: #212529; }
   .btn-lms-ctrl.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
 
-  /* Focus mode: hide left sidebar shift while in focus */
-  body.focus-mode .main-content { margin-left: 0 !important; }
+
 
   @media (max-width: 768px) {
     .lms-sidebar { width: 0; overflow: hidden; opacity: 0; border-left: none; }
@@ -274,7 +270,6 @@
         <a href="{{ url_for('students.program_view', program_id=topic.program_id) }}">{{ topic.program_name }}</a> ›
         {{ topic.chapter_title }} › {{ topic.topic_title }}
       </div>
-      <div class="lms-topic-title">{{ topic.topic_title }}</div>
 
       <!-- Watch / Read Tabs -->
       <div class="content-tabs">
@@ -288,7 +283,6 @@
       <div class="tab-pane {% if video_content %}active{% endif %}" id="paneWatch">
         {% if video_content %}
           <div class="content-block">
-            <div class="content-block-title">{{ video_content.content_title }}</div>
             {% if embed_urls[video_content.id] %}
               <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;">
                 <iframe src="{{ embed_urls[video_content.id] }}"
@@ -320,7 +314,6 @@
         {% if lesson_content %}
           {% if lesson_content.content_mode == 'pdf' %}
           <div class="content-block">
-            <div class="content-block-title">{{ lesson_content.content_title }}</div>
             <div id="pdf-loading-{{ lesson_content.id }}" class="text-center py-3 text-muted">Loading PDF…</div>
             <div id="pdf-viewer-{{ lesson_content.id }}"
                  data-pdf-url="{{ url_for('students.serve_pdf', content_id=lesson_content.id) }}"
@@ -332,7 +325,6 @@
 
           {% elif lesson_content.content_mode == 'rich_text' %}
           <div class="content-block">
-            <div class="content-block-title">{{ lesson_content.content_title }}</div>
             <div class="rich-text-content" style="line-height:1.75;font-size:15px;">
               {{ lesson_content.content_body | safe }}
             </div>
@@ -340,7 +332,6 @@
 
           {% elif lesson_content.content_mode == 'interactive_image' %}
           <div class="content-block">
-            <div class="content-block-title">{{ lesson_content.content_title }}</div>
             <!-- Interactive image container -->
             <div class="ii-wrap" id="iiWrap"
                  style="position:relative;display:inline-block;width:100%;max-width:100%;">
@@ -833,88 +824,19 @@ function toggleTopicsPanel() {
   var sb = document.getElementById('topicsSidebar');
   var hidden = sb.classList.toggle('panel-hidden');
   _updateTopicsBtn(hidden);
-  // exit focus mode if we're showing topics manually
-  if (!hidden && document.body.classList.contains('focus-mode')) {
-    document.body.classList.remove('focus-mode');
-    document.getElementById('btnFocus').classList.remove('active');
-    document.getElementById('btnFocusLabel').textContent = 'Focus';
-    localStorage.setItem('lms_focus', '0');
-    // restore left sidebar if it was on
-    _restoreLeftSidebar();
-  }
   localStorage.setItem('lms_topics_hidden', hidden ? '1' : '0');
 }
 
-/* ── Focus Mode ───────────────────────────────────────────────── */
-var _savedSbCollapsed = null;
 
-function _restoreLeftSidebar() {
-  var sb = document.getElementById('mainSidebar');
-  var mc = document.getElementById('mainContent');
-  if (!sb || !mc) return;
-  if (_savedSbCollapsed === true) {
-    sb.classList.add('collapsed');
-    mc.classList.add('sidebar-collapsed');
-  } else if (_savedSbCollapsed === false) {
-    sb.classList.remove('collapsed');
-    mc.classList.remove('sidebar-collapsed');
-  }
-  _savedSbCollapsed = null;
-}
-
-function toggleFocusMode() {
-  var isFocus = document.body.classList.toggle('focus-mode');
-  var btn = document.getElementById('btnFocus');
-  var label = document.getElementById('btnFocusLabel');
-  var sb = document.getElementById('mainSidebar');
-  var mc = document.getElementById('mainContent');
-  var topicsSb = document.getElementById('topicsSidebar');
-
-  if (isFocus) {
-    btn.classList.add('active');
-    label.textContent = 'Exit Focus';
-    // hide right topics panel
-    topicsSb.classList.add('panel-hidden');
-    _updateTopicsBtn(true);
-    localStorage.setItem('lms_topics_hidden', '1');
-    // hide left sidebar
-    if (sb && mc) {
-      _savedSbCollapsed = sb.classList.contains('collapsed');
-      sb.classList.add('collapsed');
-      mc.classList.add('sidebar-collapsed');
-    }
-  } else {
-    btn.classList.remove('active');
-    label.textContent = 'Focus';
-    // show right topics panel
-    topicsSb.classList.remove('panel-hidden');
-    _updateTopicsBtn(false);
-    localStorage.setItem('lms_topics_hidden', '0');
-    // restore left sidebar
-    if (sb && mc) _restoreLeftSidebar();
-  }
-  localStorage.setItem('lms_focus', isFocus ? '1' : '0');
-}
 
 /* ── Restore panel states on load ───────────────────────────────── */
 (function(){
   var topicsSb = document.getElementById('topicsSidebar');
   if (!topicsSb) return;
 
-  var focusOn = localStorage.getItem('lms_focus') === '1';
   var topicsHidden = localStorage.getItem('lms_topics_hidden') === '1';
 
-  if (focusOn) {
-    document.body.classList.add('focus-mode');
-    topicsSb.classList.add('panel-hidden');
-    _updateTopicsBtn(true);
-    var btnF = document.getElementById('btnFocus');
-    if (btnF) { btnF.classList.add('active'); document.getElementById('btnFocusLabel').textContent = 'Exit Focus'; }
-    // collapse left sidebar
-    var sb = document.getElementById('mainSidebar');
-    var mc = document.getElementById('mainContent');
-    if (sb && mc) { sb.classList.add('collapsed'); mc.classList.add('sidebar-collapsed'); }
-  } else if (topicsHidden) {
+  if (topicsHidden) {
     topicsSb.classList.add('panel-hidden');
     _updateTopicsBtn(true);
   } else {

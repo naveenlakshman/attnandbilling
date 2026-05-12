@@ -21,7 +21,9 @@
       overflow: hidden;
       display: flex; flex-direction: column;
     }
-    .sidebar.collapsed { width: 52px; }
+    .sidebar.collapsed { width: 62px; }
+    .sidebar.collapsed a { justify-content: center; padding: 9px 0; }
+    .sidebar.collapsed .sidebar-toggle { align-self: center; }
     .sidebar .brand { color: #fff; font-weight: 700; font-size: 15px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; }
     .sidebar .sub-brand { color: #adb5bd; font-size: 11px; margin-bottom: 20px; white-space: nowrap; overflow: hidden; }
     .sidebar a {
@@ -34,7 +36,7 @@
     .sidebar a:hover, .sidebar a.active { background: rgba(255,255,255,0.1); color: #fff; }
     .sidebar .logout-link { color: #f87171; }
     .sidebar .nav-label { transition: opacity 0.2s; }
-    .sidebar.collapsed .nav-label { opacity: 0; pointer-events: none; }
+    .sidebar.collapsed .nav-label { opacity: 0; pointer-events: none; width: 0; overflow: hidden; }
     .sidebar.collapsed .brand-text { opacity: 0; }
     .sidebar.collapsed .sub-brand { opacity: 0; }
 
@@ -58,9 +60,10 @@
     /* Main content shifts with sidebar */
     .main-content {
       margin-left: 230px; padding: 28px;
+
       transition: margin-left 0.25s ease;
     }
-    .main-content.sidebar-collapsed { margin-left: 52px; }
+    .main-content.sidebar-collapsed { margin-left: 62px; }
     .main-content.no-sidebar { margin-left: 0; }
 
     .topbar {
@@ -176,7 +179,11 @@ function toggleSidebar() {
   var mc = document.getElementById('mainContent');
   var collapsed = sb.classList.toggle('collapsed');
   mc.classList.toggle('sidebar-collapsed', collapsed);
-  localStorage.setItem('lms_sb_collapsed', collapsed ? '1' : '0');
+  // Only persist preference when NOT on topic page; topic page always resets to collapsed
+  var isTopicPage = {{ ('true' if request.endpoint == 'students.topic_view' else 'false') }};
+  if (!isTopicPage) {
+    localStorage.setItem('lms_sb_collapsed', collapsed ? '1' : '0');
+  }
 }
 function openSidebar() {
   document.getElementById('mainSidebar').classList.add('mobile-open');
@@ -192,6 +199,7 @@ function closeSidebar() {
   var sb = document.getElementById('mainSidebar');
   var mc = document.getElementById('mainContent');
   var mobileBtn = document.getElementById('mobileSidebarBtn');
+  var isTopicPage = {{ ('true' if request.endpoint == 'students.topic_view' else 'false') }};
 
   function applyState() {
     if (_isMobile()) {
@@ -199,7 +207,8 @@ function closeSidebar() {
       mobileBtn.style.display = 'inline-block';
     } else {
       mobileBtn.style.display = 'none';
-      var collapsed = localStorage.getItem('lms_sb_collapsed') === '1';
+      // On topic/learning page always start collapsed for more reading space
+      var collapsed = isTopicPage || localStorage.getItem('lms_sb_collapsed') === '1';
       sb.classList.toggle('collapsed', collapsed);
       mc.classList.toggle('sidebar-collapsed', collapsed);
     }
