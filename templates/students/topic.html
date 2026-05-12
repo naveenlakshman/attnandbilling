@@ -15,8 +15,10 @@
 {% block extra_css %}
 <style>
   /* Override base layout for full-width LMS view */
-  .main-content { padding: 0 !important; }
-  .topbar { margin: 0 !important; border-radius: 0; position: sticky; top: 0; z-index: 200; }
+  html, body { height: 100%; overflow: hidden; }
+  body { display: flex; flex-direction: column; }
+  .main-content { padding: 0 !important; flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+  .topbar { margin: 0 !important; border-radius: 0; position: sticky; top: 0; z-index: 200; flex-shrink: 0; }
 
   /* Hotspot embed responsive fix */
   .rich-text-content { overflow: hidden; }
@@ -81,7 +83,8 @@
 
   .lms-layout {
     display: flex;
-    height: calc(100vh - 57px);
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
   }
 
