@@ -638,6 +638,7 @@ def init_db():
             thumbnail_path TEXT,
             is_published INTEGER NOT NULL DEFAULT 0,
             is_active INTEGER NOT NULL DEFAULT 1,
+            is_deleted INTEGER NOT NULL DEFAULT 0,
             created_by INTEGER,
             created_at TEXT NOT NULL,
             updated_at TEXT,
@@ -645,6 +646,11 @@ def init_db():
             FOREIGN KEY (created_by) REFERENCES users(id)
         )
     """)
+    # Migration: add is_deleted to lms_programs if it doesn't exist yet
+    cur.execute("PRAGMA table_info(lms_programs)")
+    _lp_cols = {row[1] for row in cur.fetchall()}
+    if 'is_deleted' not in _lp_cols:
+        cur.execute("ALTER TABLE lms_programs ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_chapters (
