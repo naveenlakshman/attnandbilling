@@ -148,7 +148,7 @@
         on the student dashboard (1 = first). Unchecking removes the mapping.
     </div>
 
-    <form method="POST">
+    <form method="POST" novalidate>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         {% if all_programs %}
@@ -199,7 +199,7 @@
                 <span class="prog-name">{{ prog.program_name }}</span>
                 <label class="order-label" id="ord-label-{{ prog.id }}" style="visibility:hidden;">Order #
                     <input type="number" name="order_{{ prog.id }}" id="ord-{{ prog.id }}"
-                           value="0" min="1" max="999"
+                           value="0" min="0" max="999"
                            class="order-input">
                 </label>
             </div>
@@ -221,13 +221,38 @@
 
 {% block extra_js %}
 <script>
+    function nextOrderNumber() {
+        // Find the highest order number currently in the mapped list and return +1
+        let max = 0;
+        document.querySelectorAll('#mappedList .order-input').forEach(function(inp) {
+            const v = parseInt(inp.value) || 0;
+            if (v > max) max = v;
+        });
+        // Also count newly-checked unmapped items that are now visible
+        document.querySelectorAll('#unmappedList .order-input').forEach(function(inp) {
+            const label = inp.closest('label');
+            if (label && label.style.visibility === 'visible') {
+                const v = parseInt(inp.value) || 0;
+                if (v > max) max = v;
+            }
+        });
+        return max + 1;
+    }
+
     function syncRow(progId) {
         const cb = document.querySelector(`input[name="program_ids"][value="${progId}"]`);
         const row = document.getElementById(`row-${progId}`);
         const ordLabel = document.getElementById(`ord-label-${progId}`);
         if (cb.checked) {
             row.classList.add('mapped');
-            if (ordLabel) ordLabel.style.visibility = 'visible';
+            if (ordLabel) {
+                ordLabel.style.visibility = 'visible';
+                // Auto-assign next order number when a program is newly checked
+                const inp = document.getElementById(`ord-${progId}`);
+                if (inp && (parseInt(inp.value) || 0) === 0) {
+                    inp.value = nextOrderNumber();
+                }
+            }
             const handle = row.querySelector('.drag-handle');
             if (handle) handle.style.visibility = 'visible';
         } else {
