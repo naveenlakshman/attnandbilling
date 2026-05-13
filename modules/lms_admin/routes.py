@@ -159,6 +159,51 @@ def _renumber_chapter_topics(cur, chapter_id, ordered_topic_ids=None):
     return ordered_ids
 
 
+def _renumber_master_topics(cur, master_chapter_id, ordered_topic_ids=None):
+    """Ensure master topic_order is sequential (1..n) within one master chapter."""
+    rows = cur.execute(
+        """
+            SELECT id
+            FROM lms_master_topics
+            WHERE master_chapter_id = ?
+            ORDER BY topic_order ASC, id ASC
+        """,
+        (master_chapter_id,)
+    ).fetchall()
+
+    if not rows:
+        return []
+
+    existing_ids = [row['id'] for row in rows]
+    ordered_ids = []
+
+    if ordered_topic_ids:
+        seen = set()
+        for topic_id in ordered_topic_ids:
+            if topic_id in existing_ids and topic_id not in seen:
+                ordered_ids.append(topic_id)
+                seen.add(topic_id)
+        for topic_id in existing_ids:
+            if topic_id not in seen:
+                ordered_ids.append(topic_id)
+    else:
+        ordered_ids = existing_ids
+
+    now = datetime.now().isoformat(timespec='seconds')
+    for next_order, topic_id in enumerate(ordered_ids, start=1):
+        cur.execute(
+            """
+                UPDATE lms_master_topics
+                SET topic_order = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """,
+            (next_order, now, topic_id)
+        )
+
+    return ordered_ids
+
+
 def _renumber_program_chapter_links(cur, program_id, ordered_link_ids=None):
     """Normalize lms_program_chapters.chapter_order to sequential values for one program."""
     rows = cur.execute(
@@ -939,7 +984,112 @@ def list_master_topics(master_chapter_id):
             (master_chapter_id,)
         ).fetchall()
 
-        return render_template('master_topics.html', chapter=chapter, topics=topics)
+        total_topics = len(topics)
+
+        return render_template('master_topics.html', chapter=chapter, topics=topics, total_topics=total_topics)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/chapter/<int:master_chapter_id>/topics/reorder', methods=['POST'])
+@lms_content_manager_required
+def reorder_master_topics(master_chapter_id):
+    """Reorder master topics and normalize topic_order sequentially."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        chapter = cur.execute(
+            """
+                SELECT id, title
+                FROM lms_master_chapters
+                WHERE id = ?
+            """,
+            (master_chapter_id,)
+        ).fetchone()
+
+        if not chapter:
+            flash('Master chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        topics = cur.execute(
+            """
+                SELECT id, topic_order
+                FROM lms_master_topics
+                WHERE master_chapter_id = ?
+                ORDER BY topic_order ASC, id ASC
+            """,
+            (master_chapter_id,)
+        ).fetchall()
+
+        if not topics:
+            flash('No topics found to reorder.', 'warning')
+            return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
+
+        payload = request.form.get('topic_orders', '').strip()
+        requested_entries = []
+        total_topics = len(topics)
+
+        if payload:
+            try:
+                decoded = json.loads(payload)
+                if isinstance(decoded, list):
+                    requested_entries = decoded
+            except json.JSONDecodeError:
+                flash('Invalid reorder payload.', 'danger')
+                return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
+
+        if not isinstance(requested_entries, list) or len(requested_entries) != total_topics:
+            flash('Each topic must have a unique order number from 1 to total topics.', 'danger')
+            return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
+
+        valid_topic_ids = {row['id'] for row in topics}
+        payload_topic_ids = []
+        payload_orders = []
+
+        for entry in requested_entries:
+            if not isinstance(entry, dict):
+                flash('Each topic must have a unique order number from 1 to total topics.', 'danger')
+                return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
+
+            topic_id = _strict_positive_int(entry.get('id'))
+            requested_order = _strict_positive_int(entry.get('order'))
+
+            if topic_id is None or requested_order is None:
+                flash('Each topic must have a unique order number from 1 to total topics.', 'danger')
+                return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
+
+            payload_topic_ids.append(topic_id)
+            payload_orders.append(requested_order)
+
+        if set(payload_topic_ids) != valid_topic_ids or len(payload_topic_ids) != len(set(payload_topic_ids)):
+            flash('Invalid topic selection for this chapter.', 'danger')
+            return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
+
+        valid_orders = set(range(1, total_topics + 1))
+        if set(payload_orders) != valid_orders or len(payload_orders) != len(set(payload_orders)):
+            flash('Each topic must have a unique order number from 1 to total topics.', 'danger')
+            return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
+
+        ranked = []
+        for idx, entry in enumerate(requested_entries):
+            ranked.append((int(entry['order']), idx, int(entry['id'])))
+
+        ordered_topic_ids = [topic_id for _, _, topic_id in sorted(ranked, key=lambda x: (x[0], x[1]))]
+        _renumber_master_topics(cur, master_chapter_id, ordered_topic_ids)
+
+        conn.commit()
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='update',
+            module_name='lms_master_topics',
+            record_id=master_chapter_id,
+            description=f'Reordered master topics in chapter {chapter["title"]}'
+        )
+
+        flash('Master topic order updated successfully.', 'success')
+        return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
     finally:
         conn.close()
 
@@ -1216,6 +1366,24 @@ def master_topic_new(master_chapter_id):
                 (master_chapter_id, title, short_description, topic_order, status, now, now)
             )
             topic_id = cur.lastrowid
+
+            current_ids = [
+                row['id'] for row in cur.execute(
+                    """
+                        SELECT id
+                        FROM lms_master_topics
+                        WHERE master_chapter_id = ?
+                        ORDER BY topic_order ASC, id ASC
+                    """,
+                    (master_chapter_id,)
+                ).fetchall()
+            ]
+            if topic_id in current_ids:
+                current_ids.remove(topic_id)
+            insert_index = max(0, min(topic_order - 1, len(current_ids)))
+            current_ids.insert(insert_index, topic_id)
+            _renumber_master_topics(cur, master_chapter_id, current_ids)
+
             conn.commit()
 
             log_activity(
@@ -1306,6 +1474,24 @@ def master_topic_edit(master_topic_id):
                 """,
                 (title, short_description, topic_order, status, now, master_topic_id)
             )
+
+            current_ids = [
+                row['id'] for row in cur.execute(
+                    """
+                        SELECT id
+                        FROM lms_master_topics
+                        WHERE master_chapter_id = ?
+                        ORDER BY topic_order ASC, id ASC
+                    """,
+                    (topic['master_chapter_id'],)
+                ).fetchall()
+            ]
+            if master_topic_id in current_ids:
+                current_ids.remove(master_topic_id)
+            insert_index = max(0, min(topic_order - 1, len(current_ids)))
+            current_ids.insert(insert_index, master_topic_id)
+            _renumber_master_topics(cur, topic['master_chapter_id'], current_ids)
+
             conn.commit()
 
             log_activity(

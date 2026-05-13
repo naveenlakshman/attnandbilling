@@ -3,6 +3,83 @@
 {% block title %}Master Topics - {{ chapter.title }}{% endblock %}
 {% block page_title %}Master Topics{% endblock %}
 
+{% block extra_css %}
+<style>
+  .master-topics-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 1rem;
+  }
+
+  .master-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .order-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .order-hint {
+    color: #6c757d;
+    font-size: 12px;
+  }
+
+  .order-validation-error {
+    display: none;
+    color: #dc3545;
+    font-size: 12px;
+  }
+
+  .order-validation-error.show {
+    display: inline;
+  }
+
+  .master-topic-row.dragging {
+    opacity: 0.6;
+  }
+
+  .master-topic-row.drag-over {
+    outline: 2px dashed #0d6efd;
+    outline-offset: -2px;
+  }
+
+  .drag-cell {
+    width: 34px;
+    text-align: center;
+  }
+
+  .drag-handle {
+    cursor: move;
+    color: #6c757d;
+    user-select: none;
+  }
+
+  .topic-order-input {
+    width: 78px;
+    text-align: center;
+  }
+
+  .topic-order-input.order-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.15);
+  }
+
+  @media (max-width: 992px) {
+    .master-topics-header {
+      flex-direction: column;
+      align-items: stretch;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-3">
   <nav aria-label="breadcrumb" class="mb-3">
@@ -12,12 +89,22 @@
     </ol>
   </nav>
 
-  <div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="master-topics-header">
     <div>
       <h2 class="h4 mb-1">{{ chapter.title }}</h2>
       <p class="text-muted mb-0">Reusable topics for linked programs.</p>
     </div>
-    <div class="d-flex gap-2">
+
+    <div class="master-actions">
+      {% if session.get('role') in ['admin', 'staff'] and topics %}
+      <form id="saveMasterOrderForm" method="POST" action="{{ url_for('lms_admin.reorder_master_topics', master_chapter_id=chapter.id) }}" class="order-actions">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" id="masterTopicOrdersPayload" name="topic_orders" value="">
+        <button id="saveMasterOrderBtn" type="submit" class="btn btn-success btn-sm" disabled>Save Order</button>
+        <span class="order-hint">Drag rows or edit order numbers, then save.</span>
+        <span id="masterOrderValidationError" class="order-validation-error">Each topic must have a unique order number from 1 to total topics.</span>
+      </form>
+      {% endif %}
       <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.list_master_chapters') }}">Back</a>
       <a class="btn btn-primary" href="{{ url_for('lms_admin.master_topic_new', master_chapter_id=chapter.id) }}">+ New Master Topic</a>
     </div>
@@ -33,6 +120,7 @@
       <table class="table table-hover mb-0 align-middle">
         <thead class="table-light">
           <tr>
+            <th class="drag-cell"></th>
             <th style="width: 90px;">Order</th>
             <th>Topic</th>
             <th style="width: 120px;">Content</th>
@@ -42,8 +130,12 @@
         </thead>
         <tbody>
           {% for topic in topics %}
-          <tr>
-            <td>{{ topic.topic_order }}</td>
+          {% set can_manage = session.get('role') in ['admin', 'staff'] %}
+          <tr class="master-topic-row" data-topic-id="{{ topic.id }}" {% if can_manage %}draggable="true"{% endif %}>
+            <td class="drag-cell">{% if can_manage %}<span class="drag-handle" title="Drag to reorder">↕</span>{% endif %}</td>
+            <td>
+              <input type="number" class="form-control form-control-sm topic-order-input" min="1" value="{{ topic.topic_order }}" {% if not can_manage %}readonly{% endif %}>
+            </td>
             <td>
               <div class="fw-semibold">{{ topic.title }}</div>
               {% if topic.short_description %}
@@ -86,4 +178,148 @@
   </div>
   {% endif %}
 </div>
+
+{% if session.get('role') in ['admin', 'staff'] and topics %}
+<script>
+  (function initMasterTopicReorder() {
+    const tbody = document.querySelector('table tbody');
+    const saveForm = document.getElementById('saveMasterOrderForm');
+    const saveBtn = document.getElementById('saveMasterOrderBtn');
+    const payloadInput = document.getElementById('masterTopicOrdersPayload');
+    const errorBox = document.getElementById('masterOrderValidationError');
+    const totalTopics = {{ total_topics|int }};
+
+    if (!tbody || !saveForm || !saveBtn || !payloadInput || !errorBox) {
+      return;
+    }
+
+    let draggedRow = null;
+    let isDirty = false;
+
+    function getRows() {
+      return Array.from(tbody.querySelectorAll('tr.master-topic-row'));
+    }
+
+    function toggleInputError(input, show) {
+      if (input) {
+        input.classList.toggle('order-invalid', show);
+      }
+    }
+
+    function payloadFromRows() {
+      return getRows().map((row) => {
+        const input = row.querySelector('.topic-order-input');
+        return {
+          id: Number(row.dataset.topicId),
+          order: Number(input ? input.value : 0)
+        };
+      });
+    }
+
+    function validateRows() {
+      const rows = getRows();
+      const seen = new Set();
+      let valid = rows.length === totalTopics;
+
+      rows.forEach((row, index) => {
+        const input = row.querySelector('.topic-order-input');
+        const value = Number(input ? input.value : 0);
+        const isValidOrder = Number.isInteger(value) && value >= 1 && value <= totalTopics && !seen.has(value);
+        if (isValidOrder) {
+          seen.add(value);
+        } else {
+          valid = false;
+        }
+        toggleInputError(input, !isValidOrder);
+      });
+
+      if (seen.size !== totalTopics) {
+        valid = false;
+      }
+
+      errorBox.classList.toggle('show', !valid && isDirty);
+      saveBtn.disabled = !isDirty || !valid;
+      return valid;
+    }
+
+    function syncInputsFromDomOrder() {
+      getRows().forEach((row, index) => {
+        const input = row.querySelector('.topic-order-input');
+        if (input) {
+          input.value = index + 1;
+        }
+      });
+    }
+
+    getRows().forEach((row) => {
+      const input = row.querySelector('.topic-order-input');
+
+      row.addEventListener('dragstart', function (event) {
+        draggedRow = row;
+        row.classList.add('dragging');
+        event.dataTransfer.effectAllowed = 'move';
+      });
+
+      row.addEventListener('dragend', function () {
+        row.classList.remove('dragging');
+        getRows().forEach((r) => r.classList.remove('drag-over'));
+      });
+
+      row.addEventListener('dragover', function (event) {
+        event.preventDefault();
+        if (!draggedRow || draggedRow === row) {
+          return;
+        }
+        row.classList.add('drag-over');
+      });
+
+      row.addEventListener('dragleave', function () {
+        row.classList.remove('drag-over');
+      });
+
+      row.addEventListener('drop', function (event) {
+        event.preventDefault();
+        row.classList.remove('drag-over');
+        if (!draggedRow || draggedRow === row) {
+          return;
+        }
+
+        const rows = getRows();
+        const draggedIndex = rows.indexOf(draggedRow);
+        const targetIndex = rows.indexOf(row);
+        if (draggedIndex === -1 || targetIndex === -1) {
+          return;
+        }
+
+        if (draggedIndex < targetIndex) {
+          tbody.insertBefore(draggedRow, row.nextSibling);
+        } else {
+          tbody.insertBefore(draggedRow, row);
+        }
+
+        syncInputsFromDomOrder();
+        isDirty = true;
+        validateRows();
+      });
+
+      if (input) {
+        input.addEventListener('input', function () {
+          isDirty = true;
+          validateRows();
+        });
+      }
+    });
+
+    saveForm.addEventListener('submit', function (event) {
+      if (!validateRows()) {
+        event.preventDefault();
+        return;
+      }
+      payloadInput.value = JSON.stringify(payloadFromRows());
+    });
+
+    validateRows();
+  })();
+</script>
+{% endif %}
 {% endblock %}
