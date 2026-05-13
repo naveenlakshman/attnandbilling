@@ -628,7 +628,7 @@
           <option value="">All Batches</option>
           <option value="none" {% if batch_filter == 'none' %}selected{% endif %}>— Not in any batch —</option>
           {% for bt in all_batches %}
-            <option value="{{ bt.id }}" {% if batch_filter|string == bt.id|string %}selected{% endif %}>{{ bt.batch_name }}</option>
+            <option value="{{ bt.id }}" data-batch-status="{{ bt.status }}" {% if batch_filter|string == bt.id|string %}selected{% endif %}>{{ bt.batch_name }}</option>
           {% endfor %}
         </select>
       </div>
@@ -956,6 +956,35 @@ document.addEventListener('DOMContentLoaded', function () {
 <script>
 (function() {
   const form = document.querySelector('.search-filter-section form');
+
+  // ── Filter batch dropdown when Status = Active ──────────────
+  const statusEl = document.getElementById('status');
+  const batchEl  = document.getElementById('batch');
+
+  function filterBatchOptions() {
+    if (!batchEl) return;
+    var isActive = statusEl && statusEl.value === 'active';
+    Array.from(batchEl.options).forEach(function(opt) {
+      // Always keep "All Batches" (value="") and "Not in any batch" (value="none")
+      if (opt.value === '' || opt.value === 'none') return;
+      var batchStatus = opt.getAttribute('data-batch-status');
+      opt.hidden = isActive && batchStatus !== 'active';
+      // If current selection got hidden, reset to ""
+      if (opt.hidden && opt.selected) {
+        batchEl.value = '';
+      }
+    });
+  }
+
+  // Run on page load to reflect current server-side status_filter
+  filterBatchOptions();
+
+  if (statusEl) {
+    statusEl.addEventListener('change', function() {
+      filterBatchOptions();
+    });
+  }
+
   // Dropdowns: submit instantly on change
   ['branch', 'status', 'batch'].forEach(function(id) {
     const el = document.getElementById(id);

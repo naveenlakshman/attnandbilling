@@ -982,7 +982,7 @@ def students():
 
     # All batches for filter dropdown
     cur.execute("""
-        SELECT id, batch_name
+        SELECT id, batch_name, status
         FROM batches
         ORDER BY batch_name
     """)
