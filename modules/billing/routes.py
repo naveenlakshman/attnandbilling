@@ -882,7 +882,22 @@ def students():
         params.append(branch_filter)
 
     # Status filter
-    if status_filter:
+    if status_filter == 'active_completed_batch':
+        # Active students who have completed ALL their batches (no active batches remaining)
+        query += """ AND students.status = 'active'
+            AND students.id IN (
+                SELECT DISTINCT sb.student_id
+                FROM student_batches sb
+                JOIN batches b ON sb.batch_id = b.id
+                WHERE b.status = 'completed'
+            )
+            AND students.id NOT IN (
+                SELECT DISTINCT sb.student_id
+                FROM student_batches sb
+                JOIN batches b ON sb.batch_id = b.id
+                WHERE b.status = 'active'
+            )"""
+    elif status_filter:
         query += " AND students.status = ?"
         params.append(status_filter)
 

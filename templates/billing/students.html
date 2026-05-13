@@ -619,6 +619,7 @@
           <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
           <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
           <option value="dropped" {% if status_filter == 'dropped' %}selected{% endif %}>Dropped</option>
+          <option value="active_completed_batch" {% if status_filter == 'active_completed_batch' %}selected{% endif %}>Active (Batch Completed)</option>
         </select>
       </div>
 
@@ -666,7 +667,7 @@
 
         {% if status_filter %}
           {% if search_query or branch_filter %} • {% endif %}
-          Status: <strong>{{ status_filter | capitalize }}</strong>
+          Status: <strong>{% if status_filter == 'active_completed_batch' %}Active (Batch Completed){% else %}{{ status_filter | capitalize }}{% endif %}</strong>
         {% endif %}
 
         {% if batch_filter %}
