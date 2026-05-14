@@ -73,9 +73,16 @@
                     </h1>
                     <p class="text-muted mb-0">Topic: <strong>{{ topic.topic_title }}</strong> → Chapter: <strong>{{ chapter.chapter_title }}</strong></p>
                 </div>
-                <a href="{{ back_url }}" class="btn btn-outline-secondary">
-                    ← Back to Contents
-                </a>
+                <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                    {% if is_master %}
+                    <a href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}" class="btn btn-outline-primary">
+                        ← Back to Topics
+                    </a>
+                    {% endif %}
+                    <a href="{{ back_url }}" class="btn btn-outline-secondary">
+                        ← Back to Contents
+                    </a>
+                </div>
             </div>
         </div>
     </div>

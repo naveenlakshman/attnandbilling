@@ -125,7 +125,7 @@
             <th>Topic</th>
             <th style="width: 120px;">Content</th>
             <th style="width: 140px;">Status</th>
-            <th style="width: 280px;">Actions</th>
+            <th style="width: 420px;">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -153,6 +153,11 @@
             <td>
               <div class="d-flex flex-wrap gap-2">
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) }}">Manage Content</a>
+                {% if topic.lesson_content_id %}
+                <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.content_edit', content_id=topic.lesson_content_id) }}">Edit Lesson</a>
+                {% else %}
+                <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.master_content_new', master_topic_id=topic.id) }}?type=rich_text">Add Lesson</a>
+                {% endif %}
                 <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.master_topic_edit', master_topic_id=topic.id) }}">Edit</a>
                 {% if topic.status != 'archived' and session.get('role') == 'admin' %}
                 <form method="POST" action="{{ url_for('lms_admin.master_topic_archive', master_topic_id=topic.id) }}" onsubmit="return confirm('Archive this master topic?');">

@@ -982,6 +982,14 @@ def list_master_topics(master_chapter_id):
                     mt.status,
                     mt.created_at,
                     mt.updated_at,
+                    (
+                        SELECT ltc_lesson.id
+                        FROM lms_topic_contents ltc_lesson
+                        WHERE ltc_lesson.master_topic_id = mt.id
+                          AND ltc_lesson.content_mode IN ('pdf', 'rich_text', 'interactive_image')
+                        ORDER BY ltc_lesson.display_order ASC, ltc_lesson.id ASC
+                        LIMIT 1
+                    ) AS lesson_content_id,
                     COUNT(ltc.id) AS content_count
                 FROM lms_master_topics mt
                 LEFT JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
@@ -4040,7 +4048,7 @@ def content_edit(content_id):
 
                 flash('Content updated successfully.', 'success')
                 if is_master_topic:
-                    return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=content['master_topic_id']))
+                    return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=chapter['id']))
                 return redirect(url_for('lms_admin.list_topic_contents', topic_id=content['topic_id']))
 
             except Exception as e:
