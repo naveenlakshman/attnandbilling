@@ -640,7 +640,6 @@ def topic_view(topic_id):
         # Extract single item of each type (one-per-type system)
         video_content = next((c for c in contents if c['content_mode'] == 'youtube'), None)
         lesson_content = next((c for c in contents if c['content_mode'] in ('pdf', 'rich_text', 'interactive_image')), None)
-        download_content = next((c for c in contents if c['content_mode'] == 'download'), None)
 
         # Previous / next topic in same chapter
         all_topics = conn.execute("""
@@ -704,7 +703,6 @@ def topic_view(topic_id):
                            embed_urls=embed_urls,
                            video_content=video_content,
                            lesson_content=lesson_content,
-                           download_content=download_content,
                            prev_topic_id=prev_topic_id,
                            next_topic_id=next_topic_id,
                            chapters_sidebar=chapters_sidebar,
@@ -775,7 +773,6 @@ def master_topic_view(program_id, master_topic_id):
 
         video_content = next((c for c in contents if c['content_mode'] == 'youtube'), None)
         lesson_content = next((c for c in contents if c['content_mode'] in ('pdf', 'rich_text', 'interactive_image')), None)
-        download_content = next((c for c in contents if c['content_mode'] == 'download'), None)
 
         chapters_sidebar, sidebar_topics, topics_by_chapter = _master_curriculum_sidebar(conn, program_id, student_id)
 
@@ -812,7 +809,6 @@ def master_topic_view(program_id, master_topic_id):
         embed_urls=embed_urls,
         video_content=video_content,
         lesson_content=lesson_content,
-        download_content=download_content,
         prev_topic_id=prev_topic_id,
         next_topic_id=next_topic_id,
         chapters_sidebar=chapters_sidebar,
@@ -1324,6 +1320,199 @@ def save_student_note(content_id):
         return jsonify({'ok': False, 'error': str(e)}), 500
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# LMS Assignments — Student
+# ---------------------------------------------------------------------------
+
+_SUBMISSION_ALLOWED_EXTS = {'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'}
+_SUBMISSION_MAX_BYTES     = 20 * 1024 * 1024   # 20 MB
+
+
+def _save_submission_file(file_obj):
+    """Save a student submission to instance/uploads/submissions/.
+    Returns (ok, unique_filename_or_error, original_name)."""
+    orig_name = file_obj.filename or ''
+    filename  = secure_filename(orig_name)
+    if not filename:
+        return False, 'Invalid filename.', ''
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if ext not in _SUBMISSION_ALLOWED_EXTS:
+        return False, f'File type .{ext} not allowed. Use PDF, DOC, DOCX, or image.', ''
+    file_obj.seek(0, os.SEEK_END)
+    size = file_obj.tell()
+    file_obj.seek(0)
+    if size > _SUBMISSION_MAX_BYTES:
+        return False, f'File too large ({size / 1048576:.1f} MB). Max 20 MB.', ''
+    base_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
+    )
+    os.makedirs(base_dir, exist_ok=True)
+    unique_name = datetime.now().strftime('%Y%m%d_%H%M%S_') + filename
+    file_obj.save(os.path.join(base_dir, unique_name))
+    return True, unique_name, orig_name
+
+
+@students_bp.route('/program/<int:program_id>/master-topic/<int:master_topic_id>/assignments')
+@student_login_required
+def get_topic_assignments(program_id, master_topic_id):
+    from flask import jsonify
+    student_id = session['student_id']
+    conn = get_conn()
+    try:
+        if not _has_program_access(conn, program_id, student_id):
+            return jsonify({'error': 'Access denied'}), 403
+        assignments = conn.execute("""
+            SELECT id, title, description, original_filename, file_path,
+                   strftime('%Y-%m-%d', created_at) AS created_at
+            FROM   lms_assignments
+            WHERE  master_topic_id = ?
+            ORDER  BY created_at
+        """, (master_topic_id,)).fetchall()
+        result = []
+        for a in assignments:
+            sub = conn.execute("""
+                SELECT status, original_filename, feedback,
+                       strftime('%Y-%m-%d %H:%M', submitted_at) AS submitted_at,
+                       strftime('%Y-%m-%d %H:%M', reviewed_at)  AS reviewed_at
+                FROM   lms_assignment_submissions
+                WHERE  assignment_id = ? AND student_id = ?
+            """, (a['id'], student_id)).fetchone()
+            result.append({
+                'id':                a['id'],
+                'title':             a['title'],
+                'description':       a['description'] or '',
+                'original_filename': a['original_filename'] or '',
+                'has_file':          bool(a['file_path']),
+                'created_at':        a['created_at'],
+                'submission':        dict(sub) if sub else None,
+            })
+        return jsonify({'assignments': result})
+    finally:
+        conn.close()
+
+
+@students_bp.route('/assignments/<int:assignment_id>/submit', methods=['POST'])
+@student_login_required
+def submit_assignment(assignment_id):
+    from flask import jsonify
+    student_id = session['student_id']
+    conn = get_conn()
+    try:
+        a = conn.execute(
+            "SELECT master_topic_id FROM lms_assignments WHERE id = ?",
+            (assignment_id,)
+        ).fetchone()
+        if not a:
+            return jsonify({'ok': False, 'error': 'Assignment not found'}), 404
+        mt = conn.execute(
+            "SELECT master_chapter_id FROM lms_master_topics WHERE id = ?",
+            (a['master_topic_id'],)
+        ).fetchone()
+        if not mt:
+            return jsonify({'ok': False, 'error': 'Access denied'}), 403
+        programs = conn.execute(
+            "SELECT program_id FROM lms_program_chapters WHERE master_chapter_id = ?",
+            (mt['master_chapter_id'],)
+        ).fetchall()
+        if not any(_has_program_access(conn, p['program_id'], student_id) for p in programs):
+            return jsonify({'ok': False, 'error': 'Access denied'}), 403
+
+        file_obj = request.files.get('submission_file')
+        if not file_obj or not file_obj.filename:
+            return jsonify({'ok': False, 'error': 'No file uploaded'}), 400
+
+        ok, path_or_err, orig_name = _save_submission_file(file_obj)
+        if not ok:
+            return jsonify({'ok': False, 'error': path_or_err}), 400
+
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn.execute("""
+            INSERT INTO lms_assignment_submissions
+                (assignment_id, student_id, file_path, original_filename, status, submitted_at, updated_at)
+            VALUES (?, ?, ?, ?, 'submitted', ?, ?)
+            ON CONFLICT(assignment_id, student_id) DO UPDATE
+                SET file_path         = excluded.file_path,
+                    original_filename = excluded.original_filename,
+                    status            = 'submitted',
+                    feedback          = NULL,
+                    reviewed_by       = NULL,
+                    submitted_at      = excluded.submitted_at,
+                    reviewed_at       = NULL,
+                    updated_at        = excluded.updated_at
+        """, (assignment_id, student_id, path_or_err, orig_name, now, now))
+        conn.commit()
+        return jsonify({'ok': True, 'status': 'submitted',
+                        'submitted_at': now[:16], 'original_filename': orig_name})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@students_bp.route('/assignments/file/<int:assignment_id>')
+@student_login_required
+def download_assignment_file(assignment_id):
+    from flask import send_file, abort
+    student_id = session['student_id']
+    conn = get_conn()
+    try:
+        a = conn.execute(
+            "SELECT master_topic_id, file_path, original_filename FROM lms_assignments WHERE id = ?",
+            (assignment_id,)
+        ).fetchone()
+        if not a or not a['file_path']:
+            abort(404)
+        mt = conn.execute(
+            "SELECT master_chapter_id FROM lms_master_topics WHERE id = ?",
+            (a['master_topic_id'],)
+        ).fetchone()
+        if not mt:
+            abort(403)
+        programs = conn.execute(
+            "SELECT program_id FROM lms_program_chapters WHERE master_chapter_id = ?",
+            (mt['master_chapter_id'],)
+        ).fetchall()
+        if not any(_has_program_access(conn, p['program_id'], student_id) for p in programs):
+            abort(403)
+        file_path = a['file_path']
+        orig_name = a['original_filename'] or file_path
+    finally:
+        conn.close()
+    base_dir  = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'assignments')
+    )
+    full_path = os.path.join(base_dir, file_path)
+    if not os.path.isfile(full_path):
+        abort(404)
+    return send_file(full_path, as_attachment=True, download_name=orig_name)
+
+
+@students_bp.route('/submissions/file/<int:submission_id>')
+@student_login_required
+def download_own_submission(submission_id):
+    from flask import send_file, abort
+    student_id = session['student_id']
+    conn = get_conn()
+    try:
+        sub = conn.execute(
+            "SELECT student_id, file_path, original_filename FROM lms_assignment_submissions WHERE id = ?",
+            (submission_id,)
+        ).fetchone()
+        if not sub or sub['student_id'] != student_id:
+            abort(403)
+        file_path = sub['file_path']
+        orig_name = sub['original_filename'] or file_path
+    finally:
+        conn.close()
+    base_dir  = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
+    )
+    full_path = os.path.join(base_dir, file_path)
+    if not os.path.isfile(full_path):
+        abort(404)
+    return send_file(full_path, as_attachment=True, download_name=orig_name)
 
 
 # ---------------------------------------------------------------------------

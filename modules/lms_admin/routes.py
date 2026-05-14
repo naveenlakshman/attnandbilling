@@ -1153,15 +1153,6 @@ def list_master_topic_contents(master_topic_id):
             """,
             (master_topic_id,)
         ).fetchone()
-        download_content = cur.execute(
-            """
-                SELECT * FROM lms_topic_contents
-                WHERE master_topic_id = ? AND content_mode = 'download'
-                ORDER BY display_order ASC LIMIT 1
-            """,
-            (master_topic_id,)
-        ).fetchone()
-
         # Topic-to-topic navigation within the same master chapter.
         prev_topic = cur.execute(
             """
@@ -1211,7 +1202,6 @@ def list_master_topic_contents(master_topic_id):
             'topic': topic,
             'video_content': video_content,
             'lesson_content': lesson_content,
-            'download_content': download_content,
             'prev_topic': prev_topic,
             'next_topic': next_topic,
         }
@@ -1273,8 +1263,8 @@ def master_content_new(master_topic_id):
                 if not external_url:
                     flash('YouTube URL is required.', 'danger')
                     return redirect(url_for('lms_admin.master_content_new', master_topic_id=master_topic_id))
-            elif content_mode in ['pdf', 'download']:
-                file_field = 'pdf_file' if content_mode == 'pdf' else 'download_file'
+            elif content_mode == 'pdf':
+                file_field = 'pdf_file'
                 if file_field not in request.files or not request.files[file_field].filename:
                     flash('Please select a file to upload.', 'danger')
                     return redirect(url_for('lms_admin.master_content_new', master_topic_id=master_topic_id))
@@ -3416,12 +3406,6 @@ def list_topic_contents(topic_id):
             ORDER BY display_order ASC LIMIT 1
         """, (topic_id,)).fetchone()
 
-        download_content = cur.execute("""
-            SELECT * FROM lms_topic_contents
-            WHERE topic_id = ? AND content_mode = 'download'
-            ORDER BY display_order ASC LIMIT 1
-        """, (topic_id,)).fetchone()
-
         data = {
             'program': {
                 'id': topic['program_id'],
@@ -3433,8 +3417,7 @@ def list_topic_contents(topic_id):
             },
             'topic': topic,
             'video_content': video_content,
-            'lesson_content': lesson_content,
-            'download_content': download_content
+            'lesson_content': lesson_content
         }
 
         return render_template('lms_topic_contents.html', data=data)
@@ -6160,3 +6143,267 @@ def bulk_assign_batch_programs():
         )
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# LMS Assignments — Admin / Staff
+# ---------------------------------------------------------------------------
+
+_ASSIGNMENT_ALLOWED_EXTS = {'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'}
+_ASSIGNMENT_MAX_BYTES     = 50 * 1024 * 1024   # 50 MB
+
+
+def _save_assignment_file(file_obj):
+    """Save admin-uploaded assignment to instance/uploads/assignments/.
+    Returns (ok, unique_filename_or_error, original_name)."""
+    orig_name = file_obj.filename or ''
+    filename  = secure_filename(orig_name)
+    if not filename:
+        return False, 'Invalid filename.', ''
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if ext not in _ASSIGNMENT_ALLOWED_EXTS:
+        return False, f'File type .{ext} not allowed. Use PDF, DOC, DOCX, or image.', ''
+    file_obj.seek(0, os.SEEK_END)
+    size = file_obj.tell()
+    file_obj.seek(0)
+    if size > _ASSIGNMENT_MAX_BYTES:
+        return False, f'File too large ({size / 1048576:.1f} MB). Max 50 MB.', ''
+    base_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'assignments')
+    )
+    os.makedirs(base_dir, exist_ok=True)
+    unique_name = datetime.now().strftime('%Y%m%d_%H%M%S_') + filename
+    file_obj.save(os.path.join(base_dir, unique_name))
+    return True, unique_name, orig_name
+
+
+@lms_admin_bp.route('/master/assignments')
+@login_required
+def all_assignments():
+    """Overview of every assignment across all master topics."""
+    conn = get_conn()
+    try:
+        assignments = conn.execute("""
+            SELECT
+                a.id,
+                a.title,
+                a.description,
+                a.original_filename,
+                a.master_topic_id,
+                mt.title   AS topic_title,
+                mc.title   AS chapter_title,
+                strftime('%d %b %Y', a.created_at) AS created_date,
+                (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id)         AS submission_count,
+                (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id
+                                                                     AND s.status = 'reviewed')          AS reviewed_count
+            FROM lms_assignments a
+            JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
+            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            ORDER BY mc.title, mt.title, a.id
+        """).fetchall()
+        return render_template('lms_admin/lms_all_assignments.html', assignments=assignments)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/topic/<int:master_topic_id>/assignments', methods=['GET', 'POST'])
+@login_required
+def manage_assignments(master_topic_id):
+    conn = get_conn()
+    try:
+        topic = conn.execute("""
+            SELECT mt.id, mt.title, mc.id AS chapter_id, mc.title AS chapter_title
+            FROM   lms_master_topics mt
+            JOIN   lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            WHERE  mt.id = ?
+        """, (master_topic_id,)).fetchone()
+        if not topic:
+            flash('Topic not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        if request.method == 'POST':
+            title       = request.form.get('title', '').strip()
+            description = request.form.get('description', '').strip()
+            file_obj    = request.files.get('assignment_file')
+
+            if not title:
+                flash('Title is required.', 'danger')
+                return redirect(url_for('lms_admin.manage_assignments', master_topic_id=master_topic_id))
+
+            file_path = None
+            orig_name = None
+            if file_obj and file_obj.filename:
+                ok, path_or_err, orig = _save_assignment_file(file_obj)
+                if not ok:
+                    flash(f'File error: {path_or_err}', 'danger')
+                    return redirect(url_for('lms_admin.manage_assignments', master_topic_id=master_topic_id))
+                file_path = path_or_err
+                orig_name = orig
+
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            conn.execute("""
+                INSERT INTO lms_assignments
+                    (master_topic_id, title, description, file_path, original_filename, uploaded_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (master_topic_id, title, description or None,
+                  file_path, orig_name, session.get('user_id'), now, now))
+            conn.commit()
+            log_activity(
+                user_id=session['user_id'], branch_id=session.get('branch_id'),
+                action_type='create', module_name='lms_assignments', record_id=None,
+                description=f"Created assignment '{title}' for master topic {master_topic_id}"
+            )
+            flash('Assignment created.', 'success')
+            return redirect(url_for('lms_admin.manage_assignments', master_topic_id=master_topic_id))
+
+        assignments = conn.execute("""
+            SELECT a.id, a.title, a.description, a.original_filename, a.file_path,
+                   strftime('%d %b %Y', a.created_at) AS created_date,
+                   (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id) AS submission_count,
+                   (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id AND s.status = 'reviewed') AS reviewed_count
+            FROM   lms_assignments a
+            WHERE  a.master_topic_id = ?
+            ORDER  BY a.created_at
+        """, (master_topic_id,)).fetchall()
+
+        return render_template('lms_admin/lms_assignments.html',
+                               topic=topic, assignments=assignments)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/assignments/<int:assignment_id>/delete', methods=['POST'])
+@login_required
+def delete_assignment(assignment_id):
+    conn = get_conn()
+    try:
+        a = conn.execute(
+            "SELECT master_topic_id, title FROM lms_assignments WHERE id = ?",
+            (assignment_id,)
+        ).fetchone()
+        if not a:
+            flash('Assignment not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+        conn.execute("DELETE FROM lms_assignments WHERE id = ?", (assignment_id,))
+        conn.commit()
+        log_activity(
+            user_id=session['user_id'], branch_id=session.get('branch_id'),
+            action_type='delete', module_name='lms_assignments', record_id=assignment_id,
+            description=f"Deleted assignment '{a['title']}'"
+        )
+        flash('Assignment deleted.', 'success')
+        return redirect(url_for('lms_admin.manage_assignments', master_topic_id=a['master_topic_id']))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/assignments/<int:assignment_id>/submissions')
+@login_required
+def view_submissions(assignment_id):
+    conn = get_conn()
+    try:
+        a = conn.execute("""
+            SELECT a.id, a.title, a.master_topic_id, mt.title AS topic_title
+            FROM   lms_assignments a
+            JOIN   lms_master_topics mt ON mt.id = a.master_topic_id
+            WHERE  a.id = ?
+        """, (assignment_id,)).fetchone()
+        if not a:
+            flash('Assignment not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        submissions = conn.execute("""
+            SELECT s.id, s.student_id, s.original_filename, s.feedback, s.status,
+                   strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
+                   strftime('%d %b %Y %H:%M', s.reviewed_at)  AS reviewed_date,
+                   st.full_name AS student_name, st.student_code
+            FROM   lms_assignment_submissions s
+            JOIN   students st ON st.id = s.student_id
+            WHERE  s.assignment_id = ?
+            ORDER  BY s.submitted_at DESC
+        """, (assignment_id,)).fetchall()
+
+        return render_template('lms_admin/lms_assignment_submissions.html',
+                               assignment=a, submissions=submissions)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/submissions/<int:submission_id>/review', methods=['POST'])
+@login_required
+def review_submission(submission_id):
+    conn = get_conn()
+    try:
+        sub = conn.execute(
+            "SELECT assignment_id FROM lms_assignment_submissions WHERE id = ?",
+            (submission_id,)
+        ).fetchone()
+        if not sub:
+            flash('Submission not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+        feedback = request.form.get('feedback', '').strip()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn.execute("""
+            UPDATE lms_assignment_submissions
+            SET    feedback    = ?,
+                   status      = 'reviewed',
+                   reviewed_by = ?,
+                   reviewed_at = ?,
+                   updated_at  = ?
+            WHERE  id = ?
+        """, (feedback or None, session.get('user_id'), now, now, submission_id))
+        conn.commit()
+        flash('Feedback saved and marked as reviewed.', 'success')
+        return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/assignments/file/<int:assignment_id>')
+@login_required
+def admin_download_assignment(assignment_id):
+    from flask import send_file, abort
+    conn = get_conn()
+    try:
+        a = conn.execute(
+            "SELECT file_path, original_filename FROM lms_assignments WHERE id = ?",
+            (assignment_id,)
+        ).fetchone()
+        if not a or not a['file_path']:
+            abort(404)
+        file_path = a['file_path']
+        orig_name = a['original_filename'] or file_path
+    finally:
+        conn.close()
+    base_dir  = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'assignments')
+    )
+    full_path = os.path.join(base_dir, file_path)
+    if not os.path.isfile(full_path):
+        abort(404)
+    return send_file(full_path, as_attachment=True, download_name=orig_name)
+
+
+@lms_admin_bp.route('/master/submissions/file/<int:submission_id>')
+@login_required
+def admin_download_submission(submission_id):
+    from flask import send_file, abort
+    conn = get_conn()
+    try:
+        sub = conn.execute(
+            "SELECT file_path, original_filename FROM lms_assignment_submissions WHERE id = ?",
+            (submission_id,)
+        ).fetchone()
+        if not sub:
+            abort(404)
+        file_path = sub['file_path']
+        orig_name = sub['original_filename'] or file_path
+    finally:
+        conn.close()
+    base_dir  = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
+    )
+    full_path = os.path.join(base_dir, file_path)
+    if not os.path.isfile(full_path):
+        abort(404)
+    return send_file(full_path, as_attachment=True, download_name=orig_name)

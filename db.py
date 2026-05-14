@@ -1426,5 +1426,45 @@ def init_db():
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_student_notes_student ON student_notes(student_id)")
 
+    # ---------- LMS Assignments ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_assignments (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            master_topic_id   INTEGER NOT NULL,
+            title             TEXT    NOT NULL,
+            description       TEXT,
+            file_path         TEXT,
+            original_filename TEXT,
+            uploaded_by       INTEGER,
+            created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at        TEXT,
+            FOREIGN KEY (master_topic_id) REFERENCES lms_master_topics(id) ON DELETE CASCADE,
+            FOREIGN KEY (uploaded_by)     REFERENCES users(id)
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_assignments_topic ON lms_assignments(master_topic_id)")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_assignment_submissions (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            assignment_id     INTEGER NOT NULL,
+            student_id        INTEGER NOT NULL,
+            file_path         TEXT    NOT NULL,
+            original_filename TEXT    NOT NULL,
+            feedback          TEXT,
+            status            TEXT    NOT NULL DEFAULT 'submitted',
+            reviewed_by       INTEGER,
+            submitted_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            reviewed_at       TEXT,
+            updated_at        TEXT,
+            UNIQUE(assignment_id, student_id),
+            FOREIGN KEY (assignment_id) REFERENCES lms_assignments(id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id)    REFERENCES students(id),
+            FOREIGN KEY (reviewed_by)   REFERENCES users(id)
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_asn_sub_assignment ON lms_assignment_submissions(assignment_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_asn_sub_student    ON lms_assignment_submissions(student_id)")
+
     conn.commit()
     conn.close()

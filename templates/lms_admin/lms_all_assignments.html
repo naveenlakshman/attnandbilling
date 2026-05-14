@@ -1,0 +1,122 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}All Assignments{% endblock %}
+{% block page_title %}All Assignments{% endblock %}
+
+{% block extra_css %}
+<style>
+  .asn-table th { font-size: 12px; font-weight: 600; text-transform: uppercase;
+                  color: #6c757d; white-space: nowrap; }
+  .asn-table td { vertical-align: middle; font-size: 13px; }
+  .badge-sub  { background: #e7f3ff; color: #084298; border-radius: 20px;
+                padding: 2px 9px; font-size: 11px; font-weight: 700; }
+  .badge-rev  { background: #d1e7dd; color: #0f5132; border-radius: 20px;
+                padding: 2px 9px; font-size: 11px; font-weight: 700; }
+  .badge-pend { background: #fff3cd; color: #664d03; border-radius: 20px;
+                padding: 2px 9px; font-size: 11px; font-weight: 700; }
+  .stats-top  { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:22px; }
+  .stat-box   { flex:1 1 120px; background:#fff; border-radius:10px;
+                box-shadow:0 1px 4px rgba(0,0,0,.07); padding:14px 18px; text-align:center; }
+  .stat-box .n{ font-size:26px; font-weight:700; line-height:1; }
+  .stat-box .l{ font-size:11px; color:#6c757d; margin-top:3px; }
+  .n.blue { color:#0d6efd; }
+  .n.orange{ color:#fd7e14; }
+  .n.green { color:#198754; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set total     = assignments | length %}
+{% set total_sub = assignments | sum(attribute='submission_count') %}
+{% set total_rev = assignments | sum(attribute='reviewed_count') %}
+{% set total_pen = total_sub - total_rev %}
+
+<div class="container-fluid py-3">
+
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <h2 class="h4 mb-1">📋 All Assignments</h2>
+      <p class="text-muted mb-0" style="font-size:13px;">Assignments across all master topics</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm"
+       href="{{ url_for('lms_admin.list_master_chapters') }}">← Master Library</a>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-top">
+    <div class="stat-box"><div class="n blue">{{ total }}</div><div class="l">Assignments</div></div>
+    <div class="stat-box"><div class="n blue">{{ total_sub }}</div><div class="l">Total Submissions</div></div>
+    <div class="stat-box"><div class="n orange">{{ total_pen }}</div><div class="l">Pending Review</div></div>
+    <div class="stat-box"><div class="n green">{{ total_rev }}</div><div class="l">Reviewed</div></div>
+  </div>
+
+  {% if assignments %}
+  <div class="card">
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0 asn-table">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">Assignment</th>
+            <th>Chapter / Topic</th>
+            <th>Added</th>
+            <th class="text-center">Submissions</th>
+            <th class="text-center">Reviewed</th>
+            <th class="text-center">Pending</th>
+            <th class="pe-4">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in assignments %}
+          <tr>
+            <td class="ps-4">
+              <div class="fw-semibold">{{ a.title }}</div>
+              {% if a.description %}
+              <div class="text-muted" style="font-size:11px;">{{ a.description | truncate(60) }}</div>
+              {% endif %}
+            </td>
+            <td>
+              <div>{{ a.chapter_title }}</div>
+              <div class="text-muted" style="font-size:11px;">{{ a.topic_title }}</div>
+            </td>
+            <td class="text-muted">{{ a.created_date }}</td>
+            <td class="text-center">
+              <span class="badge-sub">{{ a.submission_count }}</span>
+            </td>
+            <td class="text-center">
+              <span class="badge-rev">{{ a.reviewed_count }}</span>
+            </td>
+            <td class="text-center">
+              {% set pending = a.submission_count - a.reviewed_count %}
+              <span class="{{ 'badge-pend' if pending > 0 else 'badge-rev' }}">{{ pending }}</span>
+            </td>
+            <td class="pe-4">
+              <div class="d-flex gap-2 flex-wrap">
+                <a class="btn btn-sm btn-primary"
+                   href="{{ url_for('lms_admin.view_submissions', assignment_id=a.id) }}">
+                  📋 Submissions
+                </a>
+                <a class="btn btn-sm btn-outline-secondary"
+                   href="{{ url_for('lms_admin.manage_assignments', master_topic_id=a.master_topic_id) }}">
+                  ⚙ Manage
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="text-center text-muted py-5">
+    <div style="font-size:48px;">📋</div>
+    <p class="mt-3 mb-0 fw-semibold">No assignments yet</p>
+    <p class="small">Go to a topic in the Master Library to create assignments.</p>
+    <a class="btn btn-primary mt-2" href="{{ url_for('lms_admin.list_master_chapters') }}">
+      Open Master Library
+    </a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

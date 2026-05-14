@@ -299,6 +299,37 @@
   @media (max-width: 375px) {
     .tox-tinymce { min-height: 180px !important; }
   }
+
+  /* ── Assignments tab ── */
+  .assign-card {
+    background: #fff; border: 1px solid #e9ecef; border-radius: 10px;
+    padding: 16px 18px; margin-bottom: 16px;
+  }
+  .assign-card-title { font-size: 15px; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; }
+  .assign-card-desc  { font-size: 13px; color: #6c757d; margin-bottom: 12px; }
+  .assign-status-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-size: 12px; font-weight: 600;
+  }
+  .assign-status-badge.not-submitted { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
+  .assign-status-badge.submitted     { background: #cfe2ff; color: #084298; }
+  .assign-status-badge.reviewed      { background: #d1e7dd; color: #0f5132; }
+  .assign-feedback {
+    background: #f0f7ff; border-left: 3px solid #0d6efd;
+    padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 13px; margin-top: 10px;
+    white-space: pre-wrap;
+  }
+  .btn-assign-submit {
+    background: #0d6efd; color: #fff; border: none;
+    padding: 7px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-assign-submit:disabled { background: #6c757d; cursor: default; }
+  .assign-empty { text-align: center; padding: 40px 20px; color: #6c757d; }
+  @media (max-width: 576px) {
+    .assign-card { padding: 12px 14px; }
+    .btn-assign-submit { width: 100%; margin-top: 8px; }
+  }
 </style>
 {% endblock %}
 
@@ -319,9 +350,10 @@
       <div class="content-tabs">
         <button class="tab-btn {% if video_content %}active{% else %}disabled{% endif %}"
                 id="tabWatch" onclick="switchTab('watch')">Watch</button>
-        <button class="tab-btn {% if not video_content and (lesson_content or download_content) %}active{% elif not lesson_content and not download_content %}disabled{% endif %}"
+        <button class="tab-btn {% if not video_content and lesson_content %}active{% elif not lesson_content %}disabled{% endif %}"
                 id="tabRead" onclick="switchTab('read')">Read</button>
         <button class="tab-btn" id="tabNotes" onclick="switchTab('notes')">✏ Notes</button>
+        <button class="tab-btn" id="tabAssignments" onclick="switchTab('assignments')">📋 Assignments</button>
       </div>
 
       <!-- Watch Pane -->
@@ -355,7 +387,7 @@
       </div>
 
       <!-- Read Pane -->
-      <div class="tab-pane {% if not video_content and (lesson_content or download_content) %}active{% endif %}" id="paneRead">
+      <div class="tab-pane {% if not video_content and lesson_content %}active{% endif %}" id="paneRead">
         {% if lesson_content %}
           {% if lesson_content.content_mode == 'pdf' %}
           <div class="content-block">
@@ -407,19 +439,7 @@
           {% endif %}
         {% endif %}
 
-        {% if download_content %}
-          <div class="content-block">
-            <div class="d-flex align-items-center gap-3 p-3 bg-light rounded">
-              <span style="font-size:28px;">📎</span>
-              <div class="flex-grow-1">
-                <div class="fw-semibold">{{ download_content.content_title }}</div>
-                {% if download_content.content_body %}<div class="text-muted" style="font-size:13px;">{{ download_content.content_body }}</div>{% endif %}
-              </div>
-              <a href="{{ url_for('students.serve_download', content_id=download_content.id) }}" class="btn btn-primary btn-sm">⬇ Download</a>
-            </div>
-          </div>
-        {% endif %}
-        {% if not lesson_content and not download_content %}
+        {% if not lesson_content %}
           <div class="text-center py-5 text-muted">
             <div style="font-size:40px;">📖</div>
             <p class="mt-2">No reading material for this topic.</p>
@@ -427,7 +447,7 @@
         {% endif %}
       </div>
 
-      {% if not video_content and not lesson_content and not download_content %}
+      {% if not video_content and not lesson_content %}
         <div class="text-center py-5 text-muted">
           <div style="font-size:48px;">📭</div>
           <p class="mt-3">No content for this topic yet.</p>
@@ -450,6 +470,17 @@
           </div>
         </div>
       </div>
+
+      <!-- Assignments Pane -->
+      <div class="tab-pane" id="paneAssignments"
+           data-program-id="{{ topic.program_id }}"
+           data-topic-id="{{ topic.id }}">
+        <div class="content-block">
+          <div id="assignLoading" class="text-center py-4 text-muted" style="display:none;">Loading assignments…</div>
+          <div id="assignList"></div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Bottom bar: Notes | Complete | Previous + Next -->
@@ -582,14 +613,15 @@ document.addEventListener('keydown', function(e){
 
 /* Watch / Read / Notes tab switcher */
 function switchTab(tab) {
-  ['watch', 'read', 'notes'].forEach(function(t) {
+  ['watch', 'read', 'notes', 'assignments'].forEach(function(t) {
     var pane = document.getElementById('pane' + t.charAt(0).toUpperCase() + t.slice(1));
     var btn  = document.getElementById('tab'  + t.charAt(0).toUpperCase() + t.slice(1));
     if (pane) pane.classList.toggle('active', t === tab);
     if (btn)  btn.classList.toggle('active',  t === tab);
   });
-  if (tab !== 'notes') _lastContentTab = tab;
+  if (tab !== 'notes' && tab !== 'assignments') _lastContentTab = tab;
   if (tab === 'notes') loadNotes();
+  if (tab === 'assignments') loadAssignments();
   localStorage.setItem('lms_tab_' + window.location.pathname, tab);
 }
 
@@ -634,6 +666,7 @@ tinymce.init({
     editor.on('init', function() {
       var savedTab = localStorage.getItem('lms_tab_' + window.location.pathname);
       if (savedTab === 'notes') switchTab('notes');
+      else if (savedTab === 'assignments') switchTab('assignments');
     });
   }
 });
@@ -715,6 +748,135 @@ function saveNotes(isAuto) {
 function _getCsrfToken() {
   var meta = document.querySelector('meta[name="csrf-token"]');
   return meta ? meta.getAttribute('content') : '';
+}
+
+/* ── Assignments Tab ────────────────────────────────────────────── */
+var _assignLoaded = false;
+
+function loadAssignments() {
+  if (_assignLoaded) return;
+  var pane = document.getElementById('paneAssignments');
+  if (!pane) return;
+  var programId = pane.dataset.programId;
+  var topicId   = pane.dataset.topicId;
+  if (!programId || !topicId) {
+    document.getElementById('assignList').innerHTML = '<div class="assign-empty">No topic data available.</div>';
+    return;
+  }
+  var loading = document.getElementById('assignLoading');
+  if (loading) loading.style.display = '';
+  fetch('/student/program/' + programId + '/master-topic/' + topicId + '/assignments')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (loading) loading.style.display = 'none';
+      _renderAssignments(data.assignments || []);
+      _assignLoaded = true;
+    })
+    .catch(function() {
+      if (loading) loading.style.display = 'none';
+      document.getElementById('assignList').innerHTML =
+        '<div class="assign-empty text-danger">Failed to load assignments. Please refresh and try again.</div>';
+    });
+}
+
+function _esc(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function _statusBadge(status) {
+  var map = {
+    'not-submitted': ['not-submitted', 'Not Submitted'],
+    'submitted':     ['submitted',     'Submitted'],
+    'reviewed':      ['reviewed',      'Reviewed ✓']
+  };
+  var pair = map[status] || map['not-submitted'];
+  return '<span class="assign-status-badge ' + pair[0] + '">' + pair[1] + '</span>';
+}
+
+function _renderAssignments(assignments) {
+  var list = document.getElementById('assignList');
+  if (!assignments.length) {
+    list.innerHTML = '<div class="assign-empty"><div style="font-size:36px;">📋</div><p class="mt-2">No assignments for this topic yet.</p></div>';
+    return;
+  }
+  var html = '';
+  assignments.forEach(function(a) {
+    var statusKey = a.submission ? a.submission.status : 'not-submitted';
+    html += '<div class="assign-card" id="assign-card-' + a.id + '">';
+    html += '<div class="assign-card-title">' + _esc(a.title) + '</div>';
+    if (a.description) html += '<div class="assign-card-desc">' + _esc(a.description) + '</div>';
+
+    // Status + download row
+    html += '<div class="d-flex align-items-center gap-3 flex-wrap mb-2">';
+    html += _statusBadge(statusKey);
+    if (a.has_file) {
+      html += '<a class="btn btn-sm btn-outline-primary" href="/student/assignments/file/' + a.id + '">⬇ Download Assignment</a>';
+    }
+    html += '</div>';
+
+    // Previous submission info
+    if (a.submission) {
+      html += '<div class="text-muted mb-1" style="font-size:12px;">Submitted ' + _esc(a.submission.submitted_at) + ' &mdash; ' + _esc(a.submission.original_filename) + '</div>';
+      if (a.submission.feedback) {
+        html += '<div class="assign-feedback"><strong>Staff Feedback:</strong>\n' + _esc(a.submission.feedback) + '</div>';
+      }
+      if (a.submission.reviewed_at) {
+        html += '<div class="text-muted mt-1" style="font-size:12px;">Reviewed on ' + _esc(a.submission.reviewed_at) + '</div>';
+      }
+    }
+
+    // Upload form
+    html += '<div class="mt-3">';
+    html += '<label class="assign-upload-label fw-semibold" style="font-size:13px;">' + (a.submission ? '📎 Re-submit (replaces previous)' : '📎 Submit Your Work') + '</label>';
+    html += '<div class="d-flex align-items-center gap-2 flex-wrap">';
+    html += '<input type="file" class="form-control form-control-sm" id="assign-file-' + a.id + '" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="max-width:300px;">';
+    html += '<button class="btn-assign-submit" id="assign-btn-' + a.id + '" onclick="submitAssignment(' + a.id + ')">Submit</button>';
+    html += '</div>';
+    html += '<div class="mt-1" id="assign-msg-' + a.id + '" style="font-size:13px;"></div>';
+    html += '</div>';
+
+    html += '</div>'; // end assign-card
+  });
+  list.innerHTML = html;
+}
+
+function submitAssignment(assignmentId) {
+  var fileInput = document.getElementById('assign-file-' + assignmentId);
+  var btn       = document.getElementById('assign-btn-' + assignmentId);
+  var msgEl     = document.getElementById('assign-msg-' + assignmentId);
+  if (!fileInput || !fileInput.files || !fileInput.files.length) {
+    msgEl.className = 'text-danger'; msgEl.textContent = 'Please select a file first.'; return;
+  }
+  btn.disabled = true;
+  msgEl.className = 'text-muted'; msgEl.textContent = 'Uploading…';
+
+  var fd = new FormData();
+  fd.append('submission_file', fileInput.files[0]);
+
+  fetch('/student/assignments/' + assignmentId + '/submit', {
+    method:  'POST',
+    headers: { 'X-CSRFToken': _getCsrfToken() },
+    body:    fd
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    btn.disabled = false;
+    if (data.ok) {
+      msgEl.className = 'text-success';
+      msgEl.textContent = 'Submitted successfully!';
+      _assignLoaded = false;
+      setTimeout(loadAssignments, 800);
+    } else {
+      msgEl.className = 'text-danger';
+      msgEl.textContent = 'Error: ' + (data.error || 'Unknown error');
+    }
+  })
+  .catch(function() {
+    btn.disabled = false;
+    msgEl.className = 'text-danger';
+    msgEl.textContent = 'Upload failed. Check your connection.';
+  });
 }
 
 /* ── Interactive Image Hotspots ─────────────────────────────────── */

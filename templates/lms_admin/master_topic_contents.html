@@ -120,34 +120,20 @@
     </div>
   </div>
 
+  <!-- Assignments (student-submittable) -->
   <div class="slot-card">
     <div class="slot-header">
-      <span>Download Slot (Assignment)</span>
-      {% if not data.download_content %}
-      <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.master_content_new', master_topic_id=data.topic.id) }}?type=download">Upload File</a>
-      {% endif %}
+      <span>📋 Assignments</span>
+      <a class="btn btn-sm btn-primary"
+         href="{{ url_for('lms_admin.manage_assignments', master_topic_id=data.topic.id) }}">Manage Assignments</a>
     </div>
     <div class="slot-body">
-      {% if data.download_content %}
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-          <div class="fw-semibold">{{ data.download_content.content_title }}</div>
-          <div class="text-muted small">{{ data.download_content.file_path }}</div>
-        </div>
-        <div class="d-flex gap-2">
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.content_edit', content_id=data.download_content.id) }}">Edit</a>
-          {% if session.get('role') == 'admin' %}
-          <form method="POST" action="{{ url_for('lms_admin.delete_content', content_id=data.download_content.id) }}" onsubmit="return confirm('Remove this content?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
-          </form>
-          {% endif %}
-        </div>
-      </div>
-      {% else %}
-      <div class="slot-empty">No assignment file configured.</div>
-      {% endif %}
+      <p class="text-muted mb-0" style="font-size:13px;">
+        Upload assignment sheets for students to download, complete offline, and submit back.
+        Students will see submitted work status and any feedback you give.
+      </p>
     </div>
   </div>
+
 </div>
 {% endblock %}

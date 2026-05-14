@@ -126,6 +126,13 @@
         🧩 Master Library
       </a>
 
+      <!-- Assignments -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint in ['lms_admin.all_assignments', 'lms_admin.manage_assignments', 'lms_admin.view_submissions', 'lms_admin.review_submission'] else '' }}"
+        href="{{ url_for('lms_admin.all_assignments') }}">
+        📋 Assignments
+      </a>
+
       <!-- Batch Assignments -->
       {% if session.get('role') == 'admin' %}
       <a
