@@ -50,6 +50,14 @@ def _BLEACH_ATTRS(tag, name, value):
 # bleach 6.x requires an explicit CSSSanitizer when style attributes are allowed.
 # Without it, bleach silently drops ALL style="..." attributes — the behaviour that
 # was causing table background/border colours to disappear after save.
+#
+# NOTE: The following CSS properties support TinyMCE paragraph formatting features:
+#   - text-align: paragraph alignment (left, center, right, justify)
+#   - line-height: line spacing (1, 1.15, 1.5, 1.75, 2, 2.5, 3)
+#   - margin-top/bottom/left: paragraph spacing and indentation (tab stops)
+#   - padding: spacing inside bordered/shaded paragraphs
+#   - border/border-left: paragraph borders and accent lines
+#   - background-color: paragraph shading (Light Shading, Light Blue, etc.)
 _CSS_SANITIZER = CSSSanitizer(allowed_css_properties=[
     # Text
     'color', 'background-color',
