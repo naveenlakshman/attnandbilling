@@ -1154,6 +1154,47 @@ def list_master_topic_contents(master_topic_id):
             (master_topic_id,)
         ).fetchone()
 
+        # Topic-to-topic navigation within the same master chapter.
+        prev_topic = cur.execute(
+            """
+                SELECT id, title
+                FROM lms_master_topics
+                WHERE master_chapter_id = ?
+                  AND (
+                    topic_order < ?
+                    OR (topic_order = ? AND id < ?)
+                  )
+                ORDER BY topic_order DESC, id DESC
+                LIMIT 1
+            """,
+            (
+                topic['master_chapter_id'],
+                topic['topic_order'],
+                topic['topic_order'],
+                topic['id'],
+            )
+        ).fetchone()
+
+        next_topic = cur.execute(
+            """
+                SELECT id, title
+                FROM lms_master_topics
+                WHERE master_chapter_id = ?
+                  AND (
+                    topic_order > ?
+                    OR (topic_order = ? AND id > ?)
+                  )
+                ORDER BY topic_order ASC, id ASC
+                LIMIT 1
+            """,
+            (
+                topic['master_chapter_id'],
+                topic['topic_order'],
+                topic['topic_order'],
+                topic['id'],
+            )
+        ).fetchone()
+
         data = {
             'chapter': {
                 'id': topic['master_chapter_id'],
@@ -1163,6 +1204,8 @@ def list_master_topic_contents(master_topic_id):
             'video_content': video_content,
             'lesson_content': lesson_content,
             'download_content': download_content,
+            'prev_topic': prev_topic,
+            'next_topic': next_topic,
         }
         return render_template('master_topic_contents.html', data=data)
     finally:

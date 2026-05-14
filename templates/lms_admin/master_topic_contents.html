@@ -35,12 +35,26 @@
     </ol>
   </nav>
 
-  <div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex justify-content-between align-items-start mb-3 w-100 gap-3 flex-wrap">
     <div>
       <h2 class="h4 mb-1">{{ data.topic.title }}</h2>
       <p class="text-muted mb-0">Configure reusable video, lesson, and download slots.</p>
     </div>
-    <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=data.chapter.id) }}">Back to Topics</a>
+    <div class="d-flex align-items-center gap-2 flex-wrap ms-auto justify-content-end">
+      {% if data.prev_topic %}
+      <a class="btn btn-primary" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=data.prev_topic.id) }}">&larr; Previous Topic</a>
+      {% else %}
+      <button type="button" class="btn btn-primary" disabled>&larr; Previous Topic</button>
+      {% endif %}
+
+      {% if data.next_topic %}
+      <a class="btn btn-primary" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=data.next_topic.id) }}">Next Topic &rarr;</a>
+      {% else %}
+      <button type="button" class="btn btn-primary" disabled>Next Topic &rarr;</button>
+      {% endif %}
+
+      <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=data.chapter.id) }}">Back to Topics</a>
+    </div>
   </div>
 
   <div class="slot-card">
