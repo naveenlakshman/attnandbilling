@@ -1241,6 +1241,92 @@ def leave_history():
 
 
 # ---------------------------------------------------------------------------
+# Student Notes (per content item)
+# ---------------------------------------------------------------------------
+
+def _student_can_access_content(conn, content_id, student_id):
+    """Return True if the content item belongs to any program the student can access."""
+    tc = conn.execute(
+        "SELECT master_topic_id FROM lms_topic_contents WHERE id = ?",
+        (content_id,)
+    ).fetchone()
+    if not tc or not tc['master_topic_id']:
+        return False
+    mt = conn.execute(
+        "SELECT master_chapter_id FROM lms_master_topics WHERE id = ?",
+        (tc['master_topic_id'],)
+    ).fetchone()
+    if not mt:
+        return False
+    programs = conn.execute(
+        "SELECT program_id FROM lms_program_chapters WHERE master_chapter_id = ?",
+        (mt['master_chapter_id'],)
+    ).fetchall()
+    return any(_has_program_access(conn, p['program_id'], student_id) for p in programs)
+
+
+@students_bp.route('/notes/content/<int:content_id>', methods=['GET'])
+@student_login_required
+def get_student_note(content_id):
+    from flask import jsonify
+    student_id = session['student_id']
+    conn = get_conn()
+    try:
+        if not _student_can_access_content(conn, content_id, student_id):
+            return jsonify({'error': 'Access denied'}), 403
+        row = conn.execute(
+            "SELECT note_body, strftime('%Y-%m-%d %H:%M', updated_at) AS updated_at "
+            "FROM student_notes WHERE student_id = ? AND content_id = ?",
+            (student_id, content_id)
+        ).fetchone()
+        if row:
+            return jsonify({'note_body': row['note_body'], 'updated_at': row['updated_at']})
+        return jsonify({'note_body': '', 'updated_at': None})
+    finally:
+        conn.close()
+
+
+@students_bp.route('/notes/content/<int:content_id>', methods=['POST'])
+@student_login_required
+def save_student_note(content_id):
+    from flask import jsonify
+    import bleach
+    student_id = session['student_id']
+    data = request.get_json(silent=True)
+    if not data or 'note_body' not in data:
+        return jsonify({'ok': False, 'error': 'Missing note_body'}), 400
+
+    allowed_tags = ['b', 'i', 'u', 'ul', 'ol', 'li', 'p', 'br', 'strong', 'em']
+    clean_body = bleach.clean(data['note_body'], tags=allowed_tags, strip=True)
+
+    conn = get_conn()
+    try:
+        if not _student_can_access_content(conn, content_id, student_id):
+            return jsonify({'ok': False, 'error': 'Access denied'}), 403
+        conn.execute(
+            """
+            INSERT INTO student_notes (student_id, content_id, note_body, updated_at)
+            VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(student_id, content_id) DO UPDATE
+                SET note_body = excluded.note_body,
+                    updated_at = datetime('now')
+            """,
+            (student_id, content_id, clean_body)
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT strftime('%Y-%m-%d %H:%M', updated_at) AS updated_at "
+            "FROM student_notes WHERE student_id = ? AND content_id = ?",
+            (student_id, content_id)
+        ).fetchone()
+        return jsonify({'ok': True, 'updated_at': row['updated_at'] if row else None})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Attendance Calendar
 # ---------------------------------------------------------------------------
 @students_bp.route('/attendance')

@@ -258,6 +258,47 @@
     .lms-sidebar { width: 0; overflow: hidden; opacity: 0; border-left: none; }
     .lms-sidebar.mobile-panel-open { width: 100% !important; opacity: 1 !important; border-left: 1px solid #e9ecef; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 400; }
   }
+
+  /* ── Student Notes ── */
+  .notes-pane-wrap { display: flex; flex-direction: column; gap: 12px; }
+  .notes-for-label {
+    font-size: 12px; font-weight: 600; color: #6c757d;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding-bottom: 4px; border-bottom: 1px solid #e9ecef;
+  }
+  .notes-status-bar {
+    padding: 8px 12px; border-radius: 6px; font-size: 13px; font-weight: 500;
+  }
+  .notes-status-bar.success { background: #d1e7dd; color: #0f5132; }
+  .notes-status-bar.error   { background: #f8d7da; color: #842029; }
+  .notes-status-bar.loading { background: #fff3cd; color: #664d03; }
+  .notes-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px;
+    position: sticky; bottom: 0;
+    background: #fff; padding: 10px 0 2px;
+    border-top: 1px solid #e9ecef;
+    z-index: 5;
+  }
+  .notes-last-saved { font-size: 12px; color: #6c757d; }
+  .btn-save-notes {
+    background: #0d6efd; color: #fff; border: none;
+    padding: 9px 22px; border-radius: 8px; font-weight: 600;
+    font-size: 14px; cursor: pointer; transition: background 0.15s;
+  }
+  .btn-save-notes:hover { background: #0b5ed7; }
+  .btn-save-notes:disabled { background: #6c757d; cursor: default; }
+  /* TinyMCE responsive */
+  .tox-tinymce { border-radius: 8px !important; max-height: 55vh; }
+  @media (max-width: 768px) {
+    .tox .tox-toolbar__group { flex-wrap: wrap; }
+    .tox-tinymce { min-height: 220px !important; max-height: 45vh !important; }
+    .notes-footer { flex-direction: column; align-items: flex-start; }
+    .btn-save-notes { width: 100%; text-align: center; }
+  }
+  @media (max-width: 375px) {
+    .tox-tinymce { min-height: 180px !important; }
+  }
 </style>
 {% endblock %}
 
@@ -274,12 +315,13 @@
         {{ topic.chapter_title }} › {{ topic.topic_title }}
       </div>
 
-      <!-- Watch / Read Tabs -->
+      <!-- Watch / Read / Notes Tabs -->
       <div class="content-tabs">
         <button class="tab-btn {% if video_content %}active{% else %}disabled{% endif %}"
                 id="tabWatch" onclick="switchTab('watch')">Watch</button>
         <button class="tab-btn {% if not video_content and (lesson_content or download_content) %}active{% elif not lesson_content and not download_content %}disabled{% endif %}"
                 id="tabRead" onclick="switchTab('read')">Read</button>
+        <button class="tab-btn" id="tabNotes" onclick="switchTab('notes')">✏ Notes</button>
       </div>
 
       <!-- Watch Pane -->
@@ -391,13 +433,30 @@
           <p class="mt-3">No content for this topic yet.</p>
         </div>
       {% endif %}
+
+      <!-- Notes Pane -->
+      <div class="tab-pane" id="paneNotes"
+           data-watch-id="{{ video_content.id if video_content else '' }}"
+           data-watch-title="{{ video_content.content_title if video_content else '' }}"
+           data-read-id="{{ lesson_content.id if lesson_content else '' }}"
+           data-read-title="{{ lesson_content.content_title if lesson_content else '' }}">
+        <div class="content-block notes-pane-wrap">
+          <div id="notesForLabel" class="notes-for-label"></div>
+          <div id="notesStatus" class="notes-status-bar" style="display:none;"></div>
+          <textarea id="notesEditor"></textarea>
+          <div class="notes-footer">
+            <span id="notesLastSaved" class="notes-last-saved"></span>
+            <button class="btn-save-notes" id="btnSaveNotes" onclick="saveNotes()">💾 Save Notes</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Bottom bar: Notes | Complete | Previous + Next -->
     <div class="lms-bottom-bar">
-      <!-- Left: Notes placeholder -->
+      <!-- Left: Notes shortcut -->
       <div>
-        <button class="btn-notes" onclick="alert('Notes feature coming soon!')">✏ Add / Edit Notes</button>
+        <button class="btn-notes" onclick="switchTab('notes')">✏ Notes</button>
       </div>
       <!-- Center: Mark Complete -->
       <button class="btn-complete {% if is_completed %}completed{% endif %}"
@@ -476,6 +535,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js" referrerpolicy="origin"></script>
 <script src="{{ url_for('static', filename='js/pdfjs/pdf.min.js') }}"></script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -520,12 +580,141 @@ document.addEventListener('keydown', function(e){
   if((e.ctrlKey||e.metaKey) && (e.key==='s'||e.key==='p'||e.key==='u')) e.preventDefault();
 });
 
-/* Watch / Read tab switcher */
+/* Watch / Read / Notes tab switcher */
 function switchTab(tab) {
-  document.getElementById('paneWatch').classList.toggle('active', tab === 'watch');
-  document.getElementById('paneRead').classList.toggle('active', tab === 'read');
-  document.getElementById('tabWatch').classList.toggle('active', tab === 'watch');
-  document.getElementById('tabRead').classList.toggle('active', tab === 'read');
+  ['watch', 'read', 'notes'].forEach(function(t) {
+    var pane = document.getElementById('pane' + t.charAt(0).toUpperCase() + t.slice(1));
+    var btn  = document.getElementById('tab'  + t.charAt(0).toUpperCase() + t.slice(1));
+    if (pane) pane.classList.toggle('active', t === tab);
+    if (btn)  btn.classList.toggle('active',  t === tab);
+  });
+  if (tab !== 'notes') _lastContentTab = tab;
+  if (tab === 'notes') loadNotes();
+  localStorage.setItem('lms_tab_' + window.location.pathname, tab);
+}
+
+/* ── Student Notes ───────────────────────────────────────── */
+var _paneNotes       = document.getElementById('paneNotes');
+var _notesLoaded     = false;
+var _lastContentTab  = null;
+var _activeContentId = null;
+
+(function() {
+  if (document.getElementById('tabWatch').classList.contains('active')) {
+    _lastContentTab = 'watch';
+  } else if (document.getElementById('tabRead').classList.contains('active')) {
+    _lastContentTab = 'read';
+  } else {
+    _lastContentTab = (_paneNotes && _paneNotes.dataset.watchId) ? 'watch' : 'read';
+  }
+})();
+
+var _autoSaveTimer = null;
+function _debounceAutoSave() {
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(function() {
+    if (_activeContentId) saveNotes(true);
+  }, 2000);
+}
+
+tinymce.init({
+  selector: '#notesEditor',
+  license_key: 'gpl',
+  menubar: false,
+  plugins: 'lists',
+  toolbar: 'undo redo | bold italic underline | bullist numlist',
+  placeholder: 'Start writing your notes here…',
+  min_height: 300,
+  branding: false,
+  content_style: 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.7; }',
+  setup: function(editor) {
+    editor.on('input keyup Change', function() {
+      if (_activeContentId) _debounceAutoSave();
+    });
+    editor.on('init', function() {
+      var savedTab = localStorage.getItem('lms_tab_' + window.location.pathname);
+      if (savedTab === 'notes') switchTab('notes');
+    });
+  }
+});
+
+function _getContentId(tabName) {
+  if (!_paneNotes) return null;
+  if (tabName === 'watch') return _paneNotes.dataset.watchId || null;
+  if (tabName === 'read')  return _paneNotes.dataset.readId  || null;
+  return null;
+}
+function _getContentTitle(tabName) {
+  if (!_paneNotes) return '';
+  if (tabName === 'watch') return _paneNotes.dataset.watchTitle || 'Watch';
+  if (tabName === 'read')  return _paneNotes.dataset.readTitle  || 'Read';
+  return '';
+}
+function setNotesStatus(msg, type) {
+  var el = document.getElementById('notesStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'notes-status-bar ' + (type || '');
+  el.style.display = msg ? '' : 'none';
+}
+function loadNotes() {
+  var contentId = _getContentId(_lastContentTab);
+  if (!contentId) {
+    setNotesStatus('No content available for this tab.', 'error');
+    return;
+  }
+  if (_notesLoaded && _activeContentId === contentId) return;
+  var label = document.getElementById('notesForLabel');
+  if (label) label.textContent = 'Notes for: ' + _getContentTitle(_lastContentTab);
+  setNotesStatus('Loading notes…', 'loading');
+  _notesLoaded = false;
+  fetch('/student/notes/content/' + contentId)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var ed = tinymce.get('notesEditor');
+      if (ed) ed.setContent(data.note_body || '');
+      var saved = document.getElementById('notesLastSaved');
+      if (saved) saved.textContent = data.updated_at ? 'Last saved: ' + data.updated_at : '';
+      setNotesStatus('', '');
+      _notesLoaded = true;
+      _activeContentId = contentId;
+    })
+    .catch(function() { setNotesStatus('Failed to load notes. Please try again.', 'error'); });
+}
+function saveNotes(isAuto) {
+  var contentId = _activeContentId;
+  if (!contentId) { if (!isAuto) setNotesStatus('No content to save notes for.', 'error'); return; }
+  var btn  = document.getElementById('btnSaveNotes');
+  var ed   = tinymce.get('notesEditor');
+  var body = ed ? ed.getContent() : '';
+  if (!isAuto && btn) btn.disabled = true;
+  if (isAuto) {
+    setNotesStatus('Autosaving…', 'loading');
+  } else {
+    setNotesStatus('Saving…', 'loading');
+  }
+  fetch('/student/notes/content/' + contentId, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _getCsrfToken() },
+    body: JSON.stringify({ note_body: body })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        setNotesStatus(isAuto ? 'Autosaved ✓' : 'Notes saved!', 'success');
+        var saved = document.getElementById('notesLastSaved');
+        if (saved) saved.textContent = data.updated_at ? 'Last saved: ' + data.updated_at : '';
+        setTimeout(function() { setNotesStatus('', ''); }, 3000);
+      } else {
+        setNotesStatus('Save failed: ' + (data.error || 'Unknown error'), 'error');
+      }
+    })
+    .catch(function() { setNotesStatus('Save failed. Check your connection.', 'error'); })
+    .finally(function() { if (!isAuto && btn) btn.disabled = false; });
+}
+function _getCsrfToken() {
+  var meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.getAttribute('content') : '';
 }
 
 /* ── Interactive Image Hotspots ─────────────────────────────────── */

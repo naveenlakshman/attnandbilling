@@ -1413,5 +1413,18 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON activity_logs(user_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at)")
 
+    # ---------- Student Notes (per content item) ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS student_notes (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            content_id INTEGER NOT NULL,
+            note_body  TEXT    NOT NULL DEFAULT '',
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (student_id, content_id)
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_student_notes_student ON student_notes(student_id)")
+
     conn.commit()
     conn.close()
