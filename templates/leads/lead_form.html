@@ -50,18 +50,19 @@
     </div>
 
     <div class="col-md-4">
-      <label class="form-label">WhatsApp</label>
+      <label class="form-label">WhatsApp *</label>
       <input class="form-control" name="whatsapp" id="whatsappInput"
              value="{{ lead.whatsapp if lead else '' }}"
              pattern="[6-9][0-9]{9}" maxlength="10"
              inputmode="numeric"
-             title="Enter a valid 10-digit Indian mobile number (starting with 6–9)">
+             title="Enter a valid 10-digit Indian mobile number (starting with 6–9)"
+             required>
       <div class="invalid-feedback">Enter a valid 10-digit mobile number (starting with 6–9).</div>
     </div>
 
     <div class="col-md-3">
-      <label class="form-label">Gender</label>
-      <select class="form-select" name="gender">
+      <label class="form-label">Gender *</label>
+      <select class="form-select" name="gender" required>
         <option value="">(none)</option>
         {% for g in genders %}
           <option value="{{ g }}" {% if lead and lead.gender == g %}selected{% endif %}>{{ g }}</option>
@@ -70,13 +71,13 @@
     </div>
 
     <div class="col-md-3">
-      <label class="form-label">Age</label>
-      <input class="form-control" name="age" type="number" value="{{ lead.age if lead else '' }}">
+      <label class="form-label">Age *</label>
+      <input class="form-control" name="age" type="number" value="{{ lead.age if lead else '' }}" required>
     </div>
 
     <div class="col-md-3">
-      <label class="form-label">Education Status</label>
-      <select class="form-select" name="education_status">
+      <label class="form-label">Education Status *</label>
+      <select class="form-select" name="education_status" required>
         <option value="">(none)</option>
         {% for e in educations %}
           <option value="{{ e }}" {% if lead and lead.education_status == e %}selected{% endif %}>{{ e }}</option>
@@ -85,8 +86,8 @@
     </div>
 
     <div class="col-md-3">
-      <label class="form-label">Stream</label>
-      <select class="form-select" name="stream">
+      <label class="form-label">Stream *</label>
+      <select class="form-select" name="stream" required>
         <option value="">(none)</option>
         {% for s in streams %}
           <option value="{{ s }}" {% if lead and lead.stream == s %}selected{% endif %}>{{ s }}</option>
@@ -95,14 +96,14 @@
     </div>
 
     <div class="col-md-6">
-      <label class="form-label">School/College/Company</label>
-      <input class="form-control" name="institute_name" value="{{ lead.institute_name if lead else '' }}">
+      <label class="form-label">School/College/Company *</label>
+      <input class="form-control" name="institute_name" value="{{ lead.institute_name if lead else '' }}" required>
     </div>
 
     <div class="col-md-6">
-      <label class="form-label">Interested Courses</label>
+      <label class="form-label">Interested Courses *</label>
       {% if active_courses %}
-      <select class="form-select" name="interested_courses">
+      <select class="form-select" name="interested_courses" required>
         <option value="">(none)</option>
         {% for c in active_courses %}
           <option value="{{ c.course_name }}"
@@ -112,13 +113,13 @@
         {% endfor %}
       </select>
       {% else %}
-      <input class="form-control" name="interested_courses" value="{{ lead.interested_courses if lead else '' }}" placeholder="Tally, Excel, CCOM...">
+      <input class="form-control" name="interested_courses" value="{{ lead.interested_courses if lead else '' }}" placeholder="Tally, Excel, CCOM..." required>
       {% endif %}
     </div>
 
     <div class="col-md-4">
-      <label class="form-label">Career Goal</label>
-      <select class="form-select" name="career_goal">
+      <label class="form-label">Career Goal *</label>
+      <select class="form-select" name="career_goal" required>
         <option value="">(none)</option>
         {% for c in career_goals %}
           <option value="{{ c }}" {% if lead and lead.career_goal == c %}selected{% endif %}>{{ c }}</option>
@@ -127,8 +128,8 @@
     </div>
 
     <div class="col-md-4">
-      <label class="form-label">Lead Source</label>
-      <select class="form-select" name="lead_source">
+      <label class="form-label">Lead Source *</label>
+      <select class="form-select" name="lead_source" required>
         <option value="">(none)</option>
         {% for ls in lead_sources %}
           <option value="{{ ls }}" {% if lead and lead.lead_source == ls %}selected{% endif %}>{{ ls }}</option>
@@ -198,8 +199,8 @@
     </div>
 
     <div class="col-md-4">
-      <label class="form-label">Lead From</label>
-      <select class="form-select" name="lead_location">
+      <label class="form-label">Lead From *</label>
+      <select class="form-select" name="lead_location" required>
         <option value="">(none)</option>
         <option value="rural" {% if lead and lead.lead_location == 'rural' %}selected{% endif %}>Rural</option>
         <option value="urban" {% if lead and lead.lead_location == 'urban' %}selected{% endif %}>Urban</option>
@@ -207,8 +208,8 @@
     </div>
 
     <div class="col-md-4">
-      <label class="form-label">Start Timeframe</label>
-      <select class="form-select" name="start_timeframe">
+      <label class="form-label">Start Timeframe *</label>
+      <select class="form-select" name="start_timeframe" required>
         <option value="">(none)</option>
         {% for t in timeframes %}
           <option value="{{ t }}" {% if lead and lead.start_timeframe == t %}selected{% endif %}>{{ t }}</option>
@@ -227,18 +228,18 @@
     </div>
 
     <div class="col-md-4">
-      <label class="form-label">Last Contact Date</label>
-      <input class="form-control" type="date" name="last_contact_date" value="{{ lead.last_contact_date if lead and lead.last_contact_date else '' }}">
+      <label class="form-label">Last Contact Date *</label>
+      <input class="form-control" type="date" name="last_contact_date" value="{{ lead.last_contact_date if lead and lead.last_contact_date else '' }}" required>
     </div>
 
     <div class="col-md-4">
-      <label class="form-label">Next Follow-up Date</label>
-      <input class="form-control" type="date" name="next_followup_date" value="{{ lead.next_followup_date if lead and lead.next_followup_date else '' }}">
+      <label class="form-label">Next Follow-up Date *</label>
+      <input class="form-control" type="date" name="next_followup_date" value="{{ lead.next_followup_date if lead and lead.next_followup_date else '' }}" required>
     </div>
 
     <div class="col-12">
-      <label class="form-label">Notes</label>
-      <textarea class="form-control" name="notes" rows="3">{{ lead.notes if lead else '' }}</textarea>
+      <label class="form-label">Notes *</label>
+      <textarea class="form-control" name="notes" rows="3" required>{{ lead.notes if lead else '' }}</textarea>
     </div>
   </div>
 
@@ -284,15 +285,15 @@
     phoneInput.addEventListener('blur', function () { validatePhone(this, true); });
   }
   if (waInput) {
-    waInput.addEventListener('input', function () { validatePhone(this, false); });
-    waInput.addEventListener('blur', function () { validatePhone(this, false); });
+    waInput.addEventListener('input', function () { validatePhone(this, true); });
+    waInput.addEventListener('blur', function () { validatePhone(this, true); });
   }
 
   if (form) {
     form.addEventListener('submit', function (e) {
       var ok = true;
       if (!validatePhone(phoneInput, true)) ok = false;
-      if (waInput && waInput.value.trim() && !validatePhone(waInput, false)) ok = false;
+      if (!validatePhone(waInput, true)) ok = false;
       if (!ok) {
         e.preventDefault();
         if (phoneInput && phoneInput.classList.contains('is-invalid')) {

@@ -521,11 +521,16 @@ def lead_create():
             next_followup_date = None
 
         _phone_digits = ''.join(filter(str.isdigit, phone))
+        _wa_digits = ''.join(filter(str.isdigit, whatsapp or ''))
         _phone_error = None
         if not name or not phone:
             _phone_error = "Name and Phone are required."
         elif len(_phone_digits) != 10 or _phone_digits[0] not in '6789':
             _phone_error = "Phone must be a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)."
+        elif not whatsapp:
+            _phone_error = "WhatsApp number is required and must be a valid 10-digit Indian mobile number."
+        elif len(_wa_digits) != 10 or _wa_digits[0] not in '6789':
+            _phone_error = "WhatsApp must be a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)."
         if _phone_error:
             _conn2 = get_conn()
             _cur2 = _conn2.cursor()
@@ -1177,11 +1182,16 @@ def lead_edit(lead_id):
             next_followup_date = None
 
         _phone_digits_edit = ''.join(filter(str.isdigit, phone))
+        _wa_digits_edit = ''.join(filter(str.isdigit, whatsapp or ''))
         _phone_error_edit = None
         if not name or not phone:
             _phone_error_edit = "Name and Phone are required."
         elif len(_phone_digits_edit) != 10 or _phone_digits_edit[0] not in '6789':
             _phone_error_edit = "Phone must be a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)."
+        elif not whatsapp:
+            _phone_error_edit = "WhatsApp number is required and must be a valid 10-digit Indian mobile number."
+        elif len(_wa_digits_edit) != 10 or _wa_digits_edit[0] not in '6789':
+            _phone_error_edit = "WhatsApp must be a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)."
         if _phone_error_edit:
             _conn3 = get_conn()
             _cur3 = _conn3.cursor()
