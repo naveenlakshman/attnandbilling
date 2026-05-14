@@ -48,7 +48,7 @@ def send_sms(phone_number: str, message_text: str) -> dict:
             timeout=10,
         )
 
-        if response.status_code == 200:
+        if response.status_code in (200, 202):
             data = response.json()
             logger.info("SMS sent to %s — id: %s", phone_number, data.get("id"))
             return {

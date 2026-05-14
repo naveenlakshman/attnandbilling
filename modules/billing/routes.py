@@ -1,11 +1,13 @@
-from flask import Blueprint, render_template, request, session, redirect, url_for, flash, Response, jsonify
+from flask import Blueprint, render_template, request, session, redirect, url_for, flash, Response, jsonify, current_app
 from datetime import date, datetime, timedelta
 import calendar
+import logging
 import uuid
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
 from modules.core.sms import send_sms
 from werkzeug.security import generate_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 import io
 import csv
 import os
@@ -250,6 +252,7 @@ QUALIFICATION_LEVELS = {
 }
 
 billing_bp = Blueprint("billing", __name__)
+logger = logging.getLogger(__name__)
 
 
 @billing_bp.route('/student/<int:student_id>/toggle-portal', methods=['POST'])
@@ -4024,6 +4027,58 @@ def receipt_new():
                     remaining_payment = 0
 
             conn.commit()
+
+            # Auto-send receipt SMS if student has a phone number
+            try:
+                cur2 = conn.cursor()
+                cur2.execute("""
+                    SELECT students.full_name, students.phone
+                    FROM invoices
+                    JOIN students ON invoices.student_id = students.id
+                    WHERE invoices.id = ?
+                """, (invoice_id,))
+                student = cur2.fetchone()
+
+                if student and student["phone"]:
+                    phone = student["phone"].strip()
+                    if not phone.startswith("+"):
+                        phone = "+91" + phone.lstrip("0")
+
+                    token = _make_receipt_token(receipt_id)
+                    cur2.execute("UPDATE receipts SET sms_token = ? WHERE id = ?", (token, receipt_id))
+                    conn.commit()
+
+                    download_url = url_for(
+                        "billing.receipt_public_download",
+                        token=token,
+                        _external=True
+                    )
+                    first_name = student["full_name"].split()[0]
+                    message = (
+                        f"Dear {first_name}, payment of Rs.{amount_received:.0f} received "
+                        f"against {receipt_no}. Download your receipt: {download_url} "
+                        f"- Global IT Education"
+                    )
+                    sms_result = send_sms(phone, message)
+                    if sms_result.get("success"):
+                        sms_now = datetime.now().isoformat(timespec="seconds")
+                        cur2.execute(
+                            "UPDATE receipts SET sms_sent_at = ? WHERE id = ?",
+                            (sms_now, receipt_id)
+                        )
+                        conn.commit()
+                        log_activity(
+                            user_id=session.get("user_id"),
+                            branch_id=invoice_data["branch_id"],
+                            action_type="sms",
+                            module_name="receipts",
+                            record_id=receipt_id,
+                            description=f"Receipt SMS auto-sent to {phone} for {receipt_no}"
+                        )
+            except Exception as sms_exc:
+                # SMS failure must never block receipt creation
+                logger.warning("Auto-SMS failed for receipt %s: %s", receipt_no, sms_exc)
+
             conn.close()
 
             # 🔥 ERP LOGGING
@@ -4352,6 +4407,149 @@ def receipt_print(receipt_id):
     pdf_mode = request.args.get('mode') == 'pdf'
 
     return render_template("billing/receipt_print.html", receipt=receipt, pdf_mode=pdf_mode)
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
+
+def _receipt_serializer():
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="receipt-download")
+
+
+def _make_receipt_token(receipt_id: int) -> str:
+    return _receipt_serializer().dumps(receipt_id)
+
+
+def _verify_receipt_token(token: str, max_age_days: int = 30):
+    """Returns receipt_id (int) or raises BadSignature / SignatureExpired."""
+    return _receipt_serializer().loads(token, max_age=max_age_days * 86400)
+
+
+# ── Public receipt download (no login required) ──────────────────────────────
+
+@billing_bp.route("/receipt/download/<token>")
+def receipt_public_download(token):
+    """Token-protected public link; lets a student view/download their receipt PDF."""
+    try:
+        receipt_id = _verify_receipt_token(token)
+    except SignatureExpired:
+        return render_template("billing/receipt_token_expired.html"), 410
+    except (BadSignature, Exception):
+        return render_template("billing/receipt_token_invalid.html"), 403
+
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            receipts.*,
+            invoices.id AS invoice_id,
+            invoices.invoice_no,
+            invoices.total_amount,
+            invoices.invoice_date,
+            students.student_code,
+            students.full_name,
+            students.phone,
+            students.email,
+            users.full_name AS created_by_name
+        FROM receipts
+        JOIN invoices ON receipts.invoice_id = invoices.id
+        JOIN students ON invoices.student_id = students.id
+        LEFT JOIN users ON receipts.created_by = users.id
+        WHERE receipts.id = ?
+    """, (receipt_id,))
+    receipt = cur.fetchone()
+    conn.close()
+
+    if not receipt:
+        return "Receipt not found.", 404
+
+    # Render in PDF-auto-download mode so the student gets a file immediately
+    return render_template("billing/receipt_print.html", receipt=receipt, pdf_mode=True)
+
+
+# ── Send Receipt SMS ──────────────────────────────────────────────────────────
+
+@billing_bp.route("/receipt/<int:receipt_id>/send-sms", methods=["POST"])
+@login_required
+def receipt_send_sms(receipt_id):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            receipts.*,
+            invoices.invoice_no,
+            invoices.total_amount,
+            students.full_name,
+            students.phone
+        FROM receipts
+        JOIN invoices ON receipts.invoice_id = invoices.id
+        JOIN students ON invoices.student_id = students.id
+        WHERE receipts.id = ?
+    """, (receipt_id,))
+    receipt = cur.fetchone()
+
+    if not receipt:
+        conn.close()
+        flash("Receipt not found.", "danger")
+        return redirect(url_for("billing.receipts"))
+
+    phone = (receipt["phone"] or "").strip()
+    if not phone:
+        conn.close()
+        flash("Student has no phone number on record.", "warning")
+        return redirect(url_for("billing.receipt_view", receipt_id=receipt_id))
+
+    # Generate (or reuse) a token — stored in DB so we can audit it
+    token = receipt["sms_token"]
+    if not token:
+        token = _make_receipt_token(receipt_id)
+        cur.execute("UPDATE receipts SET sms_token = ? WHERE id = ?", (token, receipt_id))
+        conn.commit()
+
+    # Build the public download URL
+    download_url = url_for(
+        "billing.receipt_public_download",
+        token=token,
+        _external=True
+    )
+
+    # Format phone to E.164 (assume India +91 if no country code)
+    if not phone.startswith("+"):
+        phone = "+91" + phone.lstrip("0")
+
+    student_name = receipt["full_name"].split()[0]  # first name only
+    amount = receipt["amount_received"]
+    receipt_no = receipt["receipt_no"]
+
+    message = (
+        f"Dear {student_name}, payment of Rs.{amount:.0f} received against {receipt_no}. "
+        f"Download your receipt: {download_url} - Global IT Education"
+    )
+
+    result = send_sms(phone, message)
+
+    now = datetime.now().isoformat(timespec="seconds")
+    if result.get("success"):
+        cur.execute(
+            "UPDATE receipts SET sms_sent_at = ? WHERE id = ?",
+            (now, receipt_id)
+        )
+        conn.commit()
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=None,
+            action_type="sms",
+            module_name="receipts",
+            record_id=receipt_id,
+            description=f"Receipt SMS sent to {phone} for {receipt_no}"
+        )
+        flash(f"Receipt SMS sent to {phone}.", "success")
+    else:
+        flash(f"SMS failed: {result.get('error', 'Unknown error')}", "danger")
+
+    conn.close()
+    return redirect(url_for("billing.receipt_view", receipt_id=receipt_id))
+
 
 @billing_bp.route("/receivables")
 @login_required

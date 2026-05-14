@@ -14,6 +14,18 @@
       <a href="{{ url_for('billing.receipt_print', receipt_id=receipt.id) }}" target="_blank" class="btn btn-primary">🖨️ Print Receipt</a>
       <a href="{{ url_for('billing.receipt_print', receipt_id=receipt.id) }}?mode=pdf" target="_blank" class="btn btn-success">⬇️ Download PDF</a>
 
+      {% if receipt.phone %}
+      <form method="post" action="{{ url_for('billing.receipt_send_sms', receipt_id=receipt.id) }}" style="display:inline;" onsubmit="return confirm('Send receipt download link to {{ receipt.phone }}?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-info" style="color:#fff;" title="Send receipt download link via SMS">
+          📱 Send SMS
+          {% if receipt.sms_sent_at %}
+            <span style="font-size:11px; opacity:0.85; margin-left:4px;">(sent {{ receipt.sms_sent_at[:10] }})</span>
+          {% endif %}
+        </button>
+      </form>
+      {% endif %}
+
       {% if session.get("role") == "admin" %}
       <a href="{{ url_for('billing.receipt_edit', receipt_id=receipt.id) }}" class="btn btn-secondary">✎ Edit</a>
       {% endif %}
