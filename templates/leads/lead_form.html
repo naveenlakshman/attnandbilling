@@ -40,12 +40,23 @@
 
     <div class="col-md-4">
       <label class="form-label">Phone *</label>
-      <input class="form-control" name="phone" value="{{ lead.phone if lead else '' }}" required>
+      <input class="form-control" name="phone" id="phoneInput"
+             value="{{ lead.phone if lead else '' }}"
+             pattern="[6-9][0-9]{9}" maxlength="10"
+             inputmode="numeric"
+             title="Enter a valid 10-digit Indian mobile number (starting with 6–9)"
+             required>
+      <div class="invalid-feedback">Enter a valid 10-digit mobile number (starting with 6–9).</div>
     </div>
 
     <div class="col-md-4">
       <label class="form-label">WhatsApp</label>
-      <input class="form-control" name="whatsapp" value="{{ lead.whatsapp if lead else '' }}">
+      <input class="form-control" name="whatsapp" id="whatsappInput"
+             value="{{ lead.whatsapp if lead else '' }}"
+             pattern="[6-9][0-9]{9}" maxlength="10"
+             inputmode="numeric"
+             title="Enter a valid 10-digit Indian mobile number (starting with 6–9)">
+      <div class="invalid-feedback">Enter a valid 10-digit mobile number (starting with 6–9).</div>
     </div>
 
     <div class="col-md-3">
@@ -241,5 +252,57 @@
     </a>
   </div>
 </form>
+
+<script>
+(function () {
+  var form = document.querySelector('form');
+  var phoneInput = document.getElementById('phoneInput');
+  var waInput = document.getElementById('whatsappInput');
+
+  function isValidIndianMobile(val) {
+    var digits = val.replace(/\D/g, '');
+    return digits.length === 10 && /^[6-9]/.test(digits);
+  }
+
+  function validatePhone(input, required) {
+    if (!input) return true;
+    var val = input.value.trim();
+    if (!val && !required) { input.classList.remove('is-invalid'); return true; }
+    if (val && isValidIndianMobile(val)) {
+      input.classList.remove('is-invalid');
+      input.classList.add('is-valid');
+      return true;
+    } else {
+      input.classList.add('is-invalid');
+      input.classList.remove('is-valid');
+      return false;
+    }
+  }
+
+  if (phoneInput) {
+    phoneInput.addEventListener('input', function () { validatePhone(this, true); });
+    phoneInput.addEventListener('blur', function () { validatePhone(this, true); });
+  }
+  if (waInput) {
+    waInput.addEventListener('input', function () { validatePhone(this, false); });
+    waInput.addEventListener('blur', function () { validatePhone(this, false); });
+  }
+
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      var ok = true;
+      if (!validatePhone(phoneInput, true)) ok = false;
+      if (waInput && waInput.value.trim() && !validatePhone(waInput, false)) ok = false;
+      if (!ok) {
+        e.preventDefault();
+        if (phoneInput && phoneInput.classList.contains('is-invalid')) {
+          phoneInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          phoneInput.focus();
+        }
+      }
+    });
+  }
+})();
+</script>
 
 {% endblock %}
