@@ -131,6 +131,28 @@
 
   {% if submissions %}
 
+  <!-- Batch filter -->
+  {% if active_batches %}
+  <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    <span style="font-size:13px;color:#6c757d;font-weight:600;">🎓 Batch:</span>
+    <form method="GET" class="d-flex align-items-center gap-2">
+      <select name="batch_id" class="form-select form-select-sm" style="width:auto;min-width:180px;"
+              onchange="this.form.submit()">
+        <option value="">All Batches</option>
+        {% for b in active_batches %}
+        <option value="{{ b.id }}" {% if selected_batch_id == b.id %}selected{% endif %}>
+          {{ b.batch_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
+    {% if selected_batch_id %}
+    <a href="{{ url_for('lms_admin.view_submissions', assignment_id=assignment.id) }}"
+       class="btn btn-sm btn-outline-secondary">✕ Clear filter</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- Filter buttons -->
   <div class="filter-row">
     <span style="font-size:13px;color:#6c757d;">Show:</span>
@@ -199,10 +221,31 @@
   </div><!-- /#subList -->
 
   {% else %}
+  <!-- Batch filter (shown even when empty so staff can change filter) -->
+  {% if active_batches %}
+  <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+    <span style="font-size:13px;color:#6c757d;font-weight:600;">🎓 Batch:</span>
+    <form method="GET" class="d-flex align-items-center gap-2">
+      <select name="batch_id" class="form-select form-select-sm" style="width:auto;min-width:180px;"
+              onchange="this.form.submit()">
+        <option value="">All Batches</option>
+        {% for b in active_batches %}
+        <option value="{{ b.id }}" {% if selected_batch_id == b.id %}selected{% endif %}>
+          {{ b.batch_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
+    {% if selected_batch_id %}
+    <a href="{{ url_for('lms_admin.view_submissions', assignment_id=assignment.id) }}"
+       class="btn btn-sm btn-outline-secondary">✕ Clear filter</a>
+    {% endif %}
+  </div>
+  {% endif %}
   <div class="text-center text-muted py-5">
     <div style="font-size:48px;">📭</div>
-    <p class="mt-3 mb-0 fw-semibold">No submissions yet</p>
-    <p class="small">Students haven't submitted anything for this assignment.</p>
+    <p class="mt-3 mb-0 fw-semibold">No submissions{% if selected_batch_id %} for this batch{% endif %}</p>
+    <p class="small">{% if selected_batch_id %}Try a different batch or clear the filter.{% else %}Students haven't submitted anything for this assignment.{% endif %}</p>
   </div>
   {% endif %}
 

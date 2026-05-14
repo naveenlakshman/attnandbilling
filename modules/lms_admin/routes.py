@@ -6183,25 +6183,64 @@ def all_assignments():
     """Overview of every assignment across all master topics."""
     conn = get_conn()
     try:
-        assignments = conn.execute("""
-            SELECT
-                a.id,
-                a.title,
-                a.description,
-                a.original_filename,
-                a.master_topic_id,
-                mt.title   AS topic_title,
-                mc.title   AS chapter_title,
-                strftime('%d %b %Y', a.created_at) AS created_date,
-                (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id)         AS submission_count,
-                (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id
-                                                                     AND s.status = 'reviewed')          AS reviewed_count
-            FROM lms_assignments a
-            JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
-            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
-            ORDER BY mc.title, mt.title, a.id
-        """).fetchall()
-        return render_template('lms_admin/lms_all_assignments.html', assignments=assignments)
+        batch_id = request.args.get('batch_id', type=int)
+
+        active_batches = conn.execute(
+            "SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name"
+        ).fetchall()
+
+        if batch_id:
+            assignments = conn.execute("""
+                SELECT
+                    a.id,
+                    a.title,
+                    a.description,
+                    a.original_filename,
+                    a.master_topic_id,
+                    mt.title   AS topic_title,
+                    mc.title   AS chapter_title,
+                    strftime('%d %b %Y', a.created_at) AS created_date,
+                    (SELECT COUNT(*) FROM lms_assignment_submissions s
+                     JOIN student_batches sb ON sb.student_id = s.student_id
+                     WHERE s.assignment_id = a.id AND sb.batch_id = ?)          AS submission_count,
+                    (SELECT COUNT(*) FROM lms_assignment_submissions s
+                     JOIN student_batches sb ON sb.student_id = s.student_id
+                     WHERE s.assignment_id = a.id AND sb.batch_id = ?
+                       AND s.status = 'reviewed')                               AS reviewed_count
+                FROM lms_assignments a
+                JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
+                JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                WHERE EXISTS (
+                    SELECT 1 FROM lms_assignment_submissions s
+                    JOIN student_batches sb ON sb.student_id = s.student_id
+                    WHERE s.assignment_id = a.id AND sb.batch_id = ?
+                )
+                ORDER BY mc.title, mt.title, a.id
+            """, (batch_id, batch_id, batch_id)).fetchall()
+        else:
+            assignments = conn.execute("""
+                SELECT
+                    a.id,
+                    a.title,
+                    a.description,
+                    a.original_filename,
+                    a.master_topic_id,
+                    mt.title   AS topic_title,
+                    mc.title   AS chapter_title,
+                    strftime('%d %b %Y', a.created_at) AS created_date,
+                    (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id)         AS submission_count,
+                    (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id
+                                                                         AND s.status = 'reviewed')          AS reviewed_count
+                FROM lms_assignments a
+                JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
+                JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                ORDER BY mc.title, mt.title, a.id
+            """).fetchall()
+
+        return render_template('lms_admin/lms_all_assignments.html',
+                               assignments=assignments,
+                               active_batches=active_batches,
+                               selected_batch_id=batch_id)
     finally:
         conn.close()
 
@@ -6312,19 +6351,40 @@ def view_submissions(assignment_id):
             flash('Assignment not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
 
-        submissions = conn.execute("""
-            SELECT s.id, s.student_id, s.original_filename, s.feedback, s.status,
-                   strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
-                   strftime('%d %b %Y %H:%M', s.reviewed_at)  AS reviewed_date,
-                   st.full_name AS student_name, st.student_code
-            FROM   lms_assignment_submissions s
-            JOIN   students st ON st.id = s.student_id
-            WHERE  s.assignment_id = ?
-            ORDER  BY s.submitted_at DESC
-        """, (assignment_id,)).fetchall()
+        batch_id = request.args.get('batch_id', type=int)
+
+        active_batches = conn.execute(
+            "SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name"
+        ).fetchall()
+
+        if batch_id:
+            submissions = conn.execute("""
+                SELECT s.id, s.student_id, s.original_filename, s.feedback, s.status,
+                       strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
+                       strftime('%d %b %Y %H:%M', s.reviewed_at)  AS reviewed_date,
+                       st.full_name AS student_name, st.student_code
+                FROM   lms_assignment_submissions s
+                JOIN   students st ON st.id = s.student_id
+                JOIN   student_batches sb ON sb.student_id = s.student_id
+                WHERE  s.assignment_id = ? AND sb.batch_id = ?
+                ORDER  BY s.submitted_at DESC
+            """, (assignment_id, batch_id)).fetchall()
+        else:
+            submissions = conn.execute("""
+                SELECT s.id, s.student_id, s.original_filename, s.feedback, s.status,
+                       strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
+                       strftime('%d %b %Y %H:%M', s.reviewed_at)  AS reviewed_date,
+                       st.full_name AS student_name, st.student_code
+                FROM   lms_assignment_submissions s
+                JOIN   students st ON st.id = s.student_id
+                WHERE  s.assignment_id = ?
+                ORDER  BY s.submitted_at DESC
+            """, (assignment_id,)).fetchall()
 
         return render_template('lms_admin/lms_assignment_submissions.html',
-                               assignment=a, submissions=submissions)
+                               assignment=a, submissions=submissions,
+                               active_batches=active_batches,
+                               selected_batch_id=batch_id)
     finally:
         conn.close()
 
