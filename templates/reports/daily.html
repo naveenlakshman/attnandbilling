@@ -390,6 +390,8 @@
               <th>Phone</th>
               <th>Stage</th>
               <th>Status</th>
+              <th>Due Date</th>
+              <th>Owner</th>
             </tr>
           </thead>
           <tbody>
@@ -400,6 +402,10 @@
               <td>{{ f.phone or '—' }}</td>
               <td><span class="badge-stage stage-{{ f.stage or 'new' }}">{{ (f.stage or 'new') | replace('_',' ') | title }}</span></td>
               <td><span class="badge-stage stage-{{ f.status or '' }}">{{ (f.status or '—') | title }}</span></td>
+              <td style="font-size:12px; color:{% if f.next_followup_date < report_date %}#dc2626{% else %}#374151{% endif %}; font-weight:600;">
+                {{ f.next_followup_date or '—' }}{% if f.next_followup_date < report_date %} <span style="font-size:10px;">(overdue)</span>{% endif %}
+              </td>
+              <td style="font-size:12px; color:#6b7280;">{{ f.owner_name or '—' }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -407,6 +413,44 @@
       </div>
       {% else %}
       <div class="dr-empty">No followups scheduled for today.</div>
+      {% endif %}
+
+      <!-- Overdue Followups sub-table -->
+      <div style="padding:14px 18px 6px; font-size:12px; font-weight:700; color:#dc2626; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid #f1f3f5; margin-top:4px;">
+        ⚠ Overdue Followups
+        {% if followups_overdue %}<span style="font-size:11px; font-weight:500; color:#6b7280; margin-left:6px;">({{ followups_overdue|length }})</span>{% endif %}
+      </div>
+      {% if followups_overdue %}
+      <div style="overflow-x:auto;">
+        <table class="dr-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Stage</th>
+              <th>Status</th>
+              <th>Due Date</th>
+              <th>Owner</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in followups_overdue %}
+            <tr>
+              <td style="color:#9ca3af;">{{ loop.index }}</td>
+              <td><a href="{{ url_for('leads.lead_detail', lead_id=f.id) }}" style="color:#2563eb; font-weight:600; text-decoration:none;">{{ f.name }}</a></td>
+              <td>{{ f.phone or '—' }}</td>
+              <td><span class="badge-stage stage-{{ f.stage or 'new' }}">{{ (f.stage or 'new') | replace('_',' ') | title }}</span></td>
+              <td><span class="badge-stage stage-{{ f.status or '' }}">{{ (f.status or '—') | title }}</span></td>
+              <td style="font-size:12px; color:#dc2626; font-weight:600;">{{ f.next_followup_date }}</td>
+              <td style="font-size:12px; color:#6b7280;">{{ f.owner_name or '—' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="dr-empty">No overdue followups.</div>
       {% endif %}
 
       <!-- Followups Done Today sub-table -->
@@ -609,10 +653,8 @@
       <span class="dr-chevron">▼</span>
     </div>
     <div class="dr-section-body">
-      {% if not selected_branch_id %}
-        <div class="dr-empty">Please select a branch to view attendance.</div>
-      {% elif totals.attendance == 0 %}
-        <div class="dr-empty">No attendance recorded for this branch today.</div>
+      {% if totals.attendance == 0 %}
+        <div class="dr-empty">No attendance recorded{% if selected_branch_id %} for this branch{% endif %} today.</div>
       {% else %}
         <!-- Summary pills -->
         <div class="att-pills">
@@ -631,6 +673,7 @@
                 <th>Student</th>
                 <th class="hide-sm">Reg. No</th>
                 <th>Batch</th>
+                {% if not selected_branch_id %}<th>Branch</th>{% endif %}
                 <th>Status</th>
               </tr>
             </thead>
@@ -641,6 +684,7 @@
                 <td style="font-weight:600;">{{ a.student_name }}</td>
                 <td class="hide-sm" style="font-size:12px; color:#6b7280;">{{ a.student_code }}</td>
                 <td style="font-size:12px;">{{ a.batch_name }}</td>
+                {% if not selected_branch_id %}<td style="font-size:12px; color:#6b7280;">{{ a.branch_name or '—' }}</td>{% endif %}
                 <td>
                   <span class="badge-stage att-{{ a.status }}">{{ a.status | title }}</span>
                 </td>

@@ -115,8 +115,11 @@ def daily_report():
     can_view_all = session.get("can_view_all_branches", False) or session.get("role") == "admin"
     user_branch_id = session.get("branch_id")
     branch_param = request.args.get("branch_id", "").strip()
-    if can_view_all and branch_param:
-        selected_branch_id = int(branch_param) if branch_param.isdigit() else None
+    if can_view_all:
+        if branch_param in ("", "all") or not branch_param:
+            selected_branch_id = None
+        else:
+            selected_branch_id = int(branch_param) if branch_param.isdigit() else None
     else:
         selected_branch_id = user_branch_id
 
@@ -133,12 +136,28 @@ def daily_report():
 
     # ── 2. Today's Followups due ──────────────────────────────────
     cur.execute("""
-        SELECT id, name, phone, stage, status, next_followup_date
-        FROM leads
-        WHERE next_followup_date = ? AND is_deleted = 0
-        ORDER BY name
+        SELECT l.id, l.name, l.phone, l.stage, l.status, l.next_followup_date,
+               u.full_name AS owner_name
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE l.next_followup_date = ? AND l.is_deleted = 0
+          AND l.status NOT IN ('converted', 'lost', 'not_interested')
+        ORDER BY l.name
     """, (report_date,))
     followups_due = cur.fetchall()
+
+    # ── 2a. Overdue Followups (past due, not yet done today) ─────
+    cur.execute("""
+        SELECT l.id, l.name, l.phone, l.stage, l.status, l.next_followup_date,
+               u.full_name AS owner_name
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE l.next_followup_date < ? AND l.is_deleted = 0
+          AND l.next_followup_date IS NOT NULL AND l.next_followup_date != ''
+          AND l.status NOT IN ('converted', 'lost', 'not_interested')
+        ORDER BY l.next_followup_date ASC, l.name
+    """, (report_date,))
+    followups_overdue = cur.fetchall()
 
     # ── 2b. Today's Followups done (actually logged today) ────────
     cur.execute("""
@@ -210,13 +229,38 @@ def daily_report():
 
         cur.execute("""
             SELECT ar.status, s.full_name AS student_name, s.student_code,
-                   b.batch_name
+                   b.batch_name, br2.branch_name
             FROM attendance_records ar
             JOIN students s ON ar.student_id = s.id
             JOIN batches b ON ar.batch_id = b.id
+            LEFT JOIN branches br2 ON ar.branch_id = br2.id
             WHERE ar.attendance_date = ? AND ar.branch_id = ?
             ORDER BY b.batch_name, s.full_name
         """, (report_date, selected_branch_id))
+        att_records = cur.fetchall()
+    else:
+        cur.execute("""
+            SELECT ar.status, COUNT(*) AS cnt
+            FROM attendance_records ar
+            WHERE ar.attendance_date = ?
+            GROUP BY ar.status
+        """, (report_date,))
+        for row in cur.fetchall():
+            s = row["status"]
+            if s in att_summary:
+                att_summary[s] = row["cnt"]
+            att_summary["total"] += row["cnt"]
+
+        cur.execute("""
+            SELECT ar.status, s.full_name AS student_name, s.student_code,
+                   b.batch_name, br2.branch_name
+            FROM attendance_records ar
+            JOIN students s ON ar.student_id = s.id
+            JOIN batches b ON ar.batch_id = b.id
+            LEFT JOIN branches br2 ON ar.branch_id = br2.id
+            WHERE ar.attendance_date = ?
+            ORDER BY br2.branch_name, b.batch_name, s.full_name
+        """, (report_date,))
         att_records = cur.fetchall()
 
     conn.close()
@@ -241,6 +285,7 @@ def daily_report():
         can_view_all=can_view_all,
         new_leads=new_leads,
         followups_due=followups_due,
+        followups_overdue=followups_overdue,
         followups_done=followups_done,
         invoices=invoices,
         receipts=receipts,
@@ -269,8 +314,11 @@ def daily_report_download():
     can_view_all = session.get("can_view_all_branches", False) or session.get("role") == "admin"
     user_branch_id = session.get("branch_id")
     branch_param = request.args.get("branch_id", "").strip()
-    if can_view_all and branch_param:
-        selected_branch_id = int(branch_param) if branch_param.isdigit() else None
+    if can_view_all:
+        if branch_param in ("", "all") or not branch_param:
+            selected_branch_id = None
+        else:
+            selected_branch_id = int(branch_param) if branch_param.isdigit() else None
     else:
         selected_branch_id = user_branch_id
 
@@ -295,10 +343,13 @@ def daily_report_download():
 
     # ── Followups (due) ───────────────────────────────────────────
     cur.execute("""
-        SELECT id, name, phone, stage, status, next_followup_date
-        FROM leads
-        WHERE next_followup_date = ? AND is_deleted = 0
-        ORDER BY name
+        SELECT l.id, l.name, l.phone, l.stage, l.status, l.next_followup_date,
+               u.full_name AS owner_name
+        FROM leads l
+        LEFT JOIN users u ON l.assigned_to_id = u.id
+        WHERE l.next_followup_date = ? AND l.is_deleted = 0
+          AND l.status NOT IN ('converted', 'lost', 'not_interested')
+        ORDER BY l.name
     """, (report_date,))
     followups_due = cur.fetchall()
 
@@ -358,13 +409,26 @@ def daily_report_download():
     if selected_branch_id:
         cur.execute("""
             SELECT s.full_name AS student_name, s.student_code,
-                   b.batch_name, ar.status
+                   b.batch_name, ar.status, br2.branch_name
             FROM attendance_records ar
             JOIN students s ON ar.student_id = s.id
             JOIN batches b ON ar.batch_id = b.id
+            LEFT JOIN branches br2 ON ar.branch_id = br2.id
             WHERE ar.attendance_date = ? AND ar.branch_id = ?
             ORDER BY b.batch_name, s.full_name
         """, (report_date, selected_branch_id))
+        att_records = cur.fetchall()
+    else:
+        cur.execute("""
+            SELECT s.full_name AS student_name, s.student_code,
+                   b.batch_name, ar.status, br2.branch_name
+            FROM attendance_records ar
+            JOIN students s ON ar.student_id = s.id
+            JOIN batches b ON ar.batch_id = b.id
+            LEFT JOIN branches br2 ON ar.branch_id = br2.id
+            WHERE ar.attendance_date = ?
+            ORDER BY br2.branch_name, b.batch_name, s.full_name
+        """, (report_date,))
         att_records = cur.fetchall()
 
     conn.close()
@@ -389,9 +453,10 @@ def daily_report_download():
 
     # Section 2: Followups
     writer.writerow(["FOLLOWUPS DUE"])
-    writer.writerow(["#", "Name", "Phone", "Stage", "Status"])
+    writer.writerow(["#", "Name", "Phone", "Stage", "Status", "Due Date", "Owner"])
     for i, f in enumerate(followups_due, 1):
-        writer.writerow([i, f["name"], f["phone"] or "", f["stage"] or "", f["status"] or ""])
+        writer.writerow([i, f["name"], f["phone"] or "", f["stage"] or "", f["status"] or "",
+                         f["next_followup_date"] or "", f["owner_name"] or ""])
     if not followups_due:
         writer.writerow(["No followups today"])
     writer.writerow([])
@@ -449,13 +514,16 @@ def daily_report_download():
     # Section 5: Attendance
     writer.writerow(["ATTENDANCE"])
     if att_records:
-        writer.writerow(["#", "Student", "Reg. No", "Batch", "Status"])
-        for i, a in enumerate(att_records, 1):
-            writer.writerow([i, a["student_name"], a["student_code"], a["batch_name"], a["status"]])
-    elif not selected_branch_id:
-        writer.writerow(["Select a branch to include attendance data"])
+        if selected_branch_id:
+            writer.writerow(["#", "Student", "Reg. No", "Batch", "Status"])
+            for i, a in enumerate(att_records, 1):
+                writer.writerow([i, a["student_name"], a["student_code"], a["batch_name"], a["status"]])
+        else:
+            writer.writerow(["#", "Student", "Reg. No", "Batch", "Branch", "Status"])
+            for i, a in enumerate(att_records, 1):
+                writer.writerow([i, a["student_name"], a["student_code"], a["batch_name"], a["branch_name"] or "", a["status"]])
     else:
-        writer.writerow(["No attendance recorded for this branch today"])
+        writer.writerow(["No attendance recorded today"])
 
     csv_data = output.getvalue()
     output.close()
