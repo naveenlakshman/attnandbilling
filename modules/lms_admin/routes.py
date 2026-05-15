@@ -2913,7 +2913,18 @@ def list_topics(chapter_id):
             WHERE chapter_id = ?
         """, (chapter_id,))
         total_topics = cur.fetchone()['count']
-        
+
+        # Find which topics in this chapter are mapped to master topics
+        topic_ids = [t['id'] for t in topics]
+        master_mapped_ids = set()
+        if topic_ids:
+            placeholders = ','.join('?' * len(topic_ids))
+            rows = cur.execute(
+                f"SELECT legacy_topic_id FROM lms_master_topic_bridge WHERE legacy_topic_id IN ({placeholders})",
+                topic_ids
+            ).fetchall()
+            master_mapped_ids = {r['legacy_topic_id'] for r in rows}
+
         data = {
             'program': {
                 'id': chapter['program_id'],
@@ -2921,7 +2932,8 @@ def list_topics(chapter_id):
             },
             'chapter': chapter,
             'topics': topics,
-            'total_topics': total_topics
+            'total_topics': total_topics,
+            'master_mapped_ids': master_mapped_ids,
         }
         
         return render_template('lms_topics.html', data=data)
@@ -3392,7 +3404,15 @@ def list_topic_contents(topic_id):
         if not topic:
             flash('Topic not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
-        
+
+        # If this legacy topic is mapped to a master topic, redirect there
+        bridge = cur.execute(
+            "SELECT master_topic_id FROM lms_master_topic_bridge WHERE legacy_topic_id = ?",
+            (topic_id,)
+        ).fetchone()
+        if bridge:
+            return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=bridge['master_topic_id']))
+
         # Fetch the first content item of each type (one-per-type system)
         video_content = cur.execute("""
             SELECT * FROM lms_topic_contents
@@ -3521,7 +3541,20 @@ def content_new(topic_id):
         if not topic:
             flash('Topic not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
-        
+
+        # If this legacy topic is mapped to a master topic, redirect content upload there
+        bridge = cur.execute(
+            "SELECT master_topic_id FROM lms_master_topic_bridge WHERE legacy_topic_id = ?",
+            (topic_id,)
+        ).fetchone()
+        if bridge:
+            flash('This topic is linked to the Master Library. Content is managed there.', 'info')
+            redirect_url = url_for('lms_admin.master_content_new', master_topic_id=bridge['master_topic_id'])
+            preset = request.args.get('type', '')
+            if preset:
+                redirect_url += f'?type={preset}'
+            return redirect(redirect_url)
+
         if request.method == 'POST':
             title = request.form.get('title', '').strip()
             content_mode = request.form.get('content_mode', 'youtube')
