@@ -81,6 +81,69 @@
   th.sortable::after { content: ' ↕'; color: #adb5bd; font-size: 10px; }
   th.sort-asc::after { content: ' ↑'; color: #0d6efd; }
   th.sort-desc::after { content: ' ↓'; color: #0d6efd; }
+
+  /* Compact desktop table */
+  .desktop-leads-view { overflow: hidden; }
+  .desktop-leads-view .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .desktop-leads-view table { font-size: 13px; min-width: 900px; }
+  .desktop-leads-view td, .desktop-leads-view th { vertical-align: middle !important; padding: 5px 8px !important; white-space: nowrap; }
+  .desktop-leads-view td.wrap-col { white-space: normal; max-width: 160px; }
+  .action-cell { white-space: nowrap; }
+
+  /* Sticky header */
+  .desktop-leads-view thead th {
+    position: sticky; top: 0; z-index: 5;
+    background: #f8f9fa; border-bottom: 2px solid #dee2e6;
+    box-shadow: 0 1px 0 rgba(0,0,0,.05);
+  }
+
+  /* Row hover */
+  .desktop-leads-view tbody tr:hover { background: #f0f7ff; cursor: pointer; }
+
+  /* Icon action buttons */
+  .lead-action-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid #dee2e6; background: #fff;
+    font-size: 14px; text-decoration: none; color: #495057;
+    transition: background .12s, border-color .12s;
+    cursor: pointer;
+  }
+  .lead-action-btn:hover { background: #e9ecef; color: #212529; border-color: #adb5bd; }
+  .lead-action-btn.btn-open { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+  .lead-action-btn.btn-open:hover { background: #0a58ca; border-color: #0a58ca; color: #fff; }
+
+  /* Course badge truncate */
+  .course-chip {
+    display: inline-block; max-width: 150px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    vertical-align: bottom;
+  }
+
+  /* Temperature pills */
+  .temp-pill {
+    display: inline-block; border-radius: 999px;
+    font-size: 11px; font-weight: 600; padding: 2px 9px;
+  }
+  .temp-hot  { background: #fee2e2; color: #b91c1c; }
+  .temp-warm { background: #ffedd5; color: #c2410c; }
+  .temp-cold { background: #dbeafe; color: #1d4ed8; }
+  .temp-converted { background: #dcfce7; color: #15803d; }
+  .temp-lost { background: #f3f4f6; color: #6b7280; }
+
+  /* Filter chip polish */
+  .filter-chip {
+    transition: background .12s, box-shadow .12s, color .12s;
+  }
+  .filter-chip:hover:not(.active) { background: #e2e8f0; border-color: #adb5bd; }
+  .filter-chip.active { box-shadow: 0 1px 4px rgba(13,110,253,.25); }
+
+  /* Mini stat polish */
+  .mini-stat { transition: box-shadow .12s; }
+  .mini-stat:hover { box-shadow: 0 2px 8px rgba(0,0,0,.10); }
+  .mini-stat .ms-icon { font-size: 16px; margin-bottom: 2px; }
+  .mini-stat .msval { font-size: 22px; font-weight: 800; line-height: 1; }
+  .mini-stat .mslabel { font-size: 10px; color: #9ca3af; margin-top: 3px; letter-spacing: .3px; text-transform: uppercase; }
 </style>
 {% endblock %}
 
@@ -101,24 +164,28 @@
 <div class="row g-2 mb-3">
   <div class="col-3">
     <div class="mini-stat">
+      <div class="ms-icon">👥</div>
       <div class="msval text-dark">{{ metrics.total_overall }}</div>
       <div class="mslabel">Total</div>
     </div>
   </div>
   <div class="col-3">
     <div class="mini-stat">
+      <div class="ms-icon">🔵</div>
       <div class="msval text-primary">{{ metrics.active_overall }}</div>
       <div class="mslabel">Active</div>
     </div>
   </div>
   <div class="col-3">
     <div class="mini-stat">
+      <div class="ms-icon">✅</div>
       <div class="msval text-success">{{ metrics.converted_overall }}</div>
       <div class="mslabel">Conv.</div>
     </div>
   </div>
   <div class="col-3">
     <div class="mini-stat">
+      <div class="ms-icon">❌</div>
       <div class="msval text-danger">{{ metrics.lost_overall }}</div>
       <div class="mslabel">Lost</div>
     </div>
@@ -152,7 +219,7 @@
       <button type="submit" name="followup_due" value="today" class="filter-chip {% if followup_due == 'today' %}active{% endif %}">Today Follow-up</button>
       <button type="submit" name="status_filter" value="converted" class="filter-chip {% if status_filter == 'converted' %}active{% endif %}">Converted</button>
       <button type="submit" name="status_filter" value="lost" class="filter-chip {% if status_filter == 'lost' %}active{% endif %}">Lost</button>
-      {% for s in stages %}
+      {% for s in stages if s not in ['Converted', 'Lost'] %}
         <button type="submit" name="stage" value="{{ s }}" class="filter-chip {% if stage == s %}active{% endif %}" title="{{ s }}">
           {{ s }}
         </button>
@@ -365,20 +432,18 @@
             <td>{{ l.phone }}</td>
             <td data-sort-key="course" data-sort-value="{{ l.interested_courses or '' }}">
               {% if l.interested_courses %}
-                <span class="badge bg-light text-dark border">{{ l.interested_courses }}</span>
+                <span class="badge bg-light text-dark border course-chip" title="{{ l.interested_courses }}">{{ l.interested_courses }}</span>
               {% else %}
                 <span class="text-muted">—</span>
               {% endif %}
             </td>
             <td data-sort-key="stage" data-sort-value="{{ l.stage }}">{{ l.stage }}</td>
             <td data-sort-key="temperature" data-sort-value="{{ l.temperature }}">
-              <span class="badge {% if l.temperature == 'Hot' %}bg-danger{% elif l.temperature == 'Warm' %}bg-warning text-dark{% elif l.temperature == 'Cold' %}bg-primary{% elif l.temperature == 'Converted' %}bg-success{% else %}bg-secondary{% endif %}">
-                {{ l.temperature }}
-              </span>
+              <span class="temp-pill {% if l.temperature == 'Hot' %}temp-hot{% elif l.temperature == 'Warm' %}temp-warm{% elif l.temperature == 'Cold' %}temp-cold{% elif l.temperature == 'Converted' %}temp-converted{% else %}temp-lost{% endif %}">{{ l.temperature }}</span>
               {% if l.followup_status == 'overdue' %}
-                <span class="badge bg-danger">Overdue</span>
+                <span class="badge bg-danger" style="font-size:10px;">Overdue</span>
               {% elif l.followup_status == 'today' %}
-                <span class="badge bg-warning text-dark">Today</span>
+                <span class="badge bg-warning text-dark" style="font-size:10px;">Today</span>
               {% endif %}
             </td>
             <td data-sort-key="score" data-sort-value="{{ l.lead_score }}">
@@ -392,16 +457,21 @@
             <td data-sort-key="next_followup" data-sort-value="{{ l.next_followup_date or '' }}">
               <small class="text-muted">{{ l.next_followup_date or '—' }}</small>
             </td>
-            <td data-sort-key="owner" data-sort-value="{{ l.owner_name or l.owner_username or '' }}">
-              <small class="text-muted">{{ l.owner_name or l.owner_username or 'Unassigned' }}</small>
+            <td data-sort-key="owner" data-sort-value="{{ l.owner_name or l.owner_username or '' }}" style="white-space:nowrap;">
+              {% set oname = l.owner_name or l.owner_username or 'Unassigned' %}
+              {% set oinit = oname[:1]|upper %}
+              <span style="display:inline-flex;align-items:center;gap:5px;">
+                <span style="width:20px;height:20px;border-radius:50%;background:#e9ecef;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;color:#495057;flex-shrink:0;">{{ oinit }}</span>
+                <small class="text-muted">{{ oname }}</small>
+              </span>
             </td>
-            <td>
-              <div class="d-flex flex-wrap gap-1">
-                <a class="btn btn-sm btn-outline-primary" href="tel:{{ l.phone }}">Call</a>
-                {% if wa_num %}<a class="btn btn-sm btn-outline-success" target="_blank" href="https://wa.me/{{ wa_num }}">WhatsApp</a>{% endif %}
-                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}#followup-form">Add Follow-up</a>
-                <a class="btn btn-sm btn-primary" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">Open</a>
-              </div>
+            <td class="action-cell">
+              <span style="display:inline-flex;gap:3px;align-items:center;">
+                <a class="lead-action-btn" href="tel:{{ l.phone }}" title="Call {{ l.name }}">📞</a>
+                {% if wa_num %}<a class="lead-action-btn" href="https://wa.me/{{ wa_num }}" target="_blank" title="WhatsApp">💬</a>{% endif %}
+                <a class="lead-action-btn" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}#followup-form" title="Add Follow-up">📅</a>
+                <a class="lead-action-btn btn-open" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}" title="Open Lead">👁</a>
+              </span>
             </td>
           </tr>
           {% endfor %}
@@ -411,12 +481,16 @@
   </div>
 
 {% else %}
-  <div class="text-center py-5 text-muted">
-    <div style="font-size:2.5em;">🔍</div>
-    <div class="mt-2">No leads found.</div>
-    {% if q or stage or source %}
-      <a href="{{ url_for('leads.leads_list') }}" class="btn btn-sm btn-outline-secondary mt-2">Clear filters</a>
+  <div class="text-center py-5" style="color:#9ca3af;">
+    <div style="font-size:3em; opacity:.5;">🔍</div>
+    <div class="fw-semibold mt-2" style="font-size:15px; color:#374151;">No leads found</div>
+    <div class="mt-1" style="font-size:13px;">Try adjusting your filters or search term.</div>
+    {% if q or stage or source or status_filter or temperature or followup_due %}
+      <a href="{{ url_for('leads.leads_list') }}" class="btn btn-sm btn-outline-primary mt-3">✕ Clear all filters</a>
     {% endif %}
+    <div class="mt-2">
+      <a href="{{ url_for('leads.lead_create') }}" class="btn btn-sm btn-primary">+ New Lead</a>
+    </div>
   </div>
 {% endif %}
 

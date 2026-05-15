@@ -66,6 +66,9 @@ def enquire():
     now = datetime.now().isoformat(timespec="seconds")
     notes = message if message else None
 
+    # Auto-assign website leads to Chaithra (user id=2)
+    WEBSITE_DEFAULT_OWNER_ID = 2
+
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -73,10 +76,11 @@ def enquire():
             INSERT INTO leads (
                 name, phone, email, interested_courses,
                 lead_source, stage, status, notes,
+                assigned_to_id,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'Website', 'New Lead', 'active', ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, 'Website', 'New Lead', 'active', ?, ?, ?, ?)
         """, (name, phone, email or None, interested_course or None,
-              notes, now, now))
+              notes, WEBSITE_DEFAULT_OWNER_ID, now, now))
         conn.commit()
     finally:
         conn.close()
