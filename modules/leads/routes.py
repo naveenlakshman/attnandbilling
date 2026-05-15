@@ -1571,7 +1571,9 @@ def followups_today():
     completed_items = []
     for row in cur.fetchall():
         item = dict(row)
-        item["temperature"] = lead_services.get_lead_temperature(item, today=today_date)
+        item["temperature"] = lead_services.get_lead_temperature(
+            item.get("lead_score"), item.get("followup_status"), item.get("stage")
+        )
         completed_items.append(item)
 
     # Admin dropdown users
