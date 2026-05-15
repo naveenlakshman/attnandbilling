@@ -314,6 +314,7 @@
   .assign-status-badge.not-submitted { background: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
   .assign-status-badge.submitted     { background: #cfe2ff; color: #084298; }
   .assign-status-badge.reviewed      { background: #d1e7dd; color: #0f5132; }
+  .assign-status-badge.rejected      { background: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
   .assign-feedback {
     background: #f0f7ff; border-left: 3px solid #0d6efd;
     padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 13px; margin-top: 10px;
@@ -784,13 +785,15 @@ function _esc(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function _statusBadge(status) {
+function _reviewBadge(reviewStatus) {
   var map = {
     'not-submitted': ['not-submitted', 'Not Submitted'],
-    'submitted':     ['submitted',     'Submitted'],
-    'reviewed':      ['reviewed',      'Reviewed ✓']
+    'submitted':     ['submitted',     'Submitted — Pending Review'],
+    'accepted':      ['reviewed',      'Accepted ✓'],
+    'rejected':      ['rejected',      'Rejected — Please Re-submit'],
+    'reviewed':      ['reviewed',      'Reviewed ✓']  // legacy
   };
-  var pair = map[status] || map['not-submitted'];
+  var pair = map[reviewStatus] || map['not-submitted'];
   return '<span class="assign-status-badge ' + pair[0] + '">' + pair[1] + '</span>';
 }
 
@@ -802,38 +805,58 @@ function _renderAssignments(assignments) {
   }
   var html = '';
   assignments.forEach(function(a) {
-    var statusKey = a.submission ? a.submission.status : 'not-submitted';
+    var sub = a.submission;
+    var reviewStatus = sub ? (sub.review_status || sub.status || 'submitted') : 'not-submitted';
+
     html += '<div class="assign-card" id="assign-card-' + a.id + '">';
     html += '<div class="assign-card-title">' + _esc(a.title) + '</div>';
     if (a.description) html += '<div class="assign-card-desc">' + _esc(a.description) + '</div>';
 
-    // Status + download row
+    // Status badge + assignment download
     html += '<div class="d-flex align-items-center gap-3 flex-wrap mb-2">';
-    html += _statusBadge(statusKey);
+    html += _reviewBadge(reviewStatus);
     if (a.has_file) {
       html += '<a class="btn btn-sm btn-outline-primary" href="/student/assignments/file/' + a.id + '">⬇ Download Assignment</a>';
     }
     html += '</div>';
 
-    // Previous submission info
-    if (a.submission) {
-      html += '<div class="text-muted mb-1" style="font-size:12px;">Submitted ' + _esc(a.submission.submitted_at) + ' &mdash; ' + _esc(a.submission.original_filename) + '</div>';
-      if (a.submission.feedback) {
-        html += '<div class="assign-feedback"><strong>Staff Feedback:</strong>\n' + _esc(a.submission.feedback) + '</div>';
+    // Submission info block
+    if (sub) {
+      html += '<div class="text-muted mb-1" style="font-size:12px;">Submitted ' + _esc(sub.submitted_at) + ' &mdash; ' + _esc(sub.original_filename) + '</div>';
+
+      // Download own submission
+      html += '<a class="btn btn-sm btn-outline-secondary mb-2" href="/student/submissions/file/' + _esc(sub.id) + '">⬇ Download My Submission</a>';
+
+      // Rejection reason (if rejected)
+      if (reviewStatus === 'rejected' && sub.rejection_reason) {
+        html += '<div class="assign-feedback" style="border-left-color:#dc3545;background:#fff5f5;">';
+        html += '<strong style="color:#842029;">Rejection Reason:</strong>\n' + _esc(sub.rejection_reason);
+        html += '</div>';
       }
-      if (a.submission.reviewed_at) {
-        html += '<div class="text-muted mt-1" style="font-size:12px;">Reviewed on ' + _esc(a.submission.reviewed_at) + '</div>';
+      // Staff feedback
+      if (sub.feedback) {
+        html += '<div class="assign-feedback"><strong>Staff Feedback:</strong>\n' + _esc(sub.feedback) + '</div>';
+      }
+      if (sub.reviewed_at) {
+        html += '<div class="text-muted mt-1 mb-2" style="font-size:12px;">Reviewed on ' + _esc(sub.reviewed_at) + '</div>';
       }
     }
 
-    // Upload form
+    // Upload form: show only if no submission OR rejected
     html += '<div class="mt-3">';
-    html += '<label class="assign-upload-label fw-semibold" style="font-size:13px;">' + (a.submission ? '📎 Re-submit (replaces previous)' : '📎 Submit Your Work') + '</label>';
-    html += '<div class="d-flex align-items-center gap-2 flex-wrap">';
-    html += '<input type="file" class="form-control form-control-sm" id="assign-file-' + a.id + '" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="max-width:300px;">';
-    html += '<button class="btn-assign-submit" id="assign-btn-' + a.id + '" onclick="submitAssignment(' + a.id + ')">Submit</button>';
-    html += '</div>';
-    html += '<div class="mt-1" id="assign-msg-' + a.id + '" style="font-size:13px;"></div>';
+    if (!sub || reviewStatus === 'rejected') {
+      var label = (!sub) ? '📎 Submit Your Work' : '📎 Re-submit (previous rejected)';
+      html += '<label class="assign-upload-label fw-semibold" style="font-size:13px;">' + label + '</label>';
+      html += '<div class="d-flex align-items-center gap-2 flex-wrap">';
+      html += '<input type="file" class="form-control form-control-sm" id="assign-file-' + a.id + '" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" style="max-width:300px;">';
+      html += '<button class="btn-assign-submit" id="assign-btn-' + a.id + '" onclick="submitAssignment(' + a.id + ')">Submit</button>';
+      html += '</div>';
+      html += '<div class="mt-1" id="assign-msg-' + a.id + '" style="font-size:13px;"></div>';
+    } else if (reviewStatus === 'submitted') {
+      html += '<div class="text-muted" style="font-size:13px; padding:8px 12px; background:#f8f9fa; border-radius:6px;">⏳ Your assignment has been submitted and is waiting for staff review. Re-upload is not available until reviewed.</div>';
+    } else if (reviewStatus === 'accepted' || reviewStatus === 'reviewed') {
+      html += '<div class="text-success fw-semibold" style="font-size:13px; padding:8px 12px; background:#d1e7dd; border-radius:6px;">✓ Your assignment has been accepted. No further submission required.</div>';
+    }
     html += '</div>';
 
     html += '</div>'; // end assign-card

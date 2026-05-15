@@ -6,89 +6,92 @@
 {% block extra_css %}
 <style>
   /* ── Stats Bar ── */
-  .stats-bar {
-    display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px;
-  }
+  .stats-bar { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px; }
   .stat-tile {
-    flex: 1 1 130px;
-    background: #fff; border-radius: 12px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
-    padding: 16px 20px; text-align: center;
+    flex:1 1 130px; background:#fff; border-radius:12px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.07); padding:16px 20px; text-align:center;
   }
-  .stat-tile .num  { font-size: 28px; font-weight: 700; line-height: 1; }
-  .stat-tile .lbl  { font-size: 12px; color: #6c757d; margin-top: 4px; }
-  .stat-tile.total .num  { color: #0d6efd; }
-  .stat-tile.pending .num{ color: #fd7e14; }
-  .stat-tile.done .num   { color: #198754; }
+  .stat-tile .num { font-size:28px; font-weight:700; line-height:1; }
+  .stat-tile .lbl { font-size:12px; color:#6c757d; margin-top:4px; }
+  .stat-tile.total .num   { color:#0d6efd; }
+  .stat-tile.pending .num { color:#fd7e14; }
+  .stat-tile.accepted .num{ color:#198754; }
+  .stat-tile.rejected .num{ color:#dc3545; }
 
-  /* ── Submission Cards ── */
+  /* ── Cards ── */
   .sub-card {
-    background: #fff; border-radius: 12px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    margin-bottom: 14px; overflow: hidden;
-    transition: box-shadow .15s;
+    background:#fff; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,0.08);
+    margin-bottom:16px; overflow:hidden; transition:box-shadow .15s;
   }
-  .sub-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+  .sub-card:hover { box-shadow:0 3px 10px rgba(0,0,0,0.12); }
   .sub-card-header {
-    padding: 13px 20px; border-bottom: 1px solid #f1f3f5;
-    display: flex; justify-content: space-between;
-    align-items: center; flex-wrap: wrap; gap: 10px;
+    padding:13px 20px; border-bottom:1px solid #f1f3f5;
+    display:flex; justify-content:space-between; align-items:center;
+    flex-wrap:wrap; gap:10px;
   }
-  .sub-card-body { padding: 16px 20px; }
+  .sub-card-body { padding:16px 20px; }
 
-  /* student avatar initial */
   .student-avatar {
-    width: 36px; height: 36px; border-radius: 50%;
-    background: #e7f0ff; color: #0d6efd;
-    font-weight: 700; font-size: 15px;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
+    width:36px; height:36px; border-radius:50%;
+    background:#e7f0ff; color:#0d6efd;
+    font-weight:700; font-size:15px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
   }
 
   /* status badges */
   .badge-status {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 3px 11px; border-radius: 20px;
-    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 11px; border-radius:20px;
+    font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
   }
-  .badge-submitted { background: #cfe2ff; color: #084298; }
-  .badge-reviewed  { background: #d1e7dd; color: #0f5132; }
+  .badge-rs-submitted { background:#cfe2ff; color:#084298; }
+  .badge-rs-accepted  { background:#d1e7dd; color:#0f5132; }
+  .badge-rs-rejected  { background:#f8d7da; color:#842029; }
 
-  /* existing feedback block */
+  /* feedback / rejection blocks */
   .feedback-block {
-    background: #f0f7ff; border-left: 3px solid #0d6efd;
-    padding: 10px 14px; border-radius: 0 6px 6px 0;
-    font-size: 13px; white-space: pre-wrap; color: #1a1a2e;
+    background:#f0f7ff; border-left:3px solid #0d6efd;
+    padding:10px 14px; border-radius:0 6px 6px 0;
+    font-size:13px; white-space:pre-wrap; color:#1a1a2e; margin-bottom:10px;
   }
+  .rejection-block {
+    background:#fff5f5; border-left:3px solid #dc3545;
+    padding:10px 14px; border-radius:0 6px 6px 0;
+    font-size:13px; white-space:pre-wrap; color:#58151c; margin-bottom:10px;
+  }
+  .review-section { border-top:1px solid #f1f3f5; margin-top:14px; padding-top:14px; }
+  .review-section textarea { font-size:13px; resize:vertical; }
+  .reviewed-by { font-size:12px; color:#6c757d; margin-top:6px; }
 
-  /* inline feedback form */
-  .review-form textarea {
-    font-size: 13px; resize: vertical;
+  /* reject modal */
+  .reject-panel {
+    display:none; background:#fff8f8; border:1px solid #f5c2c7;
+    border-radius:8px; padding:14px; margin-top:10px;
   }
-  .reviewed-by {
-    font-size: 12px; color: #6c757d; margin-top: 6px;
-  }
+  .reject-panel.show { display:block; }
 
   /* filter row */
-  .filter-row {
-    display: flex; gap: 8px; flex-wrap: wrap;
-    margin-bottom: 18px; align-items: center;
-  }
+  .filter-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; align-items:center; }
   .filter-btn {
-    padding: 4px 14px; border-radius: 20px; font-size: 13px;
-    border: 1px solid #dee2e6; background: #fff; cursor: pointer;
-    transition: background .12s, color .12s;
+    padding:4px 14px; border-radius:20px; font-size:13px;
+    border:1px solid #dee2e6; background:#fff; cursor:pointer;
+    transition:background .12s, color .12s;
   }
   .filter-btn.active, .filter-btn:hover {
-    background: #0d6efd; color: #fff; border-color: #0d6efd;
+    background:#0d6efd; color:#fff; border-color:#0d6efd;
+  }
+  .filename-chip {
+    font-size:11px; color:#6c757d; max-width:180px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
 </style>
 {% endblock %}
 
 {% block content %}
-{% set total     = submissions | length %}
-{% set reviewed  = submissions | selectattr('status','equalto','reviewed') | list | length %}
-{% set pending   = total - reviewed %}
+{% set total    = submissions | length %}
+{% set accepted = submissions | selectattr('review_status','equalto','accepted') | list | length %}
+{% set rejected = submissions | selectattr('review_status','equalto','rejected') | list | length %}
+{% set pending  = total - accepted - rejected %}
 
 <div class="container-fluid py-3">
 
@@ -123,9 +126,13 @@
       <div class="num">{{ pending }}</div>
       <div class="lbl">Pending Review</div>
     </div>
-    <div class="stat-tile done">
-      <div class="num">{{ reviewed }}</div>
-      <div class="lbl">Reviewed</div>
+    <div class="stat-tile accepted">
+      <div class="num">{{ accepted }}</div>
+      <div class="lbl">Accepted</div>
+    </div>
+    <div class="stat-tile rejected">
+      <div class="num">{{ rejected }}</div>
+      <div class="lbl">Rejected</div>
     </div>
   </div>
 
@@ -158,70 +165,138 @@
     <span style="font-size:13px;color:#6c757d;">Show:</span>
     <button class="filter-btn active" onclick="filterSubs('all', this)">All ({{ total }})</button>
     <button class="filter-btn" onclick="filterSubs('submitted', this)">Pending ({{ pending }})</button>
-    <button class="filter-btn" onclick="filterSubs('reviewed', this)">Reviewed ({{ reviewed }})</button>
+    <button class="filter-btn" onclick="filterSubs('accepted', this)">Accepted ({{ accepted }})</button>
+    <button class="filter-btn" onclick="filterSubs('rejected', this)">Rejected ({{ rejected }})</button>
   </div>
 
   <!-- Submission cards -->
   <div id="subList">
     {% for sub in submissions %}
-    <div class="sub-card" data-status="{{ sub.status }}">
+    {% set rs = sub.review_status or 'submitted' %}
+    <div class="sub-card" data-status="{{ rs }}">
+
+      <!-- Card header: student info + status + action buttons -->
       <div class="sub-card-header">
-        <!-- Student info -->
         <div class="d-flex align-items-center gap-3">
           <div class="student-avatar">{{ sub.student_name[0] | upper }}</div>
           <div>
             <div class="fw-semibold" style="font-size:15px;">{{ sub.student_name }}</div>
             <div class="text-muted" style="font-size:12px;">{{ sub.student_code }}</div>
+            <div class="text-muted" style="font-size:11px;">Submitted: {{ sub.submitted_date }}</div>
           </div>
         </div>
-        <!-- Right side: status + date + download -->
         <div class="d-flex align-items-center gap-2 flex-wrap">
-          <span class="badge-status badge-{{ sub.status }}">
-            {% if sub.status == 'reviewed' %}✓ Reviewed{% else %}● Submitted{% endif %}
+          <!-- Status badge -->
+          {% if rs == 'accepted' %}
+            <span class="badge-status badge-rs-accepted">✓ Accepted</span>
+          {% elif rs == 'rejected' %}
+            <span class="badge-status badge-rs-rejected">✕ Rejected</span>
+          {% else %}
+            <span class="badge-status badge-rs-submitted">● Pending Review</span>
+          {% endif %}
+
+          <!-- File info -->
+          <span class="filename-chip" title="{{ sub.original_filename }}">
+            📄 {{ sub.original_filename }}
           </span>
-          <span class="text-muted" style="font-size:12px;">{{ sub.submitted_date }}</span>
-          <a class="btn btn-sm btn-primary"
+
+          <!-- Download -->
+          <a class="btn btn-sm btn-outline-primary"
              href="{{ url_for('lms_admin.admin_download_submission', submission_id=sub.id) }}">
             ⬇ Download
           </a>
-          <span class="text-muted" style="font-size:11px; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ sub.original_filename }}">
-            {{ sub.original_filename }}
-          </span>
-        </div>
-      </div>
 
+          <!-- Preview -->
+          <a class="btn btn-sm btn-outline-secondary"
+             href="{{ url_for('lms_admin.preview_submission', submission_id=sub.id) }}"
+             target="_blank">
+            👁 Preview
+          </a>
+        </div>
+      </div><!-- /header -->
+
+      <!-- Card body: feedback + reviewed info + accept/reject -->
       <div class="sub-card-body">
+
         {% if sub.feedback %}
-        <div class="feedback-block mb-3">
-          <strong>Current Feedback:</strong><br>{{ sub.feedback }}
+        <div class="feedback-block">
+          <strong>Staff Feedback:</strong><br>{{ sub.feedback }}
         </div>
         {% endif %}
-        {% if sub.reviewed_date %}
-        <p class="reviewed-by mb-3">Reviewed on {{ sub.reviewed_date }}</p>
+
+        {% if rs == 'rejected' and sub.rejection_reason %}
+        <div class="rejection-block">
+          <strong>Rejection Reason:</strong><br>{{ sub.rejection_reason }}
+        </div>
         {% endif %}
 
-        <!-- Feedback form -->
-        <form method="POST" class="review-form"
-              action="{{ url_for('lms_admin.review_submission', submission_id=sub.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <div class="mb-2">
-            <label class="form-label fw-semibold mb-1" style="font-size:13px;">
-              {{ 'Update Feedback' if sub.status == 'reviewed' else '✎ Add Feedback &amp; Mark Reviewed' }}
-            </label>
-            <textarea name="feedback" class="form-control form-control-sm" rows="2"
-                      placeholder="Write feedback for the student…">{{ sub.feedback or '' }}</textarea>
-          </div>
-          <button type="submit" class="btn btn-sm btn-success">
-            ✔ {{ 'Save Updated Feedback' if sub.status == 'reviewed' else 'Submit Feedback &amp; Mark Reviewed' }}
-          </button>
-        </form>
-      </div>
-    </div>
+        {% if sub.reviewed_date %}
+        <p class="reviewed-by mb-2">Reviewed on {{ sub.reviewed_date }}</p>
+        {% endif %}
+
+        <!-- Review section -->
+        <div class="review-section">
+          <div class="fw-semibold mb-2" style="font-size:13px;">Staff Review</div>
+
+          <!-- Accept form -->
+          <form method="POST"
+                action="{{ url_for('lms_admin.accept_submission', submission_id=sub.id) }}"
+                class="mb-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-2">
+              <label class="form-label mb-1" style="font-size:12px;">
+                Feedback (optional)
+              </label>
+              <textarea name="feedback" class="form-control form-control-sm" rows="2"
+                        placeholder="Write feedback for the student…">{{ sub.feedback or '' }}</textarea>
+            </div>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+              <button type="submit" class="btn btn-sm btn-success"
+                      {% if rs == 'accepted' %}style="opacity:.65;" title="Already accepted"{% endif %}>
+                ✔ {% if rs == 'accepted' %}Already Accepted{% else %}Accept Assignment{% endif %}
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-danger"
+                      onclick="toggleRejectPanel({{ sub.id }})">
+                ✕ Reject Assignment
+              </button>
+            </div>
+          </form>
+
+          <!-- Reject panel (hidden until toggled) -->
+          <div class="reject-panel" id="rejectPanel-{{ sub.id }}">
+            <form method="POST"
+                  action="{{ url_for('lms_admin.reject_submission', submission_id=sub.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="mb-2">
+                <label class="form-label mb-1" style="font-size:12px; font-weight:600;">
+                  Rejection Reason <span class="text-danger">*</span>
+                </label>
+                <textarea name="rejection_reason" class="form-control form-control-sm" rows="2"
+                          placeholder="Explain why this submission is rejected…" required>{{ sub.rejection_reason or '' }}</textarea>
+              </div>
+              <div class="mb-2">
+                <label class="form-label mb-1" style="font-size:12px;">
+                  Additional Feedback (optional)
+                </label>
+                <textarea name="feedback" class="form-control form-control-sm" rows="2"
+                          placeholder="Any extra guidance for the student…">{{ sub.feedback or '' }}</textarea>
+              </div>
+              <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-danger">✕ Confirm Reject</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        onclick="toggleRejectPanel({{ sub.id }})">Cancel</button>
+              </div>
+            </form>
+          </div><!-- /reject-panel -->
+
+        </div><!-- /review-section -->
+      </div><!-- /card-body -->
+    </div><!-- /sub-card -->
     {% endfor %}
   </div><!-- /#subList -->
 
   {% else %}
-  <!-- Batch filter (shown even when empty so staff can change filter) -->
+  <!-- Batch filter shown even when empty -->
   {% if active_batches %}
   <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
     <span style="font-size:13px;color:#6c757d;font-weight:600;">🎓 Batch:</span>
@@ -258,6 +333,10 @@ function filterSubs(status, btn) {
   document.querySelectorAll('#subList .sub-card').forEach(function(card) {
     card.style.display = (status === 'all' || card.dataset.status === status) ? '' : 'none';
   });
+}
+function toggleRejectPanel(id) {
+  var panel = document.getElementById('rejectPanel-' + id);
+  if (panel) panel.classList.toggle('show');
 }
 </script>
 {% endblock %}

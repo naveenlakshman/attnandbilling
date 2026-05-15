@@ -1,0 +1,111 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}Preview — {{ sub.assignment_title }}{% endblock %}
+{% block page_title %}Assignment Submission Preview{% endblock %}
+
+{% block extra_css %}
+<style>
+  .preview-meta { background:#f8f9fa; border-radius:10px; padding:16px 20px; margin-bottom:20px; }
+  .preview-meta .row > div { margin-bottom:6px; }
+  .preview-label { font-size:12px; color:#6c757d; font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+  .preview-value { font-size:14px; font-weight:500; }
+  .preview-frame-wrap {
+    border:1px solid #dee2e6; border-radius:10px; overflow:hidden;
+    background:#fff; min-height:600px; position:relative;
+  }
+  .preview-frame-wrap iframe { display:block; width:100%; height:80vh; min-height:560px; border:none; }
+  .office-note { background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:14px 18px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3" style="max-width:1100px;">
+
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{{ url_for('lms_admin.view_submissions', assignment_id=sub.assignment_id) }}">
+          ← Back to Submissions
+        </a>
+      </li>
+      <li class="breadcrumb-item active">Preview</li>
+    </ol>
+  </nav>
+
+  <!-- Metadata -->
+  <div class="preview-meta mb-4">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="preview-label">Assignment</div>
+        <div class="preview-value">{{ sub.assignment_title }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="preview-label">Student</div>
+        <div class="preview-value">{{ sub.student_name }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="preview-label">Register No.</div>
+        <div class="preview-value">{{ sub.student_code }}</div>
+      </div>
+      <div class="col-md-6">
+        <div class="preview-label">File</div>
+        <div class="preview-value" style="word-break:break-all;">{{ orig_filename }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="preview-label">Submitted</div>
+        <div class="preview-value">{{ sub.submitted_date }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="preview-label">Status</div>
+        <div class="preview-value">
+          {% if sub.review_status == 'accepted' %}
+            <span class="badge bg-success">Accepted</span>
+          {% elif sub.review_status == 'rejected' %}
+            <span class="badge bg-danger">Rejected</span>
+          {% else %}
+            <span class="badge bg-primary">Pending Review</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="mt-3 d-flex gap-2">
+      <a href="{{ download_url }}" class="btn btn-sm btn-outline-primary">⬇ Download File</a>
+      <a href="{{ url_for('lms_admin.view_submissions', assignment_id=sub.assignment_id) }}"
+         class="btn btn-sm btn-outline-secondary">← Back to Submissions</a>
+    </div>
+  </div>
+
+  <!-- Preview Area -->
+  {% if preview_type == 'pdf' %}
+  <div class="preview-frame-wrap">
+    <iframe src="{{ preview_url }}" title="PDF Preview"></iframe>
+  </div>
+
+  {% elif preview_type == 'office' %}
+    {% if is_localhost %}
+    <div class="office-note mb-3">
+      <strong>⚠ Office Preview Unavailable on Localhost</strong><br>
+      Microsoft Office Online Viewer requires a publicly accessible HTTPS URL. 
+      This app is running on <code>localhost</code> so Office files cannot be previewed here.<br>
+      <strong>In production</strong> (public HTTPS), this preview will work automatically.<br>
+      <a href="{{ download_url }}" class="btn btn-sm btn-primary mt-2">⬇ Download File Instead</a>
+    </div>
+    {% else %}
+    <div class="preview-frame-wrap">
+      <iframe src="{{ preview_url }}" title="Office Document Preview"></iframe>
+    </div>
+    {% endif %}
+
+  {% else %}
+  <!-- Unsupported file type -->
+  <div class="text-center py-5">
+    <div style="font-size:56px;">📄</div>
+    <h5 class="mt-3">Preview not available for <code>.{{ ext }}</code> files</h5>
+    <p class="text-muted">Only PDF and Office documents (DOC, DOCX, XLS, XLSX, PPT, PPTX) can be previewed.</p>
+    <a href="{{ download_url }}" class="btn btn-primary">⬇ Download File</a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

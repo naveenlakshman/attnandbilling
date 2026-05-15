@@ -1326,7 +1326,7 @@ def save_student_note(content_id):
 # LMS Assignments — Student
 # ---------------------------------------------------------------------------
 
-_SUBMISSION_ALLOWED_EXTS = {'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'}
+_SUBMISSION_ALLOWED_EXTS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png'}
 _SUBMISSION_MAX_BYTES     = 20 * 1024 * 1024   # 20 MB
 
 
@@ -1373,11 +1373,12 @@ def get_topic_assignments(program_id, master_topic_id):
         result = []
         for a in assignments:
             sub = conn.execute("""
-                SELECT status, original_filename, feedback,
-                       strftime('%Y-%m-%d %H:%M', submitted_at) AS submitted_at,
-                       strftime('%Y-%m-%d %H:%M', reviewed_at)  AS reviewed_at
+                SELECT id, status, review_status, rejection_reason,
+                       original_filename, feedback,
+                       strftime('%d %b %Y %H:%M', submitted_at) AS submitted_at,
+                       strftime('%d %b %Y %H:%M', reviewed_at)  AS reviewed_at
                 FROM   lms_assignment_submissions
-                WHERE  assignment_id = ? AND student_id = ?
+                WHERE  assignment_id = ? AND student_id = ? AND is_latest = 1
             """, (a['id'], student_id)).fetchone()
             result.append({
                 'id':                a['id'],
@@ -1419,6 +1420,23 @@ def submit_assignment(assignment_id):
         if not any(_has_program_access(conn, p['program_id'], student_id) for p in programs):
             return jsonify({'ok': False, 'error': 'Access denied'}), 403
 
+        # Check re-upload permission based on latest submission review_status
+        existing = conn.execute("""
+            SELECT id, review_status
+            FROM   lms_assignment_submissions
+            WHERE  assignment_id = ? AND student_id = ? AND is_latest = 1
+        """, (assignment_id, student_id)).fetchone()
+
+        if existing:
+            rs = existing['review_status'] or 'submitted'
+            if rs == 'submitted':
+                return jsonify({'ok': False,
+                                'error': 'Your assignment is pending review. Re-upload is not allowed until staff reviews it.'}), 403
+            if rs == 'accepted':
+                return jsonify({'ok': False,
+                                'error': 'Your assignment has been accepted. Re-upload is not allowed.'}), 403
+            # rs == 'rejected' — allowed to re-upload
+
         file_obj = request.files.get('submission_file')
         if not file_obj or not file_obj.filename:
             return jsonify({'ok': False, 'error': 'No file uploaded'}), 400
@@ -1428,22 +1446,23 @@ def submit_assignment(assignment_id):
             return jsonify({'ok': False, 'error': path_or_err}), 400
 
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        # Mark previous submission (if any) as not latest
+        if existing:
+            conn.execute(
+                "UPDATE lms_assignment_submissions SET is_latest = 0 WHERE id = ?",
+                (existing['id'],)
+            )
+
+        # Insert new submission row
         conn.execute("""
             INSERT INTO lms_assignment_submissions
-                (assignment_id, student_id, file_path, original_filename, status, submitted_at, updated_at)
-            VALUES (?, ?, ?, ?, 'submitted', ?, ?)
-            ON CONFLICT(assignment_id, student_id) DO UPDATE
-                SET file_path         = excluded.file_path,
-                    original_filename = excluded.original_filename,
-                    status            = 'submitted',
-                    feedback          = NULL,
-                    reviewed_by       = NULL,
-                    submitted_at      = excluded.submitted_at,
-                    reviewed_at       = NULL,
-                    updated_at        = excluded.updated_at
+                (assignment_id, student_id, file_path, original_filename,
+                 status, review_status, submitted_at, updated_at, is_latest)
+            VALUES (?, ?, ?, ?, 'submitted', 'submitted', ?, ?, 1)
         """, (assignment_id, student_id, path_or_err, orig_name, now, now))
         conn.commit()
-        return jsonify({'ok': True, 'status': 'submitted',
+        return jsonify({'ok': True, 'status': 'submitted', 'review_status': 'submitted',
                         'submitted_at': now[:16], 'original_filename': orig_name})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500

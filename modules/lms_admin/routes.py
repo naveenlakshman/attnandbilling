@@ -6584,25 +6584,27 @@ def view_submissions(assignment_id):
 
         if batch_id:
             submissions = conn.execute("""
-                SELECT s.id, s.student_id, s.original_filename, s.feedback, s.status,
+                SELECT s.id, s.student_id, s.original_filename, s.feedback,
+                       s.status, s.review_status, s.rejection_reason,
                        strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
                        strftime('%d %b %Y %H:%M', s.reviewed_at)  AS reviewed_date,
                        st.full_name AS student_name, st.student_code
                 FROM   lms_assignment_submissions s
                 JOIN   students st ON st.id = s.student_id
                 JOIN   student_batches sb ON sb.student_id = s.student_id
-                WHERE  s.assignment_id = ? AND sb.batch_id = ?
+                WHERE  s.assignment_id = ? AND sb.batch_id = ? AND s.is_latest = 1
                 ORDER  BY s.submitted_at DESC
             """, (assignment_id, batch_id)).fetchall()
         else:
             submissions = conn.execute("""
-                SELECT s.id, s.student_id, s.original_filename, s.feedback, s.status,
+                SELECT s.id, s.student_id, s.original_filename, s.feedback,
+                       s.status, s.review_status, s.rejection_reason,
                        strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
                        strftime('%d %b %Y %H:%M', s.reviewed_at)  AS reviewed_date,
                        st.full_name AS student_name, st.student_code
                 FROM   lms_assignment_submissions s
                 JOIN   students st ON st.id = s.student_id
-                WHERE  s.assignment_id = ?
+                WHERE  s.assignment_id = ? AND s.is_latest = 1
                 ORDER  BY s.submitted_at DESC
             """, (assignment_id,)).fetchall()
 
@@ -6617,6 +6619,13 @@ def view_submissions(assignment_id):
 @lms_admin_bp.route('/master/submissions/<int:submission_id>/review', methods=['POST'])
 @login_required
 def review_submission(submission_id):
+    """Legacy route — kept for backward compat, redirects to accept."""
+    return accept_submission(submission_id)
+
+
+@lms_admin_bp.route('/master/submissions/<int:submission_id>/accept', methods=['POST'])
+@login_required
+def accept_submission(submission_id):
     conn = get_conn()
     try:
         sub = conn.execute(
@@ -6630,16 +6639,106 @@ def review_submission(submission_id):
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn.execute("""
             UPDATE lms_assignment_submissions
-            SET    feedback    = ?,
-                   status      = 'reviewed',
-                   reviewed_by = ?,
-                   reviewed_at = ?,
-                   updated_at  = ?
+            SET    feedback      = ?,
+                   status        = 'reviewed',
+                   review_status = 'accepted',
+                   reviewed_by   = ?,
+                   reviewed_at   = ?,
+                   updated_at    = ?
             WHERE  id = ?
         """, (feedback or None, session.get('user_id'), now, now, submission_id))
         conn.commit()
-        flash('Feedback saved and marked as reviewed.', 'success')
+        flash('Assignment accepted and feedback saved.', 'success')
         return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/master/submissions/<int:submission_id>/reject', methods=['POST'])
+@login_required
+def reject_submission(submission_id):
+    conn = get_conn()
+    try:
+        sub = conn.execute(
+            "SELECT assignment_id FROM lms_assignment_submissions WHERE id = ?",
+            (submission_id,)
+        ).fetchone()
+        if not sub:
+            flash('Submission not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+        rejection_reason = request.form.get('rejection_reason', '').strip()
+        feedback = request.form.get('feedback', '').strip()
+        if not rejection_reason:
+            flash('Please provide a rejection reason.', 'danger')
+            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn.execute("""
+            UPDATE lms_assignment_submissions
+            SET    feedback         = ?,
+                   rejection_reason = ?,
+                   status           = 'reviewed',
+                   review_status    = 'rejected',
+                   reviewed_by      = ?,
+                   reviewed_at      = ?,
+                   updated_at       = ?
+            WHERE  id = ?
+        """, (feedback or None, rejection_reason, session.get('user_id'), now, now, submission_id))
+        conn.commit()
+        flash('Assignment rejected. Student can now re-upload.', 'warning')
+        return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/submission/<int:submission_id>/preview')
+@login_required
+def preview_submission(submission_id):
+    from flask import abort
+    conn = get_conn()
+    try:
+        sub = conn.execute("""
+            SELECT s.id, s.file_path, s.original_filename, s.review_status,
+                   strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
+                   a.title AS assignment_title, a.id AS assignment_id,
+                   st.full_name AS student_name, st.student_code
+            FROM   lms_assignment_submissions s
+            JOIN   lms_assignments a ON a.id = s.assignment_id
+            JOIN   students st ON st.id = s.student_id
+            WHERE  s.id = ?
+        """, (submission_id,)).fetchone()
+        if not sub:
+            abort(404)
+        base_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
+        )
+        full_path = os.path.join(base_dir, sub['file_path'])
+        if not os.path.isfile(full_path):
+            flash('Submission file not found on server.', 'danger')
+            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+        orig = sub['original_filename'] or sub['file_path']
+        ext  = orig.rsplit('.', 1)[-1].lower() if '.' in orig else ''
+        download_url = url_for('lms_admin.admin_download_submission',
+                               submission_id=submission_id, _external=True)
+        # For Office Viewer the URL must be a public HTTPS URL
+        is_localhost = request.host.startswith(('localhost', '127.', '0.0.0.0'))
+        office_exts = {'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'}
+        preview_type = None
+        preview_url  = None
+        if ext == 'pdf':
+            preview_type = 'pdf'
+            preview_url  = url_for('lms_admin.admin_download_submission',
+                                   submission_id=submission_id)
+        elif ext in office_exts:
+            preview_type = 'office'
+            if not is_localhost:
+                public_url = url_for('lms_admin.admin_download_submission',
+                                     submission_id=submission_id, _external=True)
+                preview_url = 'https://view.officeapps.live.com/op/embed.aspx?src=' + public_url
+        return render_template('lms_admin/assignment_preview.html',
+                               sub=sub, ext=ext, preview_type=preview_type,
+                               preview_url=preview_url, download_url=download_url,
+                               is_localhost=is_localhost, office_exts=office_exts,
+                               orig_filename=orig)
     finally:
         conn.close()
 
