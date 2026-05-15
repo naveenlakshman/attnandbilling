@@ -1,586 +1,521 @@
-{% extends 'lms_admin/base.html' %}
-
+﻿{% extends 'lms_admin/base.html' %}
 {% block title %}Student Progress Dashboard - LMS Admin{% endblock %}
-
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  /* Layout */
+  .pd-header { border-bottom: 2px solid #e9ecef; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+  .pd-title  { font-size: 1.7rem; font-weight: 700; color: #1a1a2e; }
+  /* Filter bar */
+  .filter-bar {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .filter-bar .form-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #6c757d; margin-bottom: 3px; }
+  .filter-bar .form-control,
+  .filter-bar .form-select { font-size: 13px; }
+  .filter-active-badge { font-size: 10px; }
+  /* KPI cards */
+  .kpi-card {
+    border: none;
+    border-radius: 12px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.10) !important; }
+  .kpi-value { font-size: 2.2rem; font-weight: 800; line-height: 1; }
+  .kpi-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .kpi-sub   { font-size: 11px; color: #6c757d; margin-top: 4px; }
+  /* Progress bars */
+  .pct-red    { background-color: #dc3545; }
+  .pct-yellow { background-color: #ffc107; }
+  .pct-green  { background-color: #28a745; }
+  /* Student table */
+  #studentTable thead th { font-size: 11px; font-weight: 700; text-transform: uppercase;
+                           letter-spacing: .4px; white-space: nowrap; cursor: pointer; }
+  #studentTable thead th:hover { background: #e2e6ea; }
+  #studentTable thead th .sort-icon { opacity: .4; font-size: 10px; }
+  #studentTable thead th.sort-asc  .sort-icon,
+  #studentTable thead th.sort-desc .sort-icon { opacity: 1; }
+  #studentTable tbody tr:hover { background: #f0f7ff; }
+  #studentTable td { font-size: 12.5px; vertical-align: middle; }
+  .status-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+  .status-not-started { background: #fee2e2; color: #b91c1c; }
+  .status-in-progress { background: #fef9c3; color: #92400e; }
+  .status-completed   { background: #d1fae5; color: #065f46; }
+  .progress-wrap { min-width: 80px; }
+  .progress-wrap .pbar { height: 6px; border-radius: 3px; background: #e9ecef; }
+  .progress-wrap .pfill { height: 6px; border-radius: 3px; }
+  /* Summary sections */
+  .summary-card { border: none; border-radius: 10px; }
+  .summary-card .card-header { background: #f1f5f9; border-radius: 10px 10px 0 0; cursor: pointer; }
+  .summary-card .card-header h6 { font-size: 14px; font-weight: 700; margin: 0; }
+  .summary-table th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing:.3px; }
+  .summary-table td { font-size: 12.5px; vertical-align: middle; }
+  .avg-bar { height: 6px; border-radius: 3px; background: #e9ecef; min-width: 80px; }
+  .avg-fill { height: 6px; border-radius: 3px; }
+  /* Unassigned row */
+  .unassigned-row { background: #fff8e1; }
+  .unassigned-row:hover { background: #fff3cd !important; }
+  @media (max-width: 768px) {
+    .pd-title { font-size: 1.3rem; }
+    .kpi-value { font-size: 1.6rem; }
+  }
+</style>
+{% endblock %}
 {% block content %}
-<div class="content-wrapper">
-    <!-- Breadcrumb Navigation -->
-    <nav aria-label="breadcrumb" class="mb-4">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.dashboard') }}">Dashboard</a></li>
-            <li class="breadcrumb-item active">📊 Progress Monitoring</li>
-        </ol>
-    </nav>
-
-    <!-- Page Header -->
-    <div class="page-header mb-5">
-        <h1 class="page-title">📊 Student Progress Dashboard</h1>
-        <p class="text-muted">Real-time overview of student engagement and learning progress</p>
+<div class="container-fluid py-3">
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.dashboard') }}">Dashboard</a></li>
+      <li class="breadcrumb-item active">Progress Monitoring</li>
+    </ol>
+  </nav>
+  <!-- Header -->
+  <div class="pd-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+      <h1 class="pd-title">
+        <i class="bi bi-bar-chart-line-fill me-2" style="color:#0d6efd;"></i>Student Progress Dashboard
+      </h1>
+      <p class="text-muted mb-0" style="font-size:13px;">
+        Real-time overview of active student engagement and learning progress
+        {% if filters.is_filtered %}
+          <span class="badge bg-primary filter-active-badge ms-2">Filtered</span>
+        {% endif %}
+      </p>
     </div>
-
-    <!-- KPI Cards Section -->
-    <div class="row mb-5">
-        <!-- Active Students Card -->
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card metrics-card shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted mb-2" style="font-size: 0.9rem;">👥 Active Students</p>
-                            <h3 class="mb-0" style="color: #0066cc; font-size: 2.5rem; font-weight: bold;">
-                                {{ data.active_students }}
-                            </h3>
-                        </div>
-                        <span class="badge bg-primary" style="font-size: 1.2rem;">✓</span>
-                    </div>
-                    <small class="text-muted">Students with active program access</small>
-                </div>
-            </div>
+    {% if filters.is_filtered %}
+    <a href="{{ url_for('lms_admin.progress_dashboard') }}" class="btn btn-sm btn-outline-secondary">Clear Filters</a>
+    {% endif %}
+  </div>
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <form method="GET" action="{{ url_for('lms_admin.progress_dashboard') }}" class="row g-2 align-items-end">
+      <div class="col-12 col-sm-6 col-lg-2">
+        <label class="form-label">Branch</label>
+        <select name="branch_id" class="form-select form-select-sm">
+          <option value="">All Branches</option>
+          {% for br in branches %}
+          <option value="{{ br.id }}" {% if filters.branch_id == br.id|string %}selected{% endif %}>{{ br.branch_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-2">
+        <label class="form-label">Batch</label>
+        <select name="batch_id" class="form-select form-select-sm">
+          <option value="">All Batches</option>
+          {% for bt in filter_batches %}
+          <option value="{{ bt.id }}" {% if filters.batch_id == bt.id|string %}selected{% endif %}>{{ bt.batch_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-2">
+        <label class="form-label">Program / Course</label>
+        <select name="program_id" class="form-select form-select-sm">
+          <option value="">All Programs</option>
+          {% for pr in programs %}
+          <option value="{{ pr.id }}" {% if filters.program_id == pr.id|string %}selected{% endif %}>{{ pr.program_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-2">
+        <label class="form-label">Staff / Trainer</label>
+        <select name="staff_id" class="form-select form-select-sm">
+          <option value="">All Staff</option>
+          {% for su in staff_users %}
+          <option value="{{ su.id }}" {% if filters.staff_id == su.id|string %}selected{% endif %}>{{ su.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-2">
+        <label class="form-label">Student Search</label>
+        <input type="text" name="q" class="form-control form-control-sm"
+               placeholder="Name / Reg No / Phone"
+               value="{{ filters.q }}">
+      </div>
+      <div class="col-12 col-sm-6 col-lg-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm flex-grow-1">Filter</button>
+        <a href="{{ url_for('lms_admin.progress_dashboard') }}" class="btn btn-outline-secondary btn-sm">Reset</a>
+      </div>
+    </form>
+  </div>
+  <!-- KPI CARDS -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-2">
+      <div class="card kpi-card shadow-sm h-100">
+        <div class="card-body">
+          <div class="kpi-label text-primary">Active Students</div>
+          <div class="kpi-value text-primary mt-1">{{ active_students }}</div>
+          <div class="kpi-sub">With LMS enrollment</div>
         </div>
-
-        <!-- Overall Completion Card -->
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card metrics-card shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted mb-2" style="font-size: 0.9rem;">📈 Overall Completion</p>
-                            <h3 class="mb-0" style="color: #28a745; font-size: 2.5rem; font-weight: bold;">
-                                {{ data.overall_completion }}%
-                            </h3>
-                        </div>
-                        <span class="badge bg-success" style="font-size: 1.2rem;">📊</span>
-                    </div>
-                    <small class="text-muted">Average across all topics</small>
-                </div>
-            </div>
-        </div>
-
-        <!-- Completed Topics Card -->
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card metrics-card shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted mb-2" style="font-size: 0.9rem;">✅ Completed Topics</p>
-                            <h3 class="mb-0" style="color: #28a745; font-size: 2.5rem; font-weight: bold;">
-                                {{ data.completed_topics }}
-                            </h3>
-                        </div>
-                        <span class="badge bg-success" style="font-size: 1.2rem;">✓</span>
-                    </div>
-                    <small class="text-muted">Topics with 100% completion</small>
-                </div>
-            </div>
-        </div>
-
-        <!-- In Progress Topics Card -->
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card metrics-card shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted mb-2" style="font-size: 0.9rem;">⏳ In Progress</p>
-                            <h3 class="mb-0" style="color: #ffc107; font-size: 2.5rem; font-weight: bold;">
-                                {{ data.in_progress_topics }}
-                            </h3>
-                        </div>
-                        <span class="badge bg-warning" style="font-size: 1.2rem;">⏳</span>
-                    </div>
-                    <small class="text-muted">Topics started but not completed</small>
-                </div>
-            </div>
-        </div>
-
-        <!-- Not Started Card -->
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card metrics-card shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted mb-2" style="font-size: 0.9rem;">❌ Not Started</p>
-                            <h3 class="mb-0" style="color: #dc3545; font-size: 2.5rem; font-weight: bold;">
-                                {{ data.not_started_topics }}
-                            </h3>
-                        </div>
-                        <span class="badge bg-danger" style="font-size: 1.2rem;">✗</span>
-                    </div>
-                    <small class="text-muted">Topics not yet started</small>
-                </div>
-            </div>
-        </div>
-
-        <!-- Total Topics Card -->
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card metrics-card shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p class="text-muted mb-2" style="font-size: 0.9rem;">📚 Total Topics</p>
-                            <h3 class="mb-0" style="color: #6f42c1; font-size: 2.5rem; font-weight: bold;">
-                                {{ data.completed_topics + data.in_progress_topics + data.not_started_topics }}
-                            </h3>
-                        </div>
-                        <span class="badge bg-dark" style="font-size: 1.2rem;">📚</span>
-                    </div>
-                    <small class="text-muted">Total topic enrollment instances</small>
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
-
-    <!-- Charts and Tables Row -->
-    <div class="row mb-5">
-        <!-- Completion Distribution Chart -->
-        <div class="col-lg-6 mb-4">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light border-bottom">
-                    <h6 class="mb-0" style="font-weight: 600;">📊 Completion Distribution</h6>
-                </div>
-                <div class="card-body">
-                    {% if data.completion_distribution %}
-                        <div class="progress-list">
-                            {% for item in data.completion_distribution %}
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <small style="font-weight: 500;">{{ item.completion_range }}</small>
-                                    <small class="text-muted">{{ item.count }} students/topics</small>
-                                </div>
-                                <div class="progress" style="height: 25px;">
-                                    {% set color_map = {
-                                        'Not Started': '#dc3545',
-                                        '1-25%': '#fd7e14',
-                                        '26-50%': '#ffc107',
-                                        '51-75%': '#20c997',
-                                        '76-99%': '#17a2b8',
-                                        '100%': '#28a745'
-                                    } %}
-                                    {% set color = color_map.get(item.completion_range, '#6c757d') %}
-                                    <div class="progress-bar" role="progressbar" 
-                                         style="width: {{ (item.count / (data.completed_topics + data.in_progress_topics + data.not_started_topics) * 100) if (data.completed_topics + data.in_progress_topics + data.not_started_topics) > 0 else 0 }}%; background-color: {{ color }};" 
-                                         aria-valuenow="{{ item.count }}" aria-valuemin="0" aria-valuemax="100">
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <p class="text-muted text-center py-4">No progress data available</p>
-                    {% endif %}
-                </div>
-            </div>
+    <div class="col-6 col-lg-2">
+      <div class="card kpi-card shadow-sm h-100">
+        <div class="card-body">
+          <div class="kpi-label text-success">Overall Completion</div>
+          <div class="kpi-value text-success mt-1">{{ overall_pct }}%</div>
+          <div class="kpi-sub">Avg across enrolled topics</div>
         </div>
-
-        <!-- Quick Stats -->
-        <div class="col-lg-6 mb-4">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light border-bottom">
-                    <h6 class="mb-0" style="font-weight: 600;">📈 Quick Stats</h6>
-                </div>
-                <div class="card-body">
-                    <div class="stats-grid">
-                        <div class="stat-item border-bottom pb-3 mb-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="text-muted">Completion Rate</span>
-                                <strong style="font-size: 1.3rem; color: #28a745;">{{ data.overall_completion }}%</strong>
-                            </div>
-                        </div>
-
-                        <div class="stat-item border-bottom pb-3 mb-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="text-muted">Active Students</span>
-                                <strong style="font-size: 1.3rem; color: #0066cc;">{{ data.active_students }}</strong>
-                            </div>
-                        </div>
-
-                        <div class="stat-item border-bottom pb-3 mb-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="text-muted">On Track (%)</span>
-                                {% set on_track_pct = ((data.completed_topics + data.in_progress_topics) / (data.completed_topics + data.in_progress_topics + data.not_started_topics) * 100) if (data.completed_topics + data.in_progress_topics + data.not_started_topics) > 0 else 0 %}
-                                <strong style="font-size: 1.3rem; color: #ffc107;">{{ "%.1f"|format(on_track_pct) }}%</strong>
-                            </div>
-                        </div>
-
-                        <div class="stat-item pb-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="text-muted">Avg Completion</span>
-                                <strong style="font-size: 1.3rem; color: #6f42c1;">{{ data.overall_completion }}%</strong>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
-
-    <!-- Top Progressing Students Section -->
-    <div class="row mb-5">
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light border-bottom">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0" style="font-weight: 600;">🌟 Top Progressing Students</h6>
-                        <span class="badge bg-success">Top 5</span>
-                    </div>
-                </div>
-                <div class="card-body">
-                    {% if data.top_students %}
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width: 10%;">Rank</th>
-                                        <th style="width: 25%;">Student Name</th>
-                                        <th style="width: 15%;">Topics Count</th>
-                                        <th style="width: 25%;">Avg Completion</th>
-                                        <th style="width: 25%;">Last Accessed</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for student in data.top_students %}
-                                    <tr style="cursor: pointer;" onclick="window.location.href='{{ url_for('lms_admin.view_student_progress', student_id=student.student_id) }}';">
-                                        <td>
-                                            <span class="badge" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-size: 0.9rem;">
-                                                #{{ loop.index }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <strong>{{ student.first_name or '' }} {{ student.last_name or '' }}</strong>
-                                            <br><small class="text-muted">ID: {{ student.student_id }}</small>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-info">{{ student.topics_count or 0 }} topics</span>
-                                        </td>
-                                        <td>
-                                            <div class="progress" style="height: 20px;">
-                                                {% set avg_comp = student.avg_completion or 0 %}
-                                                {% set comp_color = '#dc3545' if avg_comp < 25 else '#fd7e14' if avg_comp < 50 else '#ffc107' if avg_comp < 75 else '#17a2b8' if avg_comp < 100 else '#28a745' %}
-                                                <div class="progress-bar" role="progressbar" 
-                                                     style="width: {{ avg_comp }}%; background-color: {{ comp_color }};" 
-                                                     aria-valuenow="{{ avg_comp }}" aria-valuemin="0" aria-valuemax="100">
-                                                    {{ "%.1f"|format(avg_comp) }}%
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <small class="text-muted">{{ data.format_date(student.last_accessed) }}</small>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <p class="text-muted text-center py-4">No student progress data available</p>
-                    {% endif %}
-                </div>
-            </div>
+    <div class="col-6 col-lg-2">
+      <div class="card kpi-card shadow-sm h-100">
+        <div class="card-body">
+          <div class="kpi-label" style="color:#065f46;">Completed</div>
+          <div class="kpi-value mt-1" style="color:#065f46;">{{ completed_count }}</div>
+          <div class="kpi-sub">Student-program at 100%</div>
         </div>
+      </div>
     </div>
-
-    <!-- Low Engagement Students Section -->
-    <div class="row mb-5">
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light border-bottom">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0" style="font-weight: 600;">⚠️ Low Engagement Students</h6>
-                        <span class="badge bg-danger">Bottom 5</span>
-                    </div>
-                </div>
-                <div class="card-body">
-                    {% if data.low_engagement_students %}
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width: 10%;">Rank</th>
-                                        <th style="width: 25%;">Student Name</th>
-                                        <th style="width: 15%;">Topics Count</th>
-                                        <th style="width: 25%;">Avg Completion</th>
-                                        <th style="width: 25%;">Last Accessed</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for student in data.low_engagement_students %}
-                                    <tr style="cursor: pointer;" onclick="window.location.href='{{ url_for('lms_admin.view_student_progress', student_id=student.student_id) }}';">
-                                        <td>
-                                            <span class="badge bg-danger" style="font-size: 0.9rem;">
-                                                #{{ loop.index }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <strong>{{ student.first_name or '' }} {{ student.last_name or '' }}</strong>
-                                            <br><small class="text-muted">ID: {{ student.student_id }}</small>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-warning text-dark">{{ student.topics_count or 0 }} topics</span>
-                                        </td>
-                                        <td>
-                                            <div class="progress" style="height: 20px;">
-                                                {% set avg_comp = student.avg_completion or 0 %}
-                                                {% set comp_color = '#dc3545' if avg_comp < 25 else '#fd7e14' if avg_comp < 50 else '#ffc107' if avg_comp < 75 else '#17a2b8' if avg_comp < 100 else '#28a745' %}
-                                                <div class="progress-bar" role="progressbar" 
-                                                     style="width: {{ avg_comp }}%; background-color: {{ comp_color }};" 
-                                                     aria-valuenow="{{ avg_comp }}" aria-valuemin="0" aria-valuemax="100">
-                                                    {{ "%.1f"|format(avg_comp) }}%
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <small class="text-muted">{{ data.format_date(student.last_accessed) }}</small>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <p class="text-muted text-center py-4">No low engagement students found</p>
-                    {% endif %}
-                </div>
-            </div>
+    <div class="col-6 col-lg-2">
+      <div class="card kpi-card shadow-sm h-100">
+        <div class="card-body">
+          <div class="kpi-label" style="color:#92400e;">In Progress</div>
+          <div class="kpi-value mt-1" style="color:#d97706;">{{ in_progress_count }}</div>
+          <div class="kpi-sub">Partially completed</div>
         </div>
+      </div>
     </div>
-
-    <!-- Recent Activity Section -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light border-bottom">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0" style="font-weight: 600;">🔔 Recent Activity</h6>
-                        <span class="badge bg-secondary">Last 10</span>
-                    </div>
-                </div>
-                <div class="card-body">
-                    {% if data.recent_activity %}
-                        <div class="activity-feed">
-                            {% for activity in data.recent_activity %}
-                            <div class="activity-item border-bottom pb-3 mb-3" style="cursor: pointer; transition: background-color 0.2s ease;" onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='transparent'" onclick="window.location.href='{{ url_for('lms_admin.view_student_progress', student_id=activity.student_id) }}';">
-                                <div class="d-flex">
-                                    <div class="activity-icon me-3">
-                                        <span class="badge rounded-circle" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
-                                            📚
-                                        </span>
-                                    </div>
-                                    <div class="activity-content flex-grow-1">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div>
-                                                <p class="mb-1" style="font-weight: 500;">
-                                                    <a href="{{ url_for('lms_admin.view_student_progress', student_id=activity.student_id) }}" style="color: inherit; text-decoration: none;">
-                                                        {{ activity.first_name or 'Student' }} {{ activity.last_name or '' }}
-                                                    </a>
-                                                    <span class="text-muted" style="font-size: 0.85rem;">• ID: {{ activity.student_id }}</span>
-                                                </p>
-                                                <p class="mb-0 text-muted" style="font-size: 0.9rem;">
-                                                    Working on <strong>{{ activity.topic_title or 'Topic' }}</strong>
-                                                </p>
-                                            </div>
-                                            <small class="text-muted" style="min-width: 120px; text-align: right;">
-                                                {{ data.format_date(activity.last_accessed) }}
-                                            </small>
-                                        </div>
-                                        <div class="mt-2">
-                                            <div class="progress" style="height: 18px;">
-                                                {% set comp = activity.completion_percentage or 0 %}
-                                                {% set color = '#dc3545' if comp < 25 else '#fd7e14' if comp < 50 else '#ffc107' if comp < 75 else '#17a2b8' if comp < 100 else '#28a745' %}
-                                                <div class="progress-bar" role="progressbar" 
-                                                     style="width: {{ comp }}%; background-color: {{ color }};" 
-                                                     aria-valuenow="{{ comp }}" aria-valuemin="0" aria-valuemax="100">
-                                                    {{ comp }}%
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <p class="text-muted text-center py-4">No recent activity</p>
-                    {% endif %}
-                </div>
-            </div>
+    <div class="col-6 col-lg-2">
+      <div class="card kpi-card shadow-sm h-100">
+        <div class="card-body">
+          <div class="kpi-label text-danger">Not Started</div>
+          <div class="kpi-value text-danger mt-1">{{ not_started_count }}</div>
+          <div class="kpi-sub">0% progress</div>
         </div>
+      </div>
     </div>
-
-    <!-- Batch Progress Overview Section -->
-    {% if data.batches %}
-    <div class="row mb-5">
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-light border-bottom">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0" style="font-weight: 600;">👥 Batch Progress Overview</h6>
-                        <span class="badge bg-secondary">{{ data.batches|length }} batch(es)</span>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th style="width: 20%;">Batch Name</th>
-                                    <th style="width: 12%;">Code</th>
-                                    <th style="width: 10%;">Students</th>
-                                    <th style="width: 15%;">Programs</th>
-                                    <th style="width: 18%;">Avg Completion</th>
-                                    <th style="width: 25%;">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for batch in data.batches %}
-                                <tr>
-                                    <td>
-                                        <strong>{{ batch.batch_name }}</strong>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-light text-dark">{{ batch.batch_code or '—' }}</span>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-info">{{ batch.students_count or 0 }}</span>
-                                    </td>
-                                    <td>
-                                        <small class="text-muted">
-                                            <strong>{{ batch.active_programs or 0 }}/{{ batch.programs_count or 0 }}</strong> active
-                                        </small>
-                                    </td>
-                                    <td>
-                                        <div class="progress" style="height: 20px; min-width: 100px;">
-                                            {% set comp = batch.avg_completion or 0 %}
-                                            {% set comp_color = '#28a745' if comp == 100 else '#ffc107' if comp >= 50 else '#fd7e14' if comp > 0 else '#e9ecef' %}
-                                            <div class="progress-bar" role="progressbar" 
-                                                 style="width: {{ comp }}%; background-color: {{ comp_color }};"
-                                                 aria-valuenow="{{ comp }}" aria-valuemin="0" aria-valuemax="100">
-                                                {% if comp > 0 %}<small style="color: {% if comp > 50 %}white{% else %}#333{% endif %}; font-weight: 500;">{{ comp }}%</small>{% endif %}
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <a href="{{ url_for('lms_admin.view_batch_progress', batch_id=batch.id) }}" class="btn btn-sm btn-primary">
-                                            View Progress →
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+    <div class="col-6 col-lg-2">
+      <div class="card kpi-card shadow-sm h-100">
+        <div class="card-body">
+          <div class="kpi-label" style="color:#6f42c1;">Topics Completed</div>
+          <div class="kpi-value mt-1" style="color:#6f42c1;">{{ total_completed }}</div>
+          <div class="kpi-sub">of {{ total_topics_sum }} total</div>
         </div>
+      </div>
+    </div>
+  </div>
+  <!-- SUMMARY ACCORDIONS -->
+  <div class="accordion mb-4" id="summaryAccordion">
+    <!-- Branch-wise -->
+    {% if branch_summary %}
+    <div class="accordion-item summary-card mb-2 shadow-sm" style="border-radius:10px; overflow:hidden;">
+      <h2 class="accordion-header">
+        <button class="accordion-button collapsed fw-bold" type="button"
+                data-bs-toggle="collapse" data-bs-target="#branchSection">
+          <i class="bi bi-building me-2"></i>Branch-wise Progress
+          <span class="badge bg-secondary ms-2" style="font-size:10px;">{{ branch_summary|length }} branch(es)</span>
+        </button>
+      </h2>
+      <div id="branchSection" class="accordion-collapse collapse">
+        <div class="accordion-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0 summary-table">
+              <thead class="table-light">
+                <tr>
+                  <th class="ps-3">Branch</th>
+                  <th class="text-center">Students</th>
+                  <th>Avg Completion</th>
+                  <th class="text-center">Completed</th>
+                  <th class="text-center">In Progress</th>
+                  <th class="text-center">Not Started</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for b in branch_summary %}
+                <tr>
+                  <td class="ps-3 fw-semibold">{{ b.branch_name or '&mdash;' }}</td>
+                  <td class="text-center"><span class="badge bg-primary">{{ b.total_students }}</span></td>
+                  <td>
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="avg-bar flex-grow-1">
+                        <div class="avg-fill {% if b.avg_pct <= 25 %}pct-red{% elif b.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
+                             style="width:{{ b.avg_pct }}%;"></div>
+                      </div>
+                      <small class="fw-bold" style="min-width:38px;">{{ b.avg_pct }}%</small>
+                    </div>
+                  </td>
+                  <td class="text-center"><span class="badge bg-success">{{ b.completed }}</span></td>
+                  <td class="text-center"><span class="badge bg-warning text-dark">{{ b.in_progress }}</span></td>
+                  <td class="text-center"><span class="badge bg-danger">{{ b.not_started }}</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
     {% endif %}
+    <!-- Batch-wise -->
+    {% if batch_summary %}
+    <div class="accordion-item summary-card mb-2 shadow-sm" style="border-radius:10px; overflow:hidden;">
+      <h2 class="accordion-header">
+        <button class="accordion-button collapsed fw-bold" type="button"
+                data-bs-toggle="collapse" data-bs-target="#batchSection">
+          <i class="bi bi-people-fill me-2"></i>Batch-wise Progress
+          <span class="badge bg-secondary ms-2" style="font-size:10px;">{{ batch_summary|length }} batch(es)</span>
+        </button>
+      </h2>
+      <div id="batchSection" class="accordion-collapse collapse">
+        <div class="accordion-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0 summary-table">
+              <thead class="table-light">
+                <tr>
+                  <th class="ps-3">Batch</th>
+                  <th>Branch</th>
+                  <th>Course(s)</th>
+                  <th>Trainer</th>
+                  <th class="text-center">Students</th>
+                  <th>Avg Completion</th>
+                  <th class="text-center" title="Students below 25% progress">Low (&lt;25%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for b in batch_summary %}
+                <tr>
+                  <td class="ps-3 fw-semibold">{{ b.batch_name or '&mdash;' }}</td>
+                  <td class="text-muted">{{ b.branch_name or '&mdash;' }}</td>
+                  <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ b.programs }}">
+                    {{ b.programs or '&mdash;' }}
+                  </td>
+                  <td>{{ b.trainer_name or '&mdash;' }}</td>
+                  <td class="text-center"><span class="badge bg-primary">{{ b.student_count }}</span></td>
+                  <td>
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="avg-bar flex-grow-1">
+                        <div class="avg-fill {% if b.avg_pct <= 25 %}pct-red{% elif b.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
+                             style="width:{{ b.avg_pct }}%;"></div>
+                      </div>
+                      <small class="fw-bold" style="min-width:38px;">{{ b.avg_pct }}%</small>
+                    </div>
+                  </td>
+                  <td class="text-center">
+                    {% if b.low_count > 0 %}
+                    <span class="badge bg-danger">{{ b.low_count }}</span>
+                    {% else %}
+                    <span class="text-muted">&mdash;</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    <!-- Staff-wise -->
+    {% if staff_summary or unassigned_summary %}
+    <div class="accordion-item summary-card mb-2 shadow-sm" style="border-radius:10px; overflow:hidden;">
+      <h2 class="accordion-header">
+        <button class="accordion-button collapsed fw-bold" type="button"
+                data-bs-toggle="collapse" data-bs-target="#staffSection">
+          <i class="bi bi-mortarboard-fill me-2"></i>Staff / Trainer-wise Progress
+          <span class="badge bg-secondary ms-2" style="font-size:10px;">{{ staff_summary|length }} trainer(s)</span>
+          {% if unassigned_summary %}
+          <span class="badge bg-warning text-dark ms-1" style="font-size:10px;">{{ unassigned_summary.student_count }} unassigned</span>
+          {% endif %}
+        </button>
+      </h2>
+      <div id="staffSection" class="accordion-collapse collapse">
+        <div class="accordion-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0 summary-table">
+              <thead class="table-light">
+                <tr>
+                  <th class="ps-3">Trainer</th>
+                  <th class="text-center">Batches</th>
+                  <th class="text-center">Students</th>
+                  <th>Avg Student Progress</th>
+                  <th class="text-center" title="Student-program rows below 25%">Below 25%</th>
+                  <th class="text-center" title="Student-program rows above 75%">Above 75%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in staff_summary %}
+                <tr>
+                  <td class="ps-3 fw-semibold">{{ s.trainer_name }}</td>
+                  <td class="text-center"><span class="badge bg-info text-dark">{{ s.batch_count }}</span></td>
+                  <td class="text-center"><span class="badge bg-primary">{{ s.student_count }}</span></td>
+                  <td>
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="avg-bar flex-grow-1">
+                        <div class="avg-fill {% if s.avg_pct <= 25 %}pct-red{% elif s.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
+                             style="width:{{ s.avg_pct }}%;"></div>
+                      </div>
+                      <small class="fw-bold" style="min-width:38px;">{{ s.avg_pct }}%</small>
+                    </div>
+                  </td>
+                  <td class="text-center">
+                    {% if s.below25 > 0 %}<span class="badge bg-danger">{{ s.below25 }}</span>
+                    {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+                  </td>
+                  <td class="text-center">
+                    {% if s.above75 > 0 %}<span class="badge bg-success">{{ s.above75 }}</span>
+                    {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+                <!-- Unassigned Students row (separated from trainer ranking) -->
+                {% if unassigned_summary %}
+                <tr class="unassigned-row">
+                  <td class="ps-3">
+                    <div class="fw-bold text-warning-emphasis">
+                      <i class="bi bi-exclamation-circle me-1"></i>Unassigned Students
+                    </div>
+                    <small class="text-muted" style="font-size:10px;">
+                      No trainer/batch assigned &mdash; not included in ranking &mdash;
+                      <a href="{{ url_for('billing.students') }}" class="text-muted">Assign trainer/batch</a>
+                    </small>
+                  </td>
+                  <td class="text-center"><span class="badge bg-secondary">{{ unassigned_summary.batch_count }}</span></td>
+                  <td class="text-center"><span class="badge bg-warning text-dark">{{ unassigned_summary.student_count }}</span></td>
+                  <td>
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="avg-bar flex-grow-1">
+                        <div class="avg-fill {% if unassigned_summary.avg_pct <= 25 %}pct-red{% elif unassigned_summary.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
+                             style="width:{{ unassigned_summary.avg_pct }}%;"></div>
+                      </div>
+                      <small class="fw-bold" style="min-width:38px;">{{ unassigned_summary.avg_pct }}%</small>
+                    </div>
+                  </td>
+                  <td class="text-center text-muted" colspan="2" style="font-size:11px;">Excluded from ranking</td>
+                </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  <!-- STUDENT DETAIL TABLE -->
+  <div class="card shadow-sm" style="border-radius:10px; border:none;">
+    <div class="card-header d-flex justify-content-between align-items-center" style="border-radius:10px 10px 0 0; background:#f1f5f9;">
+      <h6 class="mb-0 fw-bold">
+        <i class="bi bi-clipboard-data me-1"></i>Student Progress Detail
+      </h6>
+      <span class="badge bg-secondary" style="font-size:11px;">{{ student_rows|length }} record(s)</span>
+    </div>
+    {% if student_rows %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0" id="studentTable">
+        <thead class="table-light">
+          <tr>
+            <th class="sortable ps-3" data-sort-key="name">Student <span class="sort-icon">&#8597;</span></th>
+            <th class="sortable" data-sort-key="code">Reg No <span class="sort-icon">&#8597;</span></th>
+            <th class="sortable" data-sort-key="branch">Branch <span class="sort-icon">&#8597;</span></th>
+            <th class="sortable" data-sort-key="batch">Batch <span class="sort-icon">&#8597;</span></th>
+            <th class="sortable" data-sort-key="program">Course <span class="sort-icon">&#8597;</span></th>
+            <th class="sortable" data-sort-key="trainer">Trainer <span class="sort-icon">&#8597;</span></th>
+            <th class="sortable text-center" data-sort-key="total">Total <span class="sort-icon">&#8597;</span></th>
+            <th class="sortable text-center" data-sort-key="done">Done <span class="sort-icon">&#8597;</span></th>
+            <th class="sortable" data-sort-key="pct" style="min-width:130px;">Progress <span class="sort-icon">&#8597;</span></th>
+            <th class="sortable" data-sort-key="last">Last Activity <span class="sort-icon">&#8597;</span></th>
+            <th class="sortable" data-sort-key="status">Status <span class="sort-icon">&#8597;</span></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in student_rows %}
+          <tr>
+            <td class="ps-3 fw-semibold" data-sort-key="name" data-sort-value="{{ r.full_name }}">{{ r.full_name }}</td>
+            <td data-sort-key="code" data-sort-value="{{ r.student_code }}">
+              <code style="font-size:11px;">{{ r.student_code }}</code>
+            </td>
+            <td data-sort-key="branch" data-sort-value="{{ r.branch_name }}">{{ r.branch_name or '&mdash;' }}</td>
+            <td data-sort-key="batch"  data-sort-value="{{ r.batch_name }}">{{ r.batch_name or '&mdash;' }}</td>
+            <td data-sort-key="program" data-sort-value="{{ r.program_name }}" style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ r.program_name }}">
+              {{ r.program_name }}
+            </td>
+            <td data-sort-key="trainer" data-sort-value="{{ r.trainer_name }}">{{ r.trainer_name or '&mdash;' }}</td>
+            <td class="text-center" data-sort-key="total" data-sort-value="{{ r.total_topics }}">{{ r.total_topics }}</td>
+            <td class="text-center" data-sort-key="done"  data-sort-value="{{ r.completed_topics }}">{{ r.completed_topics }}</td>
+            <td data-sort-key="pct" data-sort-value="{{ r.pct }}">
+              <div class="d-flex align-items-center gap-1">
+                <div class="progress-wrap flex-grow-1">
+                  <div class="pbar">
+                    <div class="pfill {% if r.bar_color == 'danger' %}pct-red{% elif r.bar_color == 'warning' %}pct-yellow{% else %}pct-green{% endif %}"
+                         style="width:{{ r.pct }}%;"></div>
+                  </div>
+                </div>
+                <small class="fw-bold" style="min-width:36px; font-size:11px;">{{ r.pct }}%</small>
+              </div>
+            </td>
+            <td data-sort-key="last" data-sort-value="{{ r.last_activity }}">
+              <small class="text-muted">{{ r.last_activity }}</small>
+            </td>
+            <td data-sort-key="status" data-sort-value="{{ r.status }}">
+              <span class="status-badge status-{{ r.status|lower|replace(' ', '-') }}">{{ r.status }}</span>
+            </td>
+            <td>
+              <a href="{{ url_for('lms_admin.view_student_progress', student_id=r.student_id) }}"
+                 class="btn btn-sm btn-outline-primary" style="font-size:11px; padding:2px 8px;">
+                Detail
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card-body text-center py-5">
+      <i class="bi bi-bar-chart-line" style="font-size:3rem; opacity:.3; color:#6c757d;"></i>
+      <h5 class="mt-2 text-muted">No student progress data</h5>
+      {% if filters.is_filtered %}
+      <p class="text-muted" style="font-size:13px;">No records match the current filters. <a href="{{ url_for('lms_admin.progress_dashboard') }}">Clear filters</a></p>
+      {% else %}
+      <p class="text-muted" style="font-size:13px;">No active students are enrolled in any LMS program yet.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
 </div>
-
-<!-- CSS Styling -->
-<style>
-    .metrics-card {
-        border: none;
-        border-radius: 10px;
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .metrics-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
-    }
-
-    .metrics-card .card-body {
-        padding: 1.5rem;
-    }
-
-    .breadcrumb-item.active {
-        color: #6c757d;
-    }
-
-    .page-header {
-        border-bottom: 2px solid #f0f0f0;
-        padding-bottom: 1.5rem;
-    }
-
-    .page-title {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #333;
-        margin: 0;
-    }
-
-    .progress-list {
-        margin: 0;
-    }
-
-    .stats-grid {
-        display: grid;
-        gap: 0;
-    }
-
-    .stat-item {
-        padding: 1rem 0;
-    }
-
-    .table-hover tbody tr:hover {
-        background-color: #f8f9fa;
-    }
-
-    .activity-feed {
-        margin: 0;
-    }
-
-    .activity-item {
-        transition: background-color 0.2s ease;
-        padding: 1rem 0;
-    }
-
-    .activity-item:hover {
-        background-color: #f8f9fa;
-    }
-
-    .activity-item:last-child {
-        border-bottom: none !important;
-        margin-bottom: 0 !important;
-    }
-
-    .activity-icon span {
-        font-size: 1.2rem;
-    }
-
-    .badge {
-        padding: 0.4rem 0.8rem;
-        font-weight: 500;
-    }
-
-    .card {
-        border: none;
-        border-radius: 10px;
-    }
-
-    .card-header {
-        background-color: #f8f9fa;
-        border-radius: 10px 10px 0 0;
-    }
-
-    .card-header h6 {
-        font-size: 1rem;
-    }
-
-    @media (max-width: 768px) {
-        .page-title {
-            font-size: 1.5rem;
-        }
-
-        .metrics-card .card-body {
-            padding: 1rem;
-        }
-
-        h3 {
-            font-size: 2rem !important;
-        }
-
-        .table {
-            font-size: 0.9rem;
-        }
-    }
-</style>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  /* Column sort for student table */
+  var table = document.getElementById('studentTable');
+  if (!table) return;
+  var tbody   = table.querySelector('tbody');
+  var sortKey = null;
+  var sortDir = 1;
+  table.querySelectorAll('thead th.sortable').forEach(function (th) {
+    th.style.userSelect = 'none';
+    th.addEventListener('click', function () {
+      var key = th.dataset.sortKey;
+      if (sortKey === key) { sortDir = -sortDir; } else { sortKey = key; sortDir = 1; }
+      table.querySelectorAll('thead th').forEach(function (t) { t.classList.remove('sort-asc','sort-desc'); });
+      th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+      var rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort(function (a, b) {
+        var aCell = a.querySelector('[data-sort-key="' + key + '"]');
+        var bCell = b.querySelector('[data-sort-key="' + key + '"]');
+        var aVal  = aCell ? (aCell.dataset.sortValue || aCell.textContent.trim()) : '';
+        var bVal  = bCell ? (bCell.dataset.sortValue || bCell.textContent.trim()) : '';
+        var aNum  = parseFloat(aVal);
+        var bNum  = parseFloat(bVal);
+        if (!isNaN(aNum) && !isNaN(bNum)) return (aNum - bNum) * sortDir;
+        return aVal.localeCompare(bVal) * sortDir;
+      });
+      rows.forEach(function (r) { tbody.appendChild(r); });
+    });
+  });
+  /* Auto-submit form when branch changes to refresh batch list */
+  var branchSel = document.querySelector('select[name="branch_id"]');
+  if (branchSel) {
+    branchSel.addEventListener('change', function () { branchSel.form.submit(); });
+  }
+})();
+</script>
 {% endblock %}

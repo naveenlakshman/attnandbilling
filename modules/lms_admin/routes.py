@@ -5095,164 +5095,389 @@ def delete_batch_program(assignment_id):
 @lms_admin_bp.route('/progress-dashboard', methods=['GET'])
 @login_required
 def progress_dashboard():
-    """Overall student progress monitoring dashboard"""
+    """Enhanced student progress monitoring dashboard with filters."""
     conn = get_conn()
     try:
         cur = conn.cursor()
-        
-        # Get overall statistics
-        # Total active students in LMS
-        cur.execute("""
-            SELECT COUNT(DISTINCT student_id) as count
-            FROM lms_student_program_access
-            WHERE is_active = 1
-        """)
-        active_students = cur.fetchone()['count']
-        
-        # Total completed topics
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_topic_progress
-            WHERE is_completed = 1
-        """)
-        completed_topics = cur.fetchone()['count']
-        
-        # In progress (binary state — no partial completion)
-        in_progress_topics = 0
-        
-        # Total not started (records exist but not completed)
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM lms_topic_progress
-            WHERE is_completed = 0
-        """)
-        not_started_topics = cur.fetchone()['count']
-        
-        # Overall completion percentage
-        cur.execute("""
+
+        # ── Filter param extraction ──────────────────────────────────────
+        f_branch_id  = request.args.get('branch_id',  '').strip()
+        f_batch_id   = request.args.get('batch_id',   '').strip()
+        f_program_id = request.args.get('program_id', '').strip()
+        f_staff_id   = request.args.get('staff_id',   '').strip()
+        f_q          = request.args.get('q',           '').strip()
+
+        branch_id  = int(f_branch_id)  if f_branch_id.isdigit()  else None
+        batch_id   = int(f_batch_id)   if f_batch_id.isdigit()   else None
+        program_id = int(f_program_id) if f_program_id.isdigit() else None
+        staff_id   = int(f_staff_id)   if f_staff_id.isdigit()   else None
+        q          = f_q or None
+
+        # ── Dropdown data for filter bar ────────────────────────────────
+        branches = cur.execute(
+            "SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name"
+        ).fetchall()
+
+        if branch_id:
+            filter_batches = cur.execute(
+                "SELECT id, batch_name FROM batches WHERE branch_id = ? AND status = 'active' ORDER BY batch_name",
+                (branch_id,)
+            ).fetchall()
+        else:
+            filter_batches = cur.execute(
+                "SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name"
+            ).fetchall()
+
+        programs = cur.execute(
+            "SELECT id, program_name FROM lms_programs WHERE is_active = 1 AND is_deleted = 0 ORDER BY program_name"
+        ).fetchall()
+
+        staff_users = cur.execute(
+            """SELECT DISTINCT u.id, u.full_name
+               FROM users u
+               JOIN batches b ON b.trainer_id = u.id
+               JOIN student_batches sb ON sb.batch_id = b.id AND sb.status = 'active'
+               JOIN students s ON s.id = sb.student_id AND s.status = 'active'
+               WHERE u.is_active = 1
+               ORDER BY u.full_name"""
+        ).fetchall()
+
+        # ── WHERE clause builder ────────────────────────────────────────
+        # Mirror the student portal's 4-path enrollment check so every
+        # student who can see a program also appears in the admin view.
+        _enroll_check = """(
+            EXISTS (
+                SELECT 1 FROM lms_student_program_access spa
+                WHERE spa.student_id = s.id AND spa.program_id = lp.id
+                  AND spa.is_active = 1
+                  AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+            )
+            OR EXISTS (
+                SELECT 1 FROM lms_batch_program_access bpa
+                JOIN student_batches sb ON sb.batch_id = bpa.batch_id
+                WHERE sb.student_id = s.id AND bpa.program_id = lp.id
+                  AND bpa.is_active = 1 AND sb.status = 'active'
+                  AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
+            )
+            OR EXISTS (
+                SELECT 1 FROM invoices inv
+                JOIN invoice_items ii ON ii.invoice_id = inv.id
+                WHERE inv.student_id = s.id AND ii.course_id = lp.course_id
+                  AND lp.course_id IS NOT NULL
+            )
+            OR EXISTS (
+                SELECT 1 FROM invoices inv
+                JOIN invoice_items ii ON ii.invoice_id = inv.id
+                JOIN lms_course_program_map cpm ON cpm.course_id = ii.course_id
+                  AND cpm.program_id = lp.id
+                WHERE inv.student_id = s.id
+            )
+        )"""
+
+        where_clauses = [
+            "s.status = 'active'",
+            "lp.is_active = 1",
+            "lp.is_deleted = 0",
+            _enroll_check,
+        ]
+        params = []
+
+        if program_id:
+            where_clauses.append("lp.id = ?")
+            params.append(program_id)
+
+        if batch_id:
+            # Student must be in this specific batch
+            where_clauses.append("""EXISTS (
+                SELECT 1 FROM student_batches sb_f
+                WHERE sb_f.student_id = s.id AND sb_f.batch_id = ? AND sb_f.status = 'active'
+            )""")
+            params.append(batch_id)
+
+        if branch_id:
+            # Student's active batch must belong to this branch, OR student's own branch
+            where_clauses.append("""(
+                EXISTS (
+                    SELECT 1 FROM student_batches sb_br
+                    JOIN batches bat_br ON bat_br.id = sb_br.batch_id
+                    WHERE sb_br.student_id = s.id AND sb_br.status = 'active'
+                      AND bat_br.branch_id = ?
+                )
+                OR s.branch_id = ?
+            )""")
+            params.extend([branch_id, branch_id])
+
+        if staff_id:
+            # Student's active batch must have this trainer
+            where_clauses.append("""EXISTS (
+                SELECT 1 FROM student_batches sb_st
+                JOIN batches bat_st ON bat_st.id = sb_st.batch_id
+                WHERE sb_st.student_id = s.id AND sb_st.status = 'active'
+                  AND bat_st.trainer_id = ?
+            )""")
+            params.append(staff_id)
+
+        if q:
+            where_clauses.append(
+                "(s.full_name LIKE ? OR s.student_code LIKE ? OR s.phone LIKE ?)"
+            )
+            params.extend([f'%{q}%', f'%{q}%', f'%{q}%'])
+
+        where_sql = " AND ".join(where_clauses)
+
+        # ── Master-linked existence check (reused twice in SELECT) ───────
+        _master_check = """EXISTS (
+            SELECT 1 FROM lms_program_chapters pcx
+            JOIN lms_master_chapters mcx ON mcx.id = pcx.master_chapter_id
+            JOIN lms_master_topics   mtx ON mtx.master_chapter_id = mcx.id
+            WHERE pcx.program_id = lp.id AND pcx.is_visible = 1
+              AND mcx.status = 'active' AND mtx.status = 'active'
+        )"""
+
+        sql = f"""
             SELECT
-                CASE WHEN COUNT(*) = 0 THEN 0
-                ELSE ROUND(100.0 * SUM(is_completed) / COUNT(*), 1)
-                END as avg_completion
-            FROM lms_topic_progress
-        """)
-        result = cur.fetchone()
-        overall_completion = result['avg_completion'] if result['avg_completion'] else 0
-        
-        # Top 5 progressing students (by completion)
-        cur.execute("""
-            SELECT 
-                stp.student_id,
-                ast.full_name as first_name,
-                '' as last_name,
-                COUNT(stp.topic_id) as topics_count,
-                ROUND(100.0 * SUM(stp.is_completed) / COUNT(*), 1) as avg_completion,
-                MAX(stp.completed_at) as last_accessed
-            FROM lms_topic_progress stp
-            LEFT JOIN students ast ON stp.student_id = ast.id
-            GROUP BY stp.student_id
-            ORDER BY avg_completion DESC
-            LIMIT 5
-        """)
-        top_students = cur.fetchall()
-        
-        # Bottom 5 low engagement students: have program access but least/no progress
-        cur.execute("""
-            SELECT 
-                spa.student_id,
-                ast.full_name as first_name,
-                '' as last_name,
-                COUNT(DISTINCT stp.topic_id) as topics_count,
-                COALESCE(ROUND(100.0 * SUM(CASE WHEN stp.is_completed = 1 THEN 1 ELSE 0 END) / 
-                    NULLIF(COUNT(DISTINCT stp.topic_id), 0), 1), 0) as avg_completion,
-                MAX(stp.completed_at) as last_accessed
-            FROM lms_student_program_access spa
-            JOIN students ast ON spa.student_id = ast.id
-            LEFT JOIN lms_topic_progress stp ON spa.student_id = stp.student_id
-            WHERE spa.is_active = 1
-            GROUP BY spa.student_id
-            ORDER BY avg_completion ASC, topics_count ASC
-            LIMIT 5
-        """)
-        low_engagement_students = cur.fetchall()
-        
-        # Recent activity - last 10 completions
-        cur.execute("""
-            SELECT 
-                stp.student_id,
-                ast.full_name as first_name,
-                '' as last_name,
-                lt.topic_title,
-                CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END as completion_percentage,
-                stp.completed_at as last_accessed
-            FROM lms_topic_progress stp
-            LEFT JOIN students ast ON stp.student_id = ast.id
-            LEFT JOIN lms_topics lt ON stp.topic_id = lt.id
-            WHERE stp.is_completed = 1
-            ORDER BY stp.completed_at DESC
-            LIMIT 10
-        """)
-        recent_activity = cur.fetchall()
-        
-        # Completion distribution (binary: completed or not started)
-        cur.execute("""
-            SELECT 
-                CASE WHEN is_completed = 1 THEN '100%' ELSE 'Not Started' END as completion_range,
-                COUNT(*) as count
-            FROM lms_topic_progress
-            GROUP BY is_completed
-            ORDER BY is_completed
-        """)
-        completion_distribution = cur.fetchall()
-        
-        # Get batches with LMS programs
-        cur.execute("""
-            SELECT 
-                ab.id,
-                ab.batch_name,
-                COUNT(DISTINCT lbpa.program_id) as programs_count,
-                COUNT(DISTINCT CASE WHEN lbpa.is_active = 1 THEN lbpa.program_id END) as active_programs,
-                COUNT(DISTINCT sb.student_id) as students_count,
-                ROUND(
-                    CASE WHEN COUNT(stp.id) = 0 THEN 0
-                    ELSE 100.0 * SUM(CASE WHEN stp.is_completed = 1 THEN 1 ELSE 0 END) / COUNT(stp.id)
-                    END, 1) as avg_completion
-            FROM batches ab
-            LEFT JOIN lms_batch_program_access lbpa ON ab.id = lbpa.batch_id
-            LEFT JOIN student_batches sb ON ab.id = sb.batch_id AND sb.status = 'active'
-            LEFT JOIN lms_topic_progress stp ON sb.student_id = stp.student_id
-            WHERE lbpa.program_id IS NOT NULL
-            GROUP BY ab.id
-            ORDER BY ab.batch_name
-        """)
-        batches_with_lms = cur.fetchall()
-        
-        def format_date(date_str):
-            """Format date string for display"""
-            if not date_str:
-                return "—"
+                s.id               AS student_id,
+                s.student_code,
+                s.full_name,
+                lp.id              AS program_id,
+                lp.program_name,
+                COALESCE(b.batch_name,  '') AS batch_name,
+                COALESCE(br.branch_name, br2.branch_name, '') AS branch_name,
+                COALESCE(u.full_name,   '') AS trainer_name,
+                -- total topics: master-linked OR legacy (mirrors student portal)
+                CASE WHEN {_master_check} THEN (
+                    SELECT COUNT(*)
+                    FROM lms_master_topics mt
+                    JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                    JOIN lms_master_chapters  mc ON mc.id = pc.master_chapter_id
+                    WHERE pc.program_id = lp.id AND pc.is_visible = 1
+                      AND mc.status = 'active'  AND mt.status = 'active'
+                ) ELSE (
+                    SELECT COUNT(*)
+                    FROM lms_topics lt
+                    JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                    WHERE lc.program_id = lp.id AND lt.is_active = 1
+                ) END AS total_topics,
+                -- completed topics: master-linked OR legacy
+                CASE WHEN {_master_check} THEN (
+                    SELECT COUNT(*)
+                    FROM lms_master_topic_progress mtp
+                    JOIN lms_master_topics mt ON mt.id = mtp.master_topic_id
+                    JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                    JOIN lms_master_chapters  mc ON mc.id = pc.master_chapter_id
+                    WHERE mtp.student_id = s.id AND mtp.program_id = lp.id AND mtp.is_completed = 1
+                      AND pc.program_id = lp.id AND pc.is_visible = 1
+                      AND mc.status = 'active'  AND mt.status = 'active'
+                ) ELSE (
+                    SELECT COUNT(*)
+                    FROM lms_topic_progress tp
+                    JOIN lms_topics lt ON tp.topic_id = lt.id
+                    JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                    WHERE tp.student_id = s.id AND lc.program_id = lp.id AND tp.is_completed = 1
+                ) END AS completed_topics,
+                -- last activity across both progress stores
+                (
+                    SELECT MAX(last_act) FROM (
+                        SELECT MAX(tp.completed_at) AS last_act
+                        FROM lms_topic_progress tp
+                        JOIN lms_topics lt ON tp.topic_id = lt.id
+                        JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                        WHERE tp.student_id = s.id AND lc.program_id = lp.id
+                        UNION ALL
+                        SELECT MAX(mtp.completed_at) AS last_act
+                        FROM lms_master_topic_progress mtp
+                        WHERE mtp.student_id = s.id AND mtp.program_id = lp.id
+                    )
+                ) AS last_activity
+            FROM students s
+            JOIN lms_programs lp ON lp.is_active = 1 AND lp.is_deleted = 0
+            -- Display batch: prefer spa.batch_id, fallback to any active student batch
+            LEFT JOIN batches b ON b.id = COALESCE(
+                (SELECT spa2.batch_id FROM lms_student_program_access spa2
+                 WHERE spa2.student_id = s.id AND spa2.program_id = lp.id
+                   AND spa2.is_active = 1 AND spa2.batch_id IS NOT NULL LIMIT 1),
+                (SELECT MIN(sb3.batch_id) FROM student_batches sb3
+                 WHERE sb3.student_id = s.id AND sb3.status = 'active')
+            )
+            LEFT JOIN branches br  ON br.id  = b.branch_id
+            LEFT JOIN branches br2 ON br2.id = s.branch_id
+            LEFT JOIN users    u   ON u.id   = b.trainer_id
+            WHERE {where_sql}
+            ORDER BY s.full_name ASC, lp.program_name ASC
+        """
+
+        rows = cur.execute(sql, params).fetchall()
+
+        # ── Per-row enrichment ───────────────────────────────────────────
+        def _fmt_date(val):
+            if not val:
+                return '—'
             try:
-                from datetime import datetime
-                date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
-                return date_obj.strftime('%d %b %Y, %I:%M %p')
-            except:
-                return date_str
-        
-        data = {
-            'active_students': active_students,
-            'completed_topics': completed_topics,
-            'in_progress_topics': in_progress_topics,
-            'not_started_topics': not_started_topics,
-            'overall_completion': round(overall_completion, 1),
-            'top_students': top_students,
-            'low_engagement_students': low_engagement_students,
-            'recent_activity': recent_activity,
-            'completion_distribution': completion_distribution,
-            'batches': batches_with_lms,
-            'format_date': format_date
+                from datetime import datetime as _dt
+                return _dt.fromisoformat(str(val).replace('T', ' ').split('.')[0]).strftime('%d %b %Y')
+            except Exception:
+                return str(val)[:10]
+
+        student_rows = []
+        for row in rows:
+            total = row['total_topics'] or 0
+            done  = row['completed_topics'] or 0
+            pct   = round(done / total * 100, 1) if total > 0 else 0.0
+            if pct == 0:
+                status, status_color = 'Not Started', 'danger'
+            elif pct >= 100:
+                status, status_color = 'Completed', 'success'
+            else:
+                status, status_color = 'In Progress', 'warning'
+            bar_color = 'danger' if pct <= 25 else ('warning' if pct <= 60 else 'success')
+            student_rows.append({
+                'student_id':      row['student_id'],
+                'student_code':    row['student_code'],
+                'full_name':       row['full_name'],
+                'branch_name':     row['branch_name'],
+                'batch_name':      row['batch_name'],
+                'program_name':    row['program_name'],
+                'trainer_name':    row['trainer_name'],
+                'total_topics':    total,
+                'completed_topics': done,
+                'pct':             pct,
+                'status':          status,
+                'status_color':    status_color,
+                'bar_color':       bar_color,
+                'last_activity':   _fmt_date(row['last_activity']),
+            })
+
+        # ── KPI cards ───────────────────────────────────────────────────
+        active_students   = len({r['student_id'] for r in student_rows})
+        total_completed   = sum(r['completed_topics'] for r in student_rows)
+        total_topics_sum  = sum(r['total_topics'] for r in student_rows)
+        overall_pct       = round(total_completed / total_topics_sum * 100, 1) if total_topics_sum > 0 else 0.0
+        not_started_count = sum(1 for r in student_rows if r['pct'] == 0)
+        in_progress_count = sum(1 for r in student_rows if 0 < r['pct'] < 100)
+        completed_count   = sum(1 for r in student_rows if r['pct'] >= 100)
+
+        # ── Branch summary ───────────────────────────────────────────────
+        branch_map = {}
+        for r in student_rows:
+            bn = r['branch_name']
+            if bn not in branch_map:
+                branch_map[bn] = {'branch_name': bn, 'students': set(), 'total': 0, 'done': 0,
+                                  'not_started': 0, 'in_progress': 0, 'completed': 0}
+            branch_map[bn]['students'].add(r['student_id'])
+            branch_map[bn]['total'] += r['total_topics']
+            branch_map[bn]['done']  += r['completed_topics']
+            if   r['pct'] == 0:   branch_map[bn]['not_started']  += 1
+            elif r['pct'] >= 100: branch_map[bn]['completed']     += 1
+            else:                 branch_map[bn]['in_progress']   += 1
+
+        branch_summary = []
+        for bn, bd in sorted(branch_map.items()):
+            avg = round(bd['done'] / bd['total'] * 100, 1) if bd['total'] > 0 else 0.0
+            branch_summary.append({
+                'branch_name':    bn,
+                'total_students': len(bd['students']),
+                'avg_pct':        avg,
+                'not_started':    bd['not_started'],
+                'in_progress':    bd['in_progress'],
+                'completed':      bd['completed'],
+            })
+
+        # ── Batch summary ────────────────────────────────────────────────
+        batch_map = {}
+        for r in student_rows:
+            bn = r['batch_name']
+            if bn not in batch_map:
+                batch_map[bn] = {
+                    'batch_name':   bn,
+                    'branch_name':  r['branch_name'],
+                    'trainer_name': r['trainer_name'],
+                    'programs': set(), 'students': set(),
+                    'total': 0, 'done': 0, 'low_count': 0,
+                }
+            batch_map[bn]['students'].add(r['student_id'])
+            batch_map[bn]['programs'].add(r['program_name'])
+            batch_map[bn]['total'] += r['total_topics']
+            batch_map[bn]['done']  += r['completed_topics']
+            if r['pct'] < 25:
+                batch_map[bn]['low_count'] += 1
+
+        batch_summary = []
+        for bn, bd in sorted(batch_map.items()):
+            avg = round(bd['done'] / bd['total'] * 100, 1) if bd['total'] > 0 else 0.0
+            batch_summary.append({
+                'batch_name':    bn,
+                'branch_name':   bd['branch_name'],
+                'trainer_name':  bd['trainer_name'],
+                'programs':      ', '.join(sorted(bd['programs'])),
+                'student_count': len(bd['students']),
+                'avg_pct':       avg,
+                'low_count':     bd['low_count'],
+            })
+
+        # ── Staff summary (unassigned students kept separate) ──────────────
+        # trainer_name is '' when no trainer/batch is assigned
+        staff_map = {}
+        for r in student_rows:
+            tn = r['trainer_name']  # empty string = no trainer assigned
+            if tn not in staff_map:
+                staff_map[tn] = {
+                    'batches': set(), 'students': set(),
+                    'total': 0, 'done': 0, 'below25': 0, 'above75': 0,
+                }
+            staff_map[tn]['students'].add(r['student_id'])
+            staff_map[tn]['batches'].add(r['batch_name'])
+            staff_map[tn]['total'] += r['total_topics']
+            staff_map[tn]['done']  += r['completed_topics']
+            if r['pct'] < 25:  staff_map[tn]['below25'] += 1
+            if r['pct'] > 75:  staff_map[tn]['above75'] += 1
+
+        staff_summary = []
+        unassigned_summary = None
+        # Sort named trainers first; unassigned (empty key) goes to unassigned_summary
+        for tn, td in sorted(staff_map.items(), key=lambda x: (not x[0], x[0])):
+            avg = round(td['done'] / td['total'] * 100, 1) if td['total'] > 0 else 0.0
+            entry = {
+                'trainer_name':  tn,
+                'batch_count':   len(td['batches']),
+                'student_count': len(td['students']),
+                'avg_pct':       avg,
+                'below25':       td['below25'],
+                'above75':       td['above75'],
+            }
+            if not tn:
+                unassigned_summary = entry
+            else:
+                staff_summary.append(entry)
+
+        filters = {
+            'branch_id':  f_branch_id,
+            'batch_id':   f_batch_id,
+            'program_id': f_program_id,
+            'staff_id':   f_staff_id,
+            'q':          f_q,
+            'is_filtered': any([branch_id, batch_id, program_id, staff_id, q]),
         }
-        
-        return render_template('lms_progress_dashboard.html', data=data)
+
+        return render_template(
+            'lms_progress_dashboard.html',
+            filters=filters,
+            branches=branches,
+            filter_batches=filter_batches,
+            programs=programs,
+            staff_users=staff_users,
+            student_rows=student_rows,
+            active_students=active_students,
+            overall_pct=overall_pct,
+            total_completed=total_completed,
+            not_started_count=not_started_count,
+            in_progress_count=in_progress_count,
+            completed_count=completed_count,
+            total_topics_sum=total_topics_sum,
+            branch_summary=branch_summary,
+            batch_summary=batch_summary,
+            staff_summary=staff_summary,
+            unassigned_summary=unassigned_summary,
+        )
     finally:
         conn.close()
 
