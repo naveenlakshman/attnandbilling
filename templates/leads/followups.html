@@ -4,95 +4,139 @@
 {% block extra_css %}
 <style>
   .tab-chip {
-    border-radius: 999px;
-    padding: 6px 12px;
-    font-size: 13px;
-    font-weight: 600;
-    border: 1px solid #d7dce2;
-    color: #334155;
-    text-decoration: none;
-    background: #ffffff;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+    border-radius: 999px; padding: 5px 12px;
+    font-size: 12px; font-weight: 600;
+    border: 1px solid #d7dce2; color: #334155;
+    text-decoration: none; background: #fff;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: background .12s;
   }
-  .tab-chip.active {
-    background: #0f766e;
-    border-color: #0f766e;
-    color: #ffffff;
-  }
+  .tab-chip:hover:not(.active) { background: #f1f5f9; }
+  .tab-chip.active { background: #0f766e; border-color: #0f766e; color: #fff; }
   .count-pill {
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 8px;
-    background: #eef2f7;
-    color: #0f172a;
+    border-radius: 999px; font-size: 10px; font-weight: 700;
+    padding: 1px 7px; background: #eef2f7; color: #0f172a;
   }
-  .tab-chip.active .count-pill {
-    background: rgba(255,255,255,.2);
-    color: #ffffff;
-  }
+  .tab-chip.active .count-pill { background: rgba(255,255,255,.2); color: #fff; }
 
-  .stage-badge,
-  .temp-badge,
-  .due-badge {
-    font-size: 11px;
-    font-weight: 700;
-    border-radius: 999px;
-    padding: 3px 8px;
-    display: inline-block;
+  .stage-badge, .temp-badge {
+    font-size: 11px; font-weight: 600;
+    border-radius: 6px; padding: 2px 7px;
+    display: inline-block; white-space: nowrap;
   }
-  .stage-new-lead { background: #e2e8f0; color: #334155; }
-  .stage-contacted { background: #dbeafe; color: #1e40af; }
-  .stage-interested { background: #d1fae5; color: #065f46; }
+  .stage-new-lead        { background: #e2e8f0; color: #334155; }
+  .stage-contacted       { background: #dbeafe; color: #1e40af; }
+  .stage-interested      { background: #d1fae5; color: #065f46; }
   .stage-counseling-done { background: #fef3c7; color: #92400e; }
-  .stage-follow-up { background: #ede9fe; color: #5b21b6; }
-  .stage-converted { background: #dcfce7; color: #166534; }
-  .stage-lost { background: #e5e7eb; color: #374151; }
-
-  .temp-hot { background: #fee2e2; color: #b91c1c; }
+  .stage-follow-up       { background: #ede9fe; color: #5b21b6; }
+  .stage-converted       { background: #dcfce7; color: #166534; }
+  .stage-lost            { background: #e5e7eb; color: #374151; }
+  .temp-hot  { background: #fee2e2; color: #b91c1c; }
   .temp-warm { background: #fef3c7; color: #92400e; }
   .temp-cold { background: #dbeafe; color: #1d4ed8; }
 
   .due-overdue { background: #fecaca; color: #991b1b; }
-  .due-today { background: #fed7aa; color: #9a3412; }
-  .due-normal { background: #e2e8f0; color: #334155; }
+  .due-today   { background: #fed7aa; color: #9a3412; }
+  .due-normal  { background: #e2e8f0; color: #334155; }
 
   .followup-hidden { display: none !important; }
 
   .mobile-card {
-    border: 1px solid #e2e8f0;
-    border-left: 4px solid #cbd5e1;
-    border-radius: 12px;
-    background: #ffffff;
-    padding: 12px;
-    margin-bottom: 10px;
+    border: 1px solid #e2e8f0; border-left: 4px solid #cbd5e1;
+    border-radius: 10px; background: #fff;
+    padding: 10px; margin-bottom: 8px;
   }
   .mobile-card.overdue { border-left-color: #ef4444; }
-  .mobile-card.today { border-left-color: #f59e0b; }
+  .mobile-card.today   { border-left-color: #f59e0b; }
 
-  .last-note {
-    font-size: 12px;
-    color: #475569;
-    max-width: 340px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  /* -- Due date pill compact -- */
+  .due-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+    border-radius: 8px; padding: 2px 7px;
+    white-space: nowrap; letter-spacing: .2px;
   }
+
+  /* -- Compact desktop table -- */
+  .followups-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .followups-table { font-size: 12.5px; min-width: 780px; }
+  .followups-table td,
+  .followups-table th { padding: 6px 8px !important; vertical-align: middle !important; }
+  .followups-table thead th {
+    position: sticky; top: 0; z-index: 4;
+    background: #f8f9fa; border-bottom: 2px solid #dee2e6;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #6c757d;
+    white-space: nowrap;
+  }
+  .followups-table tbody tr:hover { background: #f0f7ff; }
+  .followups-table .col-lead   { min-width: 130px; }
+  .followups-table .col-phone  { white-space: nowrap; }
+  .followups-table .col-course { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .followups-table .col-stage  { white-space: nowrap; }
+  .followups-table .col-temp   { white-space: nowrap; }
+  .followups-table .col-owner  { white-space: nowrap; }
+  .followups-table .col-due    { white-space: nowrap; }
+  .followups-table .col-note   { max-width: 160px; }
+  .followups-table .col-actions { white-space: nowrap; }
+
+  /* -- Icon action buttons -- */
+  .fu-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid #dee2e6; background: #fff;
+    font-size: 13px; text-decoration: none; color: #495057;
+    cursor: pointer; flex-shrink: 0;
+    transition: background .1s, border-color .1s;
+  }
+  .fu-btn:hover { background: #e9ecef; border-color: #adb5bd; color: #212529; }
+  .fu-btn.fu-complete  { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+  .fu-btn.fu-complete:hover  { background: #0a58ca; border-color: #0a58ca; }
+  .fu-btn.fu-reschedule  { background: #fff; color: #0d6efd; border-color: #0d6efd; }
+  .fu-btn.fu-reschedule:hover  { background: #e7f0ff; }
+  .fu-btn.fu-open  { background: #198754; color: #fff; border-color: #198754; }
+  .fu-btn.fu-open:hover  { background: #157347; border-color: #157347; }
+  .actions-cell { display: inline-flex; gap: 3px; align-items: center; }
+
+  /* -- Last note truncate -- */
+  .last-note {
+    font-size: 11.5px; color: #475569;
+    max-width: 160px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* -- Lead name sub-badges -- */
+  .lead-sub-badges { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+  .sub-badge {
+    font-size: 9px; font-weight: 700; border-radius: 4px;
+    padding: 1px 5px; white-space: nowrap;
+  }
+  .sub-parent      { background: #fef9c3; color: #854d0e; }
+  .sub-visited     { background: #dbeafe; color: #1e40af; }
+  .sub-demo        { background: #d1fae5; color: #065f46; }
+  .sub-visit-sched { background: #e0f2fe; color: #0369a1; }
+
+  /* -- Stats bar -- */
+  .fu-stat {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12px; font-weight: 600;
+    padding: 4px 10px; border-radius: 999px;
+  }
+  .fu-stat-overdue   { background: #fee2e2; color: #991b1b; }
+  .fu-stat-today     { background: #fef9c3; color: #854d0e; }
+  .fu-stat-completed { background: #f1f5f9; color: #475569; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <div>
-    <h5 class="mb-0">Daily Follow-up Console</h5>
-    <div class="text-muted small">Date: {{ today }}</div>
+    <h5 class="mb-0 fw-bold">Daily Follow-up Console</h5>
+    <div class="text-muted" style="font-size:12px;">{{ today }}</div>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    <span class="badge text-bg-danger">Overdue {{ tab_counts.overdue }}</span>
-    <span class="badge text-bg-warning">Today {{ tab_counts.today }}</span>
-    <span class="badge text-bg-secondary">Completed {{ tab_counts.completed }}</span>
+    <span class="fu-stat fu-stat-overdue">&#128308; {{ tab_counts.overdue }} Overdue</span>
+    <span class="fu-stat fu-stat-today">&#128993; {{ tab_counts.today }} Today</span>
+    <span class="fu-stat fu-stat-completed">&#9989; {{ tab_counts.completed }} Done</span>
   </div>
 </div>
 
@@ -126,19 +170,19 @@
 </div>
 
 <div class="card d-none d-md-block">
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0" id="desktopTable">
-      <thead class="table-light">
+  <div class="followups-table-wrap">
+    <table class="table table-hover mb-0 followups-table" id="desktopTable">
+      <thead>
         <tr>
-          <th>Lead</th>
-          <th>Phone</th>
-          <th>Course</th>
-          <th>Stage</th>
-          <th>Temp</th>
-          {% if is_admin %}<th>Counselor</th>{% endif %}
-          <th>{% if selected_tab == 'completed' %}Completed At{% else %}Due Date{% endif %}</th>
-          <th>Last Note</th>
-          <th class="text-end">Actions</th>
+          <th class="col-lead">Lead</th>
+          <th class="col-phone">Phone</th>
+          <th class="col-course">Course</th>
+          <th class="col-stage">Stage</th>
+          <th class="col-temp">Temp</th>
+          {% if is_admin %}<th class="col-owner">Counselor</th>{% endif %}
+          <th class="col-due">{% if selected_tab == 'completed' %}Done At{% else %}Due{% endif %}</th>
+          <th class="col-note">Last Note</th>
+          <th class="col-actions">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -161,53 +205,57 @@
             {% endif %}
           {% endif %}
           <tr class="followup-row" data-search="{{ (lead_name + ' ' + lead_phone)|lower }}">
-            <td class="fw-semibold">
-              {{ lead_name }}
-              <div class="d-flex flex-wrap gap-1 mt-1">
+            <td class="col-lead">
+              <span class="fw-semibold" style="font-size:13px;">{{ lead_name }}</span>
+              <div class="lead-sub-badges">
                 {% if l.parent_discussion_status == 'Pending' %}
-                  <span class="badge bg-warning text-dark" style="font-size:9px;">Parent Pending</span>
+                  <span class="sub-badge sub-parent">Parent Pend.</span>
                 {% endif %}
                 {% if l.visit_status == 'Visit Scheduled' %}
-                  <span class="badge bg-info text-dark" style="font-size:9px;">Visit Scheduled</span>
+                  <span class="sub-badge sub-visit-sched">Visit Sched.</span>
                 {% elif l.visit_status == 'Visited' %}
-                  <span class="badge bg-primary" style="font-size:9px;">Visited</span>
+                  <span class="sub-badge sub-visited">Visited</span>
                 {% elif l.visit_status == 'Demo Attended' %}
-                  <span class="badge bg-success" style="font-size:9px;">Demo Attended</span>
+                  <span class="sub-badge sub-demo">Demo</span>
                 {% endif %}
               </div>
             </td>
-            <td class="text-muted">{{ lead_phone or '-' }}</td>
-            <td>{{ l.course_interested or '-' }}</td>
-            <td><span class="stage-badge stage-{{ stage_key }}">{{ stage_text }}</span></td>
-            <td><span class="temp-badge temp-{{ temp_key }}">{{ temperature }}</span></td>
-            {% if is_admin %}<td class="text-muted">{{ l.owner_name or l.owner_username or 'Unassigned' }}</td>{% endif %}
-            <td><span class="due-badge {{ due_status }}">{{ due_date or '-' }}</span></td>
-            <td><div class="last-note" title="{{ note_text }}">{{ note_text }}</div></td>
-            <td class="text-end">
-              <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+            <td class="col-phone text-muted">{{ lead_phone or '-' }}</td>
+            <td class="col-course" title="{{ l.course_interested or '' }}">{{ l.course_interested or '-' }}</td>
+            <td class="col-stage"><span class="stage-badge stage-{{ stage_key }}">{{ stage_text }}</span></td>
+            <td class="col-temp"><span class="temp-badge temp-{{ temp_key }}">{{ temperature }}</span></td>
+            {% if is_admin %}
+            <td class="col-owner">
+              {% set oname = l.owner_name or l.owner_username or 'Unassigned' %}
+              <span style="display:inline-flex;align-items:center;gap:4px;">
+                <span style="width:18px;height:18px;border-radius:50%;background:#e9ecef;font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;color:#495057;flex-shrink:0;">{{ oname[:1]|upper }}</span>
+                <small class="text-muted">{{ oname }}</small>
+              </span>
+            </td>
+            {% endif %}
+            <td class="col-due"><span class="due-badge {{ due_status }}">{{ due_date or '-' }}</span></td>
+            <td class="col-note"><div class="last-note" title="{{ note_text }}">{{ note_text }}</div></td>
+            <td class="col-actions">
+              <div class="actions-cell">
                 {% if lead_phone %}
-                  <a class="btn btn-sm btn-outline-success" href="tel:{{ lead_phone }}">Call</a>
-                  <a class="btn btn-sm btn-outline-success" target="_blank" href="https://wa.me/91{{ lead_phone }}">WhatsApp</a>
+                  <a class="fu-btn" href="tel:{{ lead_phone }}" title="Call">&#128222;</a>
+                  <a class="fu-btn" target="_blank" href="https://wa.me/91{{ lead_phone }}" title="WhatsApp">&#128172;</a>
                 {% endif %}
                 {% if selected_tab != 'completed' %}
-                  <button type="button" class="btn btn-sm btn-primary"
-                          data-mode="complete"
-                          data-lead-id="{{ lead_id }}"
+                  <button type="button" class="fu-btn fu-complete"
+                          data-mode="complete" data-lead-id="{{ lead_id }}"
                           data-lead-name="{{ lead_name }}"
                           data-next-followup="{{ l.next_followup_date or '' }}"
-                          data-bs-toggle="modal" data-bs-target="#quickCompleteModal">
-                    Complete
-                  </button>
-                  <button type="button" class="btn btn-sm btn-outline-primary"
-                          data-mode="reschedule"
-                          data-lead-id="{{ lead_id }}"
+                          data-bs-toggle="modal" data-bs-target="#quickCompleteModal"
+                          title="Complete">&#10003;</button>
+                  <button type="button" class="fu-btn fu-reschedule"
+                          data-mode="reschedule" data-lead-id="{{ lead_id }}"
                           data-lead-name="{{ lead_name }}"
                           data-next-followup="{{ l.next_followup_date or '' }}"
-                          data-bs-toggle="modal" data-bs-target="#quickCompleteModal">
-                    Reschedule
-                  </button>
+                          data-bs-toggle="modal" data-bs-target="#quickCompleteModal"
+                          title="Reschedule">&#128197;</button>
                 {% endif %}
-                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.lead_detail', lead_id=lead_id) }}">Open</a>
+                <a class="fu-btn fu-open" href="{{ url_for('leads.lead_detail', lead_id=lead_id) }}" title="Open">&#128065;</a>
               </div>
             </td>
           </tr>
