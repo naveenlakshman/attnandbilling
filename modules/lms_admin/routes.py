@@ -6629,15 +6629,24 @@ def accept_submission(submission_id):
     conn = get_conn()
     try:
         sub = conn.execute(
-            "SELECT assignment_id FROM lms_assignment_submissions WHERE id = ?",
+            """
+            SELECT assignment_id,
+                   is_latest,
+                   COALESCE(review_status, 'submitted') AS review_status
+            FROM lms_assignment_submissions
+            WHERE id = ?
+            """,
             (submission_id,)
         ).fetchone()
         if not sub:
             flash('Submission not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
+        if int(sub['is_latest'] or 0) != 1 or sub['review_status'] != 'submitted':
+            flash('Only the latest pending submission can be accepted/rejected.', 'warning')
+            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
         feedback = request.form.get('feedback', '').strip()
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        conn.execute("""
+        cur = conn.execute("""
             UPDATE lms_assignment_submissions
             SET    feedback      = ?,
                    status        = 'reviewed',
@@ -6646,7 +6655,12 @@ def accept_submission(submission_id):
                    reviewed_at   = ?,
                    updated_at    = ?
             WHERE  id = ?
+              AND  is_latest = 1
+              AND  COALESCE(review_status, 'submitted') = 'submitted'
         """, (feedback or None, session.get('user_id'), now, now, submission_id))
+        if cur.rowcount == 0:
+            flash('Submission can no longer be reviewed (already processed or replaced).', 'warning')
+            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
         conn.commit()
         flash('Assignment accepted and feedback saved.', 'success')
         return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
@@ -6660,19 +6674,28 @@ def reject_submission(submission_id):
     conn = get_conn()
     try:
         sub = conn.execute(
-            "SELECT assignment_id FROM lms_assignment_submissions WHERE id = ?",
+            """
+            SELECT assignment_id,
+                   is_latest,
+                   COALESCE(review_status, 'submitted') AS review_status
+            FROM lms_assignment_submissions
+            WHERE id = ?
+            """,
             (submission_id,)
         ).fetchone()
         if not sub:
             flash('Submission not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
+        if int(sub['is_latest'] or 0) != 1 or sub['review_status'] != 'submitted':
+            flash('Only the latest pending submission can be accepted/rejected.', 'warning')
+            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
         rejection_reason = request.form.get('rejection_reason', '').strip()
         feedback = request.form.get('feedback', '').strip()
         if not rejection_reason:
             flash('Please provide a rejection reason.', 'danger')
             return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        conn.execute("""
+        cur = conn.execute("""
             UPDATE lms_assignment_submissions
             SET    feedback         = ?,
                    rejection_reason = ?,
@@ -6682,7 +6705,12 @@ def reject_submission(submission_id):
                    reviewed_at      = ?,
                    updated_at       = ?
             WHERE  id = ?
+              AND  is_latest = 1
+              AND  COALESCE(review_status, 'submitted') = 'submitted'
         """, (feedback or None, rejection_reason, session.get('user_id'), now, now, submission_id))
+        if cur.rowcount == 0:
+            flash('Submission can no longer be reviewed (already processed or replaced).', 'warning')
+            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
         conn.commit()
         flash('Assignment rejected. Student can now re-upload.', 'warning')
         return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
@@ -6727,7 +6755,8 @@ def preview_submission(submission_id):
         if ext == 'pdf':
             preview_type = 'pdf'
             preview_url  = url_for('lms_admin.admin_download_submission',
-                                   submission_id=submission_id)
+                                   submission_id=submission_id,
+                                   inline=1)
         elif ext in office_exts:
             preview_type = 'office'
             if not is_localhost:
@@ -6790,4 +6819,12 @@ def admin_download_submission(submission_id):
     full_path = os.path.join(base_dir, file_path)
     if not os.path.isfile(full_path):
         abort(404)
-    return send_file(full_path, as_attachment=True, download_name=orig_name)
+    # Default stays as attachment for normal downloads. Preview iframe uses ?inline=1.
+    inline = request.args.get('inline') == '1'
+    mimetype = 'application/pdf' if (orig_name or '').lower().endswith('.pdf') else None
+    return send_file(
+        full_path,
+        as_attachment=not inline,
+        download_name=orig_name,
+        mimetype=mimetype,
+    )

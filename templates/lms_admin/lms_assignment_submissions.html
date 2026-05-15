@@ -173,6 +173,7 @@
   <div id="subList">
     {% for sub in submissions %}
     {% set rs = sub.review_status or 'submitted' %}
+    {% set can_review = (rs == 'submitted') %}
     <div class="sub-card" data-status="{{ rs }}">
 
       <!-- Card header: student info + status + action buttons -->
@@ -218,7 +219,7 @@
       <!-- Card body: feedback + reviewed info + accept/reject -->
       <div class="sub-card-body">
 
-        {% if sub.feedback %}
+        {% if rs != 'rejected' and sub.feedback %}
         <div class="feedback-block">
           <strong>Staff Feedback:</strong><br>{{ sub.feedback }}
         </div>
@@ -230,11 +231,12 @@
         </div>
         {% endif %}
 
-        {% if sub.reviewed_date %}
+        {% if rs != 'rejected' and sub.reviewed_date %}
         <p class="reviewed-by mb-2">Reviewed on {{ sub.reviewed_date }}</p>
         {% endif %}
 
-        <!-- Review section -->
+        <!-- Review section: only latest pending submissions are actionable -->
+        {% if can_review %}
         <div class="review-section">
           <div class="fw-semibold mb-2" style="font-size:13px;">Staff Review</div>
 
@@ -290,6 +292,7 @@
           </div><!-- /reject-panel -->
 
         </div><!-- /review-section -->
+        {% endif %}
       </div><!-- /card-body -->
     </div><!-- /sub-card -->
     {% endfor %}
