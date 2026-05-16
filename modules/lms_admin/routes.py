@@ -6441,7 +6441,7 @@ def bulk_assign_batch_programs():
 # LMS Assignments — Admin / Staff
 # ---------------------------------------------------------------------------
 
-_ASSIGNMENT_ALLOWED_EXTS = {'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'}
+_ASSIGNMENT_ALLOWED_EXTS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png'}
 _ASSIGNMENT_MAX_BYTES     = 50 * 1024 * 1024   # 50 MB
 
 
@@ -6454,7 +6454,7 @@ def _save_assignment_file(file_obj):
         return False, 'Invalid filename.', ''
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     if ext not in _ASSIGNMENT_ALLOWED_EXTS:
-        return False, f'File type .{ext} not allowed. Use PDF, DOC, DOCX, or image.', ''
+        return False, f'File type .{ext} not allowed. Use PDF, Word, Excel, PowerPoint, or image.', ''
     file_obj.seek(0, os.SEEK_END)
     size = file_obj.tell()
     file_obj.seek(0)
