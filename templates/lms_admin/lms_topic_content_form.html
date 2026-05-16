@@ -404,6 +404,81 @@
                 branding: false,
                 promotion: false,
                 convert_urls: false,
+                /* ── Paste image upload ──────────────────────────────────────────────
+                   paste_data_images: lets the editor accept clipboard screenshots.
+                   automatic_uploads: TinyMCE immediately uploads each pasted blob so
+                   the saved HTML stores a real server URL, never a base64 data: URI
+                   (data URIs are large, may be truncated by the DB, and are stripped
+                   by bleach).  We reuse the existing inline-image upload endpoint —
+                   it already validates extensions, caps size at 10 MB, and returns
+                   { success, url } which we forward to TinyMCE's resolve callback. */
+                paste_data_images: true,
+                automatic_uploads: true,
+                /* ── File-picker for toolbar Image button ───────────────────────────
+                   Opens the OS file explorer when the user clicks the image toolbar
+                   button and then "Browse". The selected file is uploaded via the
+                   same inline-image endpoint and the resulting URL is inserted into
+                   the Image dialog, which TinyMCE then places in the editor. */
+                file_picker_types: 'image',
+                file_picker_callback: function(cb, value, meta) {
+                    var input = document.createElement('input');
+                    input.setAttribute('type', 'file');
+                    input.setAttribute('accept', 'image/*');
+                    input.addEventListener('change', function(e) {
+                        var file = e.target.files[0];
+                        if (!file) return;
+                        var fd = new FormData();
+                        fd.append('file', file, file.name);
+                        fetch('{{ url_for("lms_admin.upload_inline_image") }}', {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': '{{ csrf_token() }}' },
+                            body: fd
+                        })
+                        .then(function(r) {
+                            if (!r.ok) { throw new Error('HTTP ' + r.status); }
+                            return r.json();
+                        })
+                        .then(function(data) {
+                            if (data.success) {
+                                // cb(url, meta) inserts the image into the dialog
+                                cb(data.url, { title: file.name });
+                            } else {
+                                alert('Upload failed: ' + (data.error || 'Unknown error'));
+                            }
+                        })
+                        .catch(function(err) {
+                            alert('Image upload error: ' + err.message);
+                        });
+                    });
+                    input.click();
+                },
+                images_upload_handler: function(blobInfo, progress) {
+                    return new Promise(function(resolve, reject) {
+                        var fd = new FormData();
+                        // blobInfo.filename() is e.g. "blobid0.png" for clipboard pastes
+                        fd.append('file', blobInfo.blob(), blobInfo.filename());
+                        fetch('{{ url_for("lms_admin.upload_inline_image") }}', {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': '{{ csrf_token() }}' },
+                            body: fd
+                        })
+                        .then(function(r) {
+                            if (!r.ok) { throw new Error('HTTP ' + r.status); }
+                            return r.json();
+                        })
+                        .then(function(data) {
+                            if (data.success) {
+                                // TinyMCE replaces the temporary blob src with this URL
+                                resolve(data.url);
+                            } else {
+                                reject({ message: 'Upload failed: ' + (data.error || 'Unknown error'), remove: true });
+                            }
+                        })
+                        .catch(function(err) {
+                            reject({ message: 'Image upload error: ' + err.message, remove: true });
+                        });
+                    });
+                },
                 /* Preserve ALL attributes on div/img/span and all table-related elements.
                    This is critical for table border styles set via Table Properties dialog. */
                 extended_valid_elements: 'div[*],img[*],span[*],table[*],thead[*],tbody[*],tfoot[*],tr[*],th[*],td[*],col[*],colgroup[*]',
