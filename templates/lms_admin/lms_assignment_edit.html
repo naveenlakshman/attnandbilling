@@ -1,0 +1,64 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}Edit Assignment — {{ assignment.title }}{% endblock %}
+{% block page_title %}Edit Assignment{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3" style="max-width:900px;">
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=assignment.chapter_id) }}">{{ assignment.chapter_title }}</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.manage_assignments', master_topic_id=assignment.master_topic_id) }}">Assignments</a></li>
+      <li class="breadcrumb-item active">Edit</li>
+    </ol>
+  </nav>
+
+  <div class="card">
+    <div class="card-header fw-semibold">Edit Assignment</div>
+    <div class="card-body">
+      <form method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+          <input type="text" name="title" class="form-control" required maxlength="200"
+                 value="{{ assignment.title }}">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Description / Instructions</label>
+          <textarea name="description" class="form-control" rows="4"
+                    placeholder="Instructions for the student (optional)">{{ assignment.description or '' }}</textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Current File</label>
+          {% if assignment.file_path %}
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="text-muted">{{ assignment.original_filename }}</span>
+            <a class="btn btn-sm btn-outline-secondary"
+               href="{{ url_for('lms_admin.admin_download_assignment', assignment_id=assignment.id) }}">⬇ Download</a>
+          </div>
+          {% else %}
+          <div class="text-muted">No file attached.</div>
+          {% endif %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Replace File <span class="text-muted fw-normal">(optional)</span></label>
+          <input type="file" name="assignment_file" class="form-control"
+                 accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+          <div class="form-text">Leave empty to keep the current file. Max 50 MB.</div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+          <a class="btn btn-outline-secondary"
+             href="{{ url_for('lms_admin.manage_assignments', master_topic_id=assignment.master_topic_id) }}">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

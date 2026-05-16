@@ -6603,6 +6603,77 @@ def manage_assignments(master_topic_id):
         conn.close()
 
 
+@lms_admin_bp.route('/master/assignments/<int:assignment_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_assignment(assignment_id):
+    conn = get_conn()
+    try:
+        assignment = conn.execute("""
+            SELECT a.id, a.master_topic_id, a.title, a.description,
+                   a.file_path, a.original_filename,
+                   mt.title AS topic_title,
+                   mc.id AS chapter_id, mc.title AS chapter_title
+            FROM   lms_assignments a
+            JOIN   lms_master_topics mt ON mt.id = a.master_topic_id
+            JOIN   lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            WHERE  a.id = ?
+        """, (assignment_id,)).fetchone()
+        if not assignment:
+            flash('Assignment not found.', 'danger')
+            return redirect(url_for('lms_admin.list_master_chapters'))
+
+        if request.method == 'POST':
+            title = request.form.get('title', '').strip()
+            description = request.form.get('description', '').strip()
+            file_obj = request.files.get('assignment_file')
+
+            if not title:
+                flash('Title is required.', 'danger')
+                return redirect(url_for('lms_admin.edit_assignment', assignment_id=assignment_id))
+
+            file_path = assignment['file_path']
+            orig_name = assignment['original_filename']
+            if file_obj and file_obj.filename:
+                ok, path_or_err, orig = _save_assignment_file(file_obj)
+                if not ok:
+                    flash(f'File error: {path_or_err}', 'danger')
+                    return redirect(url_for('lms_admin.edit_assignment', assignment_id=assignment_id))
+                file_path = path_or_err
+                orig_name = orig
+
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            conn.execute("""
+                UPDATE lms_assignments
+                SET    title = ?,
+                       description = ?,
+                       file_path = ?,
+                       original_filename = ?,
+                       uploaded_by = ?,
+                       updated_at = ?
+                WHERE  id = ?
+            """, (
+                title,
+                description or None,
+                file_path,
+                orig_name,
+                session.get('user_id'),
+                now,
+                assignment_id,
+            ))
+            conn.commit()
+            log_activity(
+                user_id=session['user_id'], branch_id=session.get('branch_id'),
+                action_type='update', module_name='lms_assignments', record_id=assignment_id,
+                description=f"Updated assignment '{title}'"
+            )
+            flash('Assignment updated.', 'success')
+            return redirect(url_for('lms_admin.manage_assignments', master_topic_id=assignment['master_topic_id']))
+
+        return render_template('lms_admin/lms_assignment_edit.html', assignment=assignment)
+    finally:
+        conn.close()
+
+
 @lms_admin_bp.route('/master/assignments/<int:assignment_id>/delete', methods=['POST'])
 @login_required
 def delete_assignment(assignment_id):
