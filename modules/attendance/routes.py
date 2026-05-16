@@ -2823,9 +2823,19 @@ def leave_requests():
             SELECT lr.*,
                    s.full_name AS student_name,
                    s.student_code,
+                   COALESCE(tn.trainer_names, '') AS trainer_names,
                    u.full_name AS reviewed_by_name
             FROM leave_requests lr
             JOIN students s ON s.id = lr.student_id
+            LEFT JOIN (
+                SELECT sb.student_id,
+                       GROUP_CONCAT(DISTINCT u.full_name) AS trainer_names
+                FROM student_batches sb
+                JOIN batches b ON b.id = sb.batch_id
+                LEFT JOIN users u ON u.id = b.trainer_id
+                                WHERE b.trainer_id IS NOT NULL
+                GROUP BY sb.student_id
+            ) tn ON tn.student_id = lr.student_id
             LEFT JOIN users u ON u.id = lr.reviewed_by
             ORDER BY
                 CASE lr.status WHEN 'pending' THEN 0 ELSE 1 END,

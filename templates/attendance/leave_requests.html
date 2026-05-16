@@ -23,6 +23,7 @@
           <thead class="table-light">
             <tr>
               <th>Student</th>
+              <th>Trainer</th>
               <th>From</th>
               <th>To</th>
               <th>Reason</th>
@@ -37,6 +38,11 @@
               <td>
                 <div class="fw-semibold">{{ req.student_name }}</div>
                 <div class="text-muted" style="font-size:12px;">{{ req.student_code }}</div>
+              </td>
+              <td style="max-width:180px;">
+                <div style="white-space:pre-wrap;word-break:break-word;" title="{{ req.trainer_names or '—' }}">
+                  {{ req.trainer_names or '—' }}
+                </div>
               </td>
               <td>{{ req.from_date }}</td>
               <td>{{ req.to_date }}</td>
@@ -106,6 +112,7 @@
           <thead class="table-light">
             <tr>
               <th>Student</th>
+              <th>Trainer</th>
               <th>From</th>
               <th>To</th>
               <th>Reason</th>
@@ -122,6 +129,11 @@
               <td>
                 <div class="fw-semibold">{{ req.student_name }}</div>
                 <div class="text-muted" style="font-size:11px;">{{ req.student_code }}</div>
+              </td>
+              <td style="max-width:160px;">
+                <div style="white-space:pre-wrap;word-break:break-word;" title="{{ req.trainer_names or '—' }}">
+                  {{ req.trainer_names or '—' }}
+                </div>
               </td>
               <td>{{ req.from_date }}</td>
               <td>{{ req.to_date }}</td>
