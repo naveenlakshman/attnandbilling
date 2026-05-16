@@ -95,7 +95,8 @@
              href="{{ url_for('lms_admin.view_submissions', assignment_id=a.id) }}">📋 Submissions</a>
           <form method="POST"
                 action="{{ url_for('lms_admin.delete_assignment', assignment_id=a.id) }}"
-                onsubmit="return confirm('Delete this assignment and all submissions? This cannot be undone.');">
+                data-title="{{ a.title|e }}"
+                onsubmit="return confirmAssignmentDelete(this);">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm btn-outline-danger">🗑 Delete</button>
           </form>
@@ -110,4 +111,20 @@
     </div>
   {% endif %}
 </div>
+
+<script>
+function confirmAssignmentDelete(formEl) {
+  var title = (formEl && formEl.dataset && formEl.dataset.title) ? formEl.dataset.title : 'this assignment';
+  var msg = 'Type "delete" to permanently delete "' + title + '" and all submissions.';
+  var typed = window.prompt(msg, '');
+  if (typed === null) {
+    return false;
+  }
+  if (typed.trim().toLowerCase() !== 'delete') {
+    window.alert('Deletion cancelled. You must type "delete" exactly.');
+    return false;
+  }
+  return true;
+}
+</script>
 {% endblock %}
