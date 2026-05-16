@@ -1,13 +1,15 @@
 from flask import render_template, request, jsonify, send_from_directory
 from . import lms_admin_bp
 from db import get_conn, log_activity
-from flask import session, redirect, url_for, flash
+from flask import session, redirect, url_for, flash, abort
 from extensions import csrf
 from datetime import datetime
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 import re
 import os
 import json
 import sqlite3
+from urllib.parse import quote
 import bleach
 from bleach.css_sanitizer import CSSSanitizer
 from werkzeug.utils import secure_filename
@@ -86,6 +88,38 @@ _ALLOWED_IMAGE_EXTS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
 _MASTER_BRIDGE_PROGRAM_SLUG = '__lms_master_bridge__'
 _MASTER_BRIDGE_PROGRAM_NAME = 'LMS Master Bridge (System)'
 _MASTER_BRIDGE_CHAPTER_TITLE = 'Master Topic Bridge Chapter'
+_SUBMISSION_PREVIEW_TOKEN_SALT = 'lms-submission-preview'
+_SUBMISSION_PREVIEW_TOKEN_MAX_AGE = 10 * 60
+
+
+def _submission_preview_serializer():
+    secret = (Config.SECRET_KEY or '').strip()
+    if not secret:
+        secret = 'fallback-preview-secret'
+    return URLSafeTimedSerializer(secret)
+
+
+def _make_submission_preview_token(submission_id):
+    return _submission_preview_serializer().dumps({'sid': int(submission_id)}, salt=_SUBMISSION_PREVIEW_TOKEN_SALT)
+
+
+def _read_submission_preview_token(token):
+    if not token:
+        return None
+    try:
+        data = _submission_preview_serializer().loads(
+            token,
+            salt=_SUBMISSION_PREVIEW_TOKEN_SALT,
+            max_age=_SUBMISSION_PREVIEW_TOKEN_MAX_AGE,
+        )
+    except (BadSignature, SignatureExpired, ValueError, TypeError):
+        return None
+    sid = data.get('sid') if isinstance(data, dict) else None
+    try:
+        sid = int(sid)
+    except (TypeError, ValueError):
+        return None
+    return sid if sid > 0 else None
 
 
 def sanitize_rich_text(html):
@@ -6754,7 +6788,6 @@ def reject_submission(submission_id):
 @lms_admin_bp.route('/submission/<int:submission_id>/preview')
 @login_required
 def preview_submission(submission_id):
-    from flask import abort
     conn = get_conn()
     try:
         sub = conn.execute("""
@@ -6793,9 +6826,10 @@ def preview_submission(submission_id):
         elif ext in office_exts:
             preview_type = 'office'
             if not is_localhost:
-                public_url = url_for('lms_admin.admin_download_submission',
-                                     submission_id=submission_id, _external=True)
-                preview_url = 'https://view.officeapps.live.com/op/embed.aspx?src=' + public_url
+                token = _make_submission_preview_token(submission_id)
+                public_url = url_for('lms_admin.preview_submission_public_file',
+                                     token=token, _external=True)
+                preview_url = 'https://view.officeapps.live.com/op/embed.aspx?src=' + quote(public_url, safe='')
         return render_template('lms_admin/assignment_preview.html',
                                sub=sub, ext=ext, preview_type=preview_type,
                                preview_url=preview_url, download_url=download_url,
@@ -6803,6 +6837,39 @@ def preview_submission(submission_id):
                                orig_filename=orig)
     finally:
         conn.close()
+
+
+@lms_admin_bp.route('/submission/public-file')
+def preview_submission_public_file():
+    """Short-lived signed URL endpoint for Office Online preview fetches."""
+    from flask import send_file
+
+    sid = _read_submission_preview_token(request.args.get('token'))
+    if not sid:
+        abort(403)
+
+    conn = get_conn()
+    try:
+        sub = conn.execute(
+            "SELECT file_path, original_filename FROM lms_assignment_submissions WHERE id = ?",
+            (sid,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not sub:
+        abort(404)
+
+    file_path = sub['file_path']
+    orig_name = sub['original_filename'] or file_path
+    base_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
+    )
+    full_path = os.path.join(base_dir, file_path)
+    if not os.path.isfile(full_path):
+        abort(404)
+
+    return send_file(full_path, as_attachment=False, download_name=orig_name)
 
 
 @lms_admin_bp.route('/master/assignments/file/<int:assignment_id>')
