@@ -122,6 +122,33 @@ def _first_master_topic_for_program(conn, program_id):
     ).fetchone()
 
 
+def _has_approved_assignment(conn, student_id, program_id, master_topic_id):
+    """Return True if student has an accepted assignment for this program/topic."""
+    row = conn.execute(
+        """
+            SELECT 1
+            FROM lms_assignment_submissions s
+            JOIN lms_assignments a ON a.id = s.assignment_id
+            JOIN lms_master_topics mt ON mt.id = a.master_topic_id
+            JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            WHERE s.student_id = ?
+              AND pc.program_id = ?
+              AND a.master_topic_id = ?
+              AND pc.is_visible = 1
+              AND mc.status = 'active'
+              AND mt.status = 'active'
+              AND COALESCE(
+                    s.review_status,
+                    CASE WHEN s.status = 'reviewed' THEN 'accepted' ELSE s.status END
+                  ) = 'accepted'
+            LIMIT 1
+        """,
+        (student_id, program_id, master_topic_id)
+    ).fetchone()
+    return bool(row)
+
+
 def _master_curriculum_sidebar(conn, program_id, student_id):
     """Return chapters/topics/progress data for master-topic sidebar in one program."""
     chapters = conn.execute(
@@ -148,7 +175,24 @@ def _master_curriculum_sidebar(conn, program_id, student_id):
                 mt.title AS topic_title,
                 mt.topic_order,
                 mt.master_chapter_id AS chapter_id,
-                CASE WHEN mp.is_completed = 1 THEN 1 ELSE 0 END AS is_completed
+                CASE
+                    WHEN mp.is_completed = 1 THEN 1
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM lms_assignments a
+                        JOIN lms_assignment_submissions s ON s.assignment_id = a.id
+                        JOIN lms_program_chapters pc2 ON pc2.master_chapter_id = mt.master_chapter_id
+                        WHERE a.master_topic_id = mt.id
+                          AND s.student_id = ?
+                          AND pc2.program_id = ?
+                          AND pc2.is_visible = 1
+                          AND COALESCE(
+                                s.review_status,
+                                CASE WHEN s.status = 'reviewed' THEN 'accepted' ELSE s.status END
+                              ) = 'accepted'
+                    ) THEN 1
+                    ELSE 0
+                END AS is_completed
             FROM lms_program_chapters pc
             JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
             JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
@@ -162,7 +206,7 @@ def _master_curriculum_sidebar(conn, program_id, student_id):
               AND mt.status = 'active'
             ORDER BY pc.chapter_order ASC, mt.topic_order ASC, mt.id ASC
         """,
-        (student_id, program_id, program_id)
+                (student_id, program_id, student_id, program_id, program_id)
     ).fetchall()
 
     topics_by_chapter = {}
@@ -761,6 +805,25 @@ def master_topic_view(program_id, master_topic_id):
             flash('Topic not found in this program.', 'danger')
             return redirect(url_for('students.program_view', program_id=program_id))
 
+        completion_locked_by_assignment = _has_approved_assignment(
+            conn, student_id, program_id, master_topic_id
+        )
+        if completion_locked_by_assignment:
+            conn.execute(
+                """
+                    INSERT INTO lms_master_topic_progress (
+                        student_id, program_id, master_topic_id, is_completed, completed_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, 1, datetime('now'), datetime('now'), datetime('now'))
+                    ON CONFLICT(student_id, program_id, master_topic_id)
+                    DO UPDATE SET
+                        is_completed = 1,
+                        completed_at = datetime('now'),
+                        updated_at = datetime('now')
+                """,
+                (student_id, program_id, master_topic_id)
+            )
+            conn.commit()
+
         contents = conn.execute(
             """
                 SELECT *
@@ -797,7 +860,10 @@ def master_topic_view(program_id, master_topic_id):
             """,
             (student_id, program_id, master_topic_id)
         ).fetchone()
-        is_completed = current_completed and current_completed['is_completed'] == 1
+        is_completed = bool(
+            (current_completed and current_completed['is_completed'] == 1)
+            or completion_locked_by_assignment
+        )
 
     finally:
         conn.close()
@@ -816,6 +882,7 @@ def master_topic_view(program_id, master_topic_id):
         total_topics=total_topics,
         completed_topics=completed_topics,
         is_completed=is_completed,
+        completion_locked_by_assignment=completion_locked_by_assignment,
         is_master_topic=True,
         progress_endpoint=url_for('students.mark_master_complete', program_id=program_id, master_topic_id=master_topic_id),
         topic_base_route='master',
@@ -887,6 +954,29 @@ def mark_master_complete(program_id, master_topic_id):
 
         if not in_program:
             return jsonify({'status': 'error', 'message': 'Topic not in program'}), 404
+
+        assignment_locked = _has_approved_assignment(conn, student_id, program_id, master_topic_id)
+        if assignment_locked:
+            conn.execute(
+                """
+                    INSERT INTO lms_master_topic_progress (
+                        student_id, program_id, master_topic_id, is_completed, completed_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, 1, datetime('now'), datetime('now'), datetime('now'))
+                    ON CONFLICT(student_id, program_id, master_topic_id)
+                    DO UPDATE SET
+                        is_completed = 1,
+                        completed_at = datetime('now'),
+                        updated_at = datetime('now')
+                """,
+                (student_id, program_id, master_topic_id)
+            )
+            conn.commit()
+            if action != 'complete':
+                return jsonify({
+                    'status': 'locked',
+                    'message': 'This topic is completed because your assignment was approved. It cannot be marked as not completed.'
+                })
+            return jsonify({'status': 'ok', 'action': 'complete', 'locked': True})
 
         if action == 'complete':
             conn.execute(

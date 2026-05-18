@@ -6768,11 +6768,14 @@ def accept_submission(submission_id):
     try:
         sub = conn.execute(
             """
-            SELECT assignment_id,
+            SELECT s.assignment_id,
+                   s.student_id,
+                   a.master_topic_id,
                    is_latest,
                    COALESCE(review_status, 'submitted') AS review_status
-            FROM lms_assignment_submissions
-            WHERE id = ?
+            FROM lms_assignment_submissions s
+            JOIN lms_assignments a ON a.id = s.assignment_id
+            WHERE s.id = ?
             """,
             (submission_id,)
         ).fetchone()
@@ -6799,6 +6802,39 @@ def accept_submission(submission_id):
         if cur.rowcount == 0:
             flash('Submission can no longer be reviewed (already processed or replaced).', 'warning')
             return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+
+        # Accepted assignments should permanently complete the linked topic in all related active programs.
+        conn.execute(
+            """
+                INSERT INTO lms_master_topic_progress (
+                    student_id, program_id, master_topic_id, is_completed, completed_at, created_at, updated_at
+                )
+                SELECT DISTINCT
+                    ?,
+                    pc.program_id,
+                    ?,
+                    1,
+                    datetime('now'),
+                    datetime('now'),
+                    datetime('now')
+                FROM lms_program_chapters pc
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+                JOIN lms_programs lp ON lp.id = pc.program_id
+                WHERE mt.id = ?
+                  AND pc.is_visible = 1
+                  AND mc.status = 'active'
+                  AND mt.status = 'active'
+                  AND lp.is_active = 1
+                ON CONFLICT(student_id, program_id, master_topic_id)
+                DO UPDATE SET
+                    is_completed = 1,
+                    completed_at = datetime('now'),
+                    updated_at = datetime('now')
+            """,
+            (sub['student_id'], sub['master_topic_id'], sub['master_topic_id'])
+        )
+
         conn.commit()
         flash('Assignment accepted and feedback saved.', 'success')
         return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))

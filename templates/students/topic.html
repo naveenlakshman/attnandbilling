@@ -214,6 +214,20 @@
   .btn-complete:hover { background: #198754; color: #fff; }
   .btn-complete.completed { background: #198754; color: #fff; }
   .btn-complete.completed:hover { background: #157347; }
+  .btn-complete:disabled {
+    opacity: 1;
+    cursor: not-allowed;
+    background: #198754;
+    color: #fff;
+    border-color: #198754;
+  }
+  .completion-lock-note {
+    font-size: 12px;
+    color: #198754;
+    font-weight: 600;
+    margin-top: 6px;
+    text-align: center;
+  }
   .btn-nav-group { display: flex; gap: 8px; align-items: center; }
   .btn-nav {
     background: #fff; border: 1px solid #dee2e6; color: #495057;
@@ -395,6 +409,7 @@
 
 {% block content %}
 {% set is_master = is_master_topic if is_master_topic is defined else false %}
+{% set completion_locked = completion_locked_by_assignment if completion_locked_by_assignment is defined else false %}
 <div class="lms-layout">
 
   <!-- ── Left: Content ── -->
@@ -550,6 +565,17 @@
         <button class="btn-notes" onclick="switchTab('notes')">✏ Notes</button>
       </div>
       <!-- Center: Mark Complete -->
+      {% if completion_locked %}
+      <div>
+        <button class="btn-complete completed"
+                id="completeBtn"
+                disabled
+                title="Locked because assignment is approved">
+          ✓ Completed
+        </button>
+        <div class="completion-lock-note" id="completionLockedHint">Completed automatically after assignment approval.</div>
+      </div>
+      {% else %}
       <button class="btn-complete {% if is_completed %}completed{% endif %}"
               id="completeBtn"
               onclick="toggleComplete()">
@@ -559,6 +585,7 @@
           Mark as Complete ✓
         {% endif %}
       </button>
+      {% endif %}
       <!-- Right: Previous + Next -->
       <div class="btn-nav-group">
         {% if prev_topic_id %}
@@ -1189,6 +1216,7 @@ document.addEventListener('DOMContentLoaded', activateLmsHotspots);
 
 /* Mark complete */
 var isCompleted = {{ 'true' if is_completed else 'false' }};
+var completionLockedByAssignment = {{ 'true' if completion_locked else 'false' }};
 var topicId = {{ topic.id }};
 var totalTopics = {{ total_topics }};
 var completedTopics = {{ completed_topics }};
@@ -1196,6 +1224,8 @@ var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('
 var progressEndpoint = '{{ progress_endpoint if progress_endpoint is defined else url_for("students.mark_complete", topic_id=topic.id) }}';
 
 function toggleComplete() {
+  if (completionLockedByAssignment) return;
+
   var action = isCompleted ? 'incomplete' : 'complete';
   var formData = new FormData();
   formData.append('action', action);
@@ -1204,6 +1234,30 @@ function toggleComplete() {
   fetch(progressEndpoint, {
     method: 'POST', body: formData
   }).then(function(r){ return r.json(); }).then(function(data){
+    if (data.status === 'locked') {
+      completionLockedByAssignment = true;
+      isCompleted = true;
+      var lockedBtn = document.getElementById('completeBtn');
+      if (lockedBtn) {
+        lockedBtn.textContent = '✓ Completed';
+        lockedBtn.classList.add('completed');
+        lockedBtn.disabled = true;
+      }
+      document.querySelectorAll('.topic-item.active').forEach(function(el){
+        el.classList.add('done');
+        el.querySelector('.check').textContent = '✓';
+      });
+      if (!document.getElementById('completionLockedHint')) {
+        var hint = document.createElement('div');
+        hint.id = 'completionLockedHint';
+        hint.className = 'completion-lock-note';
+        hint.textContent = 'Completed automatically after assignment approval.';
+        if (lockedBtn && lockedBtn.parentElement) lockedBtn.parentElement.appendChild(hint);
+      }
+      if (data.message) alert(data.message);
+      return;
+    }
+
     if(data.status === 'ok' || data.status === 'demo') {
       if (data.status === 'demo') return; // read-only demo — no UI change needed
       isCompleted = (action === 'complete');
