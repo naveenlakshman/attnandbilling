@@ -6472,43 +6472,138 @@ def _save_assignment_file(file_obj):
 @lms_admin_bp.route('/master/assignments')
 @login_required
 def all_assignments():
-    """Overview of every assignment across all master topics."""
+    """Overview of every assignment across all master topics with trainer/batch filters."""
     conn = get_conn()
     try:
-        batch_id = request.args.get('batch_id', type=int)
+        role = (session.get('role') or '').strip().lower()
+        is_admin = role == 'admin'
+        current_user_id = session.get('user_id')
 
-        active_batches = conn.execute(
-            "SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name"
-        ).fetchall()
+        requested_trainer_id = request.args.get('trainer_id', type=int)
+        requested_batch_id = request.args.get('batch_id', type=int)
 
-        if batch_id:
-            assignments = conn.execute("""
+        # Role enforcement: staff/trainer can only view their own data.
+        selected_trainer_id = requested_trainer_id if is_admin else current_user_id
+        selected_batch_id = requested_batch_id
+
+        # Trainer list for dropdown.
+        if is_admin:
+            trainers = conn.execute(
+                """
+                SELECT u.id, u.full_name
+                FROM users u
+                WHERE u.role = 'staff' AND u.is_active = 1
+                ORDER BY u.full_name
+                """
+            ).fetchall()
+        else:
+            trainers = conn.execute(
+                """
+                SELECT u.id, u.full_name
+                FROM users u
+                WHERE u.id = ? AND u.role = 'staff' AND u.is_active = 1
+                """,
+                (current_user_id,)
+            ).fetchall()
+
+        # Active batch dropdown data (always active only).
+        if selected_trainer_id:
+            active_batches = conn.execute(
+                """
+                SELECT b.id, b.batch_name
+                FROM batches b
+                WHERE LOWER(COALESCE(b.status, '')) = 'active'
+                  AND b.trainer_id = ?
+                ORDER BY b.batch_name
+                """,
+                (selected_trainer_id,)
+            ).fetchall()
+        else:
+            active_batches = conn.execute(
+                """
+                SELECT b.id, b.batch_name
+                FROM batches b
+                WHERE LOWER(COALESCE(b.status, '')) = 'active'
+                ORDER BY b.batch_name
+                """
+            ).fetchall()
+
+        # Validate batch scope. If invalid for current trainer scope, ignore safely.
+        if selected_batch_id:
+            if selected_trainer_id:
+                valid_batch = conn.execute(
+                    """
+                    SELECT 1
+                    FROM batches b
+                    WHERE b.id = ?
+                      AND b.trainer_id = ?
+                      AND LOWER(COALESCE(b.status, '')) = 'active'
+                    """,
+                    (selected_batch_id, selected_trainer_id)
+                ).fetchone()
+            else:
+                valid_batch = conn.execute(
+                    """
+                    SELECT 1
+                    FROM batches b
+                    WHERE b.id = ?
+                      AND LOWER(COALESCE(b.status, '')) = 'active'
+                    """,
+                    (selected_batch_id,)
+                ).fetchone()
+            if not valid_batch:
+                selected_batch_id = None
+
+        has_scope_filter = bool(selected_trainer_id or selected_batch_id)
+
+        if has_scope_filter:
+            scope_where = [
+                "sb.status = 'active'",
+                "LOWER(COALESCE(b.status, '')) = 'active'",
+            ]
+            scope_params = []
+            if selected_trainer_id:
+                scope_where.append("b.trainer_id = ?")
+                scope_params.append(selected_trainer_id)
+            if selected_batch_id:
+                scope_where.append("sb.batch_id = ?")
+                scope_params.append(selected_batch_id)
+
+            scope_sql = " AND ".join(scope_where)
+            assignments_sql = f"""
+                WITH scoped_submissions AS (
+                    SELECT DISTINCT s.id, s.assignment_id, s.status
+                    FROM lms_assignment_submissions s
+                    JOIN student_batches sb ON sb.student_id = s.student_id
+                    JOIN batches b ON b.id = sb.batch_id
+                    WHERE {scope_sql}
+                ),
+                assignment_counts AS (
+                    SELECT
+                        ss.assignment_id,
+                        COUNT(*) AS submission_count,
+                        SUM(CASE WHEN ss.status = 'reviewed' THEN 1 ELSE 0 END) AS reviewed_count
+                    FROM scoped_submissions ss
+                    GROUP BY ss.assignment_id
+                )
                 SELECT
                     a.id,
                     a.title,
                     a.description,
                     a.original_filename,
                     a.master_topic_id,
-                    mt.title   AS topic_title,
-                    mc.title   AS chapter_title,
+                    mt.title AS topic_title,
+                    mc.title AS chapter_title,
                     strftime('%d %b %Y', a.created_at) AS created_date,
-                    (SELECT COUNT(*) FROM lms_assignment_submissions s
-                     JOIN student_batches sb ON sb.student_id = s.student_id
-                     WHERE s.assignment_id = a.id AND sb.batch_id = ?)          AS submission_count,
-                    (SELECT COUNT(*) FROM lms_assignment_submissions s
-                     JOIN student_batches sb ON sb.student_id = s.student_id
-                     WHERE s.assignment_id = a.id AND sb.batch_id = ?
-                       AND s.status = 'reviewed')                               AS reviewed_count
+                    ac.submission_count,
+                    ac.reviewed_count
                 FROM lms_assignments a
-                JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
+                JOIN lms_master_topics mt ON mt.id = a.master_topic_id
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
-                WHERE EXISTS (
-                    SELECT 1 FROM lms_assignment_submissions s
-                    JOIN student_batches sb ON sb.student_id = s.student_id
-                    WHERE s.assignment_id = a.id AND sb.batch_id = ?
-                )
+                JOIN assignment_counts ac ON ac.assignment_id = a.id
                 ORDER BY mc.title, mt.title, a.id
-            """, (batch_id, batch_id, batch_id)).fetchall()
+            """
+            assignments = conn.execute(assignments_sql, tuple(scope_params)).fetchall()
         else:
             assignments = conn.execute("""
                 SELECT
@@ -6520,19 +6615,28 @@ def all_assignments():
                     mt.title   AS topic_title,
                     mc.title   AS chapter_title,
                     strftime('%d %b %Y', a.created_at) AS created_date,
-                    (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id)         AS submission_count,
-                    (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id
-                                                                         AND s.status = 'reviewed')          AS reviewed_count
+                    (SELECT COUNT(*)
+                     FROM lms_assignment_submissions s
+                     WHERE s.assignment_id = a.id) AS submission_count,
+                    (SELECT COUNT(*)
+                     FROM lms_assignment_submissions s
+                     WHERE s.assignment_id = a.id
+                       AND s.status = 'reviewed') AS reviewed_count
                 FROM lms_assignments a
                 JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
                 ORDER BY mc.title, mt.title, a.id
             """).fetchall()
 
-        return render_template('lms_admin/lms_all_assignments.html',
-                               assignments=assignments,
-                               active_batches=active_batches,
-                               selected_batch_id=batch_id)
+        return render_template(
+            'lms_admin/lms_all_assignments.html',
+            assignments=assignments,
+            trainers=trainers,
+            active_batches=active_batches,
+            selected_trainer_id=selected_trainer_id,
+            selected_batch_id=selected_batch_id,
+            is_admin=is_admin,
+        )
     finally:
         conn.close()
 
@@ -6714,15 +6818,75 @@ def view_submissions(assignment_id):
             flash('Assignment not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
 
-        batch_id = request.args.get('batch_id', type=int)
+        role = (session.get('role') or '').strip().lower()
+        is_admin = role == 'admin'
+        current_user_id = session.get('user_id')
 
-        active_batches = conn.execute(
-            "SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name"
-        ).fetchall()
+        requested_trainer_id = request.args.get('trainer_id', type=int)
+        selected_trainer_id = requested_trainer_id if is_admin else current_user_id
+        selected_batch_id = request.args.get('batch_id', type=int)
 
-        if batch_id:
-            submissions = conn.execute("""
-                SELECT s.id, s.student_id, s.original_filename, s.feedback,
+        if selected_trainer_id:
+            active_batches = conn.execute(
+                """
+                SELECT id, batch_name
+                FROM batches
+                WHERE trainer_id = ?
+                  AND LOWER(COALESCE(status, '')) = 'active'
+                ORDER BY batch_name
+                """,
+                (selected_trainer_id,)
+            ).fetchall()
+        else:
+            active_batches = conn.execute(
+                """
+                SELECT id, batch_name
+                FROM batches
+                WHERE LOWER(COALESCE(status, '')) = 'active'
+                ORDER BY batch_name
+                """
+            ).fetchall()
+
+        if selected_batch_id:
+            if selected_trainer_id:
+                valid_batch = conn.execute(
+                    """
+                    SELECT 1 FROM batches
+                    WHERE id = ? AND trainer_id = ?
+                      AND LOWER(COALESCE(status, '')) = 'active'
+                    """,
+                    (selected_batch_id, selected_trainer_id)
+                ).fetchone()
+            else:
+                valid_batch = conn.execute(
+                    """
+                    SELECT 1 FROM batches
+                    WHERE id = ?
+                      AND LOWER(COALESCE(status, '')) = 'active'
+                    """,
+                    (selected_batch_id,)
+                ).fetchone()
+            if not valid_batch:
+                selected_batch_id = None
+
+        if selected_trainer_id or selected_batch_id:
+            where_clauses = [
+                "s.assignment_id = ?",
+                "s.is_latest = 1",
+                "sb.status = 'active'",
+                "LOWER(COALESCE(b.status, '')) = 'active'",
+            ]
+            params = [assignment_id]
+            if selected_trainer_id:
+                where_clauses.append("b.trainer_id = ?")
+                params.append(selected_trainer_id)
+            if selected_batch_id:
+                where_clauses.append("sb.batch_id = ?")
+                params.append(selected_batch_id)
+
+            submissions = conn.execute(f"""
+                SELECT DISTINCT
+                       s.id, s.student_id, s.original_filename, s.feedback,
                        s.status, s.review_status, s.rejection_reason,
                        strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
                        strftime('%d %b %Y %H:%M', s.reviewed_at)  AS reviewed_date,
@@ -6730,9 +6894,10 @@ def view_submissions(assignment_id):
                 FROM   lms_assignment_submissions s
                 JOIN   students st ON st.id = s.student_id
                 JOIN   student_batches sb ON sb.student_id = s.student_id
-                WHERE  s.assignment_id = ? AND sb.batch_id = ? AND s.is_latest = 1
+                JOIN   batches b ON b.id = sb.batch_id
+                WHERE  {' AND '.join(where_clauses)}
                 ORDER  BY s.submitted_at DESC
-            """, (assignment_id, batch_id)).fetchall()
+            """, tuple(params)).fetchall()
         else:
             submissions = conn.execute("""
                 SELECT s.id, s.student_id, s.original_filename, s.feedback,
@@ -6749,7 +6914,7 @@ def view_submissions(assignment_id):
         return render_template('lms_admin/lms_assignment_submissions.html',
                                assignment=a, submissions=submissions,
                                active_batches=active_batches,
-                               selected_batch_id=batch_id)
+                               selected_batch_id=selected_batch_id)
     finally:
         conn.close()
 
