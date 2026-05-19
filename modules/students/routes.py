@@ -31,6 +31,42 @@ def _is_default_student_password(student):
     return check_password_hash(student['password_hash'], student['student_code'])
 
 
+# Common passwords blocklist (8+ chars only, since shorter ones are already rejected)
+_COMMON_PASSWORDS = {
+    # Complex variations of 'password'
+    'password', 'password1', 'password123', 'password12', 'Password1!', 'Password123',
+    'Passw0rd', 'passw0rd', 'passw0rd!', 'passwordabc', 'password!@#',
+    # Number sequences
+    '123456789', '12345678', '12345679', '1234567890', '1122334455',
+    # Keyboard patterns
+    'qwerty123', 'qwertyasd', 'asdfghjkl', 'zxcvbnm12',
+    # Common word combinations
+    'letmein123', 'welcomeabc', 'monkeybaby', 'dragonfire', 'mastermind',
+    'sunshineday', 'princess123', 'footballfan', 'shadowboss',
+    # Common names with variations
+    'michael123', 'superman123', 'batman1234', 'johndoe123', 'janedoe1234',
+    # Admin/system common passwords
+    'admin1234', 'administrator', 'rootaccess', 'root1234', 'sysadmin1',
+    'login1234', 'guest1234', 'testtest123',
+    # Educational institution common passwords
+    'student123', 'student1234', 'college123', 'university1', 'academy123',
+    'schooladmin', 'course1234',
+    # Emotional/personal
+    'iloveyou123', 'trustno1234', 'starwars123',
+    # Number patterns (8+ chars)
+    '11111111', '00000000', '66666666', '88888888', '99999999',
+    '12121212', '11223344', '11112222',
+    # Keyboard walks (8+ chars)
+    'asdfghjkl', 'qwertyuiop', 'zxcvbnm123', 'asdf1234',
+    # Real world common phrases
+    'password11', 'password22', 'password99', 'pass@word', 'pass@1234',
+    'welcome123', 'hello@123', 'abc123def', 'test@1234',
+    'companyname', 'workpass123', 'office1234',
+    # Rainbow table common entries
+    'foundpass', 'crackme123', 'testcase12',
+}
+
+
 def _validate_student_password_policy(new_password, student_code):
     """Return None if valid; otherwise return policy error message."""
     if len(new_password) < 8:
@@ -43,6 +79,8 @@ def _validate_student_password_policy(new_password, student_code):
         return 'New password must include at least one special character.'
     if student_code and new_password.strip().upper() == student_code.strip().upper():
         return 'New password cannot be the same as your Student ID.'
+    if new_password.lower() in _COMMON_PASSWORDS:
+        return 'This password is too common. Please choose a stronger password.'
     return None
 
 
