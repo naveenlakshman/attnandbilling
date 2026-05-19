@@ -1,9 +1,10 @@
 import os
 
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, session, abort
 from werkzeug.middleware.proxy_fix import ProxyFix
 from extensions import csrf, limiter
 from config import Config
+from db import get_conn
 from db import init_db, get_company_profile
 from modules.leads.routes import leads_bp
 from modules.billing.routes import billing_bp
@@ -15,6 +16,7 @@ from modules.attendance.routes import attendance_bp
 from modules.lms_admin import lms_admin_bp
 from modules.students import students_bp
 from modules.website import website_bp
+from modules.core.utils import login_required
 from datetime import datetime, timedelta
 
 def format_datetime(value):
@@ -82,13 +84,31 @@ def create_app():
             return f"File not found: {str(e)}", 404
 
     @app.route('/uploads/leave_docs/<path:filename>')
+    @login_required
     def serve_leave_doc(filename):
         """Serve student leave request document uploads"""
         try:
             from config import LEAVE_DOCS_DIR
+            if session.get('role') not in ('admin', 'staff'):
+                student_id = session.get('student_id')
+                if not student_id:
+                    abort(403)
+
+                conn = get_conn()
+                try:
+                    row = conn.execute(
+                        "SELECT 1 FROM leave_requests WHERE student_id = ? AND document_filename = ?",
+                        (student_id, filename),
+                    ).fetchone()
+                finally:
+                    conn.close()
+
+                if not row:
+                    abort(403)
+
             return send_from_directory(LEAVE_DOCS_DIR, filename)
-        except Exception as e:
-            return f"File not found: {str(e)}", 404
+        except Exception:
+            abort(404)
 
     # Register Jinja2 filters
     app.jinja_env.filters['format_datetime'] = format_datetime
