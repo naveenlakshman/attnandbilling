@@ -1,4 +1,6 @@
-from flask import Flask
+import os
+
+from flask import Flask, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 from extensions import csrf, limiter
 from config import Config
@@ -109,4 +111,4 @@ def create_app():
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=Config.DEBUG_MODE)

@@ -56,6 +56,9 @@ class Config:
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     RATELIMIT_DEFAULT = os.environ.get("RATELIMIT_DEFAULT", "")
 
+    # App debug mode
+    DEBUG_MODE = _env_bool("DEBUG_MODE", default=False)
+
     # Student Portal session timeout (minutes)
     STUDENT_SESSION_TIMEOUT_MINUTES = int(os.environ.get("STUDENT_SESSION_TIMEOUT_MINUTES", "120"))
 
