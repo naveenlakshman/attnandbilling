@@ -4,6 +4,7 @@ from werkzeug.utils import secure_filename
 from functools import wraps
 from datetime import datetime
 import urllib.parse
+import re
 import os
 import uuid
 from db import get_conn
@@ -19,7 +20,30 @@ def _clear_student_session():
     session.pop('student_name', None)
     session.pop('student_code', None)
     session.pop('student_login_at', None)
+    session.pop('student_force_password_change', None)
     session.pop('demo_mode', None)
+
+
+def _is_default_student_password(student):
+    """Return True when student's current password is still their student code."""
+    if not student or not student['password_hash'] or not student['student_code']:
+        return False
+    return check_password_hash(student['password_hash'], student['student_code'])
+
+
+def _validate_student_password_policy(new_password, student_code):
+    """Return None if valid; otherwise return policy error message."""
+    if len(new_password) < 8:
+        return 'New password must be at least 8 characters long.'
+    if not re.search(r'[A-Za-z]', new_password):
+        return 'New password must include at least one letter.'
+    if not re.search(r'\d', new_password):
+        return 'New password must include at least one number.'
+    if not re.search(r'[^A-Za-z0-9]', new_password):
+        return 'New password must include at least one special character.'
+    if student_code and new_password.strip().upper() == student_code.strip().upper():
+        return 'New password cannot be the same as your Student ID.'
+    return None
 
 
 def student_login_required(f):
@@ -46,6 +70,10 @@ def student_login_required(f):
                 _clear_student_session()
                 flash('Your session expired. Please log in again.', 'warning')
                 return redirect(url_for('students.login'))
+
+        if session.get('student_force_password_change') and request.endpoint != 'students.change_password':
+            flash('Please change your password before continuing.', 'warning')
+            return redirect(url_for('students.change_password'))
 
         return f(*args, **kwargs)
     return decorated
@@ -277,6 +305,12 @@ def login():
             session['student_name'] = student['full_name']
             session['student_code'] = student['student_code']
             session['student_login_at'] = int(datetime.utcnow().timestamp())
+            session['student_force_password_change'] = _is_default_student_password(student)
+
+            if session['student_force_password_change']:
+                flash('Your password is still the default Student ID. Please change it now.', 'warning')
+                return redirect(url_for('students.change_password'))
+
             return redirect(url_for('students.dashboard'))
 
         flash('Invalid Student ID or password.', 'danger')
@@ -1183,6 +1217,72 @@ def profile():
                            student=student, batches=batches,
                            invoice_courses=invoice_courses,
                            invoices=invoices, company=company)
+
+
+@students_bp.route('/change-password', methods=['GET', 'POST'])
+@student_login_required
+def change_password():
+    student_id = session['student_id']
+
+    conn = get_conn()
+    try:
+        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+
+        if request.method == 'POST':
+            if _is_demo():
+                flash('Demo mode is read-only. Password cannot be changed.', 'warning')
+                return redirect(url_for('students.change_password'))
+
+            current_password = request.form.get('current_password', '')
+            new_password = request.form.get('new_password', '')
+            confirm_password = request.form.get('confirm_password', '')
+
+            if not current_password or not new_password or not confirm_password:
+                flash('All password fields are required.', 'danger')
+                return redirect(url_for('students.change_password'))
+
+            if new_password != confirm_password:
+                flash('New password and confirm password do not match.', 'danger')
+                return redirect(url_for('students.change_password'))
+
+            student = conn.execute(
+                """
+                SELECT id, password_hash, student_code
+                FROM students
+                WHERE id = ? AND status != 'dropped' AND portal_enabled = 1
+                """,
+                (student_id,)
+            ).fetchone()
+
+            if not student or not student['password_hash']:
+                flash('Your portal account is not eligible for password change.', 'danger')
+                return redirect(url_for('students.change_password'))
+
+            if not check_password_hash(student['password_hash'], current_password):
+                flash('Current password is incorrect.', 'danger')
+                return redirect(url_for('students.change_password'))
+
+            if check_password_hash(student['password_hash'], new_password):
+                flash('New password must be different from current password.', 'danger')
+                return redirect(url_for('students.change_password'))
+
+            policy_error = _validate_student_password_policy(new_password, student['student_code'])
+            if policy_error:
+                flash(policy_error, 'danger')
+                return redirect(url_for('students.change_password'))
+
+            conn.execute(
+                "UPDATE students SET password_hash = ? WHERE id = ?",
+                (generate_password_hash(new_password), student_id)
+            )
+            conn.commit()
+            session['student_force_password_change'] = False
+            flash('Password changed successfully.', 'success')
+            return redirect(url_for('students.change_password'))
+    finally:
+        conn.close()
+
+    return render_template('students/change_password.html', company=company)
 
 
 # ---------------------------------------------------------------------------

@@ -84,6 +84,9 @@
     <h1>{{ student.full_name }}</h1>
     <div class="student-code">🪪 {{ student.student_code }}</div>
     <span class="status-pill">{{ student.status | title }}</span>
+    <div class="mb-3">
+      <a href="{{ url_for('students.change_password') }}" class="btn btn-light btn-sm">Change Password</a>
+    </div>
     <div class="quick-grid">
       {% if student.phone %}
       <div class="quick-item"><label>Phone</label><span>{{ student.phone }}</span></div>

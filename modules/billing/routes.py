@@ -292,6 +292,51 @@ def toggle_portal(student_id):
     return redirect(url_for('billing.student_profile', student_id=student_id))
 
 
+@billing_bp.route('/student/<int:student_id>/reset-portal-password', methods=['POST'])
+@login_required
+def reset_portal_password(student_id):
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT full_name, student_code, portal_enabled FROM students WHERE id = ?",
+        (student_id,)
+    ).fetchone()
+
+    if not row:
+        conn.close()
+        flash("Student not found.", "danger")
+        return redirect(url_for('billing.students'))
+
+    default_password = row['student_code']
+    conn.execute(
+        "UPDATE students SET password_hash = ? WHERE id = ?",
+        (generate_password_hash(default_password), student_id)
+    )
+    conn.commit()
+    conn.close()
+
+    log_activity(
+        session['user_id'],
+        None,
+        'update',
+        'students',
+        student_id,
+        f"Force reset portal password for {row['full_name']} ({row['student_code']})"
+    )
+
+    if row['portal_enabled']:
+        flash(
+            f"Password reset successful for {row['full_name']}. New password: {default_password}. Student must change it on next login.",
+            "success"
+        )
+    else:
+        flash(
+            f"Password reset for {row['full_name']} to {default_password}, but portal access is currently disabled. They must change it on next login once enabled.",
+            "warning"
+        )
+
+    return redirect(url_for('billing.student_profile', student_id=student_id))
+
+
 def save_student_photo(photo_data, student_code):
     """Save student photo from base64 data"""
     if not photo_data:

@@ -123,6 +123,9 @@
   <a href="{{ url_for('students.profile') }}" class="{% if request.endpoint == 'students.profile' %}active{% endif %}">
     <span class="nav-icon">👤</span><span class="nav-label">My Profile</span>
   </a>
+  <a href="{{ url_for('students.change_password') }}" class="{% if request.endpoint == 'students.change_password' %}active{% endif %}">
+    <span class="nav-icon">🔒</span><span class="nav-label">Change Password</span>
+  </a>
   <a href="{{ url_for('students.leave_history') }}"
      class="{% if request.endpoint in ('students.leave_history', 'students.leave_apply') %}active{% endif %}">
     <span class="nav-icon">📋</span><span class="nav-label">My Leaves</span>
@@ -155,7 +158,7 @@
     </div>
   </div>
 
-  {% with messages = get_flashed_messages(with_categories=true, category_filter=['danger', 'warning', 'student_error', 'student_warning']) %}
+  {% with messages = get_flashed_messages(with_categories=true, category_filter=['success', 'danger', 'warning', 'student_error', 'student_warning']) %}
     {% if messages %}
       {% for category, message in messages %}
         <div class="alert alert-{{ 'danger' if 'error' in category else category }} alert-dismissible fade show" role="alert">

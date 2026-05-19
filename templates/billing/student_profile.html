@@ -1458,6 +1458,14 @@
                 </button>
                 {% endif %}
               </form>
+              <form method="POST" action="{{ url_for('billing.reset_portal_password', student_id=student.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-warning"
+                        title="Reset student portal password to Student ID"
+                        onclick="return confirm('Reset portal password for {{ student.full_name }} to Student ID ({{ student.student_code }})?')">
+                  🔑 Reset Login Password
+                </button>
+              </form>
             </div>
           </details>
         </div>
