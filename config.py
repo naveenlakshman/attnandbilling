@@ -54,7 +54,10 @@ class Config:
 
     # Flask-Limiter
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
-    RATELIMIT_DEFAULT = os.environ.get("RATELIMIT_DEFAULT", "200 per day")
+    RATELIMIT_DEFAULT = os.environ.get("RATELIMIT_DEFAULT", "")
+
+    # Student Portal session timeout (minutes)
+    STUDENT_SESSION_TIMEOUT_MINUTES = int(os.environ.get("STUDENT_SESSION_TIMEOUT_MINUTES", "120"))
 
     # Google AI (Gemini)
     GOOGLE_AI_API_KEY = os.environ.get("GOOGLE_AI_API_KEY")

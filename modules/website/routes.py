@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from db import get_conn
 from modules.website import website_bp
-from extensions import limiter
+from extensions import public_form_limit
 
 
 @website_bp.route("/")
@@ -51,7 +51,7 @@ def home():
 
 
 @website_bp.route("/enquire", methods=["POST"])
-@limiter.limit("5 per minute")
+@public_form_limit()
 def enquire():
     name = request.form.get("name", "").strip()
     phone = request.form.get("phone", "").strip()

@@ -5,7 +5,7 @@ import os
 from db import get_conn, get_company_profile, clear_company_cache
 from .utils import login_required, admin_required
 from .sms import send_sms
-from extensions import limiter
+from extensions import public_auth_limit
 
 core_bp = Blueprint("core", __name__)
 
@@ -17,7 +17,7 @@ def home():
 
 
 @core_bp.route("/login", methods=["GET", "POST"])
-@limiter.limit("10 per minute")
+@public_auth_limit()
 def login():
     if "user_id" in session:
         return redirect(url_for("core.dashboard"))

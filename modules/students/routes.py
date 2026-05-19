@@ -1,4 +1,4 @@
-from flask import render_template, request, redirect, url_for, session, flash
+from flask import render_template, request, redirect, url_for, session, flash, current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -7,19 +7,46 @@ import urllib.parse
 import os
 import uuid
 from db import get_conn
-from extensions import limiter
+from extensions import limiter, public_auth_limit
 from . import students_bp
 
 
 # ---------------------------------------------------------------------------
 # Auth decorator
 # ---------------------------------------------------------------------------
+def _clear_student_session():
+    session.pop('student_id', None)
+    session.pop('student_name', None)
+    session.pop('student_code', None)
+    session.pop('student_login_at', None)
+    session.pop('demo_mode', None)
+
+
 def student_login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if 'student_id' not in session:
             flash('Please log in to access the student portal.', 'warning')
             return redirect(url_for('students.login'))
+
+        timeout_minutes = int(current_app.config.get('STUDENT_SESSION_TIMEOUT_MINUTES', 120))
+        now_ts = int(datetime.utcnow().timestamp())
+        login_ts = session.get('student_login_at')
+
+        if login_ts is None:
+            session['student_login_at'] = now_ts
+        else:
+            try:
+                login_ts = int(login_ts)
+            except (TypeError, ValueError):
+                login_ts = now_ts
+                session['student_login_at'] = now_ts
+
+            if now_ts - login_ts > timeout_minutes * 60:
+                _clear_student_session()
+                flash('Your session expired. Please log in again.', 'warning')
+                return redirect(url_for('students.login'))
+
         return f(*args, **kwargs)
     return decorated
 
@@ -221,6 +248,7 @@ def _master_curriculum_sidebar(conn, program_id, student_id):
 # Login / Logout
 # ---------------------------------------------------------------------------
 @students_bp.route('/login', methods=['GET', 'POST'])
+@public_auth_limit()
 def login():
     if 'student_id' in session:
         return redirect(url_for('students.dashboard'))
@@ -248,6 +276,7 @@ def login():
             session['student_id'] = student['id']
             session['student_name'] = student['full_name']
             session['student_code'] = student['student_code']
+            session['student_login_at'] = int(datetime.utcnow().timestamp())
             return redirect(url_for('students.dashboard'))
 
         flash('Invalid Student ID or password.', 'danger')
@@ -258,10 +287,7 @@ def login():
 @students_bp.route('/logout')
 def logout():
     was_demo = session.get('demo_mode')
-    session.pop('student_id', None)
-    session.pop('student_name', None)
-    session.pop('student_code', None)
-    session.pop('demo_mode', None)
+    _clear_student_session()
     if was_demo:
         return redirect(url_for('lms_admin.dashboard'))
     return redirect(url_for('students.login'))

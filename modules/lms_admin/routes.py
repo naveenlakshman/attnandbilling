@@ -615,6 +615,7 @@ def launch_demo():
     session['student_id']   = 0          # sentinel: 0 means demo (never a real student pk)
     session['student_name'] = 'Demo Student'
     session['student_code'] = 'DEMO'
+    session['student_login_at'] = int(datetime.utcnow().timestamp())
     session['demo_mode']    = True
     log_activity(session.get('user_id'), session.get('branch_id'), 'launch_demo', 'lms', None, f"{session.get('role','user').title()} launched demo student view")
     flash('Demo mode active — you are viewing the student portal in read-only mode.', 'info')
@@ -624,7 +625,7 @@ def launch_demo():
 @lms_admin_bp.route('/demo/exit')
 def exit_demo():
     """End demo session and return to LMS admin."""
-    for key in ('student_id', 'student_name', 'student_code', 'demo_mode'):
+    for key in ('student_id', 'student_name', 'student_code', 'student_login_at', 'demo_mode'):
         session.pop(key, None)
     return redirect(url_for('lms_admin.dashboard'))
 
