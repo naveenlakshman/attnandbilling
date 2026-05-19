@@ -7,6 +7,7 @@ import urllib.parse
 import os
 import uuid
 from db import get_conn
+from extensions import limiter
 from . import students_bp
 
 
@@ -496,6 +497,7 @@ def dashboard():
 # Program — chapter list
 # ---------------------------------------------------------------------------
 @students_bp.route('/program/<int:program_id>')
+@limiter.exempt
 @student_login_required
 def program_view(program_id):
     student_id = session['student_id']
@@ -581,6 +583,7 @@ def program_view(program_id):
 # Chapter — topic list
 # ---------------------------------------------------------------------------
 @students_bp.route('/chapter/<int:chapter_id>')
+@limiter.exempt
 @student_login_required
 def chapter_view(chapter_id):
     student_id = session['student_id']
@@ -628,6 +631,7 @@ def chapter_view(chapter_id):
 # Topic — view content
 # ---------------------------------------------------------------------------
 @students_bp.route('/topic/<int:topic_id>')
+@limiter.exempt
 @student_login_required
 def topic_view(topic_id):
     student_id = session['student_id']
@@ -761,6 +765,7 @@ def topic_view(topic_id):
 
 
 @students_bp.route('/program/<int:program_id>/master-topic/<int:master_topic_id>')
+@limiter.exempt
 @student_login_required
 def master_topic_view(program_id, master_topic_id):
     """Student topic viewer for reusable master topics (program-scoped progress)."""
@@ -894,6 +899,7 @@ def master_topic_view(program_id, master_topic_id):
 # Mark topic as complete / incomplete (AJAX POST)
 # ---------------------------------------------------------------------------
 @students_bp.route('/topic/<int:topic_id>/complete', methods=['POST'])
+@limiter.exempt
 @student_login_required
 def mark_complete(topic_id):
     from flask import jsonify
@@ -922,6 +928,7 @@ def mark_complete(topic_id):
 
 
 @students_bp.route('/program/<int:program_id>/master-topic/<int:master_topic_id>/complete', methods=['POST'])
+@limiter.exempt
 @student_login_required
 def mark_master_complete(program_id, master_topic_id):
     from flask import jsonify
@@ -1352,6 +1359,7 @@ def _student_can_access_content(conn, content_id, student_id):
 
 
 @students_bp.route('/notes/content/<int:content_id>', methods=['GET'])
+@limiter.exempt
 @student_login_required
 def get_student_note(content_id):
     from flask import jsonify
@@ -1373,6 +1381,7 @@ def get_student_note(content_id):
 
 
 @students_bp.route('/notes/content/<int:content_id>', methods=['POST'])
+@limiter.exempt
 @student_login_required
 def save_student_note(content_id):
     from flask import jsonify
@@ -1445,6 +1454,7 @@ def _save_submission_file(file_obj):
 
 
 @students_bp.route('/program/<int:program_id>/master-topic/<int:master_topic_id>/assignments')
+@limiter.exempt
 @student_login_required
 def get_topic_assignments(program_id, master_topic_id):
     from flask import jsonify

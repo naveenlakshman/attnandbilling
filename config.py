@@ -24,6 +24,13 @@ def _env_bool(name, default=False):
         return default
     return str(val).strip().lower() in {"1", "true", "yes", "on"}
 
+
+def _env_csv(name, default):
+    val = os.environ.get(name)
+    if val is None:
+        val = default
+    return [item.strip() for item in str(val).split(',') if item.strip()]
+
 _secret_key = os.environ.get("SECRET_KEY")
 if not _secret_key:
     raise RuntimeError(
@@ -50,6 +57,10 @@ class Config:
     # CSRF protection (Flask-WTF)
     WTF_CSRF_ENABLED = True
     WTF_CSRF_TIME_LIMIT = None  # Tokens live for the full session (needed for 7-day sessions)
+
+    # Flask-Limiter
+    RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+    RATELIMIT_DEFAULT = _env_csv("RATELIMIT_DEFAULT", "200 per day")
 
     # Google AI (Gemini)
     GOOGLE_AI_API_KEY = os.environ.get("GOOGLE_AI_API_KEY")
