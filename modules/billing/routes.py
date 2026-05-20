@@ -4825,6 +4825,78 @@ def receivables():
     total_today_due = sum(float(row["balance_due"] or 0) for row in todays_dues)
     total_upcoming_due = sum(float(row["balance_due"] or 0) for row in upcoming_dues)
 
+    # Expected receivables for the current month + next two months
+    current_month_start = datetime.now().date().replace(day=1)
+
+    def _add_months(base_date, months_to_add):
+        month_index = (base_date.month - 1) + months_to_add
+        year = base_date.year + (month_index // 12)
+        month = (month_index % 12) + 1
+        return date(year, month, 1)
+
+    month_starts = [_add_months(current_month_start, offset) for offset in range(3)]
+    receivables_window_end = _add_months(current_month_start, 3)
+
+    monthly_expected_query = """
+        SELECT
+            substr(parse_date(ip.due_date), 1, 7) AS month_key,
+            SUM(ip.amount_due - ip.amount_paid) AS total_due,
+            COUNT(*) AS item_count
+        FROM installment_plans ip
+        JOIN invoices i
+            ON ip.invoice_id = i.id
+        JOIN students s
+            ON i.student_id = s.id
+        WHERE ip.status != 'paid'
+          AND parse_date(ip.due_date) >= ?
+          AND parse_date(ip.due_date) < ?
+          AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND (
+            (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
+            + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
+          ) < i.total_amount
+    """
+    monthly_expected_params = [
+        current_month_start.isoformat(),
+        receivables_window_end.isoformat(),
+    ]
+
+    if branch_id:
+        monthly_expected_query += " AND i.branch_id = ?"
+        monthly_expected_params.append(branch_id)
+
+    if trainer_filter_sql:
+        monthly_expected_query += trainer_filter_sql
+        monthly_expected_params.extend(trainer_filter_param)
+
+    monthly_expected_query += " GROUP BY month_key ORDER BY month_key ASC"
+
+    cur.execute(monthly_expected_query, monthly_expected_params)
+    monthly_expected_rows = cur.fetchall()
+    monthly_expected_map = {
+        row["month_key"]: {
+            "total_due": float(row["total_due"] or 0),
+            "item_count": int(row["item_count"] or 0),
+        }
+        for row in monthly_expected_rows
+    }
+
+    monthly_expected_receivables = []
+    for month_start in month_starts:
+        month_key = month_start.strftime("%Y-%m")
+        month_data = monthly_expected_map.get(month_key, {})
+        monthly_expected_receivables.append({
+            "month_key": month_key,
+            "month_label": month_start.strftime("%b"),
+            "month_year": month_start.year,
+            "total_due": float(month_data.get("total_due", 0)),
+            "item_count": int(month_data.get("item_count", 0)),
+        })
+
+    total_three_month_expected = sum(
+        row["total_due"] for row in monthly_expected_receivables
+    )
+
     # Reminder stats per installment
     all_ids = [r['id'] for r in list(past_dues) + list(todays_dues) + list(upcoming_dues)]
     reminder_stats = {}
@@ -4848,6 +4920,8 @@ def receivables():
         total_past_due=total_past_due,
         total_today_due=total_today_due,
         total_upcoming_due=total_upcoming_due,
+        monthly_expected_receivables=monthly_expected_receivables,
+        total_three_month_expected=total_three_month_expected,
         today=today,
         branches=branches,
         branch_id=branch_id,

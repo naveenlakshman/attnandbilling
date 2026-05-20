@@ -126,6 +126,29 @@
   </div>
 </div>
 
+<!-- Expected Receivables: Current + Next 2 Months -->
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body py-2 px-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+      <div class="section-title text-primary mb-0">Expected Receivables (This + Next 2 Months)</div>
+      <div class="fw-semibold text-primary">Total: ₹{{ "{:,.0f}".format(total_three_month_expected or 0) }}</div>
+    </div>
+    <div class="row g-2">
+      {% for month_row in monthly_expected_receivables %}
+      <div class="col-12 col-md-4">
+        <div class="card border-0 h-100" style="background:#f8fbff;border-left:4px solid #0d6efd!important;">
+          <div class="card-body py-2 px-3">
+            <div class="summary-card-label">{{ month_row.month_label }} {{ month_row.month_year }}</div>
+            <div class="summary-card-amount text-primary">₹{{ "{:,.0f}".format(month_row.total_due or 0) }}</div>
+            <div class="summary-card-count">{{ month_row.item_count }} installment(s)</div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
 {# ── MACRO: render one installment card ── #}
 {% macro installment_card(item, rtype, border_color, badge_class, amount_class) %}
 {% set stats = reminder_stats.get(item.id) %}
