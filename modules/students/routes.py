@@ -109,7 +109,11 @@ def student_login_required(f):
                 flash('Your session expired. Please log in again.', 'warning')
                 return redirect(url_for('students.login'))
 
-        if session.get('student_force_password_change') and request.endpoint != 'students.change_password':
+        if (
+            not _is_demo()
+            and session.get('student_force_password_change')
+            and request.endpoint != 'students.change_password'
+        ):
             flash('Please change your password before continuing.', 'warning')
             return redirect(url_for('students.change_password'))
 
@@ -343,7 +347,9 @@ def login():
             session['student_name'] = student['full_name']
             session['student_code'] = student['student_code']
             session['student_login_at'] = int(datetime.utcnow().timestamp())
-            session['student_force_password_change'] = _is_default_student_password(student)
+            session['student_force_password_change'] = (
+                (not _is_demo()) and _is_default_student_password(student)
+            )
 
             if session['student_force_password_change']:
                 flash('Your password is still the default Student ID. Please change it now.', 'warning')
@@ -1266,11 +1272,11 @@ def change_password():
     try:
         company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
 
-        if request.method == 'POST':
-            if _is_demo():
-                flash('Demo mode is read-only. Password cannot be changed.', 'warning')
-                return redirect(url_for('students.change_password'))
+        if _is_demo():
+            flash('Demo mode is read-only. Password changes are disabled.', 'warning')
+            return redirect(url_for('students.dashboard'))
 
+        if request.method == 'POST':
             current_password = request.form.get('current_password', '')
             new_password = request.form.get('new_password', '')
             confirm_password = request.form.get('confirm_password', '')
@@ -1316,7 +1322,7 @@ def change_password():
             conn.commit()
             session['student_force_password_change'] = False
             flash('Password changed successfully.', 'success')
-            return redirect(url_for('students.change_password'))
+            return redirect(url_for('students.dashboard'))
     finally:
         conn.close()
 
@@ -1550,6 +1556,9 @@ def get_student_note(content_id):
 def save_student_note(content_id):
     from flask import jsonify
     import bleach
+    if _is_demo():
+        return jsonify({'ok': False, 'error': 'Read-only in demo mode'}), 403
+
     student_id = session['student_id']
     data = request.get_json(silent=True)
     if not data or 'note_body' not in data:
@@ -1662,6 +1671,9 @@ def get_topic_assignments(program_id, master_topic_id):
 @student_login_required
 def submit_assignment(assignment_id):
     from flask import jsonify
+    if _is_demo():
+        return jsonify({'ok': False, 'error': 'Read-only in demo mode'}), 403
+
     student_id = session['student_id']
     conn = get_conn()
     try:
