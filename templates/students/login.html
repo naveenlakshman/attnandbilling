@@ -32,8 +32,11 @@
     </div>
     <div class="mb-4">
       <label class="form-label fw-semibold">Password</label>
-      <input type="password" name="password" class="form-control form-control-lg"
-             placeholder="Enter your password" required>
+      <div class="position-relative">
+        <input type="password" name="password" class="form-control form-control-lg password-field"
+               placeholder="Enter your password" required>
+        <span class="password-toggle-icon" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6c757d; font-size: 18px;" title="Show/Hide password">👁️</span>
+      </div>
       <small class="text-muted">Default password is your Student ID (first login)</small>
     </div>
     <button type="submit" class="btn btn-primary w-100 btn-lg">Sign In →</button>
@@ -44,4 +47,20 @@
     Staff? <a href="{{ url_for('core.login') }}">Admin login here</a>
   </p>
 </div>
+
+<script>
+  // Password visibility toggle for eye icons
+  document.querySelectorAll('.password-toggle-icon').forEach(icon => {
+    icon.addEventListener('click', function() {
+      const input = this.closest('.position-relative').querySelector('.password-field');
+      if (input.type === 'password') {
+        input.type = 'text';
+        this.textContent = '👁️‍🗨️'; // Closed eye
+      } else {
+        input.type = 'password';
+        this.textContent = '👁️'; // Open eye
+      }
+    });
+  });
+</script>
 {% endblock %}
