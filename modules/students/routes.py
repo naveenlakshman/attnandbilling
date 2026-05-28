@@ -220,6 +220,48 @@ def _first_master_topic_for_program(conn, program_id):
     ).fetchone()
 
 
+def _last_master_topic_for_program(conn, student_id, program_id):
+    """Return the student's last valid active master topic for this program."""
+    if not student_id or _is_demo():
+        return None
+    return conn.execute(
+        """
+            SELECT mt.id
+            FROM student_program_last_activity la
+            JOIN lms_master_topics mt ON mt.id = la.master_topic_id
+            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            JOIN lms_program_chapters pc
+                ON pc.master_chapter_id = mt.master_chapter_id
+               AND pc.program_id = la.program_id
+            WHERE la.student_id = ?
+              AND la.program_id = ?
+              AND pc.is_visible = 1
+              AND mc.status = 'active'
+              AND mt.status = 'active'
+            LIMIT 1
+        """,
+        (student_id, program_id)
+    ).fetchone()
+
+
+def _save_last_master_topic(conn, student_id, program_id, master_topic_id):
+    """Store the latest valid master topic opened by a student for a program."""
+    if not student_id or _is_demo():
+        return
+    conn.execute(
+        """
+            INSERT INTO student_program_last_activity (
+                student_id, program_id, master_topic_id, updated_at
+            ) VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(student_id, program_id)
+            DO UPDATE SET
+                master_topic_id = excluded.master_topic_id,
+                updated_at = datetime('now')
+        """,
+        (student_id, program_id, master_topic_id)
+    )
+
+
 def _has_approved_assignment(conn, student_id, program_id, master_topic_id):
     """Return True if student has an accepted assignment for this program/topic."""
     row = conn.execute(
@@ -590,6 +632,17 @@ def dashboard():
                 ORDER BY CASE WHEN map_order IS NULL THEN 1 ELSE 0 END, map_order, lp.program_name
             """, (student_id, student_id, student_id, student_id, student_id, student_id, student_id, student_id)).fetchall()
 
+        programs = [dict(program) for program in programs]
+        for program in programs:
+            if _program_has_master_content(conn, program['id']):
+                first_master_topic = _first_master_topic_for_program(conn, program['id'])
+                last_master_topic = _last_master_topic_for_program(conn, student_id, program['id'])
+                program['first_master_topic_id'] = first_master_topic['id'] if first_master_topic else None
+                program['last_master_topic_id'] = last_master_topic['id'] if last_master_topic else None
+            else:
+                program['first_master_topic_id'] = None
+                program['last_master_topic_id'] = None
+
     finally:
         conn.close()
 
@@ -621,6 +674,7 @@ def program_view(program_id):
         has_master = _program_has_master_content(conn, program_id)
 
         if has_master:
+            last_master_topic = _last_master_topic_for_program(conn, student_id, program_id)
             first_master_topic = _first_master_topic_for_program(conn, program_id)
             first_topic = None
             chapters = conn.execute(
@@ -646,6 +700,7 @@ def program_view(program_id):
                 (program_id,)
             ).fetchall()
         else:
+            last_master_topic = None
             first_master_topic = None
             # Find the first topic in the legacy program flow
             first_topic = conn.execute("""
@@ -672,6 +727,10 @@ def program_view(program_id):
         conn.close()
 
     # Redirect directly to first topic (Tally LMS style — sidebar shows full curriculum)
+    # Resume from the last active master topic when the student has one.
+    if last_master_topic:
+        return redirect(url_for('students.master_topic_view', program_id=program_id, master_topic_id=last_master_topic['id']))
+
     if first_master_topic:
         return redirect(url_for('students.master_topic_view', program_id=program_id, master_topic_id=first_master_topic['id']))
 
@@ -913,6 +972,9 @@ def master_topic_view(program_id, master_topic_id):
         if not topic:
             flash('Topic not found in this program.', 'danger')
             return redirect(url_for('students.program_view', program_id=program_id))
+
+        _save_last_master_topic(conn, student_id, program_id, master_topic_id)
+        conn.commit()
 
         completion_locked_by_assignment = _has_approved_assignment(
             conn, student_id, program_id, master_topic_id

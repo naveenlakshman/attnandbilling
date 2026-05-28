@@ -8,7 +8,8 @@
     {% for program in programs %}
     <div class="col-md-6 col-lg-4">
       {% set target_topic = program.last_topic_id or program.first_topic_id %}
-      <a href="{{ url_for('students.topic_view', topic_id=target_topic) if target_topic else url_for('students.program_view', program_id=program.id) }}"
+      {% set target_master_topic = program.last_master_topic_id or program.first_master_topic_id %}
+      <a href="{{ url_for('students.master_topic_view', program_id=program.id, master_topic_id=target_master_topic) if target_master_topic else (url_for('students.topic_view', topic_id=target_topic) if target_topic else url_for('students.program_view', program_id=program.id)) }}"
          class="text-decoration-none">
         <div class="card h-100 shadow-sm border-0 program-card">
           <div class="card-body p-4">

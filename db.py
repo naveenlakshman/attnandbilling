@@ -887,6 +887,84 @@ def init_db():
     """)
 
     cur.execute("""
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table' AND name = 'student_program_last_activity'
+    """)
+    last_activity_exists = cur.fetchone() is not None
+    if not last_activity_exists:
+        cur.execute("""
+            CREATE TABLE student_program_last_activity (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id INTEGER NOT NULL,
+                program_id INTEGER NOT NULL,
+                master_topic_id INTEGER NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (student_id) REFERENCES students(id),
+                FOREIGN KEY (program_id) REFERENCES lms_programs(id),
+                FOREIGN KEY (master_topic_id) REFERENCES lms_master_topics(id)
+            )
+        """)
+    else:
+        cur.execute("PRAGMA table_info(student_program_last_activity)")
+        last_activity_cols = {row["name"] for row in cur.fetchall()}
+        # Existing production tables may have been created with an older shape.
+        # Add only missing columns; do not drop/recreate or discard data.
+        if "id" not in last_activity_cols:
+            cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN id INTEGER")
+        if "student_id" not in last_activity_cols:
+            cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN student_id INTEGER")
+        if "program_id" not in last_activity_cols:
+            cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN program_id INTEGER")
+        if "master_topic_id" not in last_activity_cols:
+            cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN master_topic_id INTEGER")
+        if "updated_at" not in last_activity_cols:
+            cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN updated_at TEXT")
+
+    cur.execute("""
+        UPDATE student_program_last_activity
+        SET updated_at = datetime('now')
+        WHERE updated_at IS NULL OR updated_at = ''
+    """)
+
+    cur.execute("PRAGMA index_list(student_program_last_activity)")
+    has_last_activity_unique = False
+    for idx in cur.fetchall():
+        if not idx["unique"]:
+            continue
+        cur.execute(f"PRAGMA index_info({idx['name']})")
+        idx_cols = [row["name"] for row in cur.fetchall()]
+        if idx_cols == ["student_id", "program_id"]:
+            has_last_activity_unique = True
+            break
+
+    if not has_last_activity_unique:
+        cur.execute("""
+            DELETE FROM student_program_last_activity
+            WHERE student_id IS NOT NULL
+              AND program_id IS NOT NULL
+              AND rowid NOT IN (
+                  SELECT rowid
+                  FROM (
+                      SELECT
+                          rowid,
+                          ROW_NUMBER() OVER (
+                              PARTITION BY student_id, program_id
+                              ORDER BY datetime(updated_at) DESC, COALESCE(id, rowid) DESC, rowid DESC
+                          ) AS rn
+                      FROM student_program_last_activity
+                      WHERE student_id IS NOT NULL
+                        AND program_id IS NOT NULL
+                  )
+                  WHERE rn = 1
+              )
+        """)
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_student_program_last_activity_unique
+            ON student_program_last_activity(student_id, program_id)
+        """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_master_topic_bridge (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             master_topic_id INTEGER NOT NULL UNIQUE,
@@ -915,6 +993,11 @@ def init_db():
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_lms_master_topic_progress_lookup
         ON lms_master_topic_progress(student_id, program_id, master_topic_id)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_student_program_last_activity_lookup
+        ON student_program_last_activity(student_id, program_id, master_topic_id)
     """)
 
     cur.execute("""
