@@ -1532,6 +1532,14 @@ function toggleComplete() {
       var pct = totalTopics > 0 ? Math.round(completedTopics / totalTopics * 100) : 0;
       document.getElementById('progressFill').style.width = pct + '%';
       document.getElementById('progressLabel').textContent = completedTopics + ' / ' + totalTopics + ' Completed';
+
+      if (isCompleted) {
+        if (data.next_topic_url) {
+          window.location.href = data.next_topic_url;
+          return;
+        }
+        if (data.message) alert(data.message);
+      }
     }
   });
 }

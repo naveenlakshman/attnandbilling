@@ -220,6 +220,37 @@ def _first_master_topic_for_program(conn, program_id):
     ).fetchone()
 
 
+def _ordered_master_topic_ids_for_program(conn, program_id):
+    """Return active master topic ids in the program's visible LMS order."""
+    rows = conn.execute(
+        """
+            SELECT mt.id
+            FROM lms_program_chapters pc
+            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+            JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+            WHERE pc.program_id = ?
+              AND pc.is_visible = 1
+              AND mc.status = 'active'
+              AND mt.status = 'active'
+            ORDER BY pc.chapter_order ASC, mt.topic_order ASC, mt.id ASC
+        """,
+        (program_id,)
+    ).fetchall()
+    return [row['id'] for row in rows]
+
+
+def _next_master_topic_for_program(conn, program_id, master_topic_id):
+    """Return the next active master topic id in LMS order, crossing chapters."""
+    ordered_topic_ids = _ordered_master_topic_ids_for_program(conn, program_id)
+    if master_topic_id not in ordered_topic_ids:
+        return None
+
+    current_index = ordered_topic_ids.index(master_topic_id)
+    if current_index >= len(ordered_topic_ids) - 1:
+        return None
+    return ordered_topic_ids[current_index + 1]
+
+
 def _last_master_topic_for_program(conn, student_id, program_id):
     """Return the student's last valid active master topic for this program."""
     if not student_id or _is_demo():
@@ -1128,6 +1159,17 @@ def mark_master_complete(program_id, master_topic_id):
         if not in_program:
             return jsonify({'status': 'error', 'message': 'Topic not in program'}), 404
 
+        next_master_topic_id = _next_master_topic_for_program(conn, program_id, master_topic_id)
+        next_topic_url = (
+            url_for(
+                'students.master_topic_view',
+                program_id=program_id,
+                master_topic_id=next_master_topic_id,
+            )
+            if next_master_topic_id
+            else None
+        )
+
         assignment_locked = _has_approved_assignment(conn, student_id, program_id, master_topic_id)
         if assignment_locked:
             conn.execute(
@@ -1143,13 +1185,21 @@ def mark_master_complete(program_id, master_topic_id):
                 """,
                 (student_id, program_id, master_topic_id)
             )
+            if next_master_topic_id and action == 'complete':
+                _save_last_master_topic(conn, student_id, program_id, next_master_topic_id)
             conn.commit()
             if action != 'complete':
                 return jsonify({
                     'status': 'locked',
                     'message': 'This topic is completed because your assignment was approved. It cannot be marked as not completed.'
                 })
-            return jsonify({'status': 'ok', 'action': 'complete', 'locked': True})
+            return jsonify({
+                'status': 'ok',
+                'action': 'complete',
+                'locked': True,
+                'next_topic_url': next_topic_url,
+                'message': None if next_topic_url else 'You have completed all topics.'
+            })
 
         if action == 'complete':
             conn.execute(
@@ -1165,6 +1215,8 @@ def mark_master_complete(program_id, master_topic_id):
                 """,
                 (student_id, program_id, master_topic_id)
             )
+            if next_master_topic_id:
+                _save_last_master_topic(conn, student_id, program_id, next_master_topic_id)
         else:
             conn.execute(
                 """
@@ -1181,7 +1233,16 @@ def mark_master_complete(program_id, master_topic_id):
             )
 
         conn.commit()
-        return jsonify({'status': 'ok', 'action': action})
+        return jsonify({
+            'status': 'ok',
+            'action': action,
+            'next_topic_url': next_topic_url if action == 'complete' else None,
+            'message': (
+                'You have completed all topics.'
+                if action == 'complete' and not next_topic_url
+                else None
+            )
+        })
     finally:
         conn.close()
 
