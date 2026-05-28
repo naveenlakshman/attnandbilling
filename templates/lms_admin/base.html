@@ -13,14 +13,18 @@
   <style>
     html {
       overflow-y: scroll;
+      max-width: 100%;
     }
 
     body {
       background-color: #f8f9fa;
+      max-width: 100%;
+      overflow-x: hidden;
     }
 
-    .d-flex {
+    .lms-shell {
       width: 100%;
+      max-width: 100%;
     }
 
     .sidebar {
@@ -31,6 +35,9 @@
       position: sticky;
       top: 0;
       flex-shrink: 0;
+      overflow-y: auto;
+      z-index: 1030;
+      transition: transform 0.2s ease;
     }
 
     .sidebar .nav-link {
@@ -64,24 +71,568 @@
       position: sticky;
       top: 0;
       z-index: 1000;
+      gap: 0.75rem;
     }
 
     .content-wrap {
       min-width: 0;
       flex: 1;
+      max-width: calc(100% - 260px);
+      overflow-x: hidden;
+    }
+
+    .content-area,
+    .flash-area {
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
+    .topbar-title {
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .topbar-user {
+      min-width: 0;
+      max-width: 40%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sidebar-toggle {
+      display: none;
+      border: 1px solid #dee2e6;
+      background: #fff;
+      color: #212529;
+      border-radius: 8px;
+      width: 42px;
+      height: 42px;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+      line-height: 1;
+    }
+
+    .sidebar-backdrop {
+      display: none;
+    }
+
+    .mobile-stack,
+    .action-group {
+      max-width: 100%;
+    }
+
+    .responsive-table-wrap,
+    .activity-table-card,
+    .programs-table-card,
+    .deleted-table-card,
+    .chapters-table-card,
+    .topics-table-card {
+      max-width: 100%;
+    }
+
+    .mobile-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+    }
+
+    /* Mobile bottom navigation, matched to the main ERP dashboard pattern. */
+    .mobile-bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-top: 1px solid #dee2e6;
+      z-index: 1040;
+      padding: 4px 0 env(safe-area-inset-bottom, 4px);
+      box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+    }
+
+    .mobile-bottom-nav a,
+    .mobile-bottom-nav button {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      text-decoration: none;
+      color: #6c757d;
+      font-size: 10px;
+      padding: 4px 2px;
+      border-radius: 8px;
+      transition: color .15s;
+      border: 0;
+      background: transparent;
+      font: inherit;
+    }
+
+    .mobile-bottom-nav .nav-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .mobile-bottom-nav a.active,
+    .mobile-bottom-nav a:hover,
+    .mobile-bottom-nav button:hover {
+      color: #0d6efd;
+    }
+
+    .mobile-bottom-nav .fab-btn {
+      color: #fff;
+      background: #0d6efd;
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: -12px;
+      box-shadow: 0 2px 8px rgba(13,110,253,.4);
+      flex: none;
+      padding: 0;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 24px;
+      transition: background .15s;
+    }
+
+    .mobile-bottom-nav .fab-btn:hover {
+      background: #0a58ca;
+      color: #fff;
+    }
+
+    .mobile-bottom-nav .fab-btn .nav-icon {
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .fab-menu-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1035;
+      background: rgba(0,0,0,.35);
+      backdrop-filter: blur(2px);
+    }
+
+    .fab-menu-overlay.show {
+      display: block;
+    }
+
+    .fab-menu {
+      position: fixed;
+      bottom: 72px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      z-index: 1045;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .18s, transform .18s;
+    }
+
+    .fab-menu.show {
+      pointer-events: auto;
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .fab-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      border-radius: 30px;
+      padding: 10px 20px 10px 14px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.15);
+      text-decoration: none;
+      color: #1f2937;
+      font-weight: 600;
+      font-size: 14px;
+      white-space: nowrap;
+      min-width: 190px;
+      border: 0;
+    }
+
+    .fab-menu-item:hover {
+      background: #f0f4ff;
+      color: #0d6efd;
+    }
+
+    .fab-menu-item.disabled,
+    .fab-menu-item:disabled {
+      color: #8a94a6;
+      cursor: not-allowed;
+      opacity: .78;
+    }
+
+    .fab-menu-item .fmi-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .fab-menu-label {
+      font-size: 10px;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      font-weight: 600;
+      margin-bottom: 2px;
     }
 
     .badge-status {
       font-size: 0.7rem;
       margin-left: 4px;
     }
+
+    @media (max-width: 767.98px) {
+      body.lms-nav-open {
+        overflow: hidden;
+      }
+
+      .lms-shell {
+        display: block !important;
+      }
+
+      .sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: min(300px, 84vw);
+        min-height: 100dvh;
+        transform: translateX(-100%);
+        box-shadow: 0 0 28px rgba(15, 23, 42, 0.2);
+      }
+
+      .sidebar.show {
+        transform: translateX(0);
+      }
+
+      .sidebar-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        z-index: 1020;
+      }
+
+      .sidebar-backdrop.show {
+        display: block;
+      }
+
+      .content-wrap {
+        max-width: 100%;
+        width: 100%;
+      }
+
+      .topbar {
+        padding: 0.55rem 0.85rem !important;
+      }
+
+      .sidebar-toggle {
+        display: inline-flex;
+        flex: 0 0 auto;
+      }
+
+      .topbar-title {
+        font-size: 1rem;
+      }
+
+      .topbar-user {
+        max-width: 28%;
+        font-size: 0.85rem;
+      }
+
+      .flash-area {
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+      }
+
+      .content-area {
+        padding: 0.85rem !important;
+      }
+
+      .mobile-stack,
+      .action-group {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.65rem !important;
+      }
+
+      .mobile-full,
+      .action-group .btn,
+      .action-group a,
+      .action-group button {
+        width: 100%;
+      }
+
+      .btn,
+      button,
+      .nav-link,
+      .btn-add,
+      .btn-back,
+      .btn-action,
+      .btn-sm-action,
+      .btn-sm,
+      .btn-submit,
+      .btn-cancel,
+      .btn-primary,
+      .btn-reset,
+      .btn-save,
+      .btn-bulk {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .filter-bar select,
+      .filter-bar input,
+      .filter-bar .form-select,
+      .filter-bar .form-control {
+        width: 100% !important;
+        min-width: 0 !important;
+      }
+
+      .responsive-table-wrap,
+      .activity-table-card,
+      .programs-table-card,
+      .deleted-table-card,
+      .chapters-table-card,
+      .topics-table-card {
+        overflow-x: auto !important;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .responsive-table-wrap > table,
+      .activity-table-card > table,
+      .programs-table-card > table,
+      .deleted-table-card > table,
+      .chapters-table-card > table,
+      .topics-table-card > table,
+      table.programs-table,
+      table.chapters-table,
+      table.topics-table,
+      table.content-table,
+      table.asn-table {
+        min-width: 680px;
+      }
+
+      .table-responsive {
+        max-width: 100%;
+      }
+
+      .page-header,
+      .programs-header,
+      .chapter-list-header,
+      .topics-list-header,
+      .pd-header,
+      .card-header,
+      .mapping-card-header,
+      .bulk-assign-cta,
+      .content-navigation {
+        flex-wrap: wrap !important;
+        gap: 0.75rem !important;
+      }
+
+      .header-actions,
+      .form-actions,
+      .program-actions,
+      .topic-actions,
+      .chapter-actions,
+      .actions-cell,
+      .action-buttons,
+      .slot-filled-actions,
+      .btn-set-group,
+      .filter-row {
+        max-width: 100%;
+      }
+
+      .main-layout,
+      .two-col {
+        grid-template-columns: 1fr !important;
+      }
+
+      .main-layout > *,
+      .two-col > *,
+      .program-row > *,
+      .mapping-card-header > *,
+      .sub-card-header > * {
+        min-width: 0;
+      }
+
+      .main-layout > :first-child {
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .sidebar-card,
+      .help-card,
+      .add-form-card {
+        position: static !important;
+      }
+
+      .stats-row,
+      .stats-top,
+      .stats-bar,
+      .metrics-grid,
+      .metrics-row,
+      .program-grid {
+        grid-template-columns: 1fr !important;
+      }
+
+      .stat-card,
+      .stat-box,
+      .stat-tile {
+        min-width: 0;
+      }
+
+      .program-row,
+      .resource-item,
+      .sub-card-header {
+        align-items: stretch !important;
+      }
+
+      .filename-chip,
+      .description-preview,
+      .chapter-description,
+      .topic-description {
+        max-width: 100% !important;
+      }
+
+      .modal-dialog {
+        margin: 0.75rem;
+      }
+
+      .modal-footer,
+      .modal-footer .btn {
+        width: 100%;
+      }
+
+      #bulkAssignForm .form-section > div[style*="grid-template-columns"],
+      .section-grid,
+      .form-row {
+        grid-template-columns: 1fr !important;
+      }
+
+      .tox.tox-tinymce {
+        max-width: 100%;
+      }
+    }
+
+    @media (max-width: 991.98px) {
+      .mobile-bottom-nav {
+        display: flex;
+      }
+
+      .content-area {
+        padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
+      }
+    }
+
+    @media (max-width: 575.98px) {
+      .mobile-card-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar-user {
+        display: none;
+      }
+
+      .page-header,
+      .programs-header,
+      .chapter-list-header,
+      .topics-list-header,
+      .pd-header,
+      .sub-card-header,
+      .mapping-card-header,
+      .program-row,
+      .content-navigation {
+        flex-direction: column !important;
+        align-items: stretch !important;
+      }
+
+      .header-actions,
+      .form-actions,
+      .program-actions,
+      .topic-actions,
+      .chapter-actions,
+      .actions-cell,
+      .action-buttons,
+      .slot-filled-actions,
+      .btn-set-group,
+      .filter-row,
+      .sub-card-header .d-flex,
+      .review-section .d-flex,
+      .program-row .d-flex {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100% !important;
+      }
+
+      .header-actions > *,
+      .form-actions > *,
+      .program-actions > *,
+      .topic-actions > *,
+      .chapter-actions > *,
+      .actions-cell > *,
+      .action-buttons > *,
+      .btn-set-group > *,
+      .slot-filled-actions > *,
+      .filter-row > *,
+      .sub-card-header a,
+      .sub-card-header button,
+      .review-section button,
+      .review-section a {
+        width: 100% !important;
+      }
+
+      .program-header,
+      .form-card,
+      .form-wrapper,
+      .edit-card,
+      .sub-card-body,
+      .sub-card-header,
+      .content-block-body,
+      .student-content-area {
+        padding: 1rem !important;
+      }
+
+      .program-title,
+      .topic-title-section h1,
+      .page-title {
+        font-size: 1.45rem !important;
+      }
+
+      .preview-frame-wrap iframe {
+        height: 70vh !important;
+        min-height: 360px !important;
+      }
+    }
   </style>
 </head>
 <body>
 
-<div class="d-flex">
+<div class="d-flex lms-shell">
   <!-- Sidebar -->
-  <aside class="sidebar p-3">
+  <aside class="sidebar p-3" id="lmsSidebar" aria-label="LMS Admin navigation">
     <div class="mb-4">
       <div class="fw-bold text-dark">Global IT Education</div>
       <div class="text-muted small">LMS Module</div>
@@ -186,13 +737,17 @@
 
     </nav>
   </aside>
+  <div class="sidebar-backdrop" id="lmsSidebarBackdrop" hidden></div>
 
   <!-- Main Content -->
   <div class="content-wrap">
     <!-- Topbar -->
     <nav class="navbar navbar-light bg-white border-bottom topbar px-4 py-2">
-      <span class="navbar-brand mb-0 h5">{% block page_title %}LMS Admin{% endblock %}</span>
-      <div class="text-muted">
+      <button class="sidebar-toggle" type="button" id="lmsSidebarToggle" aria-controls="lmsSidebar" aria-expanded="false" aria-label="Open LMS navigation">
+        <span aria-hidden="true">&#9776;</span>
+      </button>
+      <span class="navbar-brand mb-0 h5 topbar-title">{% block page_title %}LMS Admin{% endblock %}</span>
+      <div class="text-muted topbar-user">
         {% if current_user %}
           {{ session.get('user_name', 'User') }}
         {% endif %}
@@ -202,7 +757,7 @@
     <!-- Flash Messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="px-4 pt-3">
+        <div class="px-4 pt-3 flash-area">
           {% for category, message in messages %}
             <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
               {{ message }}
@@ -214,13 +769,166 @@
     {% endwith %}
 
     <!-- Content Area -->
-    <div class="p-4">
+    <div class="p-4 content-area">
       {% block content %}{% endblock %}
     </div>
   </div>
 </div>
 
+<!-- FAB overlay + pop-up menu -->
+<div class="fab-menu-overlay" id="lmsFabOverlay"></div>
+<div class="fab-menu" id="lmsFabMenu">
+  <div class="fab-menu-label">LMS Quick Actions</div>
+  {% if session.get('role') == 'admin' %}
+  <a href="{{ url_for('lms_admin.program_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dbeafe;">+</span>
+    Add Program
+  </a>
+  {% endif %}
+  <button type="button" class="fab-menu-item disabled" disabled title="Open a program first to add a chapter">
+    <span class="fmi-icon" style="background:#f3f4f6;">#</span>
+    Add Chapter
+  </button>
+  <button type="button" class="fab-menu-item disabled" disabled title="Open a chapter first to add a topic">
+    <span class="fmi-icon" style="background:#f3f4f6;">#</span>
+    Add Topic
+  </button>
+  <button type="button" class="fab-menu-item disabled" disabled title="Open a master topic first to add an assignment">
+    <span class="fmi-icon" style="background:#f3f4f6;">#</span>
+    Add Assignment
+  </button>
+</div>
+
+<!-- Mobile Bottom Navigation -->
+{% set lms_program_endpoints = [
+  'lms_admin.list_programs', 'lms_admin.program_new', 'lms_admin.program_edit', 'lms_admin.program_view',
+  'lms_admin.list_chapters', 'lms_admin.chapter_new', 'lms_admin.chapter_edit',
+  'lms_admin.list_topics', 'lms_admin.topic_new', 'lms_admin.topic_edit',
+  'lms_admin.list_topic_contents', 'lms_admin.content_new', 'lms_admin.content_edit',
+  'lms_admin.content_view', 'lms_admin.list_program_resources', 'lms_admin.add_program_resource',
+  'lms_admin.edit_program_resource', 'lms_admin.list_topic_attachments',
+  'lms_admin.add_topic_attachment', 'lms_admin.edit_topic_attachment'
+] %}
+{% set lms_assignment_endpoints = [
+  'lms_admin.assignments_alias', 'lms_admin.all_assignments', 'lms_admin.manage_assignments',
+  'lms_admin.edit_assignment', 'lms_admin.view_submissions', 'lms_admin.preview_submission'
+] %}
+{% set lms_program_active = request.endpoint in lms_program_endpoints %}
+{% set lms_assignment_active = request.endpoint in lms_assignment_endpoints %}
+{% set lms_tab_active = request.endpoint and request.endpoint.startswith('lms_admin.') and not lms_program_active and not lms_assignment_active %}
+<nav class="mobile-bottom-nav" aria-label="LMS mobile navigation">
+  <a href="{{ url_for('core.dashboard') }}" class="{{ 'active' if request.endpoint == 'core.dashboard' else '' }}">
+    <span class="nav-icon">🏠</span>
+    <span>Home</span>
+  </a>
+  <a href="{{ url_for('lms_admin.dashboard') }}" class="{{ 'active' if lms_tab_active else '' }}">
+    <span class="nav-icon">📚</span>
+    <span>LMS</span>
+  </a>
+  <a href="#" class="fab-btn" id="lmsFabToggle" title="LMS quick actions" role="button" aria-label="LMS quick actions menu" aria-expanded="false">
+    <span class="nav-icon" id="lmsFabIcon">+</span>
+  </a>
+  <a href="{{ url_for('lms_admin.list_programs') }}" class="{{ 'active' if lms_program_active else '' }}">
+    <span class="nav-icon">📖</span>
+    <span>Programs</span>
+  </a>
+  <a href="{{ url_for('lms_admin.assignments_alias') }}" class="{{ 'active' if lms_assignment_active else '' }}">
+    <span class="nav-icon">📋</span>
+    <span>Assignments</span>
+  </a>
+</nav>
+
 <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+<script>
+  (function () {
+    var sidebar = document.getElementById('lmsSidebar');
+    var toggle = document.getElementById('lmsSidebarToggle');
+    var backdrop = document.getElementById('lmsSidebarBackdrop');
+
+    if (!sidebar || !toggle || !backdrop) {
+      return;
+    }
+
+    function setSidebar(open) {
+      sidebar.classList.toggle('show', open);
+      backdrop.classList.toggle('show', open);
+      backdrop.hidden = !open;
+      document.body.classList.toggle('lms-nav-open', open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      toggle.setAttribute('aria-label', open ? 'Close LMS navigation' : 'Open LMS navigation');
+    }
+
+    toggle.addEventListener('click', function () {
+      setSidebar(!sidebar.classList.contains('show'));
+    });
+
+    backdrop.addEventListener('click', function () {
+      setSidebar(false);
+    });
+
+    sidebar.querySelectorAll('a').forEach(function (link) {
+      link.addEventListener('click', function () {
+        if (window.matchMedia('(max-width: 767.98px)').matches) {
+          setSidebar(false);
+        }
+      });
+    });
+
+    window.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        setSidebar(false);
+      }
+    });
+
+    window.addEventListener('resize', function () {
+      if (!window.matchMedia('(max-width: 767.98px)').matches) {
+        setSidebar(false);
+      }
+    });
+  })();
+</script>
+<script>
+  (function () {
+    var toggle = document.getElementById('lmsFabToggle');
+    var menu = document.getElementById('lmsFabMenu');
+    var overlay = document.getElementById('lmsFabOverlay');
+    var icon = document.getElementById('lmsFabIcon');
+
+    if (!toggle || !menu || !overlay || !icon) {
+      return;
+    }
+
+    function openMenu() {
+      menu.classList.add('show');
+      overlay.classList.add('show');
+      icon.textContent = '\u00d7';
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeMenu() {
+      menu.classList.remove('show');
+      overlay.classList.remove('show');
+      icon.textContent = '+';
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+
+    toggle.addEventListener('click', function (event) {
+      event.preventDefault();
+      menu.classList.contains('show') ? closeMenu() : openMenu();
+    });
+
+    overlay.addEventListener('click', closeMenu);
+    menu.querySelectorAll('.fab-menu-item').forEach(function (item) {
+      item.addEventListener('click', closeMenu);
+    });
+
+    window.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        closeMenu();
+      }
+    });
+  })();
+</script>
 
 {% block extra_js %}{% endblock %}
 

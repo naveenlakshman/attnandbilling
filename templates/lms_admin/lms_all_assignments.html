@@ -91,6 +91,7 @@
   {% if assignments %}
   <div class="card">
     <div class="card-body p-0">
+      <div class="table-responsive">
       <table class="table table-hover mb-0 asn-table">
         <thead class="table-light">
           <tr>
@@ -128,7 +129,7 @@
               <span class="{{ 'badge-pend' if pending > 0 else 'badge-rev' }}">{{ pending }}</span>
             </td>
             <td class="pe-4">
-              <div class="d-flex gap-2 flex-wrap">
+              <div class="d-flex gap-2 flex-wrap action-group">
                  <a class="btn btn-sm btn-primary"
                    href="{{ url_for('lms_admin.view_submissions', assignment_id=a.id, trainer_id=selected_trainer_id, batch_id=selected_batch_id) if selected_trainer_id or selected_batch_id else url_for('lms_admin.view_submissions', assignment_id=a.id) }}">
                   📋 Submissions
@@ -143,6 +144,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
   {% else %}

@@ -6470,6 +6470,13 @@ def _save_assignment_file(file_obj):
     return True, unique_name, orig_name
 
 
+@lms_admin_bp.route('/assignments')
+@login_required
+def assignments_alias():
+    """Mobile bottom-nav friendly alias for the LMS assignment overview."""
+    return redirect(url_for('lms_admin.all_assignments'))
+
+
 @lms_admin_bp.route('/master/assignments')
 @login_required
 def all_assignments():
