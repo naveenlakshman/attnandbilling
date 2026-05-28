@@ -70,23 +70,103 @@
       background: #fff; border-bottom: 1px solid #e9ecef;
       padding: 12px 24px; margin: -28px -28px 28px -28px;
       display: flex; align-items: center; justify-content: space-between;
+      gap: 16px;
     }
     .topbar .topbar-title { flex: 1; min-width: 0; }
     .topbar .student-info { font-size: 14px; color: #6c757d; }
     .topbar .student-name { font-weight: 600; color: #212529; }
+    .topbar-actions { display:flex; align-items:center; gap:16px; min-width: 0; }
+    .mobile-sidebar-btn {
+      display: none;
+      background: #fff !important;
+      border: 1px solid #dee2e6 !important;
+      border-radius: 8px;
+      color: #343a40 !important;
+      cursor: pointer;
+      flex: 0 0 40px;
+      font-size: 20px;
+      height: 40px;
+      line-height: 1;
+      padding: 0 !important;
+      width: 40px;
+    }
 
     @media (max-width: 768px) {
       .sidebar {
         transform: translateX(-100%);
-        width: 230px !important;  /* override collapsed on mobile */
+        width: min(82vw, 290px) !important;  /* override collapsed on mobile */
+        z-index: 10000;
+        box-shadow: 12px 0 28px rgba(15, 23, 42, 0.26);
       }
       .sidebar.mobile-open { transform: translateX(0); }
       .sidebar.collapsed { width: 230px; }   /* ignore collapsed state on mobile */
+      .sidebar-toggle { align-self: flex-end; margin-bottom: 16px; }
       .sidebar.collapsed .nav-label { opacity: 1; }
       .sidebar.collapsed .brand-text { opacity: 1; }
       .sidebar.collapsed .sub-brand { opacity: 1; }
       .main-content { margin-left: 0 !important; padding: 16px; }
-      .topbar { margin: -16px -16px 16px -16px; }
+      .topbar {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: -16px -16px 16px -16px;
+        padding: 10px 12px;
+      }
+      .topbar .topbar-title {
+        flex: 1 1 calc(100% - 52px);
+        min-width: 0;
+      }
+      .topbar-actions {
+        flex: 0 0 100%;
+        justify-content: space-between;
+        gap: 10px;
+        padding-left: 0;
+      }
+      .topbar-actions .lms-view-controls {
+        flex: 0 0 auto;
+        margin-left: auto;
+        order: 2;
+      }
+      .topbar .student-info {
+        align-items: center;
+        display: flex;
+        flex: 1 1 auto;
+        gap: 4px;
+        min-width: 0;
+        overflow: hidden;
+        order: 1;
+        text-align: left;
+        white-space: nowrap;
+        font-size: 0;
+      }
+      .topbar .student-info::before {
+        content: "\1F464";
+        flex: 0 0 auto;
+        font-size: 14px;
+      }
+      .topbar .student-info::after {
+        content: " \00B7  " attr(data-code);
+        flex: 0 0 auto;
+        font-size: 14px;
+      }
+      .topbar .student-name {
+        font-size: 14px;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .topbar .student-code {
+        flex: 0 0 auto;
+      }
+      .mobile-sidebar-btn { display: inline-flex; align-items: center; justify-content: center; }
+      .sidebar-overlay { z-index: 9999; }
+      #demo-banner {
+        flex-wrap: wrap;
+        gap: 6px 12px !important;
+        line-height: 1.35;
+        padding: 7px 12px !important;
+      }
     }
   </style>
   {% block extra_css %}{% endblock %}
@@ -146,12 +226,14 @@
     <!-- Mobile hamburger (only visible on small screens) -->
     <button id="mobileSidebarBtn"
             onclick="openSidebar()"
-            style="display:none;background:none;border:none;font-size:20px;
+            class="mobile-sidebar-btn"
+            aria-label="Open menu"
+            style="display:none;
                    cursor:pointer;padding:0 8px 0 0;color:#495057;">☰</button>
     <div class="topbar-title">{% block page_title %}{% endblock %}</div>
-    <div style="display:flex;align-items:center;gap:16px;">
+    <div class="topbar-actions">
       {% block topbar_extra %}{% endblock %}
-      <span class="student-info">
+      <span class="student-info" data-code="{{ session.student_code }}">
         👤 <span class="student-name">{{ session.student_name }}</span>
         &nbsp;·&nbsp; {{ session.student_code }}
       </span>
@@ -178,7 +260,12 @@
 var _isMobile = function(){ return window.innerWidth <= 768; };
 
 function toggleSidebar() {
-  if (_isMobile()) { openSidebar(); return; }
+  if (_isMobile()) {
+    var mobileSidebar = document.getElementById('mainSidebar');
+    if (mobileSidebar.classList.contains('mobile-open')) closeSidebar();
+    else openSidebar();
+    return;
+  }
   var sb = document.getElementById('mainSidebar');
   var mc = document.getElementById('mainContent');
   var collapsed = sb.classList.toggle('collapsed');
@@ -203,14 +290,25 @@ function closeSidebar() {
   var sb = document.getElementById('mainSidebar');
   var mc = document.getElementById('mainContent');
   var mobileBtn = document.getElementById('mobileSidebarBtn');
+  var sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
   var isTopicPage = {{ ('true' if request.endpoint == 'students.topic_view' else 'false') }};
 
   function applyState() {
     if (_isMobile()) {
       mc.classList.remove('sidebar-collapsed');
-      mobileBtn.style.display = 'inline-block';
+      mobileBtn.style.display = 'inline-flex';
+      if (sidebarToggleBtn) {
+        sidebarToggleBtn.innerHTML = '&times;';
+        sidebarToggleBtn.title = 'Close menu';
+        sidebarToggleBtn.setAttribute('aria-label', 'Close menu');
+      }
     } else {
       mobileBtn.style.display = 'none';
+      if (sidebarToggleBtn) {
+        sidebarToggleBtn.innerHTML = '&#9776;';
+        sidebarToggleBtn.title = 'Toggle sidebar';
+        sidebarToggleBtn.setAttribute('aria-label', 'Toggle sidebar');
+      }
       // On topic/learning page always start collapsed for more reading space
       var collapsed = isTopicPage || localStorage.getItem('lms_sb_collapsed') === '1';
       sb.classList.toggle('collapsed', collapsed);

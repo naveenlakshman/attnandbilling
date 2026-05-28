@@ -4,13 +4,13 @@
 <div class="lesson-header">
   <h1>{{ topic.program_name }}</h1>
   <nav class="lesson-breadcrumb" aria-label="breadcrumb">
-    <a href="{{ url_for('students.dashboard') }}">My Programs</a>
+    <a class="lesson-breadcrumb-home" href="{{ url_for('students.dashboard') }}">My Programs</a>
+    <span class="lesson-breadcrumb-separator lesson-breadcrumb-desktop">&rsaquo;</span>
+    <a class="lesson-breadcrumb-desktop" href="{{ url_for('students.program_view', program_id=topic.program_id) }}">{{ topic.program_name }}</a>
+    <span class="lesson-breadcrumb-separator lesson-breadcrumb-desktop">&rsaquo;</span>
+    <span class="lesson-breadcrumb-chapter">{{ topic.chapter_title }}</span>
     <span class="lesson-breadcrumb-separator">&rsaquo;</span>
-    <a href="{{ url_for('students.program_view', program_id=topic.program_id) }}">{{ topic.program_name }}</a>
-    <span class="lesson-breadcrumb-separator">&rsaquo;</span>
-    <span>{{ topic.chapter_title }}</span>
-    <span class="lesson-breadcrumb-separator">&rsaquo;</span>
-    <span>{{ topic.topic_title }}</span>
+    <span class="lesson-breadcrumb-topic">{{ topic.topic_title }}</span>
   </nav>
 </div>
 {% endblock %}
@@ -33,21 +33,50 @@
   .main-content { padding: 0 !important; flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
   .topbar { margin: 0 !important; border-radius: 0; position: sticky; top: 0; z-index: 200; flex-shrink: 0; }
 
-  /* Hotspot embed responsive fix */
-  .rich-text-content { overflow: hidden; }
+  .rich-text-content,
+  .lms-rich-content {
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-break: normal;
+    width: 100%;
+  }
+  .lms-rich-content {
+    font-size: 15px;
+    line-height: 1.75;
+  }
+  .lms-rich-content img,
+  .lms-rich-content video,
+  .lms-rich-content iframe,
+  .content-block img,
+  .content-block video,
+  .content-block iframe {
+    max-width: 100%;
+  }
+  .lms-rich-content img,
+  .lms-rich-content video,
+  .lms-rich-content iframe,
+  .content-block img,
+  .content-block video {
+    height: auto;
+  }
+  [data-pdf-url] canvas {
+    max-width: 100%;
+    height: auto !important;
+  }
   /* Table defaults: ensures borders/padding are visible even for content saved before
      table_style_by_css was enabled. Inline styles from new content override these. */
-  .rich-text-content table { border-collapse: collapse; max-width: 100%; margin: 12px 0; }
-  .rich-text-content table td,
-  .rich-text-content table th { border: 1px solid #dee2e6; padding: 6px 12px; vertical-align: top; }
-  .rich-text-content table th { background: #f8f9fa; font-weight: 600; }
-  .rich-text-content h1 { font-size: 1.9em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.2; }
-  .rich-text-content h2 { font-size: 1.55em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.25; }
-  .rich-text-content h3 { font-size: 1.25em; font-weight: 600; margin: 0.55em 0 0.25em; line-height: 1.3; }
-  .rich-text-content h4 { font-size: 1.05em; font-weight: 600; margin: 0.5em 0 0.2em; line-height: 1.35; }
+  .lms-rich-content table { border-collapse: collapse; max-width: 100%; margin: 12px 0; }
+  .lms-rich-content table td,
+  .lms-rich-content table th { border: 1px solid #dee2e6; padding: 6px 12px; vertical-align: top; }
+  .lms-rich-content table th { background: #f8f9fa; font-weight: 600; }
+  .lms-rich-content h1 { font-size: 1.9em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.2; }
+  .lms-rich-content h2 { font-size: 1.55em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.25; }
+  .lms-rich-content h3 { font-size: 1.25em; font-weight: 600; margin: 0.55em 0 0.25em; line-height: 1.3; }
+  .lms-rich-content h4 { font-size: 1.05em; font-weight: 600; margin: 0.5em 0 0.2em; line-height: 1.35; }
   /* ── Code Block Styling ── */
   .lesson-content pre,
-  .rich-text-content pre {
+  .rich-text-content pre,
+  .lms-rich-content pre {
     background-color: #1e1e1e;
     color: #d4d4d4;
     padding: 16px;
@@ -60,13 +89,15 @@
     margin: 12px 0;
   }
   .lesson-content code,
-  .rich-text-content code {
+  .rich-text-content code,
+  .lms-rich-content code {
     font-family: 'Courier New', Courier, monospace;
     font-size: 13px;
   }
   /* Prevent code blocks from horizontal scrolling unless necessary */
   .lesson-content pre code,
-  .rich-text-content pre code {
+  .rich-text-content pre code,
+  .lms-rich-content pre code {
     display: block;
     white-space: pre-wrap;
     word-wrap: break-word;
@@ -251,6 +282,9 @@
   .lms-sidebar.panel-hidden {
     width: 0; overflow: hidden; opacity: 0; border-left: none;
   }
+  .topics-drawer-overlay {
+    display: none;
+  }
   .sidebar-header {
     padding: 16px 16px 10px;
     border-bottom: 1px solid #f0f0f0;
@@ -263,6 +297,7 @@
   .progress-bar-wrap { background: #e9ecef; border-radius: 4px; height: 6px; margin-bottom: 5px; }
   .progress-bar-fill { background: #198754; height: 6px; border-radius: 4px; transition: width 0.3s; }
   .progress-label { font-size: 11px; color: #6c757d; }
+  .topics-drawer-close { display: none; }
 
   .chapter-item { border-bottom: 1px solid #f0f0f0; }
   .chapter-header {
@@ -318,17 +353,225 @@
 
 
   @media (max-width: 768px) {
-    .lms-sidebar { width: 0; overflow: hidden; opacity: 0; border-left: none; }
-    .lms-sidebar.mobile-panel-open { width: 100% !important; opacity: 1 !important; border-left: 1px solid #e9ecef; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 400; }
+    html, body { overflow: hidden; }
+    .topbar {
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
+      z-index: 350;
+    }
+    .topbar-actions {
+      align-items: center;
+    }
+    .lms-view-controls { flex: 0 0 auto; }
+    .btn-lms-ctrl {
+      min-height: 36px;
+      padding: 7px 12px;
+    }
     .lesson-header {
       flex-direction: column;
       align-items: flex-start;
-      gap: 6px;
+      gap: 3px;
+      min-width: 0;
+    }
+    .lesson-header h1 {
+      font-size: 18px;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .lesson-breadcrumb {
-      white-space: normal;
+      display: block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    .lesson-breadcrumb-home,
+    .lesson-breadcrumb-desktop {
+      display: none;
+    }
+    .lesson-breadcrumb-topic {
+      color: #334155;
+      font-weight: 600;
+    }
+    .lms-layout { overflow: visible; position: relative; }
+    .lms-content { min-width: 0; overflow: visible; }
+    .lms-content-inner {
+      padding: 0 12px 132px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .content-tabs {
+      margin: 0 -12px 14px;
+      overflow-x: auto;
+      padding: 8px 12px 0;
+      scrollbar-width: none;
+      white-space: nowrap;
+    }
+    .content-tabs::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      flex: 0 0 auto;
+      min-height: 44px;
+      padding: 10px 16px;
+    }
+    .tab-btn.active {
+      background: #eef5ff;
+      border-bottom-color: #0d6efd;
+      color: #0b5ed7;
+    }
+    .content-block {
+      border-radius: 8px;
+      margin-bottom: 14px;
+      max-width: 100%;
+      min-width: 0;
       overflow: visible;
-      text-overflow: clip;
+      padding: 14px;
+    }
+    .tab-pane {
+      max-width: 100%;
+      min-width: 0;
+    }
+    .lms-content-inner {
+      overflow-x: hidden;
+    }
+    .rich-text-content {
+      max-width: 100%;
+      min-width: 0;
+      overflow: visible;
+    }
+    .lms-rich-content {
+      font-size: 14px !important;
+      line-height: 1.65 !important;
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .lms-rich-content * {
+      box-sizing: border-box;
+      max-width: 100% !important;
+    }
+    .lms-rich-content h1 { font-size: 1.45rem !important; line-height: 1.2; }
+    .lms-rich-content h2 { font-size: 1.25rem !important; line-height: 1.25; }
+    .lms-rich-content h3 { font-size: 1.1rem !important; }
+    .lms-rich-content h4 { font-size: 1rem !important; }
+    .lms-rich-content table {
+      max-width: none !important;
+      min-width: 600px;
+      width: max-content;
+    }
+    .lms-rich-content table,
+    .lms-rich-content table * {
+      max-width: none !important;
+    }
+    .lms-rich-content table td,
+    .lms-rich-content table th {
+      font-size: 14px !important;
+      line-height: 1.45 !important;
+      padding: 7px 10px;
+      white-space: normal;
+    }
+    .lesson-content pre,
+    .rich-text-content pre,
+    .lms-rich-content pre {
+      font-size: 12px;
+      padding: 12px;
+    }
+    .lms-bottom-bar {
+      bottom: 0;
+      box-shadow: 0 -8px 22px rgba(15, 23, 42, 0.10);
+      display: grid;
+      gap: 8px;
+      grid-template-areas:
+        "complete complete complete"
+        "notes previous next";
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      left: 0;
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+      position: fixed;
+      right: 0;
+      z-index: 360;
+    }
+    .bottom-complete-action {
+      grid-area: complete;
+      width: 100%;
+    }
+    .bottom-notes-action {
+      grid-area: notes;
+      min-width: 0;
+    }
+    .btn-nav-group {
+      display: contents;
+    }
+    .btn-nav-group > :first-child { grid-area: previous; }
+    .btn-nav-group > :last-child { grid-area: next; }
+    .btn-notes,
+    .btn-complete,
+    .btn-nav {
+      align-items: center;
+      display: inline-flex;
+      justify-content: center;
+      min-height: 44px;
+      padding: 8px 10px;
+      text-align: center;
+      width: 100%;
+    }
+    .btn-complete {
+      font-size: 14px;
+      min-height: 46px;
+    }
+    .completion-lock-note {
+      margin-top: 4px;
+    }
+    .topics-drawer-overlay {
+      background: rgba(15, 23, 42, 0.48);
+      display: none;
+      inset: 0;
+      position: fixed;
+      z-index: 10001;
+    }
+    .topics-drawer-overlay.active { display: block; }
+    .lms-sidebar {
+      border-left: 1px solid #e9ecef;
+      bottom: 0;
+      box-shadow: -14px 0 30px rgba(15, 23, 42, 0.22);
+      left: auto;
+      max-width: 360px;
+      opacity: 1;
+      position: fixed;
+      right: 0;
+      top: 0;
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+      width: min(88vw, 360px) !important;
+      z-index: 10002;
+    }
+    .lms-sidebar.panel-hidden {
+      border-left: 1px solid #e9ecef;
+      opacity: 1;
+      width: min(88vw, 360px) !important;
+    }
+    .lms-sidebar.mobile-panel-open {
+      transform: translateX(0);
+    }
+    .sidebar-header {
+      padding-right: 56px;
+    }
+    .topics-drawer-close {
+      align-items: center;
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      color: #343a40;
+      cursor: pointer;
+      display: inline-flex;
+      font-size: 22px;
+      height: 36px;
+      justify-content: center;
+      line-height: 1;
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      width: 36px;
     }
   }
 
@@ -477,7 +720,7 @@
 
           {% elif lesson_content.content_mode == 'rich_text' %}
           <div class="content-block">
-            <div class="rich-text-content" style="line-height:1.75;font-size:15px;">
+            <div class="rich-text-content lms-rich-content">
               {{ lesson_content.content_body | safe }}
             </div>
           </div>
@@ -561,12 +804,12 @@
     <!-- Bottom bar: Notes | Complete | Previous + Next -->
     <div class="lms-bottom-bar">
       <!-- Left: Notes shortcut -->
-      <div>
+      <div class="bottom-notes-action">
         <button class="btn-notes" onclick="switchTab('notes')">✏ Notes</button>
       </div>
       <!-- Center: Mark Complete -->
+      <div class="bottom-complete-action">
       {% if completion_locked %}
-      <div>
         <button class="btn-complete completed"
                 id="completeBtn"
                 disabled
@@ -574,7 +817,6 @@
           ✓ Completed
         </button>
         <div class="completion-lock-note" id="completionLockedHint">Completed automatically after assignment approval.</div>
-      </div>
       {% else %}
       <button class="btn-complete {% if is_completed %}completed{% endif %}"
               id="completeBtn"
@@ -586,6 +828,7 @@
         {% endif %}
       </button>
       {% endif %}
+      </div>
       <!-- Right: Previous + Next -->
       <div class="btn-nav-group">
         {% if prev_topic_id %}
@@ -611,8 +854,13 @@
   </div>
 
   <!-- ── Right: Sidebar ── -->
+  <div class="topics-drawer-overlay" id="topicsDrawerOverlay" onclick="closeTopicsPanel()"></div>
   <div class="lms-sidebar" id="topicsSidebar">
     <div class="sidebar-header">
+      <button type="button"
+              class="topics-drawer-close"
+              onclick="closeTopicsPanel()"
+              aria-label="Close topics">&times;</button>
       <div class="sidebar-program-name">{{ topic.program_name }}</div>
       <div class="progress-bar-wrap">
         <div class="progress-bar-fill" id="progressFill"
@@ -1306,15 +1554,27 @@ function _updateTopicsBtn(hidden) {
 
 function toggleTopicsPanel() {
   if (_isMobileLms()) {
-    // Mobile: show as overlay drawer
     var sb = document.getElementById('topicsSidebar');
-    sb.classList.toggle('mobile-panel-open');
+    var overlay = document.getElementById('topicsDrawerOverlay');
+    var isOpen = sb.classList.toggle('mobile-panel-open');
+    if (overlay) overlay.classList.toggle('active', isOpen);
+    var btn = document.getElementById('btnTopics');
+    if (btn) btn.classList.toggle('active', isOpen);
     return;
   }
   var sb = document.getElementById('topicsSidebar');
   var hidden = sb.classList.toggle('panel-hidden');
   _updateTopicsBtn(hidden);
   localStorage.setItem('lms_topics_hidden', hidden ? '1' : '0');
+}
+
+function closeTopicsPanel() {
+  var sb = document.getElementById('topicsSidebar');
+  var overlay = document.getElementById('topicsDrawerOverlay');
+  var btn = document.getElementById('btnTopics');
+  if (sb) sb.classList.remove('mobile-panel-open');
+  if (overlay) overlay.classList.remove('active');
+  if (btn && _isMobileLms()) btn.classList.remove('active');
 }
 
 
@@ -1326,13 +1586,21 @@ function toggleTopicsPanel() {
 
   var topicsHidden = localStorage.getItem('lms_topics_hidden') === '1';
 
-  if (topicsHidden) {
+  if (_isMobileLms()) {
+    _updateTopicsBtn(true);
+  } else if (topicsHidden) {
     topicsSb.classList.add('panel-hidden');
     _updateTopicsBtn(true);
   } else {
     // default: show topics panel
     _updateTopicsBtn(false);
   }
+  topicsSb.querySelectorAll('a').forEach(function(link) {
+    link.addEventListener('click', closeTopicsPanel);
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeTopicsPanel();
+  });
 })();
 </script>
 {% endblock %}
