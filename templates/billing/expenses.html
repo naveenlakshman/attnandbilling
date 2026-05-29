@@ -1,4 +1,4 @@
-﻿{% extends "billing/base.html" %}
+{% extends "billing/base.html" %}
 
 {% block title %}{{ company.company_short_name }} - Expenses{% endblock %}
 
@@ -16,41 +16,27 @@
 
   .expense-page-header h2 {
     margin: 0;
-    font-size: 28px;
-  }
-
-  .expense-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .expense-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin-bottom: 20px;
   }
 
   .expense-summary-card {
     background: #ffffff;
     border: 1px solid #dee2e6;
     border-radius: 10px;
-    padding: 20px;
+    padding: 16px 20px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
   }
 
-  .expense-summary-card h3 {
-    margin: 0 0 10px 0;
-    font-size: 16px;
-    color: #555;
-  }
-
-  .expense-summary-card p {
-    margin: 0;
-    font-size: 28px;
-    font-weight: 700;
+  .expense-summary-icon {
+    width: 48px;
+    height: 48px;
+    background-color: #fdf2f2;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
     color: #c0392b;
+    flex-shrink: 0;
   }
 
   .expenses-table {
@@ -58,21 +44,21 @@
   }
 
   .expenses-table thead tr {
-    background-color: #f5f6f7;
+    background-color: #f8f9fa;
   }
 
   .expenses-table th {
-    padding: 10px 8px;
+    padding: 12px 10px;
     text-align: left;
     font-weight: 600;
     font-size: 13px;
-    color: #333;
-    border: 1px solid #ddd;
+    color: #495057;
+    border: 1px solid #dee2e6;
   }
 
   .expenses-table td {
-    padding: 10px 8px;
-    border: 1px solid #ddd;
+    padding: 12px 10px;
+    border: 1px solid #dee2e6;
     font-size: 13px;
     vertical-align: middle;
   }
@@ -82,61 +68,418 @@
   }
 </style>
 
-<div class="expense-page-header">
-  <h2>Expenses</h2>
+<div class="expense-page-header mb-4">
+  <h2 class="h3 mb-0 fw-bold text-dark fs-4 fs-md-2">Expenses</h2>
 
-  <div class="expense-actions">
-    <a class="btn btn-primary" href="{{ url_for('billing.expense_new') }}">
-      Add Expense
+  <div class="expense-actions d-flex gap-2">
+    <a class="btn btn-primary btn-sm px-3 py-2 fs-6 d-inline-flex align-items-center gap-2" href="{{ url_for('billing.expense_new') }}">
+      <span>➕</span>
+      <span class="d-none d-sm-inline">Add Expense</span>
+      <span class="d-sm-none">Add</span>
     </a>
-    <a class="btn btn-secondary" href="{{ url_for('billing.expense_categories') }}">
-      Expense Categories
+    <a class="btn btn-secondary btn-sm px-3 py-2 fs-6 d-inline-flex align-items-center gap-2" href="{{ url_for('billing.expense_categories') }}">
+      <span>📁</span>
+      <span class="d-none d-sm-inline">Categories</span>
+      <span class="d-sm-none">Categories</span>
     </a>
   </div>
 </div>
 
-<div class="expense-summary-grid">
-  <div class="expense-summary-card">
-    <h3>Total Expenses</h3>
-    <p>₹ {{ "%.2f"|format(total_expense or 0) }}</p>
+<!-- Total Summary Card -->
+<div class="row g-3 mb-4">
+  <div class="col-12 col-sm-6 col-md-4">
+    <div class="expense-summary-card d-flex align-items-center gap-3">
+      <div class="expense-summary-icon">
+        💸
+      </div>
+      <div>
+        <h3 class="text-muted fs-7 mb-1 text-uppercase fw-semibold" style="font-size: 12px; letter-spacing: 0.5px;">Total Expenses</h3>
+        <p class="mb-0 fs-3 fw-bold text-dark" id="totalExpenseAmount">₹ {{ "%.2f"|format(total_expense or 0) }}</p>
+      </div>
+    </div>
   </div>
 </div>
 
-<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
-  <table border="1" width="100%" cellpadding="10" class="expenses-table">
-    <thead>
-      <tr>
-        <th style="width: 70px;">ID</th>
-        <th style="width: 120px;">Date</th>
-        <th style="width: 140px;">Branch</th>
-        <th style="width: 160px;">Category</th>
-        <th>Title</th>
-        <th style="width: 130px;">Amount</th>
-        <th style="width: 120px;">Mode</th>
-        <th style="width: 150px;">Reference No</th>
-        <th style="width: 150px;">Created By</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for e in expenses %}
-      <tr>
-        <td>{{ e.id }}</td>
-        <td>{{ e.expense_date }}</td>
-        <td>{{ e.branch_name }}</td>
-        <td>{{ e.category_name }}</td>
-        <td>{{ e.title }}</td>
-        <td style="color:#c0392b; font-weight: 600;">₹ {{ "%.2f"|format(e.amount or 0) }}</td>
-        <td>{{ e.payment_mode }}</td>
-        <td>{{ e.reference_no or "-" }}</td>
-        <td>{{ e.created_by_name or "-" }}</td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="9" style="text-align:center; padding: 24px;">No expenses recorded yet.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Client-side Filters/Search Bar -->
+<div class="card mb-4 shadow-sm border-0 bg-white">
+  <div class="card-body p-3">
+    
+    <!-- Top Row: Search and Mobile Toggle -->
+    <div class="d-flex gap-2">
+      <div class="input-group input-group-sm flex-grow-1">
+        <span class="input-group-text bg-light border-end-0">🔍</span>
+        <input type="text" id="expenseSearch" class="form-control border-start-0 ps-0" placeholder="Search title, ID, ref...">
+      </div>
+      <!-- Mobile Filter Toggle Button -->
+      <button class="btn btn-sm btn-outline-secondary d-md-none flex-shrink-0 d-flex align-items-center gap-1" type="button" data-bs-toggle="collapse" data-bs-target="#advancedFilters" aria-expanded="false">
+        <span>⚙️</span> Filters
+      </button>
+    </div>
+    
+    <!-- Collapsible Advanced Filters -->
+    <div class="collapse d-md-block" id="advancedFilters">
+      <div class="row g-3 mt-2">
+        <!-- Branch Filter -->
+        <div class="col-12 col-md-3">
+          <select id="branchFilter" class="form-select form-select-sm">
+            <option value="">All Branches</option>
+          </select>
+        </div>
+        <!-- Category Filter -->
+        <div class="col-12 col-md-3">
+          <select id="categoryFilter" class="form-select form-select-sm">
+            <option value="">All Categories</option>
+          </select>
+        </div>
+        <!-- Date Filters -->
+        <div class="col-12 col-md-3">
+          <input type="date" id="startDateFilter" class="form-control form-control-sm" title="Start Date" placeholder="Start Date">
+        </div>
+        <div class="col-12 col-md-3">
+          <input type="date" id="endDateFilter" class="form-control form-control-sm" title="End Date" placeholder="End Date">
+        </div>
+      </div>
+    </div>
+    
+    <!-- Filter Helper Info/Actions -->
+    <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top flex-wrap gap-2">
+      <div class="text-muted fs-7" style="font-size: 12px;">
+        Showing <span id="filteredCount" class="fw-semibold">{{ expenses|length }}</span> of <span class="fw-semibold">{{ expenses|length }}</span> records
+      </div>
+      <button type="button" id="clearFiltersBtn" class="btn btn-link btn-sm text-decoration-none p-0 fs-7" style="font-size: 12px;">
+        Clear All Filters
+      </button>
+    </div>
+    
+  </div>
 </div>
 
+<!-- Expenses Table Container (Desktop/Tablet only) -->
+<div class="card shadow-sm border-0 mb-4 d-none d-md-block" style="border-radius: 10px; overflow: hidden;">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0 expenses-table">
+      <thead>
+        <tr>
+          <th style="width: 70px;">ID</th>
+          <th style="width: 120px;">Date</th>
+          <th style="width: 140px;">Branch</th>
+          <th style="width: 160px;">Category</th>
+          <th>Title</th>
+          <th style="width: 130px;">Amount</th>
+          <th style="width: 120px;">Mode</th>
+          <th style="width: 150px;">Reference No</th>
+          <th style="width: 150px;">Created By</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in expenses %}
+        <tr class="expense-row" 
+            data-branch="{{ e.branch_name }}" 
+            data-category="{{ e.category_name }}" 
+            data-date="{{ e.expense_date }}">
+          <td data-label="ID">{{ e.id }}</td>
+          <td data-label="Date">{{ e.expense_date }}</td>
+          <td data-label="Branch">{{ e.branch_name }}</td>
+          <td data-label="Category">{{ e.category_name }}</td>
+          <td data-label="Title"><span class="title-content">{{ e.title }}</span></td>
+          <td data-label="Amount" data-amount="{{ e.amount or 0 }}" style="color:#c0392b; font-weight: 600;">
+            ₹ {{ "%.2f"|format(e.amount or 0) }}
+          </td>
+          <td data-label="Mode">{{ e.payment_mode }}</td>
+          <td data-label="Reference No">{{ e.reference_no or "-" }}</td>
+          <td data-label="Created By">{{ e.created_by_name or "-" }}</td>
+        </tr>
+        {% else %}
+        <tr class="no-expenses-row">
+          <td colspan="9" class="text-center text-muted py-4">No expenses recorded yet.</td>
+        </tr>
+        {% endfor %}
+        
+        <!-- Dynamic No Results Row (Hidden by default) -->
+        <tr id="noResultsRow" class="d-none">
+          <td colspan="9" class="text-center text-muted py-4">
+            <div class="py-2">
+              <span class="fs-4">🔍</span>
+              <p class="mt-2 mb-0">No expenses found matching the selected filters.</p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Expenses Mobile Cards (Mobile only) -->
+<div class="d-block d-md-none mb-4" id="mobileExpensesContainer">
+  {% for e in expenses %}
+  <div class="card mb-3 shadow-sm border-0 bg-white expense-mobile-card" 
+       data-branch="{{ e.branch_name }}" 
+       data-category="{{ e.category_name }}" 
+       data-date="{{ e.expense_date }}"
+       data-id="{{ e.id }}"
+       data-title="{{ e.title }}"
+       data-ref="{{ e.reference_no or '' }}"
+       data-created-by="{{ e.created_by_name or '' }}"
+       data-amount="{{ e.amount or 0 }}">
+    <div class="card-body p-3">
+      
+      <!-- Top Row: Category Badge and Amount -->
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <div>
+          <span class="badge bg-light text-dark border mb-1" style="font-weight: 500;">{{ e.category_name }}</span>
+          <h5 class="card-title fs-6 fw-bold text-dark mb-0 lh-sm">{{ e.title }}</h5>
+        </div>
+        <div class="text-end ms-2 flex-shrink-0">
+          <span class="fw-bold fs-5 d-block lh-1" style="color: #c0392b;">₹ {{ "%.2f"|format(e.amount or 0) }}</span>
+          <span class="text-muted" style="font-size: 10px;">ID: #{{ e.id }}</span>
+        </div>
+      </div>
+      
+      <!-- Details Grid -->
+      <div class="row g-2 mt-2 pt-2 border-top border-light fs-7 text-muted" style="font-size: 12px;">
+        <div class="col-6 d-flex align-items-center gap-1">
+          <span>📅</span> <span class="text-dark">{{ e.expense_date }}</span>
+        </div>
+        <div class="col-6 d-flex align-items-center gap-1">
+          <span>🏢</span> <span class="text-dark">{{ e.branch_name }}</span>
+        </div>
+        <div class="col-6 d-flex align-items-center gap-1">
+          <span>💳</span> <span class="text-dark">{{ e.payment_mode }}</span>
+        </div>
+        <div class="col-6 text-truncate" title="{{ e.reference_no or '-' }}">
+          <span style="font-size: 11px;" class="text-uppercase">Ref:</span> <span class="text-dark fw-medium">{{ e.reference_no or "-" }}</span>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+  {% else %}
+  <div class="card p-4 text-center text-muted border-0 shadow-sm bg-white">
+    No expenses recorded yet.
+  </div>
+  {% endfor %}
+  
+  <!-- Dynamic Mobile No Results Card (Hidden by default) -->
+  <div id="mobileNoResultsCard" class="card p-4 text-center text-muted border-0 shadow-sm bg-white d-none">
+    <div class="py-2">
+      <span class="fs-4">🔍</span>
+      <p class="mt-2 mb-0">No expenses found matching the selected filters.</p>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('expenseSearch');
+  const branchSelect = document.getElementById('branchFilter');
+  const categorySelect = document.getElementById('categoryFilter');
+  const startDateInput = document.getElementById('startDateFilter');
+  const endDateInput = document.getElementById('endDateFilter');
+  const clearBtn = document.getElementById('clearFiltersBtn');
+  const filteredCountEl = document.getElementById('filteredCount');
+  const totalExpenseEl = document.getElementById('totalExpenseAmount');
+  
+  const noResultsRow = document.getElementById('noResultsRow');
+  const mobileNoResultsCard = document.getElementById('mobileNoResultsCard');
+  
+  const expenseRows = document.querySelectorAll('.expense-row');
+  const expenseCards = document.querySelectorAll('.expense-mobile-card');
+
+  // Populate dynamic select options from data
+  const branches = new Set();
+  const categories = new Set();
+
+  // Scan both desktop rows AND mobile cards to get all unique values
+  expenseRows.forEach(item => {
+    const b = item.getAttribute('data-branch');
+    const c = item.getAttribute('data-category');
+    if (b && b.trim()) branches.add(b.trim());
+    if (c && c.trim()) categories.add(c.trim());
+  });
+
+  expenseCards.forEach(item => {
+    const b = item.getAttribute('data-branch');
+    const c = item.getAttribute('data-category');
+    if (b && b.trim()) branches.add(b.trim());
+    if (c && c.trim()) categories.add(c.trim());
+  });
+
+  // Populate Branch dropdown
+  const branchArray = Array.from(branches).sort();
+  branchArray.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b;
+    opt.textContent = b;
+    branchSelect.appendChild(opt);
+  });
+
+  // Add message if no branches found
+  if (branchArray.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No branches available';
+    opt.disabled = true;
+    branchSelect.appendChild(opt);
+  }
+
+  // Populate Category dropdown
+  const categoryArray = Array.from(categories).sort();
+  categoryArray.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    categorySelect.appendChild(opt);
+  });
+
+  // Add message if no categories found
+  if (categoryArray.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No categories available';
+    opt.disabled = true;
+    categorySelect.appendChild(opt);
+  }
+
+  // Format currency helper
+  function formatCurrency(amount) {
+    return '₹ ' + amount.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function filterExpenses() {
+    const query = searchInput.value.toLowerCase().trim();
+    const branchVal = branchSelect.value;
+    const categoryVal = categorySelect.value;
+    const startDateVal = startDateInput.value;
+    const endDateVal = endDateInput.value;
+
+    let runningSum = 0;
+    let desktopVisibleCount = 0;
+    let mobileVisibleCount = 0;
+
+    // Filter desktop rows
+    expenseRows.forEach(row => {
+      const rowId = row.querySelector('td[data-label="ID"]').textContent.toLowerCase();
+      const rowDate = row.getAttribute('data-date');
+      const rowBranch = row.getAttribute('data-branch');
+      const rowCategory = row.getAttribute('data-category');
+      const rowTitle = row.querySelector('td[data-label="Title"] .title-content').textContent.toLowerCase();
+      const rowRef = row.querySelector('td[data-label="Reference No"]').textContent.toLowerCase();
+      const rowCreatedBy = row.querySelector('td[data-label="Created By"]').textContent.toLowerCase();
+      const rowAmount = parseFloat(row.querySelector('td[data-label="Amount"]').getAttribute('data-amount') || 0);
+
+      const matchesSearch = !query || 
+                            rowId.includes(query) || 
+                            rowTitle.includes(query) || 
+                            rowRef.includes(query) || 
+                            rowCreatedBy.includes(query);
+
+      const matchesBranch = !branchVal || rowBranch === branchVal;
+      const matchesCategory = !categoryVal || rowCategory === categoryVal;
+
+      let matchesDate = true;
+      if (startDateVal && rowDate < startDateVal) {
+        matchesDate = false;
+      }
+      if (endDateVal && rowDate > endDateVal) {
+        matchesDate = false;
+      }
+
+      if (matchesSearch && matchesBranch && matchesCategory && matchesDate) {
+        row.classList.remove('d-none');
+        desktopVisibleCount++;
+        runningSum += rowAmount;
+      } else {
+        row.classList.add('d-none');
+      }
+    });
+
+    // Filter mobile cards
+    expenseCards.forEach(card => {
+      const rowId = card.getAttribute('data-id').toLowerCase();
+      const rowDate = card.getAttribute('data-date');
+      const rowBranch = card.getAttribute('data-branch');
+      const rowCategory = card.getAttribute('data-category');
+      const rowTitle = card.getAttribute('data-title').toLowerCase();
+      const rowRef = card.getAttribute('data-ref').toLowerCase();
+      const rowCreatedBy = card.getAttribute('data-created-by').toLowerCase();
+      const rowAmount = parseFloat(card.getAttribute('data-amount') || 0);
+
+      const matchesSearch = !query || 
+                            rowId.includes(query) || 
+                            rowTitle.includes(query) || 
+                            rowRef.includes(query) || 
+                            rowCreatedBy.includes(query);
+
+      const matchesBranch = !branchVal || rowBranch === branchVal;
+      const matchesCategory = !categoryVal || rowCategory === categoryVal;
+
+      let matchesDate = true;
+      if (startDateVal && rowDate < startDateVal) {
+        matchesDate = false;
+      }
+      if (endDateVal && rowDate > endDateVal) {
+        matchesDate = false;
+      }
+
+      if (matchesSearch && matchesBranch && matchesCategory && matchesDate) {
+        card.classList.remove('d-none');
+        mobileVisibleCount++;
+        // If there are no desktop rows (unlikely), sum mobile amounts
+        if (expenseRows.length === 0) {
+          runningSum += rowAmount;
+        }
+      } else {
+        card.classList.add('d-none');
+      }
+    });
+
+    // Use count from active display
+    const visibleCount = expenseRows.length > 0 ? desktopVisibleCount : mobileVisibleCount;
+
+    // Update sum and counters
+    filteredCountEl.textContent = visibleCount;
+    totalExpenseEl.textContent = formatCurrency(runningSum);
+
+    // Show/hide no results components
+    if (expenseRows.length > 0) {
+      if (desktopVisibleCount === 0) {
+        noResultsRow.classList.remove('d-none');
+      } else {
+        noResultsRow.classList.add('d-none');
+      }
+    }
+
+    if (expenseCards.length > 0) {
+      if (mobileVisibleCount === 0) {
+        mobileNoResultsCard.classList.remove('d-none');
+      } else {
+        mobileNoResultsCard.classList.add('d-none');
+      }
+    }
+  }
+
+  // Event listeners
+  searchInput.addEventListener('input', filterExpenses);
+  branchSelect.addEventListener('change', filterExpenses);
+  categorySelect.addEventListener('change', filterExpenses);
+  startDateInput.addEventListener('change', filterExpenses);
+  endDateInput.addEventListener('change', filterExpenses);
+
+  clearBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    searchInput.value = '';
+    branchSelect.value = '';
+    categorySelect.value = '';
+    startDateInput.value = '';
+    endDateInput.value = '';
+    filterExpenses();
+  });
+});
+</script>
 {% endblock %}
