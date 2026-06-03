@@ -124,6 +124,32 @@
   .summary-card-link:hover {
     color: inherit;
   }
+  .receivable-student-link {
+    color: inherit;
+    text-decoration: none;
+  }
+  .receivable-student-link:hover {
+    color: #0d6efd;
+  }
+  .receivable-avatar,
+  .receivable-avatar-fallback {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid #dee2e6;
+  }
+  .receivable-avatar {
+    object-fit: cover;
+  }
+  .receivable-avatar-fallback {
+    background: #e9ecef;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: #6c757d;
+  }
   .summary-count-badge {
     display: inline-flex;
     align-items: center;
@@ -409,29 +435,42 @@
   "count": stats.count if stats else 0
 } %}
 {% set attendance_hist = receivable_attendance_history.get(item.student_id, {}) %}
-{% set attendance_flags = namespace(has_absent=false, has_leave=false) %}
+{% set attendance_flags = namespace(absent_count=0, leave_count=0) %}
 {% for att_date in receivable_attendance_dates %}
   {% set att_status = attendance_hist.get(att_date) %}
-  {% if att_status == 'absent' %}{% set attendance_flags.has_absent = true %}{% endif %}
-  {% if att_status == 'leave' %}{% set attendance_flags.has_leave = true %}{% endif %}
+  {% if att_status == 'absent' %}{% set attendance_flags.absent_count = attendance_flags.absent_count + 1 %}{% endif %}
+  {% if att_status == 'leave' %}{% set attendance_flags.leave_count = attendance_flags.leave_count + 1 %}{% endif %}
 {% endfor %}
 <div class="card border-0 shadow-sm mb-2 installment-card" style="border-left:4px solid {{ border_color }}!important;">
   <div class="card-body py-2 px-3">
     <!-- Row 1: Photo + Name + badge + balance -->
     <div class="d-flex justify-content-between align-items-start gap-2 mb-1 flex-wrap">
       <div class="d-flex align-items-center gap-2">
+        <a href="{{ url_for('billing.student_profile', student_id=item.student_id) }}"
+           class="receivable-student-link"
+           title="Open {{ item.student_name }} profile">
         {% if item.photo_filename %}
         <img src="{{ url_for('static', filename='images/student_photos/' ~ item.photo_filename) }}"
              alt="{{ item.student_name }}"
-             style="width:52px;height:52px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid {{ border_color }};">
+             class="receivable-avatar"
+             style="border-color: {{ border_color }};"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="receivable-avatar-fallback" style="display:none; border-color: {{ border_color }};">
+          {{ item.student_name[0] | upper }}
+        </div>
         {% else %}
-        <div style="width:52px;height:52px;border-radius:50%;background:#e9ecef;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;font-weight:700;color:#6c757d;border:2px solid #dee2e6;">
+        <div class="receivable-avatar-fallback" style="display:flex;">
           {{ item.student_name[0] | upper }}
         </div>
         {% endif %}
+        </a>
         <div>
-          <span class="fw-semibold" style="font-size:14px;">{{ item.student_name }}</span>
-          <span class="text-muted" style="font-size:12px;"> · {{ item.student_code }}</span>
+          <a href="{{ url_for('billing.student_profile', student_id=item.student_id) }}"
+             class="receivable-student-link"
+             title="Open {{ item.student_name }} profile">
+            <span class="fw-semibold" style="font-size:14px;">{{ item.student_name }}</span>
+            <span class="text-muted" style="font-size:12px;"> · {{ item.student_code }}</span>
+          </a>
           <span class="badge {{ badge_class }} ms-1" style="font-size:10px;">{{ rtype | upper | replace('_',' ') }}</span>
           {% if item.batch_names %}
           <div style="font-size:11.5px;color:#6c757d;margin-top:1px;">🎓 {{ item.batch_names }}</div>
@@ -469,9 +508,15 @@
                 title="{{ att_date }}: {{ att_status | capitalize if att_status else 'No record' }}">{{ att_short }}</span>
         {% endfor %}
       </div>
-      {% if attendance_flags.has_absent or attendance_flags.has_leave %}
+      {% if attendance_flags.absent_count or attendance_flags.leave_count %}
         <span class="receivable-attendance-risk">
-          {% if attendance_flags.has_absent and attendance_flags.has_leave %}Absent/Leave{% elif attendance_flags.has_absent %}Absent{% else %}Leave{% endif %}
+          {% if attendance_flags.absent_count and attendance_flags.leave_count %}
+            {{ attendance_flags.absent_count }} absent, {{ attendance_flags.leave_count }} leave
+          {% elif attendance_flags.absent_count %}
+            {{ attendance_flags.absent_count }} absent
+          {% else %}
+            {{ attendance_flags.leave_count }} leave
+          {% endif %}
         </span>
       {% endif %}
     </div>
