@@ -114,6 +114,34 @@
     align-items: start;
   }
 
+  .dashboard-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .dashboard-chart-header h3 {
+    margin-bottom: 0;
+  }
+
+  .dashboard-chart-range-pill {
+    flex-shrink: 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    padding: 5px 10px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .dashboard-chart-canvas-wrap {
+    min-height: 380px;
+  }
+
   .dashboard-chart-left canvas {
     width: 100% !important;
     height: 380px !important;
@@ -221,8 +249,9 @@
     }
 
     .stat-card p {
-      font-size: clamp(1.15rem, 7vw, 1.55rem);
+      font-size: clamp(1rem, 6.2vw, 1.45rem);
       line-height: 1.15;
+      white-space: nowrap;
     }
 
     .receivable-card h3,
@@ -269,8 +298,36 @@
       gap: 14px;
     }
 
+    .dashboard-chart-header {
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    .dashboard-chart-header h3 {
+      font-size: 1rem;
+      line-height: 1.25;
+      margin-bottom: 6px;
+    }
+
+    .dashboard-chart-range-pill {
+      display: inline-flex;
+      max-width: 100%;
+      white-space: normal;
+      font-size: 11px;
+      line-height: 1.25;
+      padding: 5px 8px;
+    }
+
+    .dashboard-chart-canvas-wrap {
+      min-height: 214px;
+      padding: 8px 4px 2px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
     .dashboard-chart-left canvas {
-      height: 250px !important;
+      height: 204px !important;
     }
 
     #clickInfo {
@@ -298,8 +355,9 @@
     }
 
     .dashboard-total-value {
-      font-size: clamp(1rem, 5.5vw, 1.3rem);
+      font-size: clamp(.95rem, 5vw, 1.2rem);
       line-height: 1.15;
+      white-space: nowrap;
     }
 
     .dashboard-date-range {
@@ -444,8 +502,13 @@
 <div class="card dashboard-chart-card p-4">
   <div class="dashboard-chart-layout">
     <div class="dashboard-chart-left">
-      <h3>Sales, Receipts and Expenses</h3>
-      <canvas id="dashboardChart"></canvas>
+      <div class="dashboard-chart-header">
+        <h3>Sales, Receipts and Expenses</h3>
+        <div class="dashboard-chart-range-pill">{{ start_date }} to {{ end_date }}</div>
+      </div>
+      <div class="dashboard-chart-canvas-wrap">
+        <canvas id="dashboardChart"></canvas>
+      </div>
 
       <div id="clickInfo" class="mt-4 p-3 bg-light rounded" style="display: none;">
         <div class="small text-muted mb-3">
@@ -490,10 +553,6 @@
           ₹ {{ "%.2f"|format(net_position or 0) }}
         </p>
       </div>
-
-      <div class="dashboard-date-range">
-        <small>{{ start_date }} to {{ end_date }}</small>
-      </div>
     </div>
   </div>
 </div>
@@ -509,31 +568,59 @@ const receiptsData = {{ receipts_data|tojson }};
 const expensesData = {{ expenses_data|tojson }};
 const dashboardIsMobile = window.matchMedia('(max-width: 575.98px)').matches;
 
+const activeMonthIndexes = monthLabels
+    .map((label, index) => ({
+        label,
+        index,
+        hasValue: Number(salesData[index] || 0) !== 0 ||
+                  Number(receiptsData[index] || 0) !== 0 ||
+                  Number(expensesData[index] || 0) !== 0
+    }))
+    .filter(item => item.hasValue);
+
+const chartIndexes = (dashboardIsMobile && activeMonthIndexes.length > 0)
+    ? activeMonthIndexes.map(item => item.index)
+    : monthLabels.map((_, index) => index);
+
+const chartLabels = chartIndexes.map(index => monthLabels[index]);
+const chartSalesData = chartIndexes.map(index => salesData[index]);
+const chartReceiptsData = chartIndexes.map(index => receiptsData[index]);
+const chartExpensesData = chartIndexes.map(index => expensesData[index]);
+
 const chartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
-        labels: monthLabels,
+        labels: chartLabels,
         datasets: [
             {
                 label: 'Sales',
-                data: salesData,
+                data: chartSalesData,
                 backgroundColor: 'rgba(54, 162, 235, 0.7)',
                 borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1
+                borderWidth: 1,
+                borderRadius: dashboardIsMobile ? 4 : 0,
+                categoryPercentage: dashboardIsMobile ? 0.62 : 0.8,
+                barPercentage: dashboardIsMobile ? 0.72 : 0.9
             },
             {
                 label: 'Receipts',
-                data: receiptsData,
+                data: chartReceiptsData,
                 backgroundColor: 'rgba(75, 192, 75, 0.7)',
                 borderColor: 'rgba(75, 192, 75, 1)',
-                borderWidth: 1
+                borderWidth: 1,
+                borderRadius: dashboardIsMobile ? 4 : 0,
+                categoryPercentage: dashboardIsMobile ? 0.62 : 0.8,
+                barPercentage: dashboardIsMobile ? 0.72 : 0.9
             },
             {
                 label: 'Expenses',
-                data: expensesData,
+                data: chartExpensesData,
                 backgroundColor: 'rgba(255, 99, 99, 0.7)',
                 borderColor: 'rgba(255, 99, 99, 1)',
-                borderWidth: 1
+                borderWidth: 1,
+                borderRadius: dashboardIsMobile ? 4 : 0,
+                categoryPercentage: dashboardIsMobile ? 0.62 : 0.8,
+                barPercentage: dashboardIsMobile ? 0.72 : 0.9
             }
         ]
     },
@@ -559,6 +646,9 @@ const chartInstance = new Chart(ctx, {
         scales: {
             y: {
                 beginAtZero: true,
+                grid: {
+                    color: dashboardIsMobile ? 'rgba(148, 163, 184, 0.22)' : undefined
+                },
                 ticks: {
                     maxTicksLimit: dashboardIsMobile ? 4 : 8,
                     callback: function(value) {
@@ -567,11 +657,17 @@ const chartInstance = new Chart(ctx, {
                 }
             },
             x: {
+                grid: {
+                    display: !dashboardIsMobile
+                },
                 ticks: {
                     maxRotation: dashboardIsMobile ? 0 : 45,
                     minRotation: 0,
                     autoSkip: true,
-                    maxTicksLimit: dashboardIsMobile ? 4 : 12
+                    maxTicksLimit: dashboardIsMobile ? 4 : 12,
+                    font: {
+                        size: dashboardIsMobile ? 10 : 12
+                    }
                 }
             }
         }
@@ -582,7 +678,7 @@ document.getElementById('dashboardChart').addEventListener('click', function(evt
     try {
         const canvasPosition = Chart.helpers.getRelativePosition(evt, chartInstance);
         const xScale = chartInstance.scales.x;
-        const dataIndex = Math.round((canvasPosition.x - xScale.left) / ((xScale.right - xScale.left) / monthLabels.length));
+        const dataIndex = Math.round((canvasPosition.x - xScale.left) / ((xScale.right - xScale.left) / chartLabels.length));
         const elements = chartInstance.getElementsAtEventForMode(evt, 'index', { intersect: false }, true);
 
         let finalDataIndex = dataIndex;
@@ -591,11 +687,11 @@ document.getElementById('dashboardChart').addEventListener('click', function(evt
             finalDataIndex = elements[0].index;
         }
 
-        if (finalDataIndex >= 0 && finalDataIndex < monthLabels.length) {
-            const month = monthLabels[finalDataIndex];
-            const salesValue = salesData[finalDataIndex];
-            const receiptsValue = receiptsData[finalDataIndex];
-            const expensesValue = expensesData[finalDataIndex];
+        if (finalDataIndex >= 0 && finalDataIndex < chartLabels.length) {
+            const month = chartLabels[finalDataIndex];
+            const salesValue = chartSalesData[finalDataIndex];
+            const receiptsValue = chartReceiptsData[finalDataIndex];
+            const expensesValue = chartExpensesData[finalDataIndex];
 
             document.getElementById('clickMonth').textContent = month;
             document.getElementById('clickSales').innerHTML = `₹ ${salesValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
