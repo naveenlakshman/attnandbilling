@@ -3,6 +3,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
 from datetime import datetime
+from hashlib import sha256
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 import urllib.parse
 import re
 import os
@@ -20,8 +22,116 @@ def _clear_student_session():
     session.pop('student_name', None)
     session.pop('student_code', None)
     session.pop('student_login_at', None)
+    session.pop('student_session_mode', None)
     session.pop('student_force_password_change', None)
     session.pop('demo_mode', None)
+
+
+def _is_mobile_app_request():
+    """Detect the Android APK/WebView student app without affecting lab browsers."""
+    ua = request.headers.get('User-Agent', '').lower()
+    explicit_app = (
+        request.values.get('app') in {'1', 'true', 'yes', 'mobile'}
+        or request.values.get('client') == 'mobile_app'
+    )
+    webview_app = '; wv' in ua or 'studentapp' in ua or 'attnandbillingapp' in ua
+    return explicit_app or webview_app
+
+
+def _student_mobile_cookie_name():
+    return current_app.config.get('STUDENT_MOBILE_REMEMBER_COOKIE', 'student_mobile_auth')
+
+
+def _student_mobile_max_age():
+    days = int(current_app.config.get('STUDENT_MOBILE_SESSION_DAYS', 30))
+    return days * 24 * 60 * 60
+
+
+def _student_mobile_serializer():
+    return URLSafeTimedSerializer(
+        current_app.config['SECRET_KEY'],
+        salt='student-mobile-auth-v1',
+    )
+
+
+def _password_fingerprint(password_hash):
+    return sha256((password_hash or '').encode('utf-8')).hexdigest()
+
+
+def _mark_student_logged_in(student, mode='lab'):
+    session.permanent = mode == 'mobile_app'
+    session['student_id'] = student['id']
+    session['student_name'] = student['full_name']
+    session['student_code'] = student['student_code']
+    session['student_login_at'] = int(datetime.utcnow().timestamp())
+    session['student_session_mode'] = mode
+    session['student_force_password_change'] = (
+        (not _is_demo()) and _is_default_student_password(student)
+    )
+
+
+def _set_student_mobile_cookie(response, student):
+    token = _student_mobile_serializer().dumps({
+        'student_id': student['id'],
+        'student_code': student['student_code'],
+        'password_fingerprint': _password_fingerprint(student['password_hash']),
+    })
+    response.set_cookie(
+        _student_mobile_cookie_name(),
+        token,
+        max_age=_student_mobile_max_age(),
+        httponly=True,
+        secure=current_app.config.get('SESSION_COOKIE_SECURE', False),
+        samesite=current_app.config.get('SESSION_COOKIE_SAMESITE', 'Lax'),
+    )
+    return response
+
+
+def _clear_student_mobile_cookie(response):
+    response.delete_cookie(
+        _student_mobile_cookie_name(),
+        secure=current_app.config.get('SESSION_COOKIE_SECURE', False),
+        samesite=current_app.config.get('SESSION_COOKIE_SAMESITE', 'Lax'),
+    )
+    return response
+
+
+def _restore_mobile_student_session():
+    if not _is_mobile_app_request():
+        return False
+
+    token = request.cookies.get(_student_mobile_cookie_name())
+    if not token:
+        return False
+
+    try:
+        payload = _student_mobile_serializer().loads(
+            token,
+            max_age=_student_mobile_max_age(),
+        )
+    except (BadSignature, SignatureExpired):
+        return False
+
+    conn = get_conn()
+    try:
+        student = conn.execute(
+            """
+            SELECT * FROM students
+            WHERE id = ? AND student_code = ? AND status != 'dropped' AND portal_enabled = 1
+            """,
+            (payload.get('student_id'), payload.get('student_code')),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if (
+        not student
+        or payload.get('password_fingerprint') != _password_fingerprint(student['password_hash'])
+    ):
+        return False
+
+    _mark_student_logged_in(student, mode='mobile_app')
+    return True
 
 
 def _is_default_student_password(student):
@@ -87,27 +197,28 @@ def _validate_student_password_policy(new_password, student_code):
 def student_login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if 'student_id' not in session:
+        if 'student_id' not in session and not _restore_mobile_student_session():
             flash('Please log in to access the student portal.', 'warning')
             return redirect(url_for('students.login'))
 
-        timeout_minutes = int(current_app.config.get('STUDENT_SESSION_TIMEOUT_MINUTES', 120))
-        now_ts = int(datetime.utcnow().timestamp())
-        login_ts = session.get('student_login_at')
+        if session.get('student_session_mode') != 'mobile_app':
+            timeout_minutes = int(current_app.config.get('STUDENT_SESSION_TIMEOUT_MINUTES', 120))
+            now_ts = int(datetime.utcnow().timestamp())
+            login_ts = session.get('student_login_at')
 
-        if login_ts is None:
-            session['student_login_at'] = now_ts
-        else:
-            try:
-                login_ts = int(login_ts)
-            except (TypeError, ValueError):
-                login_ts = now_ts
+            if login_ts is None:
                 session['student_login_at'] = now_ts
+            else:
+                try:
+                    login_ts = int(login_ts)
+                except (TypeError, ValueError):
+                    login_ts = now_ts
+                    session['student_login_at'] = now_ts
 
-            if now_ts - login_ts > timeout_minutes * 60:
-                _clear_student_session()
-                flash('Your session expired. Please log in again.', 'warning')
-                return redirect(url_for('students.login'))
+                if now_ts - login_ts > timeout_minutes * 60:
+                    _clear_student_session()
+                    flash('Your session expired. Please log in again.', 'warning')
+                    return redirect(url_for('students.login'))
 
         if (
             not _is_demo()
@@ -396,6 +507,8 @@ def login():
     if 'student_id' in session:
         return redirect(url_for('students.dashboard'))
 
+    mobile_app_login = _is_mobile_app_request()
+
     conn = get_conn()
     try:
         company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
@@ -416,32 +529,39 @@ def login():
             conn.close()
 
         if student and student['password_hash'] and check_password_hash(student['password_hash'], password):
-            session['student_id'] = student['id']
-            session['student_name'] = student['full_name']
-            session['student_code'] = student['student_code']
-            session['student_login_at'] = int(datetime.utcnow().timestamp())
-            session['student_force_password_change'] = (
-                (not _is_demo()) and _is_default_student_password(student)
-            )
+            mode = 'mobile_app' if mobile_app_login else 'lab'
+            _mark_student_logged_in(student, mode=mode)
 
             if session['student_force_password_change']:
                 flash('Your password is still the default Student ID. Please change it now.', 'warning')
-                return redirect(url_for('students.change_password'))
+                response = redirect(url_for('students.change_password'))
+                if mobile_app_login:
+                    response = _clear_student_mobile_cookie(response)
+                return response
 
-            return redirect(url_for('students.dashboard'))
+            response = redirect(url_for('students.dashboard'))
+            if mobile_app_login:
+                response = _set_student_mobile_cookie(response, student)
+            return response
 
         flash('Invalid Student ID or password.', 'danger')
 
-    return render_template('students/login.html', company=company)
+    return render_template(
+        'students/login.html',
+        company=company,
+        mobile_app_login=mobile_app_login,
+    )
 
 
 @students_bp.route('/logout')
 def logout():
     was_demo = session.get('demo_mode')
     _clear_student_session()
+    response = redirect(url_for('lms_admin.dashboard')) if was_demo else redirect(url_for('students.login'))
+    response = _clear_student_mobile_cookie(response)
     if was_demo:
-        return redirect(url_for('lms_admin.dashboard'))
-    return redirect(url_for('students.login'))
+        return response
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -1438,14 +1558,22 @@ def change_password():
                 flash(policy_error, 'danger')
                 return redirect(url_for('students.change_password'))
 
+            new_password_hash = generate_password_hash(new_password)
             conn.execute(
                 "UPDATE students SET password_hash = ? WHERE id = ?",
-                (generate_password_hash(new_password), student_id)
+                (new_password_hash, student_id)
             )
             conn.commit()
             session['student_force_password_change'] = False
             flash('Password changed successfully.', 'success')
-            return redirect(url_for('students.dashboard'))
+            response = redirect(url_for('students.dashboard'))
+            if session.get('student_session_mode') == 'mobile_app':
+                response = _set_student_mobile_cookie(response, {
+                    'id': student_id,
+                    'student_code': student['student_code'],
+                    'password_hash': new_password_hash,
+                })
+            return response
     finally:
         conn.close()
 

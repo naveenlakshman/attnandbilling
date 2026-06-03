@@ -61,6 +61,11 @@ class Config:
 
     # Student Portal session timeout (minutes)
     STUDENT_SESSION_TIMEOUT_MINUTES = int(os.environ.get("STUDENT_SESSION_TIMEOUT_MINUTES", "120"))
+    STUDENT_MOBILE_SESSION_DAYS = int(os.environ.get("STUDENT_MOBILE_SESSION_DAYS", "30"))
+    STUDENT_MOBILE_REMEMBER_COOKIE = os.environ.get(
+        "STUDENT_MOBILE_REMEMBER_COOKIE",
+        "student_mobile_auth",
+    )
 
     # Google AI (Gemini)
     GOOGLE_AI_API_KEY = os.environ.get("GOOGLE_AI_API_KEY")
