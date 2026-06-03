@@ -1388,6 +1388,427 @@
         }
       }
 
+      @media (max-width: 767.98px) {
+        .student-profile-page {
+          gap: 12px;
+          padding-bottom: 96px;
+          --profile-card-shadow: 0 3px 12px rgba(18, 38, 63, 0.08);
+        }
+
+        .profile-page-header {
+          display: block;
+        }
+
+        .profile-page-title h1 {
+          font-size: 1.45rem;
+          line-height: 1.15;
+          letter-spacing: 0;
+        }
+
+        .profile-page-title p {
+          display: none;
+        }
+
+        .profile-action-stack {
+          gap: 8px;
+        }
+
+        .profile-action-stack > div:first-child .btn {
+          width: 100%;
+          min-height: 38px;
+          border-radius: 10px;
+          padding: 8px 10px;
+          font-size: 0.86rem;
+          font-weight: 700;
+          justify-content: center;
+        }
+
+        .profile-action-bar {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .profile-action-bar .btn,
+        .profile-action-bar form button,
+        .profile-more-actions > summary {
+          min-height: 40px;
+          border-radius: 10px;
+          padding: 8px 10px;
+          font-size: 0.82rem;
+          box-shadow: none;
+          white-space: nowrap;
+        }
+
+        .profile-more-actions {
+          grid-column: 1 / -1;
+        }
+
+        .profile-more-actions-menu {
+          border-radius: 10px;
+          padding: 8px;
+          gap: 7px;
+          box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+        }
+
+        .profile-hero {
+          padding: 14px;
+          border-radius: 12px;
+          background: #ffffff;
+          color: var(--profile-text);
+          border: 1px solid var(--profile-border);
+          box-shadow: var(--profile-card-shadow);
+        }
+
+        .profile-hero::after {
+          display: none;
+        }
+
+        .profile-hero-main {
+          display: grid;
+          grid-template-columns: 84px minmax(0, 1fr);
+          gap: 12px;
+          align-items: start;
+        }
+
+        .profile-avatar-shell {
+          width: 88px;
+        }
+
+        .profile-avatar {
+          width: 76px;
+          height: 76px;
+          border-radius: 18px;
+          border: 2px solid #dbe7ff;
+          background: #eef4ff;
+          box-shadow: none;
+        }
+
+        .profile-avatar-fallback {
+          font-size: 1.35rem;
+          color: #2563eb;
+          background: #eef4ff;
+        }
+
+        .profile-photo-trigger {
+          position: static;
+          transform: none;
+          width: 88px;
+          margin-top: 6px;
+          border: 1px solid #dbe7ff;
+          border-radius: 999px;
+          padding: 4px 5px;
+          font-size: 0.58rem;
+          line-height: 1.1;
+          box-shadow: none;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .profile-hero-content {
+          display: contents;
+        }
+
+        .profile-hero-top {
+          grid-column: 2;
+          display: grid;
+          gap: 8px;
+          min-width: 0;
+        }
+
+        .profile-identity {
+          min-width: 0;
+        }
+
+        .profile-identity h2 {
+          font-size: 1.24rem;
+          line-height: 1.18;
+          letter-spacing: 0;
+          color: var(--profile-text);
+          overflow-wrap: anywhere;
+        }
+
+        .profile-reg-number {
+          margin-top: 4px;
+          font-size: 0.78rem;
+          color: var(--profile-muted);
+          opacity: 1;
+        }
+
+        .profile-badge-row {
+          gap: 6px;
+          margin-top: 8px;
+        }
+
+        .status-pill,
+        .source-lead-pill,
+        .course-pill,
+        .profile-batch-pill {
+          padding: 5px 8px;
+          font-size: 0.68rem;
+          line-height: 1.15;
+        }
+
+        .profile-hero .status-pill.active,
+        .profile-hero .status-pill.completed,
+        .profile-hero .status-pill.pending,
+        .profile-hero .status-pill.partially-paid,
+        .profile-hero .status-pill.partially_paid,
+        .profile-hero .status-pill.inactive,
+        .profile-hero .status-pill.dropped {
+          color: #ffffff;
+        }
+
+        .source-lead-pill {
+          max-width: 100%;
+          color: #3451d1;
+          background: #eef4ff;
+          border-color: #dbe7ff;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .profile-contact-actions {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 7px;
+        }
+
+        .profile-contact-btn {
+          min-height: 34px;
+          border-radius: 9px;
+          padding: 7px 8px;
+          font-size: 0.75rem;
+          box-shadow: none;
+          white-space: nowrap;
+        }
+
+        .profile-priority-grid,
+        .profile-meta-grid {
+          grid-column: 1 / -1;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .profile-priority-card,
+        .profile-meta-item {
+          border-radius: 10px;
+          padding: 9px 10px;
+          background: #f8fafc;
+          border: 1px solid #e7ecf5;
+          color: var(--profile-text);
+        }
+
+        .profile-priority-card.balance {
+          background: #fff7ed;
+          border-color: #fed7aa;
+        }
+
+        .profile-priority-card.attendance {
+          background: #eff6ff;
+          border-color: #bfdbfe;
+        }
+
+        .profile-priority-label,
+        .profile-meta-label {
+          margin-bottom: 4px;
+          color: var(--profile-muted);
+          opacity: 1;
+          font-size: 0.62rem;
+          letter-spacing: 0.04em;
+        }
+
+        .profile-priority-value,
+        .profile-meta-value {
+          color: var(--profile-text);
+          font-size: 0.8rem;
+          line-height: 1.2;
+        }
+
+        .profile-meta-value .source-lead-pill {
+          display: inline-flex;
+          max-width: 100%;
+        }
+
+        .profile-summary-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .profile-summary-card,
+        .profile-card,
+        .profile-section,
+        .profile-course-panel,
+        .mobile-data-card {
+          border-radius: 12px;
+          padding: 14px;
+          box-shadow: var(--profile-card-shadow);
+        }
+
+        .profile-summary-card {
+          min-height: 104px;
+          gap: 8px;
+        }
+
+        .profile-summary-top {
+          align-items: flex-start;
+          gap: 8px;
+        }
+
+        .profile-summary-label {
+          font-size: 0.72rem;
+          line-height: 1.25;
+        }
+
+        .profile-summary-value {
+          font-size: 1.06rem;
+          line-height: 1.15;
+          overflow-wrap: anywhere;
+        }
+
+        .profile-summary-icon {
+          width: 30px;
+          height: 30px;
+          font-size: 0.9rem;
+          flex: 0 0 auto;
+        }
+
+        .profile-card-subtitle,
+        .profile-section-subtitle {
+          font-size: 0.78rem;
+          line-height: 1.35;
+        }
+
+        .profile-section {
+          gap: 12px;
+        }
+
+        .profile-section-header {
+          display: grid;
+          gap: 8px;
+        }
+
+        .profile-section-title,
+        .profile-card h3 {
+          font-size: 0.98rem;
+          line-height: 1.25;
+        }
+
+        .profile-section-badge {
+          justify-self: start;
+          padding: 5px 9px;
+          font-size: 0.72rem;
+        }
+
+        .profile-attendance-summary-value {
+          font-size: 1.35rem;
+        }
+
+        .profile-attendance-summary-meta {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 7px;
+        }
+
+        .profile-attendance-stat {
+          border-radius: 9px;
+          padding: 7px 8px;
+          text-align: center;
+          font-size: 0.72rem;
+        }
+
+        .profile-quickbar {
+          display: none !important;
+        }
+
+        .profile-info-grid,
+        .sig-status-grid,
+        .mobile-data-grid {
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+
+        .profile-section > .profile-info-grid[style] {
+          grid-template-columns: 1fr !important;
+        }
+
+        .profile-kv-list {
+          gap: 10px;
+          margin-top: 12px;
+        }
+
+        .profile-kv-row {
+          display: grid;
+          grid-template-columns: minmax(95px, 0.44fr) minmax(0, 1fr);
+          gap: 10px;
+          align-items: start;
+          padding-bottom: 9px;
+        }
+
+        .profile-kv-label {
+          min-width: 0;
+          font-size: 0.74rem;
+        }
+
+        .profile-kv-value {
+          text-align: left;
+          font-size: 0.8rem;
+          line-height: 1.3;
+        }
+
+        .profile-course-header {
+          display: grid;
+          gap: 8px;
+        }
+
+        .profile-course-pills {
+          gap: 6px;
+        }
+
+        .profile-card-actions {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .mobile-data-card-header {
+          display: flex;
+          flex-direction: row;
+          align-items: flex-start;
+        }
+
+        .mobile-data-card-title {
+          font-size: 0.92rem;
+          line-height: 1.25;
+        }
+
+        .mobile-data-card-subtitle,
+        .mobile-data-label,
+        .profile-activity-meta {
+          font-size: 0.74rem;
+        }
+
+        .mobile-data-value {
+          font-size: 0.84rem;
+        }
+
+        .profile-activity-item {
+          border-radius: 12px;
+          padding: 12px;
+        }
+
+        .profile-activity-main {
+          display: grid;
+          gap: 8px;
+        }
+
+        .profile-activity-badge {
+          justify-self: start;
+          padding: 5px 8px;
+          font-size: 0.65rem;
+          letter-spacing: 0.04em;
+        }
+      }
+
       @media print {
         .profile-action-stack,
         .profile-mobile-stack,
