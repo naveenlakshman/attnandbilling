@@ -5239,6 +5239,55 @@ def receivables():
         row["total_due"] for row in monthly_expected_receivables
     )
 
+    visible_student_ids = sorted({
+        row["student_id"]
+        for row in list(past_dues) + list(todays_dues) + list(upcoming_dues)
+        if row["student_id"] is not None
+    })
+    try:
+        attendance_base_date = date.fromisoformat(today)
+    except Exception:
+        attendance_base_date = datetime.now().date()
+    receivable_attendance_dates = [
+        (attendance_base_date - timedelta(days=i)).isoformat()
+        for i in range(6, -1, -1)
+    ]
+    receivable_attendance_history = {}
+
+    if visible_student_ids:
+        date_placeholders = ",".join(["?"] * len(receivable_attendance_dates))
+        student_placeholders = ",".join(["?"] * len(visible_student_ids))
+        cur.execute(f"""
+            SELECT student_id, attendance_date, status
+            FROM attendance_records
+            WHERE attendance_date IN ({date_placeholders})
+              AND student_id IN ({student_placeholders})
+        """, receivable_attendance_dates + visible_student_ids)
+        for row in cur.fetchall():
+            sid = row["student_id"]
+            receivable_attendance_history.setdefault(sid, {})[row["attendance_date"]] = row["status"]
+
+        cur.execute(f"""
+            SELECT student_id, from_date, to_date
+            FROM leave_requests
+            WHERE status = 'approved'
+              AND student_id IN ({student_placeholders})
+              AND date(from_date) <= date(?)
+              AND date(to_date) >= date(?)
+        """, visible_student_ids + [receivable_attendance_dates[-1], receivable_attendance_dates[0]])
+        for row in cur.fetchall():
+            sid = row["student_id"]
+            student_history = receivable_attendance_history.setdefault(sid, {})
+            try:
+                leave_start = date.fromisoformat(str(row["from_date"])[:10])
+                leave_end = date.fromisoformat(str(row["to_date"])[:10])
+            except Exception:
+                continue
+            for att_date in receivable_attendance_dates:
+                current_date = date.fromisoformat(att_date)
+                if leave_start <= current_date <= leave_end and att_date not in student_history:
+                    student_history[att_date] = "leave"
+
     # Reminder stats per installment
     all_ids = [r['id'] for r in list(past_dues) + list(todays_dues) + list(upcoming_dues)]
     reminder_stats = {}
@@ -5268,6 +5317,8 @@ def receivables():
         branches=branches,
         branch_id=branch_id,
         reminder_stats=reminder_stats,
+        receivable_attendance_dates=receivable_attendance_dates,
+        receivable_attendance_history=receivable_attendance_history,
         available_trainers=available_trainers,
         trainer_id=trainer_id,
         user_role=user_role

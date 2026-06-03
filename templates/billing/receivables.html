@@ -31,6 +31,46 @@
   .reminder-info-text {
     font-size: 11.5px;
   }
+  .receivable-attendance-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 4px;
+    flex-wrap: wrap;
+  }
+  .receivable-attendance-title {
+    color: #64748b;
+    font-size: 11.5px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .receivable-attendance-cells {
+    display: grid;
+    grid-template-columns: repeat(7, 14px);
+    gap: 3px;
+  }
+  .receivable-attendance-cell {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    font-weight: 800;
+    line-height: 1;
+    color: #fff;
+  }
+  .att-present { background: #28a745; }
+  .att-absent { background: #dc3545; }
+  .att-late { background: #ffc107; color: #593c00; }
+  .att-leave { background: #0dcaf0; color: #083344; }
+  .att-none { background: #e9ecef; border: 1px solid #dee2e6; color: #94a3b8; }
+  .receivable-attendance-risk {
+    color: #dc3545;
+    font-size: 11px;
+    font-weight: 700;
+  }
   .summary-card-amount {
     font-size: 1.3rem;
     font-weight: 700;
@@ -48,48 +88,240 @@
     color: #aaa;
     margin-top: 2px;
   }
+  .receivables-page-title {
+    margin: 0;
+    font-weight: 800;
+    line-height: 1.15;
+  }
+  .receivables-page-subtitle {
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .receivables-filter-form {
+    display: flex;
+    align-items: end;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .receivables-filter-field label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+  }
+  .receivables-filter-field .form-select {
+    min-width: 180px;
+  }
+  .summary-card-link {
+    display: block;
+    height: 100%;
+    color: inherit;
+    text-decoration: none;
+  }
+  .summary-card-link:hover {
+    color: inherit;
+  }
+  .summary-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .amount-short {
+    display: none;
+  }
+  .expected-card-header {
+    align-items: flex-start;
+  }
+  .expected-range {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .expected-receivables-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .expected-receivable-card {
+    background: #f8fbff;
+    border-left: 4px solid #0d6efd !important;
+  }
+  .receivables-list-section {
+    scroll-margin-top: 72px;
+  }
   @media (max-width: 576px) {
+    .receivables-page-title {
+      font-size: 1.45rem;
+    }
+    .receivables-page-subtitle {
+      font-size: 12px;
+    }
+    .receivables-filter-card .card-body {
+      padding: 10px 12px !important;
+    }
+    .receivables-filter-form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 9px;
+    }
+    .receivables-filter-field .form-select {
+      min-width: 0;
+      width: 100%;
+      font-size: 13px;
+    }
+    .receivables-filter-clear {
+      grid-column: 1 / -1;
+    }
+    .summary-card-link .card-body {
+      padding: 10px 9px !important;
+    }
+    .summary-card-label {
+      font-size: 10px;
+      letter-spacing: .25px;
+      min-height: 26px;
+    }
+    .summary-card-amount {
+      font-size: 1.15rem;
+      white-space: nowrap;
+    }
+    .summary-card-count {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      font-size: 10px;
+    }
+    .summary-count-badge {
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      font-size: 10px;
+    }
+    .amount-full {
+      display: none;
+    }
+    .amount-short {
+      display: inline;
+    }
+    .expected-card-header {
+      gap: 6px !important;
+      margin-bottom: 9px !important;
+    }
+    .expected-card-header .section-title {
+      font-size: .95rem;
+    }
+    .expected-total {
+      font-size: 13px;
+      white-space: nowrap;
+    }
     .btn-action-group .btn {
       font-size: 11.5px;
       padding: 4px 8px;
     }
+    .receivable-attendance-strip {
+      gap: 6px;
+      margin-top: 7px;
+    }
+    .receivable-attendance-cells {
+      grid-template-columns: repeat(7, 13px);
+      gap: 2px;
+    }
+    .receivable-attendance-cell {
+      width: 13px;
+      height: 13px;
+      border-radius: 3px;
+      font-size: 7px;
+    }
     .balance-amount { font-size: 1rem; }
+    .expected-receivables-grid {
+      grid-template-columns: repeat(3, minmax(96px, 1fr));
+      gap: 6px;
+    }
+    .expected-receivable-card .card-body {
+      padding: 8px 8px !important;
+    }
+    .expected-receivables-grid .summary-card-label {
+      font-size: 10px;
+      letter-spacing: .25px;
+      min-height: 0;
+    }
+    .expected-receivables-grid .summary-card-amount {
+      font-size: 1rem;
+      white-space: nowrap;
+    }
+    .expected-receivables-grid .summary-card-count {
+      font-size: 10px;
+    }
+    .expected-year {
+      display: none;
+    }
+    .receivables-list-section {
+      margin-top: 18px !important;
+    }
   }
 </style>
 
+{% macro short_money(amount) -%}
+  {%- set value = amount or 0 -%}
+  {%- if value >= 1000 -%}
+    ₹{{ "%.1f"|format(value / 1000) }}k
+  {%- else -%}
+    ₹{{ "{:,.0f}".format(value) }}
+  {%- endif -%}
+{%- endmacro %}
+
 <!-- Header -->
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-  <h4 class="mb-0 fw-bold">Receivables — Student Installments</h4>
+  <div>
+    <h4 class="receivables-page-title">Receivables</h4>
+    <div class="receivables-page-subtitle">Student installments</div>
+  </div>
 </div>
 
 <!-- Filters -->
-<div class="card border-0 shadow-sm mb-3">
+<div class="card border-0 shadow-sm mb-3 receivables-filter-card">
   <div class="card-body py-2 px-3">
-    <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
-      <label class="fw-semibold mb-0 text-muted small">Branch:</label>
-      <select name="branch_id" class="form-select form-select-sm" style="max-width:220px;" onchange="this.form.submit()">
-        <option value="">All Branches</option>
-        {% for branch in branches %}
-        <option value="{{ branch.id }}" {% if branch_id|string == branch.id|string %}selected{% endif %}>
-          {{ branch.branch_name }}
-        </option>
-        {% endfor %}
-      </select>
+    <form method="get" class="receivables-filter-form">
+      <div class="receivables-filter-field">
+        <label>Branch</label>
+        <select name="branch_id" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">All Branches</option>
+          {% for branch in branches %}
+          <option value="{{ branch.id }}" {% if branch_id|string == branch.id|string %}selected{% endif %}>
+            {{ branch.branch_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
       {% if user_role == 'admin' and available_trainers %}
-      <label class="fw-semibold mb-0 text-muted small ms-2">Trainer:</label>
-      <select name="trainer_id" class="form-select form-select-sm" style="max-width:200px;" onchange="this.form.submit()">
-        <option value="">All Trainers</option>
-        {% for trainer in available_trainers %}
-        <option value="{{ trainer.id }}" {% if trainer_id|string == trainer.id|string %}selected{% endif %}>
-          {{ trainer.full_name }}
-        </option>
-        {% endfor %}
-      </select>
+      <div class="receivables-filter-field">
+        <label>Trainer</label>
+        <select name="trainer_id" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">All Trainers</option>
+          {% for trainer in available_trainers %}
+          <option value="{{ trainer.id }}" {% if trainer_id|string == trainer.id|string %}selected{% endif %}>
+            {{ trainer.full_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
       {% else %}
       <input type="hidden" name="trainer_id" value="{{ trainer_id }}">
       {% endif %}
       {% if branch_id or trainer_id %}
-      <a href="{{ url_for('billing.receivables') }}" class="btn btn-sm btn-outline-secondary">✕ Clear</a>
+      <a href="{{ url_for('billing.receivables') }}" class="btn btn-sm btn-outline-secondary receivables-filter-clear">Clear Filters</a>
       {% endif %}
     </form>
   </div>
@@ -98,50 +330,61 @@
 <!-- Summary Cards -->
 <div class="row g-2 mb-3">
   <div class="col-4">
-    <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #dc3545!important;">
-      <div class="card-body py-2 px-3">
-        <div class="summary-card-label">Past Due</div>
-        <div class="summary-card-amount text-danger">₹{{ "{:,.0f}".format(total_past_due or 0) }}</div>
-        <div class="summary-card-count">{{ past_dues|length }} item(s)</div>
+    <a href="#past-due-section" class="summary-card-link">
+      <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #dc3545!important;">
+        <div class="card-body py-2 px-3">
+          <div class="summary-card-label">Past Due</div>
+          <div class="summary-card-amount text-danger"><span class="amount-full">₹{{ "{:,.0f}".format(total_past_due or 0) }}</span><span class="amount-short">{{ short_money(total_past_due) }}</span></div>
+          <div class="summary-card-count"><span>{{ past_dues|length }} item(s)</span><span class="summary-count-badge">{{ past_dues|length }}</span></div>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
   <div class="col-4">
-    <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #fd7e14!important;">
-      <div class="card-body py-2 px-3">
-        <div class="summary-card-label">Due Today</div>
-        <div class="summary-card-amount text-warning">₹{{ "{:,.0f}".format(total_today_due or 0) }}</div>
-        <div class="summary-card-count">{{ todays_dues|length }} item(s)</div>
+    <a href="#due-today-section" class="summary-card-link">
+      <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #fd7e14!important;">
+        <div class="card-body py-2 px-3">
+          <div class="summary-card-label">Due Today</div>
+          <div class="summary-card-amount text-warning"><span class="amount-full">₹{{ "{:,.0f}".format(total_today_due or 0) }}</span><span class="amount-short">{{ short_money(total_today_due) }}</span></div>
+          <div class="summary-card-count"><span>{{ todays_dues|length }} item(s)</span><span class="summary-count-badge">{{ todays_dues|length }}</span></div>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
   <div class="col-4">
-    <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #0d6efd!important;">
-      <div class="card-body py-2 px-3">
-        <div class="summary-card-label">Upcoming</div>
-        <div class="summary-card-amount text-primary">₹{{ "{:,.0f}".format(total_upcoming_due or 0) }}</div>
-        <div class="summary-card-count">{{ upcoming_dues|length }} item(s)</div>
+    <a href="#upcoming-section" class="summary-card-link">
+      <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #0d6efd!important;">
+        <div class="card-body py-2 px-3">
+          <div class="summary-card-label">Upcoming</div>
+          <div class="summary-card-amount text-primary"><span class="amount-full">₹{{ "{:,.0f}".format(total_upcoming_due or 0) }}</span><span class="amount-short">{{ short_money(total_upcoming_due) }}</span></div>
+          <div class="summary-card-count"><span>{{ upcoming_dues|length }} item(s)</span><span class="summary-count-badge">{{ upcoming_dues|length }}</span></div>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
 </div>
 
-<!-- Expected Receivables: Current + Next 2 Months -->
+<!-- Expected Receivables -->
 <div class="card border-0 shadow-sm mb-3">
   <div class="card-body py-2 px-3">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-      <div class="section-title text-primary mb-0">Expected Receivables (This + Next 2 Months)</div>
-      <div class="fw-semibold text-primary">Total: ₹{{ "{:,.0f}".format(total_three_month_expected or 0) }}</div>
+    <div class="d-flex justify-content-between flex-wrap gap-2 mb-2 expected-card-header">
+      <div>
+        <div class="section-title text-primary mb-0">Expected Receivables</div>
+        {% if monthly_expected_receivables %}
+        <div class="expected-range">
+          {{ monthly_expected_receivables[0].month_label }}-{{ monthly_expected_receivables[-1].month_label }} {{ monthly_expected_receivables[-1].month_year }}
+        </div>
+        {% endif %}
+      </div>
+      <div class="fw-semibold text-primary expected-total">Total: <span class="amount-full">₹{{ "{:,.0f}".format(total_three_month_expected or 0) }}</span><span class="amount-short">{{ short_money(total_three_month_expected) }}</span></div>
     </div>
-    <div class="row g-2">
+    <div class="expected-receivables-grid">
       {% for month_row in monthly_expected_receivables %}
-      <div class="col-12 col-md-4">
-        <div class="card border-0 h-100" style="background:#f8fbff;border-left:4px solid #0d6efd!important;">
-          <div class="card-body py-2 px-3">
-            <div class="summary-card-label">{{ month_row.month_label }} {{ month_row.month_year }}</div>
-            <div class="summary-card-amount text-primary">₹{{ "{:,.0f}".format(month_row.total_due or 0) }}</div>
-            <div class="summary-card-count">{{ month_row.item_count }} installment(s)</div>
-          </div>
+      <div class="card border-0 h-100 expected-receivable-card">
+        <div class="card-body py-2 px-3">
+          <div class="summary-card-label">{{ month_row.month_label }}<span class="expected-year"> {{ month_row.month_year }}</span></div>
+          <div class="summary-card-amount text-primary"><span class="amount-full">₹{{ "{:,.0f}".format(month_row.total_due or 0) }}</span><span class="amount-short">{{ short_money(month_row.total_due) }}</span></div>
+          <div class="summary-card-count">{{ month_row.item_count }} installment(s)</div>
         </div>
       </div>
       {% endfor %}
@@ -165,6 +408,13 @@
   "lastSent": stats.last_sent_at if stats else "",
   "count": stats.count if stats else 0
 } %}
+{% set attendance_hist = receivable_attendance_history.get(item.student_id, {}) %}
+{% set attendance_flags = namespace(has_absent=false, has_leave=false) %}
+{% for att_date in receivable_attendance_dates %}
+  {% set att_status = attendance_hist.get(att_date) %}
+  {% if att_status == 'absent' %}{% set attendance_flags.has_absent = true %}{% endif %}
+  {% if att_status == 'leave' %}{% set attendance_flags.has_leave = true %}{% endif %}
+{% endfor %}
 <div class="card border-0 shadow-sm mb-2 installment-card" style="border-left:4px solid {{ border_color }}!important;">
   <div class="card-body py-2 px-3">
     <!-- Row 1: Photo + Name + badge + balance -->
@@ -199,6 +449,32 @@
       <span class="info-pill">📄 <a href="{{ url_for('billing.invoice_view', invoice_id=item.invoice_id) }}" class="text-decoration-none">{{ item.invoice_no }}</a></span>
       <span class="info-pill">📅 {{ item.due_date }}</span>
     </div>
+    <div class="receivable-attendance-strip" aria-label="Last 7 days attendance">
+      <span class="receivable-attendance-title">Last 7 days</span>
+      <div class="receivable-attendance-cells">
+        {% for att_date in receivable_attendance_dates %}
+          {% set att_status = attendance_hist.get(att_date) %}
+          {% if att_status == 'present' %}
+            {% set att_short = 'P' %}
+          {% elif att_status == 'absent' %}
+            {% set att_short = 'A' %}
+          {% elif att_status == 'late' %}
+            {% set att_short = 'L' %}
+          {% elif att_status == 'leave' %}
+            {% set att_short = 'Lv' %}
+          {% else %}
+            {% set att_short = '' %}
+          {% endif %}
+          <span class="receivable-attendance-cell att-{{ att_status or 'none' }}"
+                title="{{ att_date }}: {{ att_status | capitalize if att_status else 'No record' }}">{{ att_short }}</span>
+        {% endfor %}
+      </div>
+      {% if attendance_flags.has_absent or attendance_flags.has_leave %}
+        <span class="receivable-attendance-risk">
+          {% if attendance_flags.has_absent and attendance_flags.has_leave %}Absent/Leave{% elif attendance_flags.has_absent %}Absent{% else %}Leave{% endif %}
+        </span>
+      {% endif %}
+    </div>
     {% if item.remarks %}
     <div class="text-muted mb-1" style="font-size:12px;">💬 {{ item.remarks }}</div>
     {% endif %}
@@ -228,7 +504,7 @@
 {% endmacro %}
 
 <!-- ── PAST DUE ── -->
-<div class="mb-4">
+<div class="mb-4 receivables-list-section" id="past-due-section">
   <div class="d-flex align-items-center gap-2 mb-2">
     <span class="section-title text-danger">⚠ Past Due (Overdue)</span>
     <span class="badge bg-danger rounded-pill">{{ past_dues|length }}</span>
@@ -248,7 +524,7 @@
 </div>
 
 <!-- ── DUE TODAY ── -->
-<div class="mb-4">
+<div class="mb-4 receivables-list-section" id="due-today-section">
   <div class="d-flex align-items-center gap-2 mb-2">
     <span class="section-title text-warning">⏳ Due Today</span>
     <span class="badge bg-warning text-dark rounded-pill">{{ todays_dues|length }}</span>
@@ -268,7 +544,7 @@
 </div>
 
 <!-- ── UPCOMING ── -->
-<div class="mb-4">
+<div class="mb-4 receivables-list-section" id="upcoming-section">
   <div class="d-flex align-items-center gap-2 mb-2">
     <span class="section-title text-primary">📅 Upcoming (Next 50)</span>
     <span class="badge bg-primary rounded-pill">{{ upcoming_dues|length }}</span>
