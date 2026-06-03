@@ -254,6 +254,22 @@ def init_db():
             date_of_birth TEXT,
             parent_name TEXT,
             parent_contact TEXT,
+            father_name TEXT,
+            mother_name TEXT,
+            tenth_institution TEXT,
+            tenth_board TEXT,
+            tenth_year TEXT,
+            tenth_percentage TEXT,
+            puc_institution TEXT,
+            puc_board TEXT,
+            puc_stream TEXT,
+            puc_year TEXT,
+            puc_percentage TEXT,
+            degree_institution TEXT,
+            degree_university TEXT,
+            degree_course TEXT,
+            degree_year TEXT,
+            degree_percentage TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT,
             FOREIGN KEY (branch_id) REFERENCES branches(id)
@@ -1020,6 +1036,22 @@ def init_db():
     add_column_if_not_exists(cur, "students", "date_of_birth", "TEXT")
     add_column_if_not_exists(cur, "students", "parent_name", "TEXT")
     add_column_if_not_exists(cur, "students", "parent_contact", "TEXT")
+    add_column_if_not_exists(cur, "students", "father_name", "TEXT")
+    add_column_if_not_exists(cur, "students", "mother_name", "TEXT")
+    add_column_if_not_exists(cur, "students", "tenth_institution", "TEXT")
+    add_column_if_not_exists(cur, "students", "tenth_board", "TEXT")
+    add_column_if_not_exists(cur, "students", "tenth_year", "TEXT")
+    add_column_if_not_exists(cur, "students", "tenth_percentage", "TEXT")
+    add_column_if_not_exists(cur, "students", "puc_institution", "TEXT")
+    add_column_if_not_exists(cur, "students", "puc_board", "TEXT")
+    add_column_if_not_exists(cur, "students", "puc_stream", "TEXT")
+    add_column_if_not_exists(cur, "students", "puc_year", "TEXT")
+    add_column_if_not_exists(cur, "students", "puc_percentage", "TEXT")
+    add_column_if_not_exists(cur, "students", "degree_institution", "TEXT")
+    add_column_if_not_exists(cur, "students", "degree_university", "TEXT")
+    add_column_if_not_exists(cur, "students", "degree_course", "TEXT")
+    add_column_if_not_exists(cur, "students", "degree_year", "TEXT")
+    add_column_if_not_exists(cur, "students", "degree_percentage", "TEXT")
     add_column_if_not_exists(cur, "students", "photo_filename", "TEXT")
     add_column_if_not_exists(cur, "students", "student_signature_filename", "TEXT")
     add_column_if_not_exists(cur, "students", "student_signature_date", "TEXT")

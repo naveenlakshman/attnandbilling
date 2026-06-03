@@ -1709,6 +1709,30 @@
               <span class="profile-kv-label">Qualification</span>
               <span class="profile-kv-value">{{ student.qualification or '-' }}</span>
             </div>
+            {% if student.tenth_institution or student.tenth_board or student.tenth_year or student.tenth_percentage %}
+            <div class="profile-kv-row">
+              <span class="profile-kv-label">10th / SSLC</span>
+              <span class="profile-kv-value">
+                {{ [student.tenth_institution, student.tenth_board, student.tenth_year, student.tenth_percentage] | select | join(' | ') }}
+              </span>
+            </div>
+            {% endif %}
+            {% if student.puc_institution or student.puc_board or student.puc_stream or student.puc_year or student.puc_percentage %}
+            <div class="profile-kv-row">
+              <span class="profile-kv-label">2nd PUC / 12th</span>
+              <span class="profile-kv-value">
+                {{ [student.puc_institution, student.puc_board, student.puc_stream, student.puc_year, student.puc_percentage] | select | join(' | ') }}
+              </span>
+            </div>
+            {% endif %}
+            {% if student.degree_institution or student.degree_university or student.degree_course or student.degree_year or student.degree_percentage %}
+            <div class="profile-kv-row">
+              <span class="profile-kv-label">Degree</span>
+              <span class="profile-kv-value">
+                {{ [student.degree_institution, student.degree_university, student.degree_course, student.degree_year, student.degree_percentage] | select | join(' | ') }}
+              </span>
+            </div>
+            {% endif %}
             <div class="profile-kv-row">
               <span class="profile-kv-label">Status</span>
               <span class="profile-kv-value">{{ student.status | capitalize if student.status else '-' }}</span>
@@ -1736,7 +1760,7 @@
         </article>
       </section>
 
-      {% if student.parent_name or student.parent_contact %}
+      {% if student.father_name or student.mother_name or student.parent_name or student.parent_contact %}
       <section class="profile-section">
         <div class="profile-section-header">
           <div>
@@ -1748,7 +1772,15 @@
           <div class="profile-card" style="box-shadow:none; padding:0; border:none;">
             <div class="profile-kv-list" style="margin-top:0;">
               <div class="profile-kv-row">
-                <span class="profile-kv-label">Name</span>
+                <span class="profile-kv-label">Father Name</span>
+                <span class="profile-kv-value">{{ student.father_name or '-' }}</span>
+              </div>
+              <div class="profile-kv-row">
+                <span class="profile-kv-label">Mother Name</span>
+                <span class="profile-kv-value">{{ student.mother_name or '-' }}</span>
+              </div>
+              <div class="profile-kv-row">
+                <span class="profile-kv-label">Guardian Name</span>
                 <span class="profile-kv-value">{{ student.parent_name or '-' }}</span>
               </div>
             </div>

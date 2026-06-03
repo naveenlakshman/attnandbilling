@@ -251,6 +251,194 @@ QUALIFICATION_LEVELS = {
     ],
 }
 
+STUDENT_RESUME_FIELDS = (
+    "father_name",
+    "mother_name",
+    "tenth_institution",
+    "tenth_board",
+    "tenth_year",
+    "tenth_percentage",
+    "puc_institution",
+    "puc_board",
+    "puc_stream",
+    "puc_year",
+    "puc_percentage",
+    "degree_institution",
+    "degree_university",
+    "degree_course",
+    "degree_year",
+    "degree_percentage",
+)
+
+STUDENT_REQUIRED_FIELD_LABELS = (
+    ("branch_id", "Branch"),
+    ("full_name", "Full Name"),
+    ("phone", "Phone"),
+    ("gender", "Gender"),
+    ("email", "Email"),
+    ("date_of_birth", "Date of Birth"),
+    ("pincode", "Pincode"),
+    ("locality", "Locality"),
+    ("address", "Address"),
+    ("city", "City / District / Town"),
+    ("state", "State"),
+    ("landmark", "Landmark"),
+    ("alternate_phone", "Alternate Phone"),
+    ("address_type", "Address Type"),
+    ("father_name", "Father Name"),
+    ("mother_name", "Mother Name"),
+    ("parent_name", "Parent/Guardian Name"),
+    ("parent_contact", "Parent/Guardian Contact Number"),
+    ("education_level", "Education Level"),
+    ("qualification", "Qualification"),
+    ("student_location", "Student From"),
+    ("employment_status", "Employment Status"),
+    ("status", "Student Status"),
+)
+
+STUDENT_RESUME_REQUIRED_LABELS = {
+    "tenth": (
+        ("tenth_institution", "10th School Name"),
+        ("tenth_board", "10th Board"),
+        ("tenth_year", "10th Passed Year"),
+        ("tenth_percentage", "10th Percentage / CGPA"),
+    ),
+    "puc": (
+        ("puc_institution", "PUC College Name"),
+        ("puc_board", "PUC Board"),
+        ("puc_stream", "PUC Stream"),
+        ("puc_year", "PUC Passed Year / Status"),
+        ("puc_percentage", "PUC Percentage / CGPA"),
+    ),
+    "degree": (
+        ("degree_institution", "Degree College Name"),
+        ("degree_university", "Degree University"),
+        ("degree_course", "Degree Course"),
+        ("degree_year", "Degree Passed Year / Status"),
+        ("degree_percentage", "Degree Percentage / CGPA"),
+    ),
+}
+
+
+def _requires_puc_resume_details(education_level, qualification):
+    qualification_value = (qualification or "").lower()
+    return any(
+        marker in qualification_value
+        for marker in ("2nd puc", "12th", "puc completed")
+    )
+
+
+def _requires_degree_resume_details(education_level, qualification):
+    qualification_value = (qualification or "").lower()
+    degree_markers = (
+        "b.com",
+        "bba",
+        "bbm",
+        "ba",
+        "bca",
+        "b.sc",
+        "be / b.tech",
+        "b.ed",
+        "b.pharm",
+        "bhm",
+        "bjmc",
+        "b.design",
+        "b.arch",
+        "llb",
+        "undergraduate",
+    )
+    return education_level == "Undergraduate" or any(
+        marker in qualification_value for marker in degree_markers
+    )
+
+
+def _student_resume_form_values(form, education_level, qualification):
+    values = {
+        field: form.get(field, "").strip() or None
+        for field in STUDENT_RESUME_FIELDS
+    }
+
+    needs_puc = _requires_puc_resume_details(education_level, qualification)
+    needs_degree = _requires_degree_resume_details(education_level, qualification)
+    needs_tenth = needs_puc or needs_degree
+
+    if not needs_tenth:
+        for field in (
+            "tenth_institution",
+            "tenth_board",
+            "tenth_year",
+            "tenth_percentage",
+        ):
+            values[field] = None
+
+    if not (needs_puc or needs_degree):
+        for field in (
+            "puc_institution",
+            "puc_board",
+            "puc_stream",
+            "puc_year",
+            "puc_percentage",
+        ):
+            values[field] = None
+
+    if not needs_degree:
+        for field in (
+            "degree_institution",
+            "degree_university",
+            "degree_course",
+            "degree_year",
+            "degree_percentage",
+        ):
+            values[field] = None
+
+    return values
+
+
+def _student_required_missing_labels(values, resume_fields, has_photo):
+    missing = []
+    for field, label in STUDENT_REQUIRED_FIELD_LABELS:
+        if not str(values.get(field) or "").strip():
+            missing.append(label)
+
+    if not has_photo:
+        missing.append("Student Photo")
+
+    needs_puc = _requires_puc_resume_details(
+        values.get("education_level"),
+        values.get("qualification"),
+    )
+    needs_degree = _requires_degree_resume_details(
+        values.get("education_level"),
+        values.get("qualification"),
+    )
+
+    if needs_puc or needs_degree:
+        for field, label in STUDENT_RESUME_REQUIRED_LABELS["tenth"]:
+            if not resume_fields.get(field):
+                missing.append(label)
+
+    if needs_puc or needs_degree:
+        for field, label in STUDENT_RESUME_REQUIRED_LABELS["puc"]:
+            if not resume_fields.get(field):
+                missing.append(label)
+
+    if needs_degree:
+        for field, label in STUDENT_RESUME_REQUIRED_LABELS["degree"]:
+            if not resume_fields.get(field):
+                missing.append(label)
+
+    return missing
+
+
+def _student_required_error_message(missing):
+    if not missing:
+        return None
+    if len(missing) <= 5:
+        return "Please fill all mandatory fields: " + ", ".join(missing) + "."
+    shown = ", ".join(missing[:5])
+    return f"Please fill all mandatory fields. Missing: {shown}, and {len(missing) - 5} more."
+
+
 billing_bp = Blueprint("billing", __name__)
 logger = logging.getLogger(__name__)
 
@@ -1169,9 +1357,9 @@ def student_new():
     cur = conn.cursor()
 
     if request.method == "POST":
-        branch_id = request.form["branch_id"]
-        full_name = request.form["full_name"].strip()
-        phone = request.form["phone"].strip()
+        branch_id = request.form.get("branch_id", "").strip()
+        full_name = request.form.get("full_name", "").strip()
+        phone = request.form.get("phone", "").strip()
         lead_id_raw = request.form.get("lead_id", "").strip()
         form_lead_id = int(lead_id_raw) if lead_id_raw.isdigit() else None
 
@@ -1210,7 +1398,50 @@ def student_new():
         date_of_birth = request.form.get("date_of_birth", "").strip() or None
         parent_name = request.form.get("parent_name", "").strip() or None
         parent_contact = request.form.get("parent_contact", "").strip() or None
+        resume_fields = _student_resume_form_values(request.form, education_level, qualification)
         photo_data = request.form.get("photo_data", "").strip()
+        required_values = {
+            "branch_id": branch_id,
+            "full_name": full_name,
+            "phone": phone,
+            "gender": gender,
+            "email": email,
+            "date_of_birth": date_of_birth,
+            "pincode": pincode,
+            "locality": locality,
+            "address": address,
+            "city": city,
+            "state": state,
+            "landmark": landmark,
+            "alternate_phone": alternate_phone,
+            "address_type": address_type,
+            "parent_name": parent_name,
+            "parent_contact": parent_contact,
+            "education_level": education_level,
+            "qualification": qualification,
+            "student_location": student_location,
+            "employment_status": employment_status,
+            "status": status,
+            **resume_fields,
+        }
+        missing_required = _student_required_missing_labels(
+            required_values,
+            resume_fields,
+            has_photo=bool(photo_data),
+        )
+        if missing_required:
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            branches = cur.fetchall()
+            conn.close()
+            return render_template(
+                "billing/student_form.html",
+                student=None,
+                branches=branches,
+                education_levels=QUALIFICATION_LEVELS.keys(),
+                qualification_levels=QUALIFICATION_LEVELS,
+                error=_student_required_error_message(missing_required),
+                form_data=request.form
+            )
 
         # Validate date_of_birth is a real calendar date
         if date_of_birth:
@@ -1322,6 +1553,22 @@ def student_new():
                 date_of_birth,
                 parent_name,
                 parent_contact,
+                father_name,
+                mother_name,
+                tenth_institution,
+                tenth_board,
+                tenth_year,
+                tenth_percentage,
+                puc_institution,
+                puc_board,
+                puc_stream,
+                puc_year,
+                puc_percentage,
+                degree_institution,
+                degree_university,
+                degree_course,
+                degree_year,
+                degree_percentage,
                 joined_date,
                 status,
                 branch_id,
@@ -1330,7 +1577,7 @@ def student_new():
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(next_reg_no),
             full_name,
@@ -1352,6 +1599,22 @@ def student_new():
             date_of_birth,
             parent_name,
             parent_contact,
+            resume_fields["father_name"],
+            resume_fields["mother_name"],
+            resume_fields["tenth_institution"],
+            resume_fields["tenth_board"],
+            resume_fields["tenth_year"],
+            resume_fields["tenth_percentage"],
+            resume_fields["puc_institution"],
+            resume_fields["puc_board"],
+            resume_fields["puc_stream"],
+            resume_fields["puc_year"],
+            resume_fields["puc_percentage"],
+            resume_fields["degree_institution"],
+            resume_fields["degree_university"],
+            resume_fields["degree_course"],
+            resume_fields["degree_year"],
+            resume_fields["degree_percentage"],
             now,
             status,
             branch_id,
@@ -1481,9 +1744,9 @@ def student_edit(student_id):
         return redirect(url_for("billing.students"))
 
     if request.method == "POST":
-        branch_id = request.form["branch_id"]
-        full_name = request.form["full_name"].strip()
-        phone = request.form["phone"].strip()
+        branch_id = request.form.get("branch_id", "").strip()
+        full_name = request.form.get("full_name", "").strip()
+        phone = request.form.get("phone", "").strip()
 
         # Validate phone number
         import re as _re
@@ -1520,7 +1783,54 @@ def student_edit(student_id):
         date_of_birth = request.form.get("date_of_birth", "").strip() or None
         parent_name = request.form.get("parent_name", "").strip() or None
         parent_contact = request.form.get("parent_contact", "").strip() or None
+        resume_fields = _student_resume_form_values(request.form, education_level, qualification)
         photo_data = request.form.get("photo_data", "").strip()
+        try:
+            existing_photo_filename = student["photo_filename"] if "photo_filename" in student.keys() else None
+        except:
+            existing_photo_filename = None
+        required_values = {
+            "branch_id": branch_id,
+            "full_name": full_name,
+            "phone": phone,
+            "gender": gender,
+            "email": email,
+            "date_of_birth": date_of_birth,
+            "pincode": pincode,
+            "locality": locality,
+            "address": address,
+            "city": city,
+            "state": state,
+            "landmark": landmark,
+            "alternate_phone": alternate_phone,
+            "address_type": address_type,
+            "parent_name": parent_name,
+            "parent_contact": parent_contact,
+            "education_level": education_level,
+            "qualification": qualification,
+            "student_location": student_location,
+            "employment_status": employment_status,
+            "status": status,
+            **resume_fields,
+        }
+        missing_required = _student_required_missing_labels(
+            required_values,
+            resume_fields,
+            has_photo=bool(photo_data or existing_photo_filename),
+        )
+        if missing_required:
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            branches = cur.fetchall()
+            conn.close()
+            return render_template(
+                "billing/student_form.html",
+                student=student,
+                branches=branches,
+                education_levels=QUALIFICATION_LEVELS.keys(),
+                qualification_levels=QUALIFICATION_LEVELS,
+                error=_student_required_error_message(missing_required),
+                form_data=request.form
+            )
 
         # Validate date_of_birth is a real calendar date
         if date_of_birth:
@@ -1601,6 +1911,22 @@ def student_edit(student_id):
                 date_of_birth = ?,
                 parent_name = ?,
                 parent_contact = ?,
+                father_name = ?,
+                mother_name = ?,
+                tenth_institution = ?,
+                tenth_board = ?,
+                tenth_year = ?,
+                tenth_percentage = ?,
+                puc_institution = ?,
+                puc_board = ?,
+                puc_stream = ?,
+                puc_year = ?,
+                puc_percentage = ?,
+                degree_institution = ?,
+                degree_university = ?,
+                degree_course = ?,
+                degree_year = ?,
+                degree_percentage = ?,
                 status = ?,
                 photo_filename = ?,
                 updated_at = ?
@@ -1626,6 +1952,22 @@ def student_edit(student_id):
             date_of_birth,
             parent_name,
             parent_contact,
+            resume_fields["father_name"],
+            resume_fields["mother_name"],
+            resume_fields["tenth_institution"],
+            resume_fields["tenth_board"],
+            resume_fields["tenth_year"],
+            resume_fields["tenth_percentage"],
+            resume_fields["puc_institution"],
+            resume_fields["puc_board"],
+            resume_fields["puc_stream"],
+            resume_fields["puc_year"],
+            resume_fields["puc_percentage"],
+            resume_fields["degree_institution"],
+            resume_fields["degree_university"],
+            resume_fields["degree_course"],
+            resume_fields["degree_year"],
+            resume_fields["degree_percentage"],
             status,
             photo_filename,
             now,

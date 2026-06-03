@@ -75,6 +75,21 @@
     font-size: 12px;
   }
 
+  .resume-detail-section {
+    border: 1px solid #dbe3ea;
+    border-radius: 8px;
+    padding: 14px;
+    margin-top: 12px;
+    background: #fbfcfe;
+  }
+
+  .resume-section-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: #1f2937;
+    margin-bottom: 12px;
+  }
+
   .page-header-row {
     display: flex;
     justify-content: space-between;
@@ -359,7 +374,7 @@
       {% endif %}
       <div class="student-form-grid">
         <div class="form-group">
-          <label>Branch</label>
+          <label>Branch <span style="color:#dc3545;">*</span></label>
           <select name="branch_id" required>
             <option value="">-- Select Branch --</option>
             {% for b in branches %}
@@ -387,12 +402,12 @@
         {% endif %}
 
         <div class="form-group">
-          <label>Full Name</label>
+          <label>Full Name <span style="color:#dc3545;">*</span></label>
           <input type="text" name="full_name" required value="{% if student %}{{ student.full_name }}{% elif prefill_lead %}{{ prefill_lead.name }}{% elif form_data %}{{ form_data.get('full_name', '') }}{% endif %}">
         </div>
 
         <div class="form-group">
-          <label>Phone</label>
+          <label>Phone <span style="color:#dc3545;">*</span></label>
           <input type="text" id="phoneInput" name="phone" required
                  placeholder="10-digit mobile number"
                  maxlength="10"
@@ -409,15 +424,15 @@
         <div class="form-group">
           <label>Date of Birth <span style="color:#dc3545;">*</span></label>
           <div class="dob-selector">
-            <input type="number" id="dob_day" placeholder="Day" min="1" max="31"
+            <input type="number" id="dob_day" placeholder="Day" min="1" max="31" required
                    value="{{ _dob_d }}" aria-label="Day">
-            <select id="dob_month" aria-label="Month">
+            <select id="dob_month" aria-label="Month" required>
               <option value="" disabled selected hidden>Month</option>
               {% for m in [(1,'January'),(2,'February'),(3,'March'),(4,'April'),(5,'May'),(6,'June'),(7,'July'),(8,'August'),(9,'September'),(10,'October'),(11,'November'),(12,'December')] %}
               <option value="{{ m[0] }}" {% if _dob_m == m[0] %}selected{% endif %}>{{ m[1] }}</option>
               {% endfor %}
             </select>
-            <input type="number" id="dob_year" placeholder="Year"
+            <input type="number" id="dob_year" placeholder="Year" required
                    value="{{ _dob_y }}" aria-label="Year">
           </div>
           <div id="dob-error" style="display:none; color:#dc3545; font-size:12px; margin-top:4px;"></div>
@@ -494,20 +509,20 @@
 
             <!-- Row 4: Landmark + Alternate Phone -->
             <div class="form-group">
-              <label>Landmark <span style="color:#888;font-weight:400;">(Optional)</span></label>
-              <input type="text" name="landmark" placeholder="Nearby landmark"
+              <label>Landmark <span style="color:#dc3545;">*</span></label>
+              <input type="text" name="landmark" placeholder="Nearby landmark" required
                      value="{% if student %}{{ student.landmark or '' }}{% elif form_data %}{{ form_data.get('landmark', '') }}{% endif %}">
             </div>
             <div class="form-group">
-              <label>Alternate Phone <span style="color:#888;font-weight:400;">(Optional)</span></label>
-              <input type="text" name="alternate_phone" placeholder="Alternate contact number"
+              <label>Alternate Phone <span style="color:#dc3545;">*</span></label>
+              <input type="text" name="alternate_phone" placeholder="Alternate contact number" required
                      value="{% if student %}{{ student.alternate_phone or '' }}{% elif form_data %}{{ form_data.get('alternate_phone', '') }}{% endif %}">
             </div>
 
             <!-- Row 5: Address Type -->
             <div class="form-group full-width" style="grid-column: 1 / -1;">
               <label>Address Type <span style="color:#dc3545;">*</span></label>
-              {% set _addr_type = (student.address_type if student else form_data.get('address_type', '') if form_data else '') %}
+              {% set _addr_type = (student.address_type if student else (form_data.get('address_type') if form_data and form_data.get('address_type') is not none else 'Home') if form_data else 'Home') %}
               <div style="display:flex; gap:20px; margin-top:4px;">
                 {% for atype in ['Home', 'Office', 'Other'] %}
                 <label style="font-weight:400; display:flex; align-items:center; gap:6px; cursor:pointer;">
@@ -525,7 +540,7 @@
         <!-- ── End Address Block ── -->
 
         <div class="form-group full-width">
-          <label>Student Photo {% if not student %}<span style="color:#dc3545;">*</span>{% endif %}</label>
+          <label>Student Photo {% if not student or not student.photo_filename %}<span style="color:#dc3545;">*</span>{% endif %}</label>
           <div class="form-photo-section{% if error and 'photo' in error|lower %} photo-required-error{% endif %}" id="photoUploadSection">
             <div class="form-photo-wrapper">
               <div class="form-photo-display" id="formPhotoDisplay">
@@ -541,19 +556,29 @@
                 📷 {% if (student and student.photo_filename) or (form_data and form_data.get('photo_data')) %}Change Photo{% else %}Add Photo{% endif %}
               </button>
             </div>
-            {% if not student %}<div class="photo-error-msg" id="photoErrorMsg" {% if form_data and form_data.get('photo_data') %}style="display:none;"{% endif %}>📷 Please upload a student photo before saving.</div>{% endif %}
+            {% if not student or not student.photo_filename %}<div class="photo-error-msg" id="photoErrorMsg" {% if form_data and form_data.get('photo_data') %}style="display:none;"{% endif %}>📷 Please upload a student photo before saving.</div>{% endif %}
             <input type="hidden" id="photo_data" name="photo_data" value="{{ form_data.get('photo_data', '') if form_data else '' }}">
           </div>
         </div>
 
         <div class="form-group">
-          <label>Parent/Guardian Name</label>
-          <input type="text" name="parent_name" value="{% if student %}{{ student.parent_name }}{% elif form_data %}{{ form_data.get('parent_name', '') }}{% endif %}">
+          <label>Father Name <span style="color:#dc3545;">*</span></label>
+          <input type="text" name="father_name" required value="{% if student %}{{ student.father_name or '' }}{% elif form_data %}{{ form_data.get('father_name', '') }}{% endif %}">
         </div>
 
         <div class="form-group">
-          <label>Parent/Guardian Contact Number</label>
-          <input type="text" name="parent_contact" value="{% if student %}{{ student.parent_contact }}{% elif form_data %}{{ form_data.get('parent_contact', '') }}{% endif %}">
+          <label>Mother Name <span style="color:#dc3545;">*</span></label>
+          <input type="text" name="mother_name" required value="{% if student %}{{ student.mother_name or '' }}{% elif form_data %}{{ form_data.get('mother_name', '') }}{% endif %}">
+        </div>
+
+        <div class="form-group">
+          <label>Parent/Guardian Name <span style="color:#dc3545;">*</span></label>
+          <input type="text" name="parent_name" required value="{% if student %}{{ student.parent_name or '' }}{% elif form_data %}{{ form_data.get('parent_name', '') }}{% endif %}">
+        </div>
+
+        <div class="form-group">
+          <label>Parent/Guardian Contact Number <span style="color:#dc3545;">*</span></label>
+          <input type="text" name="parent_contact" required value="{% if student %}{{ student.parent_contact or '' }}{% elif form_data %}{{ form_data.get('parent_contact', '') }}{% endif %}">
         </div>
 
         <div class="form-group">
@@ -595,6 +620,99 @@
                  style="margin-top:8px; display:none;">
         </div>
 
+        <div class="form-group full-width" id="resumeEducationDetails" style="display:none;">
+          <label style="font-weight:700; font-size:15px; color:#333; margin-bottom:0;">Education Details for Resume</label>
+          <small class="field-help">These details will be used later for the student resume feature.</small>
+
+          <div class="resume-detail-section" id="tenthDetailSection" style="display:none;">
+            <div class="resume-section-title">10th / SSLC Details</div>
+            <div class="student-form-grid" style="gap:14px;">
+              <div class="form-group">
+                <label>School Name <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="tenth_institution" data-resume-field
+                       value="{% if student %}{{ student.tenth_institution or '' }}{% elif form_data %}{{ form_data.get('tenth_institution', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>Board <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="tenth_board" data-resume-field placeholder="SSLC / CBSE / ICSE"
+                       value="{% if student %}{{ student.tenth_board or '' }}{% elif form_data %}{{ form_data.get('tenth_board', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>Passed Year <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="tenth_year" data-resume-field placeholder="Example: 2024"
+                       value="{% if student %}{{ student.tenth_year or '' }}{% elif form_data %}{{ form_data.get('tenth_year', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>Percentage / CGPA <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="tenth_percentage" data-resume-field placeholder="Example: 82% or 8.2 CGPA"
+                       value="{% if student %}{{ student.tenth_percentage or '' }}{% elif form_data %}{{ form_data.get('tenth_percentage', '') }}{% endif %}">
+              </div>
+            </div>
+          </div>
+
+          <div class="resume-detail-section" id="pucDetailSection" style="display:none;">
+            <div class="resume-section-title">2nd PUC / 12th Details</div>
+            <div class="student-form-grid" style="gap:14px;">
+              <div class="form-group">
+                <label>College Name <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="puc_institution" data-resume-field
+                       value="{% if student %}{{ student.puc_institution or '' }}{% elif form_data %}{{ form_data.get('puc_institution', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>Board <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="puc_board" data-resume-field placeholder="PU Board / CBSE / State Board"
+                       value="{% if student %}{{ student.puc_board or '' }}{% elif form_data %}{{ form_data.get('puc_board', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>Stream <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="puc_stream" data-resume-field placeholder="Science / Commerce / Arts"
+                       value="{% if student %}{{ student.puc_stream or '' }}{% elif form_data %}{{ form_data.get('puc_stream', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>Passed Year / Status <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="puc_year" data-resume-field placeholder="Example: 2026 or Pursuing"
+                       value="{% if student %}{{ student.puc_year or '' }}{% elif form_data %}{{ form_data.get('puc_year', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>Percentage / CGPA <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="puc_percentage" data-resume-field placeholder="Example: 78% or Pursuing"
+                       value="{% if student %}{{ student.puc_percentage or '' }}{% elif form_data %}{{ form_data.get('puc_percentage', '') }}{% endif %}">
+              </div>
+            </div>
+          </div>
+
+          <div class="resume-detail-section" id="degreeDetailSection" style="display:none;">
+            <div class="resume-section-title">Degree Details</div>
+            <div class="student-form-grid" style="gap:14px;">
+              <div class="form-group">
+                <label>College Name <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="degree_institution" data-resume-field
+                       value="{% if student %}{{ student.degree_institution or '' }}{% elif form_data %}{{ form_data.get('degree_institution', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>University <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="degree_university" data-resume-field
+                       value="{% if student %}{{ student.degree_university or '' }}{% elif form_data %}{{ form_data.get('degree_university', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>Course / Degree <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="degree_course" data-resume-field placeholder="Example: B.Com, BCA, B.Sc"
+                       value="{% if student %}{{ student.degree_course or '' }}{% elif form_data %}{{ form_data.get('degree_course', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>Passed Year / Status <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="degree_year" data-resume-field placeholder="Example: 2027 or 2nd Year"
+                       value="{% if student %}{{ student.degree_year or '' }}{% elif form_data %}{{ form_data.get('degree_year', '') }}{% endif %}">
+              </div>
+              <div class="form-group">
+                <label>Percentage / CGPA <span class="resume-required" style="color:#dc3545;">*</span></label>
+                <input type="text" name="degree_percentage" data-resume-field placeholder="Example: 8.0 CGPA or Pursuing"
+                       value="{% if student %}{{ student.degree_percentage or '' }}{% elif form_data %}{{ form_data.get('degree_percentage', '') }}{% endif %}">
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>Student From <span style="color:#dc3545;">*</span></label>
           {% set _sloc = (student.student_location if student else (prefill_lead.lead_location if prefill_lead else form_data.get('student_location', '') if form_data else '')) %}
@@ -619,9 +737,9 @@
 
         {% if student %}
         <div class="form-group">
-          <label>Student Status</label>
+          <label>Student Status <span style="color:#dc3545;">*</span></label>
           {% set _status = student.status %}
-          <select name="status">
+          <select name="status" required>
             <option value="active" {% if _status == 'active' %}selected{% endif %}>Active</option>
             <option value="completed" {% if _status == 'completed' %}selected{% endif %}>Completed</option>
             <option value="dropped" {% if _status == 'dropped' %}selected{% endif %}>Dropped</option>
@@ -651,6 +769,67 @@ let studentCode = "{% if student %}{{ student.student_code }}{% endif %}";
 const educationLevelSelect = document.querySelector('select[name="education_level"]');
 const qualificationSelect = document.getElementById('qualification_select');
 const qualificationCustom = document.getElementById('qualification_custom');
+const resumeEducationDetails = document.getElementById('resumeEducationDetails');
+const tenthDetailSection = document.getElementById('tenthDetailSection');
+const pucDetailSection = document.getElementById('pucDetailSection');
+const degreeDetailSection = document.getElementById('degreeDetailSection');
+
+function getSelectedQualification() {
+  return (qualificationCustom.value || qualificationSelect.value || '').trim();
+}
+
+function qualificationNeedsPucDetails() {
+  const qualification = getSelectedQualification().toLowerCase();
+  return qualification.includes('2nd puc') ||
+         qualification.includes('12th') ||
+         qualification.includes('puc completed');
+}
+
+function qualificationNeedsDegreeDetails() {
+  const selectedLevel = educationLevelSelect.value;
+  const qualification = getSelectedQualification().toLowerCase();
+  const degreeMarkers = [
+    'b.com',
+    'bba',
+    'bbm',
+    'ba',
+    'bca',
+    'b.sc',
+    'be / b.tech',
+    'b.ed',
+    'b.pharm',
+    'bhm',
+    'bjmc',
+    'b.design',
+    'b.arch',
+    'llb',
+    'undergraduate'
+  ];
+  return selectedLevel === 'Undergraduate' || degreeMarkers.some(marker => qualification.includes(marker));
+}
+
+function setResumeSectionVisibility(section, shouldShow) {
+  if (!section) return;
+  section.style.display = shouldShow ? '' : 'none';
+  section.querySelectorAll('[data-resume-field]').forEach(input => {
+    input.disabled = !shouldShow;
+    input.required = shouldShow;
+  });
+}
+
+function updateResumeEducationSections() {
+  const needsDegree = qualificationNeedsDegreeDetails();
+  const needsPuc = needsDegree || qualificationNeedsPucDetails();
+  const needsTenth = needsPuc || needsDegree;
+
+  setResumeSectionVisibility(tenthDetailSection, needsTenth);
+  setResumeSectionVisibility(pucDetailSection, needsPuc);
+  setResumeSectionVisibility(degreeDetailSection, needsDegree);
+
+  if (resumeEducationDetails) {
+    resumeEducationDetails.style.display = (needsTenth || needsPuc || needsDegree) ? '' : 'none';
+  }
+}
 
 function updateQualifications() {
   const selectedLevel = educationLevelSelect.value;
@@ -679,14 +858,17 @@ function updateQualifications() {
       if (matchingOpt) {
         qualificationSelect.value = existingVal;
         qualificationCustom.style.display = 'none';
+        qualificationCustom.required = false;
       } else if (existingVal) {
         qualificationSelect.value = 'custom';
         qualificationCustom.style.display = '';
+        qualificationCustom.required = true;
       }
     }
   } else {
     qualificationSelect.options[0].textContent = '-- Select Education Level first --';
     qualificationCustom.style.display = 'none';
+    qualificationCustom.required = false;
   }
 }
 
@@ -694,22 +876,30 @@ qualificationSelect.addEventListener('change', function() {
   if (this.value === 'custom') {
     qualificationCustom.value = '';
     qualificationCustom.style.display = '';
+    qualificationCustom.required = true;
     qualificationCustom.focus();
   } else if (this.value) {
     qualificationCustom.value = this.value;
     qualificationCustom.style.display = 'none';
+    qualificationCustom.required = false;
   } else {
     qualificationCustom.value = '';
     qualificationCustom.style.display = 'none';
+    qualificationCustom.required = false;
   }
+  updateResumeEducationSections();
 });
+
+qualificationCustom.addEventListener('input', updateResumeEducationSections);
 
 educationLevelSelect.addEventListener('change', function() {
   // Clear selection when education level changes
   qualificationSelect.value = '';
   qualificationCustom.value = '';
   qualificationCustom.style.display = 'none';
+  qualificationCustom.required = false;
   updateQualifications();
+  updateResumeEducationSections();
 });
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -778,6 +968,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Photo required validation (new student only)
   const studentForm = document.getElementById('studentForm');
   const isNewStudent = !{{ 'true' if student else 'false' }};
+  const hasExistingPhoto = {{ 'true' if student and student.photo_filename else 'false' }};
   if (studentForm) {
     studentForm.addEventListener('submit', function(e) {
       // Phone validation on submit
@@ -815,7 +1006,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => { qSel.style.outline = ''; }, 3000);
         return false;
       }
-      if (isNewStudent) {
+      if (isNewStudent || !hasExistingPhoto) {
         const photoData = document.getElementById('photo_data');
         const section = document.getElementById('photoUploadSection');
         const errMsg = document.getElementById('photoErrorMsg');
@@ -911,6 +1102,7 @@ document.addEventListener('DOMContentLoaded', function() {
       qualificationSelect.value = "custom";
     }
   }
+  updateResumeEducationSections();
 });
 
 function forceSaveStudent() {
