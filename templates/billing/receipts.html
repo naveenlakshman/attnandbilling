@@ -5,6 +5,11 @@
 {% block content %}
 
 <style>
+  .receipts-page {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
   .receipt-page-header {
     display: flex;
     justify-content: space-between;
@@ -16,26 +21,90 @@
 
   .receipt-page-header h2 {
     margin: 0;
-    font-size: 28px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+
+  .receipt-dashboard {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+
+  .receipt-dashboard h3 {
+    margin: 0 0 12px;
+    color: #333;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .receipt-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+
+  .receipt-date-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .receipt-date-form label {
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+    color: #555;
+  }
+
+  .receipt-date-form input {
+    padding: 8px 10px;
+    border: 1.5px solid #ced4da;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+
+  .receipt-date-form input:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13,110,253,0.08);
+  }
+
+  .receipt-panel-title {
+    margin: 0 0 10px;
+    color: #666;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .4px;
+    text-transform: uppercase;
   }
 
   .receipt-search-card {
     margin-bottom: 20px;
+    border-radius: 8px;
+    padding: 12px;
   }
 
   .receipt-search-form {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
     align-items: center;
   }
 
   .receipt-search-form input {
     flex: 1;
-    min-width: 260px;
+    min-width: 220px;
     padding: 10px 12px;
     border: 1px solid #ced4da;
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 14px;
   }
 
@@ -47,6 +116,8 @@
 
   .receipts-table {
     border-collapse: collapse;
+    width: 100%;
+    min-width: 980px;
   }
 
   .receipts-table thead tr {
@@ -60,6 +131,7 @@
     font-size: 13px;
     color: #333;
     border: 1px solid #ddd;
+    white-space: nowrap;
   }
 
   .receipts-table th.sortable {
@@ -112,8 +184,9 @@
   }
 
   .amount-green {
-    color: green;
+    color: #16803c;
     font-weight: 600;
+    white-space: nowrap;
   }
 
   .invoice-stats-grid {
@@ -121,35 +194,294 @@
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 12px;
   }
+
+  .receipt-stat-tile {
+    color: #fff;
+    padding: 14px;
+    border-radius: 8px;
+    min-width: 0;
+  }
+
+  .receipt-stat-label {
+    font-size: 12px;
+    opacity: .9;
+    margin-bottom: 6px;
+  }
+
+  .receipt-stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.15;
+  }
+
+  .receipt-stat-value.money {
+    font-size: 17px;
+    overflow-wrap: anywhere;
+  }
+
+  .receipt-method-lines {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .receipt-method-lines div:first-child {
+    margin-bottom: 4px;
+  }
+
+  .c-blue { background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); }
+  .c-green { background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); }
+  .c-purple { background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); }
+  .c-teal { background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); }
+
+  .receipt-table-card {
+    padding: 0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .receipt-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .receipt-link {
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .receipt-muted-link {
+    text-decoration: none;
+  }
+
+  .receipt-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #eef4ff;
+    color: #0d4f9e;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .receipt-action-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    background: #f0f6ff;
+    color: #0d6efd;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  @media (max-width: 640px) {
+    .receipts-page {
+      margin: 0 -4px;
+    }
+
+    .receipt-page-header {
+      margin-bottom: 12px;
+    }
+
+    .receipt-page-header h2 {
+      font-size: 20px;
+    }
+
+    .receipt-page-header .btn {
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+
+    .receipt-dashboard {
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .receipt-dashboard h3 {
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+
+    .receipt-controls,
+    .receipt-date-form {
+      width: 100%;
+    }
+
+    .receipt-date-form input {
+      flex: 1;
+      min-width: 145px;
+    }
+
+    .receipt-controls .btn,
+    .receipt-date-form .btn {
+      min-height: 38px;
+    }
+
+    .invoice-stats-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .receipt-stat-tile {
+      padding: 10px;
+    }
+
+    .receipt-stat-label {
+      font-size: 11px;
+    }
+
+    .receipt-stat-value {
+      font-size: 19px;
+    }
+
+    .receipt-stat-value.money {
+      font-size: 14px;
+    }
+
+    .receipt-method-lines {
+      font-size: 11px;
+    }
+
+    .receipt-search-card {
+      margin-bottom: 12px;
+    }
+
+    .receipt-search-form input,
+    .receipt-search-form .btn {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .receipt-table-scroll {
+      overflow-x: visible;
+    }
+
+    .receipts-table {
+      min-width: 0;
+    }
+
+    .receipts-table thead {
+      display: none;
+    }
+
+    .receipts-table,
+    .receipts-table tbody,
+    .receipts-table tr {
+      display: block;
+      width: 100%;
+    }
+
+    .receipts-table tr {
+      padding: 12px;
+      border-bottom: 1px solid #e9ecef;
+      background: #fff;
+    }
+
+    .receipts-table tr:last-child {
+      border-bottom: 0;
+    }
+
+    .receipts-table tbody tr:hover {
+      background: #fff;
+    }
+
+    .receipts-table td {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 4px 0;
+      border: 0;
+      font-size: 13px;
+      text-align: right;
+    }
+
+    .receipts-table td::before {
+      content: attr(data-label);
+      color: #6c757d;
+      font-weight: 700;
+      text-align: left;
+      flex: 0 0 92px;
+    }
+
+    .receipts-table .td-sl {
+      display: none;
+    }
+
+    .receipts-table .td-receipt-no {
+      align-items: flex-start;
+      padding-bottom: 8px;
+      margin-bottom: 6px;
+      border-bottom: 1px solid #f0f0f0;
+      text-align: left;
+    }
+
+    .receipts-table .td-receipt-no::before {
+      display: none;
+    }
+
+    .receipts-table .td-receipt-no a {
+      font-size: 15px;
+      color: #0056b3;
+    }
+
+    .receipts-table .td-student,
+    .receipts-table .td-notes {
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+
+    .receipts-table .td-action {
+      justify-content: flex-end;
+      padding-top: 8px;
+    }
+
+    .receipts-table .td-action::before {
+      display: none;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .invoice-stats-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
+
+<div class="receipts-page">
 
 <div class="receipt-page-header">
   <h2>Receipts</h2>
+  <a href="{{ url_for('billing.receipt_new') }}" class="btn btn-primary">Record Receipt</a>
 </div>
 
 {% if session.get('role') == 'admin' %}
-<div style="margin-bottom: 25px;">
-  <h3 style="margin-top: 0; margin-bottom: 15px; color: #333;">📊 Receipt Dashboard</h3>
+<div class="receipt-dashboard">
+  <h3>Receipt Dashboard</h3>
 
-  <div style="margin-bottom: 20px;">
+  <div>
     <!-- Toggle Buttons -->
-    <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-      <form method="get" id="date-stats-form" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+    <div class="receipt-controls">
+      <form method="get" id="date-stats-form" class="receipt-date-form">
         {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
-        <label for="stats_date" style="font-weight: 600; margin: 0; white-space: nowrap;">📅 Date:</label>
+        <label for="stats_date">Date</label>
         <input
           type="date"
           id="stats_date"
           name="stats_date"
           value="{{ stats_date }}"
           max="{{ today }}"
-          style="padding: 7px 10px; border: 2px solid #3498db; border-radius: 6px; font-size: 14px; cursor: pointer;"
           onchange="document.getElementById('date-stats-form').submit();"
         >
         <button
           id="btnDate"
           type="submit"
-          style="padding: 8px 16px; border: 2px solid #3498db; background-color: #3498db; color: white; border-radius: 6px; cursor: pointer; font-weight: 600;"
+          class="btn btn-primary"
         >
           View
         </button>
@@ -157,68 +489,68 @@
       <button
         id="btnMonth"
         onclick="toggleStatsView('month')"
-        style="padding: 8px 16px; border: 2px solid #95a5a6; background-color: white; color: #333; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.3s ease;"
+        class="btn btn-outline-secondary"
       >
-        📆 This Month
+        This Month
       </button>
     </div>
 
     <!-- Date Stats -->
     <div id="dateStats" style="display: block;">
-      <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">
+      <h4 class="receipt-panel-title">
         {{ stats_date if stats_date != today else 'Today' }}
       </h4>
       <div class="invoice-stats-grid">
-        <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Receipts</div>
-          <div style="font-size: 24px; font-weight: bold;">{{ date_stats.total_receipts or 0 }}</div>
+        <div class="receipt-stat-tile c-blue">
+          <div class="receipt-stat-label">Total Receipts</div>
+          <div class="receipt-stat-value">{{ date_stats.total_receipts or 0 }}</div>
         </div>
 
-        <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
-          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(date_stats.total_amount or 0) }}</div>
+        <div class="receipt-stat-tile c-green">
+          <div class="receipt-stat-label">Total Amount</div>
+          <div class="receipt-stat-value money">₹ {{ "%.2f"|format(date_stats.total_amount or 0) }}</div>
         </div>
 
-        <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Payment Methods</div>
-          <div style="font-size: 12px; font-weight: bold;">
-            <div style="margin-bottom: 4px;">💵 Cash: {{ date_stats.cash_count or 0 }} - ₹ {{ "%.2f"|format(date_stats.cash_amount or 0) }}</div>
+        <div class="receipt-stat-tile c-purple">
+          <div class="receipt-stat-label">Payment Methods</div>
+          <div class="receipt-method-lines">
+            <div>💵 Cash: {{ date_stats.cash_count or 0 }} - ₹ {{ "%.2f"|format(date_stats.cash_amount or 0) }}</div>
             <div>📱 UPI: {{ date_stats.upi_count or 0 }} - ₹ {{ "%.2f"|format(date_stats.upi_amount or 0) }}</div>
           </div>
         </div>
 
-        <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Avg Receipt</div>
-          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(date_stats.avg_amount or 0) }}</div>
+        <div class="receipt-stat-tile c-teal">
+          <div class="receipt-stat-label">Avg Receipt</div>
+          <div class="receipt-stat-value money">₹ {{ "%.2f"|format(date_stats.avg_amount or 0) }}</div>
         </div>
       </div>
     </div>
 
     <!-- Month Stats -->
     <div id="monthStats" style="display: none;">
-      <h4 style="margin: 0 0 12px 0; color: #666; font-size: 14px; text-transform: uppercase;">This Month</h4>
+      <h4 class="receipt-panel-title">This Month</h4>
       <div class="invoice-stats-grid">
-        <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Receipts</div>
-          <div style="font-size: 24px; font-weight: bold;">{{ month_stats.total_receipts or 0 }}</div>
+        <div class="receipt-stat-tile c-blue">
+          <div class="receipt-stat-label">Total Receipts</div>
+          <div class="receipt-stat-value">{{ month_stats.total_receipts or 0 }}</div>
         </div>
 
-        <div style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Total Amount</div>
-          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(month_stats.total_amount or 0) }}</div>
+        <div class="receipt-stat-tile c-green">
+          <div class="receipt-stat-label">Total Amount</div>
+          <div class="receipt-stat-value money">₹ {{ "%.2f"|format(month_stats.total_amount or 0) }}</div>
         </div>
 
-        <div style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Payment Methods</div>
-          <div style="font-size: 12px; font-weight: bold; table-layout: fixed;">
-            <div style="margin-bottom: 4px;">💵 Cash: {{ month_stats.cash_count or 0 }} - ₹ {{ "%.2f"|format(month_stats.cash_amount or 0) }}</div>
+        <div class="receipt-stat-tile c-purple">
+          <div class="receipt-stat-label">Payment Methods</div>
+          <div class="receipt-method-lines">
+            <div>💵 Cash: {{ month_stats.cash_count or 0 }} - ₹ {{ "%.2f"|format(month_stats.cash_amount or 0) }}</div>
             <div>📱 UPI: {{ month_stats.upi_count or 0 }} - ₹ {{ "%.2f"|format(month_stats.upi_amount or 0) }}</div>
           </div>
         </div>
 
-        <div style="background: linear-gradient(135deg, #1abc9c 0%, #16a085 100%); color: white; padding: 15px; border-radius: 6px;">
-          <div style="font-size: 12px; opacity: 0.9; margin-bottom: 6px;">Avg Receipt</div>
-          <div style="font-size: 18px; font-weight: bold;">₹ {{ "%.2f"|format(month_stats.avg_amount or 0) }}</div>
+        <div class="receipt-stat-tile c-teal">
+          <div class="receipt-stat-label">Avg Receipt</div>
+          <div class="receipt-stat-value money">₹ {{ "%.2f"|format(month_stats.avg_amount or 0) }}</div>
         </div>
       </div>
     </div>
@@ -228,6 +560,9 @@
 
 <div class="card receipt-search-card">
   <form method="get" class="receipt-search-form">
+    {% if stats_date and stats_date != today %}
+    <input type="hidden" name="stats_date" value="{{ stats_date }}">
+    {% endif %}
     <input
       type="text"
       name="search"
@@ -242,10 +577,10 @@
   </form>
 </div>
 
-<div class="card" style="padding: 0; border-radius: 6px; overflow: hidden;">
+<div class="card receipt-table-card">
   {% if receipts %}
-    <div style="overflow-x: auto;">
-      <table border="1" width="100%" cellpadding="10" class="receipts-table">
+    <div class="receipt-table-scroll">
+      <table class="receipts-table">
         <thead>
         <tr>
           <th style="width: 70px;">SL No</th>
@@ -263,49 +598,49 @@
       <tbody>
         {% for receipt in receipts %}
         <tr>
-          <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
+          <td class="td-sl" data-label="#" style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
 
-          <td data-sort-key="receipt_no" data-sort-value="{{ receipt.receipt_no }}">
-            <a href="{{ url_for('billing.receipt_view', receipt_id=receipt.id) }}" style="text-decoration: none; font-weight: 600;">
+          <td class="td-receipt-no" data-label="Receipt" data-sort-key="receipt_no" data-sort-value="{{ receipt.receipt_no }}">
+            <a href="{{ url_for('billing.receipt_view', receipt_id=receipt.id) }}" class="receipt-link">
               {{ receipt.receipt_no }}
             </a>
           </td>
 
-          <td data-sort-key="invoice_no" data-sort-value="{{ receipt.invoice_no }}">
-            <a href="{{ url_for('billing.invoice_view', invoice_id=receipt.invoice_id) }}" style="text-decoration: none;">
+          <td data-label="Invoice" data-sort-key="invoice_no" data-sort-value="{{ receipt.invoice_no }}">
+            <a href="{{ url_for('billing.invoice_view', invoice_id=receipt.invoice_id) }}" class="receipt-muted-link">
               {{ receipt.invoice_no }}
             </a>
           </td>
 
-          <td data-sort-key="student" data-sort-value="{{ receipt.student_code }} {{ receipt.full_name }}">
+          <td class="td-student" data-label="Student" data-sort-key="student" data-sort-value="{{ receipt.student_code }} {{ receipt.full_name }}">
             {{ receipt.student_code or "" }}
             {% if receipt.student_code %} - {% endif %}
             {{ receipt.full_name }}
           </td>
 
-          <td data-sort-key="date" data-sort-value="{{ receipt.receipt_date }}">{{ receipt.receipt_date }}</td>
+          <td data-label="Date" data-sort-key="date" data-sort-value="{{ receipt.receipt_date }}">{{ receipt.receipt_date }}</td>
 
-          <td class="amount-green" data-sort-key="amount" data-sort-value="{{ receipt.amount_received or 0 }}">
+          <td data-label="Amount" class="amount-green" data-sort-key="amount" data-sort-value="{{ receipt.amount_received or 0 }}">
             ₹ {{ "%.2f"|format(receipt.amount_received or 0) }}
           </td>
 
-          <td data-sort-key="mode" data-sort-value="{{ receipt.payment_mode or '' }}">
+          <td data-label="Mode" data-sort-key="mode" data-sort-value="{{ receipt.payment_mode or '' }}">
             {% set mode_labels = {
               'cash': 'Cash',
               'upi': 'UPI',
               'bank_transfer': 'Bank Transfer',
               'card': 'Card'
             } %}
-            {{ mode_labels.get(receipt.payment_mode, receipt.payment_mode) }}
+            <span class="receipt-mode-badge">{{ mode_labels.get(receipt.payment_mode, receipt.payment_mode) }}</span>
           </td>
 
-          <td>{{ receipt.notes or '-' }}</td>
+          <td class="td-notes" data-label="Notes">{{ receipt.notes or '-' }}</td>
 
-          <td data-sort-key="created_by" data-sort-value="{{ receipt.created_by_name or 'System' }}">{{ receipt.created_by_name or 'System' }}</td>
+          <td data-label="Created By" data-sort-key="created_by" data-sort-value="{{ receipt.created_by_name or 'System' }}">{{ receipt.created_by_name or 'System' }}</td>
 
-          <td>
+          <td class="td-action" data-label="Action">
             {% if session.get("role") == "admin" %}
-              <a href="{{ url_for('billing.receipt_edit', receipt_id=receipt.id) }}">Edit</a>
+              <a class="receipt-action-link" href="{{ url_for('billing.receipt_edit', receipt_id=receipt.id) }}">Edit</a>
             {% else %}
               -
             {% endif %}
@@ -323,6 +658,8 @@
   {% endif %}
 </div>
 
+</div>
+
 <script>
 function toggleStatsView(view) {
   const dateStats = document.getElementById('dateStats');
@@ -332,15 +669,13 @@ function toggleStatsView(view) {
   if (view === 'month') {
     dateStats.style.display = 'none';
     monthStats.style.display = 'block';
-    btnMonth.style.backgroundColor = '#3498db';
-    btnMonth.style.borderColor = '#3498db';
-    btnMonth.style.color = 'white';
+    btnMonth.classList.remove('btn-outline-secondary');
+    btnMonth.classList.add('btn-primary');
   } else {
     dateStats.style.display = 'block';
     monthStats.style.display = 'none';
-    btnMonth.style.backgroundColor = 'white';
-    btnMonth.style.borderColor = '#95a5a6';
-    btnMonth.style.color = '#333';
+    btnMonth.classList.remove('btn-primary');
+    btnMonth.classList.add('btn-outline-secondary');
   }
 }
 

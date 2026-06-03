@@ -223,3 +223,4 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 /.antigravitycli/
+static/lms/images/inline/*.png
