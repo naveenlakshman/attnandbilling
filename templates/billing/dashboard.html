@@ -10,8 +10,27 @@
   .receivable-card,
   .dashboard-chart-card {
     border: none;
-    border-radius: 18px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+    border-radius: 12px;
+    box-shadow: 0 3px 12px rgba(15, 23, 42, 0.06);
+  }
+
+  .dashboard-page-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+  }
+
+  .dashboard-filter-card {
+    background: #ffffff;
+  }
+
+  .dashboard-filter-form .form-label {
+    font-weight: 600;
+    color: #334155;
+  }
+
+  .dashboard-filter-form .form-select,
+  .dashboard-filter-form .btn {
+    min-height: 42px;
   }
 
   .stat-card h3,
@@ -28,6 +47,16 @@
     font-size: 2rem;
     font-weight: 700;
     margin: 0;
+  }
+
+  .stat-card {
+    min-height: 124px;
+  }
+
+  .stat-card p,
+  .dashboard-total-value,
+  .receivable-total {
+    overflow-wrap: anywhere;
   }
 
   .receivable-link {
@@ -123,14 +152,171 @@
       grid-template-columns: 1fr;
     }
   }
+
+  @media (max-width: 575.98px) {
+    .dashboard-page-title {
+      font-size: 1.5rem;
+      margin-bottom: 14px !important;
+    }
+
+    .dashboard-filter-card,
+    .stat-card,
+    .receivable-card,
+    .dashboard-chart-card {
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+    }
+
+    .dashboard-filter-card,
+    .receivable-card,
+    .dashboard-chart-card {
+      padding: 14px !important;
+      margin-bottom: 14px !important;
+    }
+
+    .dashboard-filter-form {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px !important;
+    }
+
+    .dashboard-filter-form > div {
+      width: 100%;
+    }
+
+    .dashboard-filter-form .filter-action {
+      grid-column: 1 / -1;
+    }
+
+    .dashboard-filter-form .form-label {
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+
+    .dashboard-filter-form .form-select,
+    .dashboard-filter-form .btn {
+      min-height: 38px;
+      font-size: 13px;
+      border-radius: 8px;
+      padding-top: 7px;
+      padding-bottom: 7px;
+    }
+
+    .dashboard-stat-row {
+      --bs-gutter-x: .75rem;
+      --bs-gutter-y: .75rem;
+      margin-bottom: 14px !important;
+    }
+
+    .stat-card {
+      min-height: 104px;
+      padding: 14px !important;
+    }
+
+    .stat-card h3 {
+      font-size: 12px;
+      line-height: 1.25;
+      margin-bottom: 10px;
+      color: #475569;
+    }
+
+    .stat-card p {
+      font-size: clamp(1.15rem, 7vw, 1.55rem);
+      line-height: 1.15;
+    }
+
+    .receivable-card h3,
+    .dashboard-chart-card h3 {
+      font-size: 1rem;
+      margin-bottom: 10px;
+    }
+
+    .receivable-total {
+      font-size: clamp(1.35rem, 8vw, 1.75rem);
+      line-height: 1.15;
+    }
+
+    .receivable-bar {
+      height: 12px;
+      margin: 14px 0;
+    }
+
+    .receivable-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .receivable-grid > div,
+    .dashboard-total-block {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .receivable-grid small {
+      font-size: 10px;
+      margin-bottom: 4px;
+      letter-spacing: .02em;
+    }
+
+    .receivable-grid p {
+      font-size: .92rem;
+      line-height: 1.2;
+    }
+
+    .dashboard-chart-layout {
+      gap: 14px;
+    }
+
+    .dashboard-chart-left canvas {
+      height: 250px !important;
+    }
+
+    #clickInfo {
+      margin-top: 12px !important;
+      padding: 12px !important;
+    }
+
+    #clickInfo .row {
+      --bs-gutter-y: .5rem;
+    }
+
+    .dashboard-chart-right {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .dashboard-total-block {
+      margin-bottom: 0;
+    }
+
+    .dashboard-total-block h4 {
+      font-size: 11px;
+      margin-bottom: 5px;
+    }
+
+    .dashboard-total-value {
+      font-size: clamp(1rem, 5.5vw, 1.3rem);
+      line-height: 1.15;
+    }
+
+    .dashboard-date-range {
+      grid-column: 1 / -1;
+      margin-top: 0;
+      text-align: center;
+      font-size: 12px;
+    }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<h2 class="mb-4">Dashboard</h2>
+<h2 class="dashboard-page-title mb-4">Dashboard</h2>
 
 <div class="card dashboard-filter-card p-4 mb-4">
-  <form method="get" class="row g-3 align-items-end">
+  <form method="get" class="row g-3 align-items-end dashboard-filter-form">
     <div class="col-md-4">
       <label class="form-label">Branch</label>
       <select name="branch_id" class="form-select">
@@ -152,35 +338,35 @@
       </select>
     </div>
 
-    <div class="col-md-2">
+    <div class="col-md-2 filter-action">
       <button type="submit" class="btn btn-primary w-100">Apply</button>
     </div>
   </form>
 </div>
 
-<div class="row g-4 mb-4">
-  <div class="col-md-3">
+<div class="row g-4 mb-4 dashboard-stat-row">
+  <div class="col-6 col-md-3">
     <div class="card stat-card p-4">
       <h3>Total Students</h3>
       <p>{{ total_students }}</p>
     </div>
   </div>
 
-  <div class="col-md-3">
+  <div class="col-6 col-md-3">
     <div class="card stat-card p-4">
       <h3>Total Invoices</h3>
       <p>{{ total_invoices }}</p>
     </div>
   </div>
 
-  <div class="col-md-3">
+  <div class="col-6 col-md-3">
     <div class="card stat-card p-4">
       <h3>Total Sales</h3>
       <p>₹ {{ "%.2f"|format(total_sales or 0) }}</p>
     </div>
   </div>
 
-  <div class="col-md-3">
+  <div class="col-6 col-md-3">
     <div class="card stat-card p-4">
       <h3>Total Receipts</h3>
       <p>₹ {{ "%.2f"|format(total_receipts or 0) }}</p>
@@ -321,6 +507,7 @@ const monthLabels = {{ month_labels|tojson }};
 const salesData = {{ sales_data|tojson }};
 const receiptsData = {{ receipts_data|tojson }};
 const expensesData = {{ expenses_data|tojson }};
+const dashboardIsMobile = window.matchMedia('(max-width: 575.98px)').matches;
 
 const chartInstance = new Chart(ctx, {
     type: 'bar',
@@ -355,10 +542,14 @@ const chartInstance = new Chart(ctx, {
         maintainAspectRatio: false,
         plugins: {
             legend: {
-                position: 'top',
+                position: dashboardIsMobile ? 'bottom' : 'top',
                 labels: {
                     usePointStyle: true,
-                    padding: 15
+                    boxWidth: dashboardIsMobile ? 8 : 12,
+                    padding: dashboardIsMobile ? 10 : 15,
+                    font: {
+                        size: dashboardIsMobile ? 11 : 12
+                    }
                 }
             },
             tooltip: {
@@ -369,6 +560,7 @@ const chartInstance = new Chart(ctx, {
             y: {
                 beginAtZero: true,
                 ticks: {
+                    maxTicksLimit: dashboardIsMobile ? 4 : 8,
                     callback: function(value) {
                         return '₹ ' + value.toLocaleString('en-IN');
                     }
@@ -376,8 +568,10 @@ const chartInstance = new Chart(ctx, {
             },
             x: {
                 ticks: {
-                    maxRotation: 45,
-                    minRotation: 0
+                    maxRotation: dashboardIsMobile ? 0 : 45,
+                    minRotation: 0,
+                    autoSkip: true,
+                    maxTicksLimit: dashboardIsMobile ? 4 : 12
                 }
             }
         }
