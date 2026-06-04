@@ -5,12 +5,56 @@
 
 {% block extra_css %}
 <style>
+  .master-topics-page {
+    --mt-border: #e5e7eb;
+    --mt-soft: #f8fafc;
+    --mt-text: #111827;
+    --mt-muted: #64748b;
+  }
+
   .master-topics-header {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .master-topics-back {
+    justify-self: start;
+    color: #0d6efd;
+    font-size: .86rem;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .master-topics-back:hover {
+    text-decoration: underline;
+  }
+
+  .master-topics-title-row {
     display: flex;
-    justify-content: space-between;
     align-items: flex-start;
+    justify-content: space-between;
     gap: 12px;
-    margin-bottom: 1rem;
+  }
+
+  .master-topics-title-row h2 {
+    margin: 0;
+    color: var(--mt-text);
+    font-weight: 800;
+    line-height: 1.16;
+  }
+
+  .master-topics-copy p {
+    margin: 4px 0 0;
+    max-width: 42rem;
+  }
+
+  .master-topics-new-btn {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: .35rem .9rem;
+    border-radius: 8px;
+    font-weight: 800;
   }
 
   .master-actions {
@@ -24,6 +68,33 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .master-topic-search input {
+    width: 100%;
+    min-height: 40px;
+    padding: .45rem .75rem;
+    border: 1px solid var(--mt-border);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--mt-text);
+    font-size: .92rem;
+  }
+
+  .master-topic-search input:focus {
+    outline: 0;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, .12);
+  }
+
+  .master-topic-empty-search {
+    display: none;
+    padding: 18px;
+    border: 1px solid var(--mt-border);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--mt-muted);
+    text-align: center;
   }
 
   .order-hint {
@@ -71,28 +142,261 @@
     box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.15);
   }
 
-  @media (max-width: 992px) {
+  .master-topic-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @media (max-width: 767.98px) {
+    .master-topics-page {
+      margin-top: -2px;
+    }
+
     .master-topics-header {
-      flex-direction: column;
-      align-items: stretch;
+      gap: 9px;
+      margin-bottom: 10px;
+    }
+
+    .master-topics-title-row h2 {
+      font-size: 1.32rem;
+    }
+
+    .master-topics-copy p {
+      font-size: .86rem;
+      line-height: 1.35;
+    }
+
+    .master-topics-new-btn {
+      min-height: 38px;
+      padding: .35rem .85rem;
+    }
+
+    .master-actions {
+      display: grid;
+      gap: 8px;
+    }
+
+    .order-actions {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid var(--mt-border);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    }
+
+    .order-actions .btn {
+      min-height: 36px;
+      border-radius: 8px;
+      font-size: .84rem;
+      font-weight: 800;
+    }
+
+    .order-hint {
+      font-size: .76rem;
+      line-height: 1.3;
+    }
+
+    .order-validation-error {
+      grid-column: 1 / -1;
+      font-size: .76rem;
+    }
+
+    .master-topic-info {
+      display: none;
+    }
+
+    .master-topics-card {
+      border: 0;
+      background: transparent;
+      box-shadow: none !important;
+    }
+
+    .master-topics-card .table-responsive {
+      overflow: visible;
+    }
+
+    .master-topics-table {
+      min-width: 0 !important;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    .master-topics-table thead {
+      display: none;
+    }
+
+    .master-topics-table,
+    .master-topics-table tbody,
+    .master-topics-table tr,
+    .master-topics-table td {
+      display: block;
+      width: 100%;
+    }
+
+    .master-topics-table tbody {
+      display: grid;
+      gap: 9px;
+    }
+
+    .master-topics-table tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--mt-border);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    }
+
+    .master-topics-table tr:hover {
+      background: #fff;
+    }
+
+    .master-topics-table td {
+      min-width: 0;
+      padding: 0 !important;
+      border: 0 !important;
+      font-size: .86rem;
+      line-height: 1.35;
+      text-align: left !important;
+      white-space: normal;
+    }
+
+    .master-topics-table td[data-label] {
+      padding: 8px 7px !important;
+      border-radius: 8px;
+      background: var(--mt-soft);
+    }
+
+    .master-topics-table td::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 3px;
+      color: var(--mt-muted);
+      font-size: .66rem;
+      font-weight: 800;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+
+    .drag-cell {
+      display: none !important;
+    }
+
+    .topic-title-cell,
+    .topic-actions-cell {
+      grid-column: 1 / -1;
+    }
+
+    .topic-title-cell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: flex-start;
+      padding-bottom: 9px !important;
+      border-bottom: 1px solid var(--mt-border) !important;
+    }
+
+    .topic-title-cell::before,
+    .topic-actions-cell::before {
+      display: none !important;
+    }
+
+    .topic-mobile-head {
+      min-width: 0;
+    }
+
+    .master-topic-title {
+      color: var(--mt-text);
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .master-topic-desc {
+      margin-top: 5px;
+      color: var(--mt-muted);
+      font-size: .8rem;
+      line-height: 1.35;
+    }
+
+    .topic-mobile-status {
+      flex: 0 0 auto;
+      margin-top: 1px;
+    }
+
+    .topic-order-cell {
+      order: 2;
+    }
+
+    .topic-content-cell {
+      order: 3;
+    }
+
+    .topic-status-cell {
+      display: none !important;
+    }
+
+    .topic-order-input {
+      width: 100%;
+      min-height: 34px;
+      border-radius: 8px;
+      font-weight: 800;
+    }
+
+    .topic-actions-cell {
+      order: 4;
+      padding-top: 10px !important;
+      border-top: 1px solid var(--mt-border) !important;
+    }
+
+    .master-topic-row-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .master-topic-row-actions > a:first-child {
+      grid-column: 1 / -1;
+    }
+
+    .master-topic-row-actions form {
+      grid-column: 1 / -1;
+    }
+
+    .master-topic-row-actions .btn {
+      width: 100%;
+      min-height: 36px;
+      border-radius: 8px;
+      font-size: .82rem;
+      font-weight: 800;
+    }
+
+    .master-topic-row-actions form .btn {
+      width: 100%;
     }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-3">
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a></li>
-      <li class="breadcrumb-item active" aria-current="page">{{ chapter.title }}</li>
-    </ol>
-  </nav>
+<div class="master-topics-page">
 
   <div class="master-topics-header">
-    <div>
-      <h2 class="h4 mb-1">{{ chapter.title }}</h2>
-      <p class="text-muted mb-0">Reusable topics for linked programs.</p>
+    <a class="master-topics-back" href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a>
+
+    <div class="master-topics-copy">
+      <div class="master-topics-title-row">
+        <h2 class="h4">{{ chapter.title }}</h2>
+        <a class="btn btn-primary btn-sm master-topics-new-btn" href="{{ url_for('lms_admin.master_topic_new', master_chapter_id=chapter.id) }}">New</a>
+      </div>
+      <p class="text-muted">Reusable topics for linked programs.</p>
     </div>
 
     <div class="master-actions">
@@ -105,19 +409,23 @@
         <span id="masterOrderValidationError" class="order-validation-error">Each topic must have a unique order number from 1 to total topics.</span>
       </form>
       {% endif %}
-      <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.list_master_chapters') }}">Back</a>
-      <a class="btn btn-primary" href="{{ url_for('lms_admin.master_topic_new', master_chapter_id=chapter.id) }}">+ New Master Topic</a>
     </div>
+
+    {% if topics %}
+    <div class="master-topic-search">
+      <input type="search" id="masterTopicSearch" placeholder="Search topics" autocomplete="off">
+    </div>
+    {% endif %}
   </div>
 
-  <div class="alert alert-info" role="alert">
+  <div class="alert alert-info master-topic-info" role="alert">
     Content rows are prepared for master topics through <strong>master_topic_id</strong>. Full editor wiring is introduced in the next compatibility step to keep legacy behavior safe.
   </div>
 
   {% if topics %}
-  <div class="card shadow-sm">
+  <div class="card shadow-sm master-topics-card">
     <div class="table-responsive">
-      <table class="table table-hover mb-0 align-middle">
+      <table class="table table-hover mb-0 align-middle master-topics-table">
         <thead class="table-light">
           <tr>
             <th class="drag-cell"></th>
@@ -131,27 +439,36 @@
         <tbody>
           {% for topic in topics %}
           {% set can_manage = session.get('role') in ['admin', 'staff'] %}
-          <tr class="master-topic-row" data-topic-id="{{ topic.id }}" {% if can_manage %}draggable="true"{% endif %}>
+          <tr class="master-topic-row" data-topic-id="{{ topic.id }}" data-topic-search="{{ (topic.title ~ ' ' ~ (topic.short_description or '') ~ ' ' ~ topic.status)|lower }}" {% if can_manage %}draggable="true"{% endif %}>
             <td class="drag-cell">{% if can_manage %}<span class="drag-handle" title="Drag to reorder">↕</span>{% endif %}</td>
-            <td>
+            <td class="topic-order-cell" data-label="Order">
               <input type="number" class="form-control form-control-sm topic-order-input" min="1" value="{{ topic.topic_order }}" {% if not can_manage %}readonly{% endif %}>
             </td>
-            <td>
-              <div class="fw-semibold">{{ topic.title }}</div>
-              {% if topic.short_description %}
-              <div class="text-muted small">{{ topic.short_description|truncate(120) }}</div>
-              {% endif %}
+            <td class="topic-title-cell">
+              <div class="topic-mobile-head">
+                <div class="master-topic-title">{{ topic.title }}</div>
+                {% if topic.short_description %}
+                <div class="master-topic-desc">{{ topic.short_description|truncate(120) }}</div>
+                {% endif %}
+              </div>
+              <div class="topic-mobile-status">
+                {% if topic.status == 'active' %}
+                <span class="badge bg-success">Active</span>
+                {% else %}
+                <span class="badge bg-secondary">Archived</span>
+                {% endif %}
+              </div>
             </td>
-            <td><span class="badge bg-primary">{{ topic.content_count }}</span></td>
-            <td>
+            <td class="topic-content-cell" data-label="Content"><span class="badge bg-primary">{{ topic.content_count }}</span></td>
+            <td class="topic-status-cell" data-label="Status">
               {% if topic.status == 'active' %}
               <span class="badge bg-success">Active</span>
               {% else %}
               <span class="badge bg-secondary">Archived</span>
               {% endif %}
             </td>
-            <td>
-              <div class="d-flex flex-wrap gap-2">
+            <td class="topic-actions-cell">
+              <div class="master-topic-row-actions">
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) }}">Manage Content</a>
                 {% if topic.lesson_content_id %}
                 <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.content_edit', content_id=topic.lesson_content_id) }}">Edit Lesson</a>
@@ -173,6 +490,9 @@
       </table>
     </div>
   </div>
+  <div class="master-topic-empty-search" id="masterTopicSearchEmpty">
+    No topics match your search.
+  </div>
   {% else %}
   <div class="card shadow-sm">
     <div class="card-body text-center py-5">
@@ -183,6 +503,38 @@
   </div>
   {% endif %}
 </div>
+
+{% if topics %}
+<script>
+  (function initMasterTopicSearch() {
+    const input = document.getElementById('masterTopicSearch');
+    const empty = document.getElementById('masterTopicSearchEmpty');
+    const rows = Array.from(document.querySelectorAll('.master-topic-row'));
+
+    if (!input || !rows.length) {
+      return;
+    }
+
+    input.addEventListener('input', function () {
+      const query = input.value.trim().toLowerCase();
+      let visible = 0;
+
+      rows.forEach(function (row) {
+        const haystack = row.dataset.topicSearch || '';
+        const match = !query || haystack.indexOf(query) !== -1;
+        row.hidden = !match;
+        if (match) {
+          visible += 1;
+        }
+      });
+
+      if (empty) {
+        empty.style.display = visible ? 'none' : 'block';
+      }
+    });
+  })();
+</script>
+{% endif %}
 
 {% if session.get('role') in ['admin', 'staff'] and topics %}
 <script>
