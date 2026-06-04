@@ -1890,6 +1890,28 @@ def program_view(program_id):
             (program_id,)
         )
         linked_master_chapters = cur.fetchone()['count']
+        cur.execute(
+            """
+                SELECT
+                    pc.id AS link_id,
+                    pc.chapter_order,
+                    pc.custom_title,
+                    pc.is_visible,
+                    pc.master_chapter_id,
+                    mc.title AS master_title,
+                    COUNT(mt.id) AS topic_count
+                FROM lms_program_chapters pc
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                LEFT JOIN lms_master_topics mt
+                    ON mt.master_chapter_id = mc.id
+                   AND mt.status = 'active'
+                WHERE pc.program_id = ?
+                GROUP BY pc.id
+                ORDER BY pc.chapter_order ASC, pc.id ASC
+            """,
+            (program_id,)
+        )
+        linked_master_chapter_items = cur.fetchall()
         total_chapters = len(chapters) + (linked_master_chapters or 0)
         
         # Get total topics count
@@ -1909,11 +1931,43 @@ def program_view(program_id):
         """, (program_id, program_id))
         total_topics = cur.fetchone()['count']
         
-        # Get total students assigned
+        # Mirror progress dashboard enrollment: direct access, batch access,
+        # invoice course access, or invoice course-to-program mapping.
         cur.execute("""
-            SELECT COUNT(DISTINCT student_id) as count
-            FROM lms_student_program_access
-            WHERE program_id = ? AND access_status = 'active'
+            SELECT COUNT(DISTINCT s.id) as count
+            FROM students s
+            JOIN lms_programs lp ON lp.id = ?
+            WHERE s.status = 'active'
+              AND lp.is_active = 1
+              AND lp.is_deleted = 0
+              AND (
+                EXISTS (
+                    SELECT 1 FROM lms_student_program_access spa
+                    WHERE spa.student_id = s.id AND spa.program_id = lp.id
+                      AND spa.is_active = 1
+                      AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+                )
+                OR EXISTS (
+                    SELECT 1 FROM lms_batch_program_access bpa
+                    JOIN student_batches sb ON sb.batch_id = bpa.batch_id
+                    WHERE sb.student_id = s.id AND bpa.program_id = lp.id
+                      AND bpa.is_active = 1 AND sb.status = 'active'
+                      AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
+                )
+                OR EXISTS (
+                    SELECT 1 FROM invoices inv
+                    JOIN invoice_items ii ON ii.invoice_id = inv.id
+                    WHERE inv.student_id = s.id AND ii.course_id = lp.course_id
+                      AND lp.course_id IS NOT NULL
+                )
+                OR EXISTS (
+                    SELECT 1 FROM invoices inv
+                    JOIN invoice_items ii ON ii.invoice_id = inv.id
+                    JOIN lms_course_program_map cpm ON cpm.course_id = ii.course_id
+                      AND cpm.program_id = lp.id
+                    WHERE inv.student_id = s.id
+                )
+              )
         """, (program_id,))
         total_students = cur.fetchone()['count']
         
@@ -1966,6 +2020,7 @@ def program_view(program_id):
         summary = {
             'program': program,
             'chapters': chapters,
+            'linked_master_chapter_items': linked_master_chapter_items,
             'total_chapters': total_chapters,
             'linked_master_chapters': linked_master_chapters or 0,
             'total_topics': total_topics,
@@ -2035,27 +2090,27 @@ def program_view(program_id):
                         (SELECT COUNT(DISTINCT lt.id)
                          FROM lms_topics lt
                          JOIN lms_chapters lc ON lc.id = lt.chapter_id
-                         JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
-                         WHERE lc.program_id = ?
-                           AND ltc.content_mode = 'download')
+                         JOIN lms_master_topic_bridge b ON b.legacy_topic_id = lt.id
+                         JOIN lms_assignments a ON a.master_topic_id = b.master_topic_id
+                         WHERE lc.program_id = ?)
                         +
                         (SELECT COUNT(DISTINCT mt.id)
                          FROM lms_master_topics mt
                          JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
-                         JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
+                         JOIN lms_assignments a ON a.master_topic_id = mt.id
                          WHERE pc.program_id = ?
-                           AND mt.status = 'active'
-                           AND ltc.content_mode = 'download')
-                    ) AS topics_with_download
+                           AND pc.is_visible = 1
+                           AND mt.status = 'active')
+                    ) AS topics_with_assignments
             """, (program_id, program_id, program_id, program_id, program_id, program_id))
             coverage = cur.fetchone()
             summary['topics_with_video'] = coverage['topics_with_video'] or 0
             summary['topics_with_pdf'] = coverage['topics_with_pdf'] or 0
-            summary['topics_with_download'] = coverage['topics_with_download'] or 0
+            summary['topics_with_assignments'] = coverage['topics_with_assignments'] or 0
         else:
             summary['topics_with_video'] = 0
             summary['topics_with_pdf'] = 0
-            summary['topics_with_download'] = 0
+            summary['topics_with_assignments'] = 0
 
         return render_template('lms_program_view.html', summary=summary)
     finally:

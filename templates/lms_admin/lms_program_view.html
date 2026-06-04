@@ -1,7 +1,7 @@
 {% extends "lms_admin/base.html" %}
 
 {% block title %}{{ summary.program.program_name }} - LMS Program - Global IT ERP{% endblock %}
-{% block page_title %}{{ summary.program.program_name }}{% endblock %}
+{% block page_title %}Program{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -78,6 +78,7 @@
     text-decoration: none;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     transition: all 0.3s ease;
   }
@@ -251,6 +252,14 @@
     gap: 0.5rem;
   }
   .chapter-toggle:hover { background: rgba(102,126,234,0.06); }
+  .chapter-link {
+    color: inherit;
+    text-decoration: none;
+  }
+  .chapter-link:hover {
+    color: inherit;
+    text-decoration: none;
+  }
 
   .chapter-info h4 {
     margin: 0 0 4px 0;
@@ -421,30 +430,147 @@
     color: #383d41;
   }
 
+  .coverage-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 0 20px 20px;
+  }
+
   @media (max-width: 768px) {
     .program-header {
-      padding: 24px;
+      padding: 16px;
+      margin-bottom: 12px;
+      border-radius: 10px;
+    }
+
+    .program-header::before {
+      width: 120px;
+      height: 120px;
+      opacity: .65;
     }
 
     .program-title {
-      font-size: 24px;
+      font-size: 1.55rem;
+      line-height: 1.18;
+      margin-bottom: 12px;
     }
 
     .program-meta {
-      gap: 12px;
+      gap: 8px;
+      margin-bottom: 10px;
     }
 
-    .metrics-grid {
-      grid-template-columns: repeat(2, 1fr);
+    .program-meta-item {
+      gap: 0;
+    }
+
+    .status-badge {
+      padding: 5px 10px;
+      font-size: .75rem;
+      border-radius: 999px;
+      font-weight: 800;
+    }
+
+    .program-description {
+      margin-top: 12px;
+      line-height: 1.35;
+      font-size: .95rem;
     }
 
     .program-actions {
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
     }
 
     .btn-header {
       width: 100%;
+      min-height: 40px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: .84rem;
+      font-weight: 800;
       justify-content: center;
+    }
+
+    .metrics-grid {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .metric-card {
+      width: auto !important;
+      min-width: 0;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border-left-width: 3px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    }
+
+    .metric-card:hover {
+      transform: none;
+    }
+
+    .metric-icon {
+      display: none;
+    }
+
+    .metric-label {
+      font-size: .68rem;
+      line-height: 1.1;
+    }
+
+    .metric-value {
+      font-size: 1.45rem;
+      margin-top: 4px;
+      line-height: 1;
+    }
+
+    .metrics-grid .metric-card.resources {
+      grid-column: 1 / -1;
+    }
+
+    .section-card {
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+
+    .section-header {
+      padding: 11px 12px;
+    }
+
+    .section-title {
+      font-size: .84rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .section-content {
+      padding: 12px;
+    }
+
+    .coverage-body {
+      gap: 10px;
+      padding: 0 12px 12px;
+    }
+
+    .chapter-toggle {
+      padding: 11px 12px;
+    }
+
+    .chapter-info h4 {
+      font-size: .92rem;
+      line-height: 1.25;
+    }
+
+    .resource-item,
+    .activity-item {
+      padding: 11px 12px;
+      border-radius: 8px;
     }
   }
 </style>
@@ -455,24 +581,24 @@
 <!-- Program Header -->
 <div class="program-header">
   <div class="program-header-content">
-    <h1 class="program-title">📖 {{ summary.program.program_name }}</h1>
+    <h1 class="program-title">{{ summary.program.program_name }}</h1>
     
     <div class="program-meta">
       {% if summary.program.course_name %}
       <div class="program-meta-item">
-        🎓 <strong>{{ summary.program.course_name }}</strong>
+        <strong>{{ summary.program.course_name }}</strong>
       </div>
       {% endif %}
       
       <div class="program-meta-item">
         <span class="status-badge {% if summary.program.is_active %}status-active{% else %}status-inactive{% endif %}">
-          {{ '✓ Active' if summary.program.is_active else '✗ Inactive' }}
+          {{ 'Active' if summary.program.is_active else 'Inactive' }}
         </span>
       </div>
       
       <div class="program-meta-item">
         <span class="status-badge {% if summary.program.is_published %}status-published{% else %}status-draft{% endif %}">
-          {{ '📤 Published' if summary.program.is_published else '📄 Draft' }}
+          {{ 'Published' if summary.program.is_published else 'Draft' }}
         </span>
       </div>
     </div>
@@ -486,21 +612,18 @@
     <div class="program-actions">
       {% if session.get('role') == 'admin' %}
       <a href="{{ url_for('lms_admin.program_edit', program_id=summary.program.id) }}" class="btn-header btn-edit">
-        ✏️ Edit Program
+        Edit
       </a>
       {% endif %}
       <a href="{{ url_for('lms_admin.list_chapters', program_id=summary.program.id) }}" class="btn-header btn-edit">
-        📑 Chapters
+        Chapters
       </a>
       <a href="{{ url_for('lms_admin.list_program_resources', program_id=summary.program.id) }}" class="btn-header btn-edit">
-        📚 Resources
-      </a>
-      <a href="{{ url_for('lms_admin.list_programs') }}" class="btn-header btn-back">
-        ← Back to Programs
+        Resources
       </a>
       {% if session.get('role') == 'admin' %}
       <button type="button" class="btn-header btn-danger-header" onclick="document.getElementById('deleteProgramModal').style.display='flex'">
-        🗑️ Delete Program
+        Delete
       </button>
       {% endif %}
     </div>
@@ -510,11 +633,11 @@
 <!-- Delete Confirmation Modal -->
 <div id="deleteProgramModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center;">
   <div style="background:#fff; border-radius:12px; padding:32px; max-width:440px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-    <h4 style="margin:0 0 12px; color:#dc3545;">⚠️ Delete Program</h4>
+    <h4 style="margin:0 0 12px; color:#dc3545;">Delete Program</h4>
     <p style="color:#333; margin-bottom:8px;">You are about to delete:</p>
     <p style="font-weight:700; font-size:16px; margin-bottom:16px;">{{ summary.program.program_name }}</p>
     <p style="color:#6c757d; font-size:13px; margin-bottom:24px;">
-      This will soft-delete the program — it will no longer appear in the program list. 
+      This will soft-delete the program; it will no longer appear in the program list.
       Chapters, topics, and student access records are preserved.
     </p>
     <div style="display:flex; gap:12px; justify-content:flex-end;">
@@ -536,31 +659,26 @@
 <!-- Metrics Grid -->
 <div class="metrics-grid">
   <div class="metric-card chapters">
-    <div class="metric-icon">📑</div>
     <div class="metric-label">Chapters</div>
     <div class="metric-value">{{ summary.total_chapters }}</div>
   </div>
 
   <div class="metric-card topics">
-    <div class="metric-icon">📝</div>
     <div class="metric-label">Topics</div>
     <div class="metric-value">{{ summary.total_topics }}</div>
   </div>
 
   <div class="metric-card students">
-    <div class="metric-icon">👥</div>
     <div class="metric-label">Students</div>
     <div class="metric-value">{{ summary.total_students }}</div>
   </div>
 
   <div class="metric-card tests">
-    <div class="metric-icon">✍️</div>
     <div class="metric-label">Tests</div>
     <div class="metric-value">{{ summary.total_tests }}</div>
   </div>
 
   <div class="metric-card resources">
-    <div class="metric-icon">📦</div>
     <div class="metric-label">Resources</div>
     <div class="metric-value">{{ summary.resource_count }}</div>
   </div>
@@ -570,13 +688,13 @@
 {% if summary.total_topics > 0 %}
 {% set video_pct = ((summary.topics_with_video / summary.total_topics) * 100) | round(0) | int %}
 {% set pdf_pct   = ((summary.topics_with_pdf   / summary.total_topics) * 100) | round(0) | int %}
-{% set dl_pct    = ((summary.topics_with_download / summary.total_topics) * 100) | round(0) | int %}
+{% set assignment_pct = ((summary.topics_with_assignments / summary.total_topics) * 100) | round(0) | int %}
 <div class="section-card" style="margin-bottom: 20px;">
   <div class="section-header" style="margin-bottom: 14px;">
-    <h3 class="section-title">📊 Content Coverage</h3>
+    <h3 class="section-title">Content Coverage</h3>
     <span style="font-size: 12px; color: #6c757d;">{{ summary.total_topics }} topics total</span>
   </div>
-  <div style="display: flex; flex-direction: column; gap: 12px;">
+  <div class="coverage-body">
 
     <!-- Video -->
     <div>
@@ -600,14 +718,14 @@
       </div>
     </div>
 
-    <!-- Download -->
+    <!-- Assignments -->
     <div>
       <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px;">
-        <span>&#x2B07; Download</span>
-        <span style="color: #6c757d;">{{ summary.topics_with_download }} / {{ summary.total_topics }}</span>
+        <span>Assignments</span>
+        <span style="color: #6c757d;">{{ summary.topics_with_assignments }} / {{ summary.total_topics }}</span>
       </div>
       <div style="background: #e9ecef; border-radius: 6px; height: 10px; overflow: hidden;">
-        <div style="width: {{ dl_pct }}%; background: {% if dl_pct == 100 %}#198754{% elif dl_pct >= 50 %}#fd7e14{% else %}#dc3545{% endif %}; height: 100%; border-radius: 6px; transition: width 0.4s;"></div>
+        <div style="width: {{ assignment_pct }}%; background: {% if assignment_pct == 100 %}#198754{% elif assignment_pct >= 50 %}#fd7e14{% else %}#dc3545{% endif %}; height: 100%; border-radius: 6px; transition: width 0.4s;"></div>
       </div>
     </div>
 
@@ -618,16 +736,31 @@
 <!-- Chapters Section -->
 <div class="section-card">
   <div class="section-header">
-    <h3 class="section-title">📑 Chapters ({{ summary.total_chapters }})</h3>
+    <h3 class="section-title">Chapters ({{ summary.total_chapters }})</h3>
     {% if summary.total_chapters > 0 %}
     <a href="{{ url_for('lms_admin.list_chapters', program_id=summary.program.id) }}" style="color: #0d6efd; text-decoration: none; font-size: 13px; font-weight: 600;">
-      View All →
+      View All
     </a>
     {% endif %}
   </div>
   <div class="section-content">
-    {% if summary.chapters %}
+    {% if summary.linked_master_chapter_items or summary.chapters %}
       <div class="chapters-list">
+        {% for link in summary.linked_master_chapter_items %}
+        <div class="chapter-item">
+          <a class="chapter-toggle chapter-link" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=link.master_chapter_id) }}">
+            <div class="chapter-info">
+              <h4>{{ link.chapter_order }}. {{ link.custom_title if link.custom_title else link.master_title }}</h4>
+              <div class="chapter-meta">
+                <span class="chapter-badge">Shared</span>
+                <span class="chapter-badge">{{ link.topic_count }} {{ 'Topic' if link.topic_count == 1 else 'Topics' }}</span>
+                <span class="chapter-badge">{{ 'Visible' if link.is_visible else 'Hidden' }}</span>
+              </div>
+            </div>
+            <span class="chevron">Open</span>
+          </a>
+        </div>
+        {% endfor %}
         {% for chapter in summary.chapters %}
         {% set ch_topics = summary.topics_by_chapter.get(chapter.id, []) %}
         <div class="chapter-item">
@@ -639,11 +772,11 @@
             <div class="chapter-info">
               <h4>{{ chapter.chapter_order }}. {{ chapter.chapter_title }}</h4>
               <div class="chapter-meta">
-                <span class="chapter-badge">📝 {{ chapter.topic_count }} {{ 'Topic' if chapter.topic_count == 1 else 'Topics' }}</span>
-                <span class="chapter-badge">{{ '✓ Active' if chapter.is_active else '✗ Inactive' }}</span>
+                <span class="chapter-badge">{{ chapter.topic_count }} {{ 'Topic' if chapter.topic_count == 1 else 'Topics' }}</span>
+                <span class="chapter-badge">{{ 'Active' if chapter.is_active else 'Inactive' }}</span>
               </div>
             </div>
-            <span class="chevron">▼</span>
+            <span class="chevron">v</span>
           </button>
           <div class="collapse topics-dropdown" id="ch-{{ chapter.id }}">
             {% if ch_topics %}
@@ -657,7 +790,7 @@
                 <span style="font-size:0.72rem; color:#999;">⏱ {{ t.estimated_minutes }}m</span>
                 {% endif %}
                 <span style="font-size:0.72rem; font-weight:600; padding:1px 7px; border-radius:10px; background:{% if t.content_count > 0 %}#e0f2fe; color:#0369a1;{% else %}#f3f4f6; color:#9ca3af;{% endif %}">
-                  📄 {{ t.content_count }} content{{ 's' if t.content_count != 1 else '' }}
+                  {{ t.content_count }} content{{ 's' if t.content_count != 1 else '' }}
                 </span>
                 {% if t.is_preview %}
                 <span style="font-size:0.7rem; color:#f59e0b; font-weight:600;">Preview</span>
@@ -677,14 +810,14 @@
       </div>
     {% else %}
       <div class="empty-state-small">
-        <div class="empty-state-icon-small">📑</div>
+        <div class="empty-state-icon-small">+</div>
         {% if summary.linked_master_chapters > 0 %}
         <p class="empty-state-text-small">This program currently uses {{ summary.linked_master_chapters }} linked master {{ 'chapter' if summary.linked_master_chapters == 1 else 'chapters' }}. Use Manage Chapters to view linked content.</p>
         {% else %}
         <p class="empty-state-text-small">No chapters yet. Create chapters to organize topics.</p>
         {% endif %}
         <a href="{{ url_for('lms_admin.list_chapters', program_id=summary.program.id) }}" style="display: inline-block; background: #0d6efd; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 13px; margin-top: 12px;">
-          Manage Chapters →
+          Manage Chapters
         </a>
       </div>
     {% endif %}
@@ -694,7 +827,7 @@
 <!-- Resources Section -->
 <div class="section-card">
   <div class="section-header">
-    <h3 class="section-title">� Resources ({{ summary.resource_count }})</h3>
+    <h3 class="section-title">Resources ({{ summary.resource_count }})</h3>
   </div>
   <div class="section-content">
     {% if summary.resources %}
@@ -710,15 +843,15 @@
       </div>
       <div style="margin-top: 1rem; text-align: center;">
         <a href="{{ url_for('lms_admin.list_program_resources', program_id=summary.program.id) }}" style="display: inline-block; background: #0d6efd; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 13px;">
-          Manage Resources →
+          Manage Resources
         </a>
       </div>
     {% else %}
       <div class="empty-state-small">
-        <div class="empty-state-icon-small">📚</div>
+        <div class="empty-state-icon-small">+</div>
         <p class="empty-state-text-small">No resources added yet. Share course materials with all students.</p>
         <a href="{{ url_for('lms_admin.list_program_resources', program_id=summary.program.id) }}" style="display: inline-block; background: #0d6efd; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 13px; margin-top: 12px;">
-          Manage Resources →
+          Manage Resources
         </a>
       </div>
     {% endif %}
@@ -728,7 +861,7 @@
 <!-- Activity Section -->
 <div class="section-card">
   <div class="section-header">
-    <h3 class="section-title">📋 Recent Activity</h3>
+    <h3 class="section-title">Recent Activity</h3>
   </div>
   <div class="section-content">
     {% if summary.recent_activity %}
@@ -739,7 +872,7 @@
           {{ activity.description }}
           {% if activity.full_name %}
           <div class="activity-time">
-            by <strong>{{ activity.full_name }}</strong> • {{ activity.created_at }}
+            by <strong>{{ activity.full_name }}</strong> - {{ activity.created_at }}
           </div>
           {% else %}
           <div class="activity-time">
@@ -751,7 +884,7 @@
       </div>
     {% else %}
       <div class="empty-state-small">
-        <div class="empty-state-icon-small">📭</div>
+        <div class="empty-state-icon-small">-</div>
         <p class="empty-state-text-small">No activity yet.</p>
       </div>
     {% endif %}
