@@ -6,12 +6,16 @@
 {% block extra_css %}
 <style>
   .programs-header {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .programs-title-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
     gap: 12px;
-    flex-wrap: wrap;
   }
 
   .programs-header h2 {
@@ -21,32 +25,49 @@
     color: #212529;
   }
 
-  .programs-header .btn {
-    padding: 10px 18px;
+  .programs-header-actions {
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+
+  .programs-header .btn,
+  .programs-new-btn {
+    min-height: 38px;
+    padding: 8px 14px;
+    border-radius: 8px;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 800;
   }
 
   .filter-bar {
-    background: #f8f9fa;
+    background: #fff;
     border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 20px;
-    display: flex;
-    gap: 12px;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
     align-items: center;
-    flex-wrap: wrap;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
   }
 
+  .filter-bar input,
   .filter-bar select {
+    min-height: 40px;
     padding: 8px 12px;
     border: 1px solid #dee2e6;
-    border-radius: 4px;
+    border-radius: 8px;
     font-size: 13px;
     background: #fff;
   }
 
+  .filter-bar input {
+    grid-column: 1 / -1;
+  }
+
+  .filter-bar input:focus,
   .filter-bar select:focus {
     outline: none;
     border-color: #0d6efd;
@@ -287,28 +308,192 @@
     white-space: nowrap;
   }
 
+  .programs-empty-filter {
+    display: none;
+    padding: 24px 16px;
+    border-radius: 10px;
+    background: #fff;
+    color: #6c757d;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  }
+
   @media (max-width: 768px) {
     .programs-header {
-      flex-direction: column;
-      align-items: flex-start;
+      margin-top: -2px;
+      gap: 9px;
     }
 
     .programs-header h2 {
+      min-width: 0;
+      font-size: 1.85rem;
+      line-height: 1.15;
+    }
+
+    .programs-header .btn,
+    .programs-new-btn {
+      width: auto;
+      min-height: 38px;
+      padding: .35rem .85rem;
+      white-space: nowrap;
+    }
+
+    .programs-header-actions {
+      justify-content: flex-end;
+    }
+
+    .filter-bar {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+
+    .filter-bar input,
+    .filter-bar select {
+      min-height: 38px;
+      font-size: 12px;
+    }
+
+    .programs-table-card {
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      overflow: visible;
+    }
+
+    .programs-table-card .programs-table {
+      min-width: 0 !important;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    .programs-table-card .programs-table thead {
+      display: none;
+    }
+
+    .programs-table-card .programs-table,
+    .programs-table-card .programs-table tbody,
+    .programs-table-card .programs-table tr,
+    .programs-table-card .programs-table td {
+      display: block;
       width: 100%;
     }
 
-    .programs-header .btn {
-      width: 100%;
-      text-align: center;
+    .programs-table-card .programs-table tbody {
+      display: grid;
+      gap: 9px;
+    }
+
+    .programs-table-card .programs-table tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    }
+
+    .programs-table-card .programs-table tbody tr:hover {
+      background: #fff;
+    }
+
+    .programs-table-card .programs-table td {
+      min-width: 0;
+      padding: 0 !important;
+      border: 0 !important;
+      font-size: .86rem;
+      line-height: 1.35;
+      text-align: left !important;
+      white-space: normal;
+    }
+
+    .programs-table-card .programs-table td[data-label] {
+      padding: 8px 7px !important;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .programs-table-card .programs-table td::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 3px;
+      color: #64748b;
+      font-size: .66rem;
+      font-weight: 800;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+
+    .program-mobile-hidden {
+      display: none !important;
+    }
+
+    .program-title-cell,
+    .program-actions-cell {
+      grid-column: 1 / -1;
+    }
+
+    .program-title-cell {
+      padding-bottom: 10px !important;
+      border-bottom: 1px solid #e5e7eb !important;
+    }
+
+    .program-title-cell::before,
+    .program-actions-cell::before {
+      display: none !important;
+    }
+
+    .program-title-link {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .program-title-wrap {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .program-name {
+      color: #111827;
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .description-preview {
+      max-width: none;
+      margin-top: 4px;
+      white-space: normal;
+      font-size: .8rem;
+      line-height: 1.35;
+    }
+
+    .course-badge,
+    .chapter-badge,
+    .status-badge {
+      border-radius: 999px;
     }
 
     .actions-cell {
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid #e5e7eb;
     }
 
     .btn-sm-action {
       width: 100%;
       justify-content: center;
+      min-height: 36px;
+      border-radius: 8px;
+      font-size: .82rem;
+      font-weight: 800;
     }
   }
 </style>
@@ -318,12 +503,16 @@
 
 <!-- Page Header -->
 <div class="programs-header">
+  <div class="programs-title-row">
   <h2>📖 LMS Programs</h2>
-  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <div class="programs-header-actions">
+      {% if session.get('role') == 'admin' %}
+      <a class="btn btn-primary btn-sm programs-new-btn" href="{{ url_for('lms_admin.program_new') }}">New</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="programs-header-actions">
     {% if session.get('role') == 'admin' %}
-    <a class="btn btn-primary" href="{{ url_for('lms_admin.program_new') }}">
-      + Add Program
-    </a>
     {% if deleted_programs %}
     <button class="btn btn-outline-secondary" onclick="toggleDeletedSection()" id="toggleDeletedBtn">
       🗑️ Deleted ({{ deleted_programs|length }})
@@ -335,6 +524,7 @@
 
 <!-- Filter Bar -->
 <div class="filter-bar">
+  <input type="search" id="programSearch" placeholder="Search programs" autocomplete="off" oninput="filterPrograms()">
   <select id="statusFilter" onchange="filterPrograms()">
     <option value="">All Programs</option>
     <option value="active">Active</option>
@@ -364,11 +554,11 @@
       </thead>
       <tbody>
         {% for program in programs %}
-        <tr class="program-row" data-active="{{ 1 if program.is_active else 0 }}" data-published="{{ 1 if program.is_published else 0 }}">
-          <td style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
-          <td>
-            <a href="{{ url_for('lms_admin.program_view', program_id=program.id) }}" style="text-decoration: none; color: inherit;">
-              <div style="display: flex; align-items: center; gap: 8px;">
+        <tr class="program-row" data-active="{{ 1 if program.is_active else 0 }}" data-published="{{ 1 if program.is_published else 0 }}" data-search="{{ (program.program_name ~ ' ' ~ (program.description or '') ~ ' ' ~ (program.course_name or ''))|lower }}">
+          <td class="program-mobile-hidden" style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
+          <td class="program-title-cell">
+            <a class="program-title-link" href="{{ url_for('lms_admin.program_view', program_id=program.id) }}">
+              <div class="program-title-wrap">
                 {% if program.total_topics > 0 %}
                 {% set pct = ((program.topics_with_content / program.total_topics) * 100) | round(0) | int %}
                 {% set circ = 62.83 %}
@@ -393,29 +583,29 @@
               </div>
             </a>
           </td>
-          <td>
+          <td data-label="Course">
             {% if program.course_name %}
               <span class="course-badge">{{ program.course_name }}</span>
             {% else %}
               <span style="color: #999; font-size: 12px;">—</span>
             {% endif %}
           </td>
-          <td>
+          <td data-label="Chapters">
             <span class="chapter-badge">
               📑 {{ program.chapter_count }} {{'Chapter' if program.chapter_count == 1 else 'Chapters'}}
             </span>
           </td>
-          <td>
+          <td data-label="Status">
             <span class="status-badge {{ 'status-active' if program.is_active else 'status-inactive' }}">
               {{ 'Active' if program.is_active else 'Inactive' }}
             </span>
           </td>
-          <td>
+          <td data-label="Published">
             <span class="status-badge {{ 'status-published' if program.is_published else 'status-draft' }}">
               {{ 'Published' if program.is_published else 'Draft' }}
             </span>
           </td>
-          <td>
+          <td class="program-actions-cell">
             <div class="actions-cell">
               <a class="btn-sm-action btn-chapters" href="{{ url_for('lms_admin.program_view', program_id=program.id) }}" title="View Program">
                 👁️ View
@@ -440,15 +630,27 @@
     </div>
   {% endif %}
 </div>
+<div class="programs-empty-filter" id="programsEmptyFilter">
+  No programs match your filters.
+</div>
 
 <script>
   function filterPrograms() {
+    const searchInput = document.getElementById('programSearch');
+    const searchQuery = searchInput ? searchInput.value.trim().toLowerCase() : '';
     const statusFilter = document.getElementById('statusFilter').value;
     const publishFilter = document.getElementById('publishFilter').value;
     const rows = document.querySelectorAll('.program-row');
+    const emptyState = document.getElementById('programsEmptyFilter');
+    if (!rows.length) return;
+    let visible = 0;
 
     rows.forEach(row => {
       let show = true;
+
+      if (searchQuery && !(row.dataset.search || '').includes(searchQuery)) {
+        show = false;
+      }
 
       if (statusFilter) {
         const isActive = row.dataset.active === '1';
@@ -463,7 +665,12 @@
       }
 
       row.style.display = show ? '' : 'none';
+      if (show) visible += 1;
     });
+
+    if (emptyState) {
+      emptyState.style.display = visible ? 'none' : 'block';
+    }
   }
 
   function toggleDeletedSection() {
