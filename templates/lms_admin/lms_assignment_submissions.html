@@ -416,6 +416,7 @@
 {% set rejected = submissions | selectattr('review_status','equalto','rejected') | list | length %}
 {% set pending = total - accepted - rejected %}
 {% set trainer_id = request.args.get('trainer_id') %}
+{% set status_filter = request.args.get('status_filter', 'all') %}
 
 <div class="submissions-page">
   <header class="submissions-header">
@@ -454,6 +455,7 @@
       {% if trainer_id %}
       <input type="hidden" name="trainer_id" value="{{ trainer_id }}">
       {% endif %}
+      <input type="hidden" name="status_filter" value="{{ status_filter }}">
       <label class="form-label" for="batchFilter">Batch</label>
       <select id="batchFilter" name="batch_id" class="form-select form-select-sm" onchange="this.form.submit()">
         <option value="">All Batches</option>
@@ -464,7 +466,7 @@
     </form>
     {% if selected_batch_id %}
     <a class="btn btn-sm btn-outline-secondary"
-       href="{{ url_for('lms_admin.view_submissions', assignment_id=assignment.id, trainer_id=trainer_id) if trainer_id else url_for('lms_admin.view_submissions', assignment_id=assignment.id) }}">
+       href="{{ url_for('lms_admin.view_submissions', assignment_id=assignment.id, trainer_id=trainer_id, status_filter=status_filter) if trainer_id else url_for('lms_admin.view_submissions', assignment_id=assignment.id, status_filter=status_filter) }}">
       Clear Batch
     </a>
     {% endif %}
@@ -472,10 +474,10 @@
 
     {% if submissions %}
     <div class="status-filter">
-      <button type="button" class="active" onclick="filterSubs('all', this)">All {{ total }}</button>
-      <button type="button" onclick="filterSubs('submitted', this)">Pending {{ pending }}</button>
-      <button type="button" onclick="filterSubs('accepted', this)">Accepted {{ accepted }}</button>
-      <button type="button" onclick="filterSubs('rejected', this)">Rejected {{ rejected }}</button>
+      <button type="button" class="{{ 'active' if status_filter == 'all' else '' }}" onclick="filterSubs('all', this, true)">All {{ total }}</button>
+      <button type="button" class="{{ 'active' if status_filter == 'submitted' else '' }}" onclick="filterSubs('submitted', this, true)">Pending {{ pending }}</button>
+      <button type="button" class="{{ 'active' if status_filter == 'accepted' else '' }}" onclick="filterSubs('accepted', this, true)">Accepted {{ accepted }}</button>
+      <button type="button" class="{{ 'active' if status_filter == 'rejected' else '' }}" onclick="filterSubs('rejected', this, true)">Rejected {{ rejected }}</button>
     </div>
     {% endif %}
   </section>
@@ -548,6 +550,9 @@
               action="{{ url_for('lms_admin.accept_submission', submission_id=sub.id) }}"
               class="mb-2">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="return_trainer_id" value="{{ trainer_id or '' }}">
+          <input type="hidden" name="return_batch_id" value="{{ selected_batch_id or '' }}">
+          <input type="hidden" name="return_status_filter" value="{{ status_filter }}">
           <div class="mb-2">
             <label class="form-label" for="feedback-{{ sub.id }}">Feedback (optional)</label>
             <textarea id="feedback-{{ sub.id }}" name="feedback" class="form-control form-control-sm" rows="2"
@@ -564,6 +569,9 @@
         <div class="reject-panel" id="rejectPanel-{{ sub.id }}">
           <form method="POST" action="{{ url_for('lms_admin.reject_submission', submission_id=sub.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="return_trainer_id" value="{{ trainer_id or '' }}">
+            <input type="hidden" name="return_batch_id" value="{{ selected_batch_id or '' }}">
+            <input type="hidden" name="return_status_filter" value="{{ status_filter }}">
             <div class="mb-2">
               <label class="form-label" for="reason-{{ sub.id }}">Rejection Reason <span class="text-danger">*</span></label>
               <textarea id="reason-{{ sub.id }}" name="rejection_reason" class="form-control form-control-sm" rows="2"
@@ -598,15 +606,34 @@
 
 {% block extra_js %}
 <script>
-function filterSubs(status, btn) {
+function updateSubmissionFilterUrl(status) {
+  var url = new URL(window.location.href);
+  if (status === 'all') {
+    url.searchParams.delete('status_filter');
+  } else {
+    url.searchParams.set('status_filter', status);
+  }
+  window.history.replaceState({}, '', url.toString());
+  document.querySelectorAll('input[name="status_filter"], input[name="return_status_filter"]').forEach(function (input) {
+    input.value = status;
+  });
+}
+
+function filterSubs(status, btn, updateUrl) {
   document.querySelectorAll('.status-filter button').forEach(function (button) {
     button.classList.remove('active');
   });
-  btn.classList.add('active');
+  if (btn) {
+    btn.classList.add('active');
+  }
 
   document.querySelectorAll('#subList .submission-card').forEach(function (card) {
     card.style.display = (status === 'all' || card.dataset.status === status) ? '' : 'none';
   });
+
+  if (updateUrl) {
+    updateSubmissionFilterUrl(status);
+  }
 }
 
 function toggleRejectPanel(id) {
@@ -615,5 +642,13 @@ function toggleRejectPanel(id) {
     panel.classList.toggle('show');
   }
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+  var currentFilter = '{{ status_filter }}';
+  var activeButton = document.querySelector('.status-filter button.active');
+  if (currentFilter !== 'all') {
+    filterSubs(currentFilter, activeButton, false);
+  }
+});
 </script>
 {% endblock %}

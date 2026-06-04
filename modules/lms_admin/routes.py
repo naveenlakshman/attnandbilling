@@ -6544,10 +6544,12 @@ def all_assignments():
 
         requested_trainer_id = request.args.get('trainer_id', type=int)
         requested_batch_id = request.args.get('batch_id', type=int)
+        requested_program_id = request.args.get('program_id', type=int)
 
         # Role enforcement: staff/trainer can only view their own data.
         selected_trainer_id = requested_trainer_id if is_admin else current_user_id
         selected_batch_id = requested_batch_id
+        selected_program_id = requested_program_id
 
         # Trainer list for dropdown.
         if is_admin:
@@ -6569,55 +6571,126 @@ def all_assignments():
                 (current_user_id,)
             ).fetchall()
 
-        # Active batch dropdown data (always active only).
-        if selected_trainer_id:
-            active_batches = conn.execute(
+        programs = conn.execute(
+            """
+            SELECT lp.id, lp.program_name, c.course_name
+            FROM lms_programs lp
+            LEFT JOIN courses c ON c.id = lp.course_id
+            WHERE lp.is_active = 1
+              AND lp.is_deleted = 0
+              AND EXISTS (
+                  SELECT 1
+                  FROM lms_program_chapters pc
+                  WHERE pc.program_id = lp.id
+                    AND pc.is_visible = 1
+              )
+            ORDER BY lp.program_name
+            """
+        ).fetchall()
+
+        if selected_program_id:
+            valid_program = conn.execute(
                 """
-                SELECT b.id, b.batch_name
-                FROM batches b
-                WHERE LOWER(COALESCE(b.status, '')) = 'active'
-                  AND b.trainer_id = ?
-                ORDER BY b.batch_name
+                SELECT 1
+                FROM lms_programs lp
+                WHERE lp.id = ?
+                  AND lp.is_active = 1
+                  AND lp.is_deleted = 0
+                  AND EXISTS (
+                      SELECT 1
+                      FROM lms_program_chapters pc
+                      WHERE pc.program_id = lp.id
+                        AND pc.is_visible = 1
+                  )
                 """,
-                (selected_trainer_id,)
-            ).fetchall()
-        else:
-            active_batches = conn.execute(
-                """
-                SELECT b.id, b.batch_name
-                FROM batches b
-                WHERE LOWER(COALESCE(b.status, '')) = 'active'
-                ORDER BY b.batch_name
-                """
-            ).fetchall()
+                (selected_program_id,)
+            ).fetchone()
+            if not valid_program:
+                selected_program_id = None
+
+        # Active batch dropdown data, narrowed by trainer and selected program.
+        # For assignment review, program scope is based on submitted assignments
+        # tied to that program's linked master chapters, not batch-program access.
+        batch_where = ["LOWER(COALESCE(b.status, '')) = 'active'"]
+        batch_params = []
+        if selected_program_id:
+            batch_where.append("""
+                EXISTS (
+                    SELECT 1
+                    FROM student_batches sbp
+                    JOIN lms_assignment_submissions subp ON subp.student_id = sbp.student_id
+                    JOIN lms_assignments ap ON ap.id = subp.assignment_id
+                    JOIN lms_master_topics mtp ON mtp.id = ap.master_topic_id
+                    JOIN lms_program_chapters pcp
+                      ON pcp.master_chapter_id = mtp.master_chapter_id
+                     AND pcp.program_id = ?
+                     AND pcp.is_visible = 1
+                    WHERE sbp.batch_id = b.id
+                      AND sbp.status = 'active'
+                )
+            """)
+            batch_params.append(selected_program_id)
+        if selected_trainer_id:
+            batch_where.append("b.trainer_id = ?")
+            batch_params.append(selected_trainer_id)
+
+        active_batches = conn.execute(
+            f"""
+            SELECT DISTINCT b.id, b.batch_name
+            FROM batches b
+            WHERE {' AND '.join(batch_where)}
+            ORDER BY b.batch_name
+            """,
+            tuple(batch_params)
+        ).fetchall()
 
         # Validate batch scope. If invalid for current trainer scope, ignore safely.
         if selected_batch_id:
+            valid_batch_where = ["b.id = ?", "LOWER(COALESCE(b.status, '')) = 'active'"]
+            valid_batch_params = [selected_batch_id]
+            if selected_program_id:
+                valid_batch_where.append("""
+                    EXISTS (
+                        SELECT 1
+                        FROM student_batches sbp
+                        JOIN lms_assignment_submissions subp ON subp.student_id = sbp.student_id
+                        JOIN lms_assignments ap ON ap.id = subp.assignment_id
+                        JOIN lms_master_topics mtp ON mtp.id = ap.master_topic_id
+                        JOIN lms_program_chapters pcp
+                          ON pcp.master_chapter_id = mtp.master_chapter_id
+                         AND pcp.program_id = ?
+                         AND pcp.is_visible = 1
+                        WHERE sbp.batch_id = b.id
+                          AND sbp.status = 'active'
+                    )
+                """)
+                valid_batch_params.append(selected_program_id)
             if selected_trainer_id:
-                valid_batch = conn.execute(
-                    """
-                    SELECT 1
-                    FROM batches b
-                    WHERE b.id = ?
-                      AND b.trainer_id = ?
-                      AND LOWER(COALESCE(b.status, '')) = 'active'
-                    """,
-                    (selected_batch_id, selected_trainer_id)
-                ).fetchone()
-            else:
-                valid_batch = conn.execute(
-                    """
-                    SELECT 1
-                    FROM batches b
-                    WHERE b.id = ?
-                      AND LOWER(COALESCE(b.status, '')) = 'active'
-                    """,
-                    (selected_batch_id,)
-                ).fetchone()
+                valid_batch_where.append("b.trainer_id = ?")
+                valid_batch_params.append(selected_trainer_id)
+
+            valid_batch = conn.execute(
+                f"""
+                SELECT 1
+                FROM batches b
+                WHERE {' AND '.join(valid_batch_where)}
+                """,
+                tuple(valid_batch_params)
+            ).fetchone()
             if not valid_batch:
                 selected_batch_id = None
 
         has_scope_filter = bool(selected_trainer_id or selected_batch_id)
+        program_join = ""
+        program_params = []
+        if selected_program_id:
+            program_join = """
+                JOIN lms_program_chapters pc_filter
+                  ON pc_filter.master_chapter_id = mt.master_chapter_id
+                 AND pc_filter.program_id = ?
+                 AND pc_filter.is_visible = 1
+            """
+            program_params.append(selected_program_id)
 
         if has_scope_filter:
             scope_where = [
@@ -6663,12 +6736,13 @@ def all_assignments():
                 FROM lms_assignments a
                 JOIN lms_master_topics mt ON mt.id = a.master_topic_id
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                {program_join}
                 JOIN assignment_counts ac ON ac.assignment_id = a.id
                 ORDER BY mc.title, mt.title, a.id
             """
-            assignments = conn.execute(assignments_sql, tuple(scope_params)).fetchall()
+            assignments = conn.execute(assignments_sql, tuple(scope_params + program_params)).fetchall()
         else:
-            assignments = conn.execute("""
+            assignments_sql = f"""
                 SELECT
                     a.id,
                     a.title,
@@ -6688,16 +6762,20 @@ def all_assignments():
                 FROM lms_assignments a
                 JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                {program_join}
                 ORDER BY mc.title, mt.title, a.id
-            """).fetchall()
+            """
+            assignments = conn.execute(assignments_sql, tuple(program_params)).fetchall()
 
         return render_template(
             'lms_admin/lms_all_assignments.html',
             assignments=assignments,
             trainers=trainers,
             active_batches=active_batches,
+            programs=programs,
             selected_trainer_id=selected_trainer_id,
             selected_batch_id=selected_batch_id,
+            selected_program_id=selected_program_id,
             is_admin=is_admin,
         )
     finally:
@@ -6992,6 +7070,19 @@ def review_submission(submission_id):
 @lms_admin_bp.route('/master/submissions/<int:submission_id>/accept', methods=['POST'])
 @login_required
 def accept_submission(submission_id):
+    def _submission_review_redirect(assignment_id):
+        args = {}
+        trainer_id = (request.form.get('return_trainer_id') or '').strip()
+        batch_id = (request.form.get('return_batch_id') or '').strip()
+        status_filter = (request.form.get('return_status_filter') or '').strip()
+        if trainer_id.isdigit():
+            args['trainer_id'] = trainer_id
+        if batch_id.isdigit():
+            args['batch_id'] = batch_id
+        if status_filter in {'submitted', 'accepted', 'rejected'}:
+            args['status_filter'] = status_filter
+        return redirect(url_for('lms_admin.view_submissions', assignment_id=assignment_id, **args))
+
     conn = get_conn()
     try:
         sub = conn.execute(
@@ -7012,7 +7103,7 @@ def accept_submission(submission_id):
             return redirect(url_for('lms_admin.list_master_chapters'))
         if int(sub['is_latest'] or 0) != 1 or sub['review_status'] != 'submitted':
             flash('Only the latest pending submission can be accepted/rejected.', 'warning')
-            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+            return _submission_review_redirect(sub['assignment_id'])
         feedback = request.form.get('feedback', '').strip()
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute("""
@@ -7029,7 +7120,7 @@ def accept_submission(submission_id):
         """, (feedback or None, session.get('user_id'), now, now, submission_id))
         if cur.rowcount == 0:
             flash('Submission can no longer be reviewed (already processed or replaced).', 'warning')
-            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+            return _submission_review_redirect(sub['assignment_id'])
 
         # Accepted assignments should permanently complete the linked topic in all related active programs.
         conn.execute(
@@ -7065,7 +7156,7 @@ def accept_submission(submission_id):
 
         conn.commit()
         flash('Assignment accepted and feedback saved.', 'success')
-        return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+        return _submission_review_redirect(sub['assignment_id'])
     finally:
         conn.close()
 
@@ -7073,6 +7164,19 @@ def accept_submission(submission_id):
 @lms_admin_bp.route('/master/submissions/<int:submission_id>/reject', methods=['POST'])
 @login_required
 def reject_submission(submission_id):
+    def _submission_review_redirect(assignment_id):
+        args = {}
+        trainer_id = (request.form.get('return_trainer_id') or '').strip()
+        batch_id = (request.form.get('return_batch_id') or '').strip()
+        status_filter = (request.form.get('return_status_filter') or '').strip()
+        if trainer_id.isdigit():
+            args['trainer_id'] = trainer_id
+        if batch_id.isdigit():
+            args['batch_id'] = batch_id
+        if status_filter in {'submitted', 'accepted', 'rejected'}:
+            args['status_filter'] = status_filter
+        return redirect(url_for('lms_admin.view_submissions', assignment_id=assignment_id, **args))
+
     conn = get_conn()
     try:
         sub = conn.execute(
@@ -7090,12 +7194,12 @@ def reject_submission(submission_id):
             return redirect(url_for('lms_admin.list_master_chapters'))
         if int(sub['is_latest'] or 0) != 1 or sub['review_status'] != 'submitted':
             flash('Only the latest pending submission can be accepted/rejected.', 'warning')
-            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+            return _submission_review_redirect(sub['assignment_id'])
         rejection_reason = request.form.get('rejection_reason', '').strip()
         feedback = request.form.get('feedback', '').strip()
         if not rejection_reason:
             flash('Please provide a rejection reason.', 'danger')
-            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+            return _submission_review_redirect(sub['assignment_id'])
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute("""
             UPDATE lms_assignment_submissions
@@ -7112,10 +7216,10 @@ def reject_submission(submission_id):
         """, (feedback or None, rejection_reason, session.get('user_id'), now, now, submission_id))
         if cur.rowcount == 0:
             flash('Submission can no longer be reviewed (already processed or replaced).', 'warning')
-            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+            return _submission_review_redirect(sub['assignment_id'])
         conn.commit()
         flash('Assignment rejected. Student can now re-upload.', 'warning')
-        return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
+        return _submission_review_redirect(sub['assignment_id'])
     finally:
         conn.close()
 

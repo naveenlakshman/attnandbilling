@@ -48,7 +48,7 @@
 
   .dashboard-filter-form {
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto auto;
+    grid-template-columns: repeat(3, minmax(180px, 1fr)) auto auto;
     gap: 12px;
     align-items: end;
   }
@@ -266,7 +266,8 @@
     }
 
     .dashboard-filter-form > div:nth-child(1),
-    .dashboard-filter-form > div:nth-child(2) {
+    .dashboard-filter-form > div:nth-child(2),
+    .dashboard-filter-form > div:nth-child(3) {
       grid-column: 1 / -1;
     }
 
@@ -491,7 +492,7 @@
   <div class="dashboard-header-row">
     <div>
       <h2 class="dashboard-page-title">Assignments</h2>
-      <p class="dashboard-page-subtitle">Assignments across all master topics, filtered by trainer and active batch.</p>
+      <p class="dashboard-page-subtitle">Assignments across all master topics, filtered by trainer, batch, and program.</p>
     </div>
     <a class="btn btn-outline-secondary btn-sm master-library-link" href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a>
   </div>
@@ -524,6 +525,19 @@
         </select>
       </div>
 
+      <div>
+        <label class="form-label">Program / Course</label>
+        <select name="program_id" class="form-select form-select-sm"
+                onchange="this.form.batch_id.value=''; this.form.submit();">
+          <option value="">All Programs</option>
+          {% for p in programs %}
+          <option value="{{ p.id }}" {% if selected_program_id == p.id %}selected{% endif %}>
+            {{ p.program_name }}{% if p.course_name %} - {{ p.course_name }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
       <div class="filter-action">
         <button type="submit" class="btn btn-sm btn-primary w-100">Apply</button>
       </div>
@@ -535,7 +549,7 @@
 
   {% if not active_batches and selected_trainer_id %}
   <div class="alert alert-warning py-2 px-3" style="font-size:13px;">
-    No active batches found for the selected trainer.
+    No active batches found for the selected trainer/program filter.
   </div>
   {% endif %}
 
@@ -650,9 +664,9 @@
     </div>
     {% else %}
     <div class="empty-state-card">
-      {% if selected_batch_id or selected_trainer_id %}
+      {% if selected_batch_id or selected_trainer_id or selected_program_id %}
       <p class="mb-1 fw-semibold">No assignments match this filter.</p>
-      <p class="small mb-3">No submissions were found for the selected trainer or batch scope.</p>
+      <p class="small mb-3">No submissions were found for the selected trainer, batch, or program scope.</p>
       <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.all_assignments') }}">Clear Filter</a>
       {% else %}
       <p class="mb-1 fw-semibold">No assignments yet.</p>
