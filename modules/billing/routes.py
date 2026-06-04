@@ -1142,6 +1142,16 @@ def students():
         query += """ AND students.id NOT IN (
             SELECT DISTINCT student_id FROM student_batches
         )"""
+    elif batch_filter == 'unassigned':
+        query += """ AND students.status = 'active'
+            AND students.id NOT IN (
+                SELECT DISTINCT sb.student_id
+                FROM student_batches sb
+                JOIN batches b ON b.id = sb.batch_id
+                WHERE sb.status = 'active'
+                  AND LOWER(COALESCE(b.status, '')) = 'active'
+                  AND b.trainer_id IS NOT NULL
+            )"""
     elif batch_filter:
         query += """ AND students.id IN (
             SELECT student_id FROM student_batches WHERE batch_id = ?

@@ -14,6 +14,10 @@
       background-color: #f8f9fa;
     }
 
+    .baddebt-shell {
+      min-height: 100vh;
+    }
+
     .sidebar {
       width: 260px;
       min-height: 100vh;
@@ -21,6 +25,7 @@
       border-right: 1px solid #dee2e6;
       position: sticky;
       top: 0;
+      flex-shrink: 0;
     }
 
     .sidebar .nav-link {
@@ -47,6 +52,42 @@
 
     .content-wrap {
       min-width: 0;
+    }
+
+    .baddebt-main {
+      min-width: 0;
+    }
+
+    .baddebt-mobile-tabs {
+      display: none;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 10px 12px;
+      background: #fff;
+      border-bottom: 1px solid #dee2e6;
+      scrollbar-width: none;
+    }
+
+    .baddebt-mobile-tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    .baddebt-mobile-tabs a {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      border: 1px solid #dbe4ef;
+      border-radius: 999px;
+      color: #334155;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-decoration: none;
+      background: #f8fafc;
+    }
+
+    .baddebt-mobile-tabs a.active {
+      border-color: #0d6efd;
+      color: #0d6efd;
+      background: #eff6ff;
     }
 
     .card-header-custom {
@@ -87,6 +128,40 @@
       background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
       color: white;
     }
+
+    @media (max-width: 991.98px) {
+      .baddebt-shell {
+        display: block !important;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .topbar {
+        padding: 12px 14px !important;
+      }
+
+      .topbar h5 {
+        max-width: 58vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 1rem;
+      }
+
+      .topbar .btn {
+        min-height: 38px;
+      }
+
+      .baddebt-mobile-tabs {
+        display: flex;
+      }
+
+      .content-wrap {
+        padding: 14px 12px 24px !important;
+      }
+    }
   </style>
 
   {% block extra_css %}{% endblock %}
@@ -108,7 +183,7 @@
 </head>
 
 <body>
-  <div class="d-flex">
+  <div class="d-flex baddebt-shell">
     <!-- Sidebar -->
     <div class="sidebar">
       <div class="p-3 border-bottom">
@@ -136,7 +211,7 @@
     </div>
 
     <!-- Main Content -->
-    <div class="flex-grow-1">
+    <div class="flex-grow-1 baddebt-main">
       <!-- Top Bar -->
       <div class="topbar bg-white border-bottom px-4 py-3 shadow-sm">
         <div class="d-flex justify-content-between align-items-center">
@@ -147,6 +222,14 @@
           </div>
         </div>
       </div>
+
+      <nav class="baddebt-mobile-tabs" aria-label="Bad debt navigation">
+        <a class="{% if request.endpoint == 'baddebt.dashboard' %}active{% endif %}"
+           href="{{ url_for('baddebt.dashboard') }}">Write-offs</a>
+        <a class="{% if request.endpoint == 'baddebt.create' %}active{% endif %}"
+           href="{{ url_for('baddebt.create') }}">New Write-off</a>
+        <a href="{{ url_for('billing.dashboard') }}">Billing</a>
+      </nav>
 
       <!-- Content -->
       <div class="content-wrap p-4">

@@ -1,25 +1,371 @@
 {% extends "attendance/base.html" %}
 {% block title %}Leave Requests{% endblock %}
 
-{% block content %}
-<div class="container-fluid py-3">
+{% block extra_css %}
+<style>
+  .leave-page {
+    --leave-border: #e5e7eb;
+    --leave-soft: #f8fafc;
+    --leave-text: #111827;
+    --leave-muted: #6b7280;
+  }
 
-  <!-- Page heading -->
-  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h4 class="fw-bold mb-0">📋 Student Leave Requests</h4>
-    <span class="text-muted small">Review and action pending leave requests from students.</span>
+  .leave-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .leave-page-title {
+    color: var(--leave-text);
+    font-size: 1.3rem;
+    line-height: 1.25;
+  }
+
+  .leave-page-subtitle {
+    max-width: 420px;
+    text-align: right;
+    color: var(--leave-muted);
+  }
+
+  .leave-section {
+    overflow: hidden;
+    border: 1px solid var(--leave-border);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+  }
+
+  .leave-section + .leave-section {
+    margin-top: 18px;
+  }
+
+  .leave-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--leave-border);
+    background: var(--leave-soft);
+  }
+
+  .leave-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-weight: 700;
+    color: var(--leave-text);
+  }
+
+  .leave-table {
+    margin-bottom: 0;
+    font-size: 14px;
+  }
+
+  .leave-table th {
+    white-space: nowrap;
+    color: #374151;
+    font-size: 12px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .leave-student-name {
+    color: var(--leave-text);
+    font-weight: 700;
+  }
+
+  .leave-student-code,
+  .leave-cell-muted {
+    color: var(--leave-muted);
+    font-size: 12px;
+  }
+
+  .leave-trainer,
+  .leave-reason,
+  .leave-note {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .leave-trainer {
+    max-width: 180px;
+  }
+
+  .leave-reason {
+    max-width: 220px;
+    max-height: 62px;
+    overflow: hidden;
+  }
+
+  .leave-note {
+    max-width: 160px;
+  }
+
+  .leave-action-cell {
+    min-width: 290px;
+  }
+
+  .leave-action-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .leave-action-buttons {
+    display: flex;
+    gap: 6px;
+  }
+
+  .leave-empty {
+    padding: 44px 16px;
+    color: var(--leave-muted);
+    text-align: center;
+  }
+
+  .leave-empty-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    margin-bottom: 10px;
+    border-radius: 50%;
+    background: #ecfdf5;
+    color: #047857;
+    font-weight: 800;
+  }
+
+  @media (max-width: 767.98px) {
+    .leave-page {
+      padding-top: 10px !important;
+      padding-bottom: 88px !important;
+      color: var(--leave-text);
+    }
+
+    .leave-page-header {
+      display: block;
+      margin-bottom: 12px;
+    }
+
+    .leave-page-title {
+      margin-bottom: 6px;
+      font-size: 1rem;
+    }
+
+    .leave-page-subtitle {
+      max-width: none;
+      text-align: left;
+      font-size: 0.8rem;
+      line-height: 1.35;
+    }
+
+    .leave-section {
+      overflow: visible;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .leave-section-header {
+      margin-bottom: 10px;
+      border: 1px solid var(--leave-border);
+      border-radius: 10px;
+      background: #fff;
+      padding: 11px 14px;
+      box-shadow: 0 1px 6px rgba(15, 23, 42, 0.04);
+    }
+
+    .leave-section-title {
+      font-size: 0.95rem;
+    }
+
+    .leave-section .table-responsive {
+      overflow: visible;
+    }
+
+    .leave-table,
+    .leave-table tbody,
+    .leave-table tr {
+      display: block;
+      width: 100%;
+    }
+
+    .leave-table {
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 0.88rem;
+    }
+
+    .leave-table thead {
+      display: none;
+    }
+
+    .leave-table tbody tr {
+      margin-top: 10px;
+      margin-bottom: 0;
+      padding: 14px;
+      border: 1px solid var(--leave-border);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    }
+
+    .leave-table td {
+      max-width: none !important;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 12px;
+      width: 100%;
+      padding: 8px 0 !important;
+      border: 0 !important;
+      text-align: left !important;
+    }
+
+    .leave-table td::before {
+      content: attr(data-label);
+      display: block;
+      margin: 1px 0 0;
+      color: var(--leave-muted);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .leave-table td:first-child {
+      display: block;
+      width: auto;
+      margin: -14px -14px 8px;
+      padding: 13px 14px 11px !important;
+      border-bottom: 1px solid var(--leave-border) !important;
+      border-radius: 10px 10px 0 0;
+      background: #f8fafc;
+    }
+
+    .leave-table td:first-child::before {
+      display: none;
+    }
+
+    .leave-student-name {
+      font-size: 1.02rem;
+      line-height: 1.25;
+    }
+
+    .leave-student-code {
+      margin-top: 3px;
+    }
+
+    .leave-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .leave-cell-muted {
+      font-size: 0.82rem;
+    }
+
+    .leave-trainer,
+    .leave-reason,
+    .leave-note {
+      max-width: none;
+      max-height: none;
+    }
+
+    .leave-trainer {
+      white-space: normal;
+    }
+
+    .leave-reason {
+      line-height: 1.42;
+    }
+
+    .leave-table td[data-label="Reason"],
+    .leave-table td[data-label="Staff Note"],
+    .leave-action-cell {
+      display: block;
+    }
+
+    .leave-table td[data-label="Reason"]::before,
+    .leave-table td[data-label="Staff Note"]::before,
+    .leave-action-cell::before {
+      margin-bottom: 5px;
+    }
+
+    .leave-table td[data-label="Document"] .btn {
+      width: 100%;
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .leave-mobile-optional,
+    .leave-status-cell {
+      display: none !important;
+    }
+
+    .leave-action-cell {
+      margin-top: 8px;
+      padding-top: 14px !important;
+      border-top: 1px solid var(--leave-border) !important;
+    }
+
+    .leave-action-form .form-control {
+      min-height: 42px;
+      font-size: 16px;
+    }
+
+    .leave-action-buttons .btn {
+      min-height: 44px;
+      font-weight: 700;
+    }
+
+    .leave-empty {
+      border: 1px solid var(--leave-border);
+      border-radius: 10px;
+      background: #fff;
+      padding: 24px 16px;
+      margin-top: 10px;
+      line-height: 1.35;
+      box-shadow: 0 1px 6px rgba(15, 23, 42, 0.04);
+    }
+
+    .leave-empty-icon {
+      display: none;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="py-3 leave-page">
+
+  <div class="leave-page-header">
+    <div>
+      <h4 class="fw-bold mb-0 leave-page-title">Student Leave Requests</h4>
+    </div>
+    <div class="leave-page-subtitle small">Review pending leave requests, open documents, and send a note with your decision.</div>
   </div>
 
-  <!-- ─── Pending requests ─────────────────────────────────────── -->
-  <div class="card shadow-sm mb-4">
-    <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center gap-2">
-      <span class="fw-bold">⏳ Pending Requests</span>
-      <span class="badge bg-warning text-dark">{{ pending | length }}</span>
+  <section class="leave-section" aria-labelledby="pending-requests-heading">
+    <div class="leave-section-header">
+      <div class="leave-section-title" id="pending-requests-heading">
+        <span>Pending Requests</span>
+        <span class="badge bg-warning text-dark">{{ pending | length }}</span>
+      </div>
     </div>
-    <div class="card-body p-0">
+    <div>
       {% if pending %}
       <div class="table-responsive">
-        <table class="table table-hover mb-0 align-middle" style="font-size:14px;">
+        <table class="table table-hover align-middle leave-table">
           <thead class="table-light">
             <tr>
               <th>Student</th>
@@ -29,58 +375,60 @@
               <th>Reason</th>
               <th>Document</th>
               <th>Submitted</th>
-              <th style="width:300px;">Action</th>
+              <th style="width: 300px;">Action</th>
             </tr>
           </thead>
           <tbody>
             {% for req in pending %}
             <tr>
-              <td>
-                <div class="fw-semibold">{{ req.student_name }}</div>
-                <div class="text-muted" style="font-size:12px;">{{ req.student_code }}</div>
-              </td>
-              <td style="max-width:180px;">
-                <div style="white-space:pre-wrap;word-break:break-word;" title="{{ req.trainer_names or '—' }}">
-                  {{ req.trainer_names or '—' }}
+              <td data-label="Student">
+                <div class="leave-card-head">
+                  <div>
+                    <div class="leave-student-name">{{ req.student_name }}</div>
+                    <div class="leave-student-code">{{ req.student_code }}</div>
+                  </div>
                 </div>
               </td>
-              <td>{{ req.from_date }}</td>
-              <td>{{ req.to_date }}</td>
-              <td style="max-width:220px;">
-                <div style="white-space:pre-wrap;word-break:break-word;max-height:60px;overflow:hidden;"
-                     title="{{ req.reason }}">{{ req.reason }}</div>
+              <td data-label="Trainer">
+                <div class="leave-trainer" title="{{ req.trainer_names or '-' }}">
+                  {{ req.trainer_names or '-' }}
+                </div>
               </td>
-              <td>
+              <td data-label="From">{{ req.from_date }}</td>
+              <td data-label="To">{{ req.to_date }}</td>
+              <td data-label="Reason">
+                <div class="leave-reason" title="{{ req.reason }}">{{ req.reason }}</div>
+              </td>
+              <td data-label="Document" class="{% if not req.document_filename %}leave-mobile-optional{% endif %}">
                 {% if req.document_filename %}
                   <a href="{{ url_for('serve_leave_doc', filename=req.document_filename) }}"
                      target="_blank" class="btn btn-sm btn-outline-secondary">
-                    📎 View
+                    View Document
                   </a>
                 {% else %}
-                  <span class="text-muted small">—</span>
+                  <span class="leave-cell-muted">&mdash;</span>
                 {% endif %}
               </td>
-              <td class="text-muted small">{{ req.created_at[:10] }}</td>
-              <td>
-                <!-- Approve / Reject form with optional note -->
+              <td data-label="Submitted" class="leave-cell-muted">{{ req.created_at[:10] }}</td>
+              <td data-label="Action" class="leave-action-cell">
                 <form method="POST"
                       action="{{ url_for('attendance.leave_request_action', leave_id=req.id) }}"
-                      class="d-flex flex-column gap-1"
+                      class="leave-action-form"
                       onsubmit="return confirmAction(this)">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input type="text"
                          name="review_notes"
                          class="form-control form-control-sm"
-                         placeholder="Optional note to student…"
+                         placeholder="Optional note to student..."
                          maxlength="500">
-                  <div class="d-flex gap-1">
+                  <div class="leave-action-buttons">
                     <button type="submit" name="action" value="approve"
                             class="btn btn-sm btn-success flex-fill">
-                      ✅ Approve
+                      Approve
                     </button>
                     <button type="submit" name="action" value="reject"
                             class="btn btn-sm btn-danger flex-fill">
-                      ❌ Reject
+                      Reject
                     </button>
                   </div>
                 </form>
@@ -91,24 +439,25 @@
         </table>
       </div>
       {% else %}
-      <div class="text-center py-5 text-muted">
-        <div style="font-size:40px;">✅</div>
-        <p class="mt-2 mb-0">No pending leave requests at the moment.</p>
+      <div class="leave-empty">
+        <div class="leave-empty-icon">OK</div>
+        <p class="mb-0">No pending leave requests at the moment.</p>
       </div>
       {% endif %}
     </div>
-  </div>
+  </section>
 
-  <!-- ─── History (approved / rejected) ───────────────────────── -->
-  <div class="card shadow-sm">
-    <div class="card-header bg-light d-flex align-items-center gap-2">
-      <span class="fw-bold">📜 Reviewed History</span>
-      <span class="badge bg-secondary">{{ history | length }}</span>
+  <section class="leave-section" aria-labelledby="reviewed-history-heading">
+    <div class="leave-section-header">
+      <div class="leave-section-title" id="reviewed-history-heading">
+        <span>Reviewed History</span>
+        <span class="badge bg-secondary">{{ history | length }}</span>
+      </div>
     </div>
-    <div class="card-body p-0">
+    <div>
       {% if history %}
       <div class="table-responsive">
-        <table class="table table-sm table-hover mb-0 align-middle" style="font-size:13px;">
+        <table class="table table-sm table-hover align-middle leave-table">
           <thead class="table-light">
             <tr>
               <th>Student</th>
@@ -126,40 +475,50 @@
           <tbody>
             {% for req in history %}
             <tr>
-              <td>
-                <div class="fw-semibold">{{ req.student_name }}</div>
-                <div class="text-muted" style="font-size:11px;">{{ req.student_code }}</div>
-              </td>
-              <td style="max-width:160px;">
-                <div style="white-space:pre-wrap;word-break:break-word;" title="{{ req.trainer_names or '—' }}">
-                  {{ req.trainer_names or '—' }}
+              <td data-label="Student">
+                <div class="leave-card-head">
+                  <div>
+                    <div class="leave-student-name">{{ req.student_name }}</div>
+                    <div class="leave-student-code">{{ req.student_code }}</div>
+                  </div>
+                  <div>
+                    {% if req.status == 'approved' %}
+                      <span class="badge bg-success">Approved</span>
+                    {% else %}
+                      <span class="badge bg-danger">Rejected</span>
+                    {% endif %}
+                  </div>
                 </div>
               </td>
-              <td>{{ req.from_date }}</td>
-              <td>{{ req.to_date }}</td>
-              <td style="max-width:180px;">
-                <div style="white-space:pre-wrap;word-break:break-word;max-height:48px;overflow:hidden;"
-                     title="{{ req.reason }}">{{ req.reason }}</div>
+              <td data-label="Trainer">
+                <div class="leave-trainer" title="{{ req.trainer_names or '-' }}">
+                  {{ req.trainer_names or '-' }}
+                </div>
               </td>
-              <td>
+              <td data-label="From">{{ req.from_date }}</td>
+              <td data-label="To">{{ req.to_date }}</td>
+              <td data-label="Reason">
+                <div class="leave-reason" title="{{ req.reason }}">{{ req.reason }}</div>
+              </td>
+              <td data-label="Document" class="{% if not req.document_filename %}leave-mobile-optional{% endif %}">
                 {% if req.document_filename %}
                   <a href="{{ url_for('serve_leave_doc', filename=req.document_filename) }}"
-                     target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2">📎</a>
+                     target="_blank" class="btn btn-sm btn-outline-secondary py-1 px-2">View</a>
                 {% else %}
-                  —
+                  <span class="leave-cell-muted">&mdash;</span>
                 {% endif %}
               </td>
-              <td>
+              <td data-label="Status" class="leave-status-cell">
                 {% if req.status == 'approved' %}
                   <span class="badge bg-success">Approved</span>
                 {% else %}
                   <span class="badge bg-danger">Rejected</span>
                 {% endif %}
               </td>
-              <td class="text-muted">{{ req.reviewed_by_name or '—' }}</td>
-              <td class="text-muted">{{ req.reviewed_at[:10] if req.reviewed_at else '—' }}</td>
-              <td class="text-muted" style="max-width:160px;word-break:break-word;">
-                {{ req.review_notes or '—' }}
+              <td data-label="Reviewed By" class="leave-cell-muted">{{ req.reviewed_by_name or '-' }}</td>
+              <td data-label="Reviewed On" class="leave-cell-muted">{{ req.reviewed_at[:10] if req.reviewed_at else '-' }}</td>
+              <td data-label="Staff Note">
+                <div class="leave-note leave-cell-muted">{{ req.review_notes or '-' }}</div>
               </td>
             </tr>
             {% endfor %}
@@ -167,21 +526,23 @@
         </table>
       </div>
       {% else %}
-      <div class="text-center py-4 text-muted">
+      <div class="leave-empty">
         <p class="mb-0">No reviewed requests yet.</p>
       </div>
       {% endif %}
     </div>
-  </div>
+</section>
 
 </div>
+{% endblock %}
 
+{% block extra_js %}
+{{ super() }}
 <script>
-  // Ask for confirmation before approving or rejecting
   function confirmAction(form) {
     var btn = document.activeElement;
     var action = btn ? btn.value : '';
-    var label  = action === 'approve' ? 'approve' : 'reject';
+    var label = action === 'approve' ? 'approve' : 'reject';
     return confirm('Are you sure you want to ' + label + ' this leave request?');
   }
 </script>

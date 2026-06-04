@@ -1,86 +1,537 @@
 {% extends "lms_admin/base.html" %}
 
-{% block title %}All Assignments{% endblock %}
-{% block page_title %}All Assignments{% endblock %}
+{% block title %}All Assignments - {{ company.company_short_name }}{% endblock %}
+{% block page_title %}{{ company.company_short_name }} - LMS{% endblock %}
 
 {% block extra_css %}
 <style>
-  .asn-table th { font-size: 12px; font-weight: 600; text-transform: uppercase;
-                  color: #6c757d; white-space: nowrap; }
-  .asn-table td { vertical-align: middle; font-size: 13px; }
-  .badge-sub  { background: #e7f3ff; color: #084298; border-radius: 20px;
-                padding: 2px 9px; font-size: 11px; font-weight: 700; }
-  .badge-rev  { background: #d1e7dd; color: #0f5132; border-radius: 20px;
-                padding: 2px 9px; font-size: 11px; font-weight: 700; }
-  .badge-pend { background: #fff3cd; color: #664d03; border-radius: 20px;
-                padding: 2px 9px; font-size: 11px; font-weight: 700; }
-  .stats-top  { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:22px; }
-  .stat-box   { flex:1 1 120px; background:#fff; border-radius:10px;
-                box-shadow:0 1px 4px rgba(0,0,0,.07); padding:14px 18px; text-align:center; }
-  .stat-box .n{ font-size:26px; font-weight:700; line-height:1; }
-  .stat-box .l{ font-size:11px; color:#6c757d; margin-top:3px; }
-  .n.blue { color:#0d6efd; }
-  .n.orange{ color:#fd7e14; }
-  .n.green { color:#198754; }
+  .assignments-dashboard {
+    --asn-border: #e5e7eb;
+    --asn-soft: #f8fafc;
+    --asn-text: #111827;
+    --asn-muted: #64748b;
+  }
+
+  .dashboard-page-title {
+    margin-bottom: 4px;
+    color: var(--asn-text);
+    font-size: 1.75rem;
+    font-weight: 700;
+  }
+
+  .dashboard-page-subtitle {
+    margin-bottom: 0;
+    color: var(--asn-muted);
+  }
+
+  .dashboard-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .dashboard-filter-card,
+  .stat-card,
+  .assignments-card {
+    border: none;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(15, 23, 42, 0.06);
+  }
+
+  .dashboard-filter-card {
+    padding: 18px;
+    margin-bottom: 14px;
+  }
+
+  .dashboard-filter-form {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto auto;
+    gap: 12px;
+    align-items: end;
+  }
+
+  .dashboard-filter-form .form-label {
+    color: #334155;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .dashboard-filter-form .form-select,
+  .dashboard-filter-form .form-control,
+  .dashboard-filter-form .btn {
+    min-height: 42px;
+  }
+
+  .dashboard-stat-row {
+    --bs-gutter-x: 1rem;
+    --bs-gutter-y: 1rem;
+    margin-bottom: 18px;
+  }
+
+  .stat-card {
+    min-height: 112px;
+    padding: 18px;
+  }
+
+  .stat-card h3 {
+    margin-bottom: 12px;
+    color: #334155;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .stat-card p {
+    margin: 0;
+    color: var(--asn-text);
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .stat-card.accent-blue { border-left: 4px solid #3b82f6; }
+  .stat-card.accent-cyan { border-left: 4px solid #06b6d4; }
+  .stat-card.accent-orange { border-left: 4px solid #f97316; }
+  .stat-card.accent-green { border-left: 4px solid #22c55e; }
+
+  .assignments-card {
+    overflow: hidden;
+  }
+
+  .assignments-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--asn-border);
+    background: var(--asn-soft);
+  }
+
+  .assignments-card-header h2 {
+    margin: 0;
+    color: var(--asn-text);
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+
+  .assignments-table {
+    margin-bottom: 0;
+    font-size: 0.9rem;
+  }
+
+  .assignments-table th {
+    color: #475569;
+    font-size: 0.73rem;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .assignments-table td {
+    vertical-align: middle;
+  }
+
+  .assignment-title {
+    color: var(--asn-text);
+    font-weight: 800;
+  }
+
+  .assignment-mobile-summary {
+    display: none;
+  }
+
+  .assignment-desc {
+    max-width: 340px;
+    color: var(--asn-muted);
+    font-size: 0.78rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .badge-sub,
+  .badge-rev,
+  .badge-pend {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 800;
+  }
+
+  .badge-sub { background: #e7f3ff; color: #084298; }
+  .badge-rev { background: #dcfce7; color: #15803d; }
+  .badge-pend { background: #fff3cd; color: #92400e; }
+
+  .assignment-actions {
+    display: inline-flex;
+    gap: 8px;
+  }
+
+  .empty-state-card {
+    padding: 42px 18px;
+    color: #94a3b8;
+    text-align: center;
+  }
+
+  @media (max-width: 991.98px) {
+    .dashboard-header-row {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .dashboard-header-row .btn {
+      width: 100%;
+    }
+
+    .dashboard-filter-form {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .dashboard-filter-form .filter-action {
+      grid-column: auto;
+    }
+  }
+
+  @media (max-width: 575.98px) {
+    .assignments-dashboard {
+      margin-top: -2px;
+    }
+
+    .dashboard-header-row {
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .dashboard-page-title {
+      font-size: 1.42rem;
+      line-height: 1.15;
+    }
+
+    .dashboard-page-subtitle {
+      margin-bottom: 0;
+      font-size: 0.86rem;
+      line-height: 1.35;
+    }
+
+    .dashboard-header-row .btn {
+      width: auto;
+      min-height: 0;
+      justify-self: start;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #0d6efd;
+      font-size: 0.85rem;
+      font-weight: 700;
+      box-shadow: none;
+    }
+
+    .dashboard-filter-card,
+    .stat-card,
+    .assignments-card {
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+    }
+
+    .dashboard-filter-card {
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .dashboard-filter-form {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .dashboard-filter-form .form-label {
+      margin-bottom: 5px;
+      font-size: 11px;
+    }
+
+    .dashboard-filter-form .form-select,
+    .dashboard-filter-form .form-control,
+    .dashboard-filter-form .btn {
+      min-height: 36px;
+      border-radius: 8px;
+      font-size: 12px;
+      padding: 0.35rem 0.55rem;
+    }
+
+    .dashboard-filter-form > div:nth-child(1),
+    .dashboard-filter-form > div:nth-child(2) {
+      grid-column: 1 / -1;
+    }
+
+    .dashboard-stat-row {
+      --bs-gutter-x: .75rem;
+      --bs-gutter-y: .75rem;
+      margin-bottom: 14px;
+    }
+
+    .stat-card {
+      min-height: 84px;
+      padding: 12px;
+    }
+
+    .stat-card h3 {
+      margin-bottom: 8px;
+      color: #475569;
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .stat-card p {
+      font-size: clamp(1rem, 6vw, 1.35rem);
+      white-space: nowrap;
+    }
+
+    .assignments-card {
+      overflow: visible;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .assignments-card-header {
+      margin-bottom: 8px;
+      padding: 12px 14px;
+      border: 1px solid var(--asn-border);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 1px 6px rgba(15, 23, 42, 0.04);
+    }
+
+    .assignments-card-header h2 {
+      font-size: 1rem;
+    }
+
+    .assignments-card .table-responsive {
+      overflow: visible;
+    }
+
+    .assignments-table,
+    .assignments-table tbody,
+    .assignments-table tr {
+      display: block;
+      width: 100%;
+      min-width: 0 !important;
+    }
+
+    .assignments-table thead {
+      display: none;
+    }
+
+    .assignments-table tr {
+      margin-bottom: 8px;
+      padding: 12px;
+      border: 1px solid var(--asn-border);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    }
+
+    .assignments-table td {
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr);
+      gap: 10px;
+      width: 100%;
+      padding: 6px 0 !important;
+      border: 0 !important;
+      text-align: left !important;
+    }
+
+    .assignments-table td::before {
+      content: attr(data-label);
+      margin-top: 1px;
+      color: var(--asn-muted);
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .assignments-table td:first-child {
+      display: block;
+      width: auto;
+      margin: -12px -12px 8px;
+      padding: 12px !important;
+      border-bottom: 1px solid var(--asn-border) !important;
+      border-radius: 10px 10px 0 0;
+      background: #f8fafc;
+    }
+
+    .assignments-table td:first-child::before {
+      display: none;
+    }
+
+    .assignment-title {
+      line-height: 1.25;
+    }
+
+    .assignment-mobile-summary {
+      display: block;
+      margin-top: 10px;
+    }
+
+    .assignment-mobile-meta {
+      display: grid;
+      gap: 3px;
+      margin-bottom: 10px;
+      color: #475569;
+      font-size: 0.84rem;
+      line-height: 1.35;
+    }
+
+    .assignment-mobile-topic {
+      font-weight: 700;
+    }
+
+    .assignment-mobile-counts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .assignment-count-tile {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      padding: 9px 6px;
+      border-radius: 10px;
+      text-align: center;
+      font-weight: 800;
+    }
+
+    .assignment-count-tile span {
+      color: #64748b;
+      font-size: 0.64rem;
+      text-transform: uppercase;
+    }
+
+    .assignment-count-tile strong {
+      font-size: 0.98rem;
+      line-height: 1;
+    }
+
+    .assignment-count-tile.sub {
+      background: #e7f3ff;
+      color: #084298;
+    }
+
+    .assignment-count-tile.rev {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .assignment-count-tile.pen {
+      background: #fff3cd;
+      color: #92400e;
+    }
+
+    .assignment-desc {
+      max-width: none;
+      margin-top: 4px;
+      white-space: normal;
+    }
+
+    .assignment-mobile-hide {
+      display: none !important;
+    }
+
+    .assignment-actions-cell {
+      display: block !important;
+      margin-top: 8px;
+      padding-top: 12px !important;
+      border-top: 1px solid var(--asn-border) !important;
+    }
+
+    .assignment-actions-cell::before {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .assignment-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .assignment-actions .btn {
+      width: 100%;
+      min-height: 38px;
+      font-weight: 800;
+      font-size: 0.85rem;
+    }
+
+    .empty-state-card {
+      padding: 30px 16px;
+      border: 1px solid var(--asn-border);
+      border-radius: 10px;
+      background: #fff;
+    }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-{% set total     = assignments | length %}
+{% set total = assignments | length %}
 {% set total_sub = assignments | sum(attribute='submission_count') %}
 {% set total_rev = assignments | sum(attribute='reviewed_count') %}
 {% set total_pen = total_sub - total_rev %}
 
-<div class="container-fluid py-3">
-
-  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+<div class="assignments-dashboard">
+  <div class="dashboard-header-row">
     <div>
-      <h2 class="h4 mb-1">📋 All Assignments</h2>
-      <p class="text-muted mb-0" style="font-size:13px;">Assignments across all master topics</p>
+      <h2 class="dashboard-page-title">Assignments</h2>
+      <p class="dashboard-page-subtitle">Assignments across all master topics, filtered by trainer and active batch.</p>
     </div>
-    <a class="btn btn-outline-secondary btn-sm"
-       href="{{ url_for('lms_admin.list_master_chapters') }}">← Master Library</a>
+    <a class="btn btn-outline-secondary btn-sm master-library-link" href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a>
   </div>
 
-  <!-- Stats -->
-  <div class="stats-top">
-    <div class="stat-box"><div class="n blue">{{ total }}</div><div class="l">Assignments</div></div>
-    <div class="stat-box"><div class="n blue">{{ total_sub }}</div><div class="l">Total Submissions</div></div>
-    <div class="stat-box"><div class="n orange">{{ total_pen }}</div><div class="l">Pending Review</div></div>
-    <div class="stat-box"><div class="n green">{{ total_rev }}</div><div class="l">Reviewed</div></div>
+  <div class="card dashboard-filter-card">
+    <form method="GET" class="dashboard-filter-form">
+      <div>
+        <label class="form-label">Trainer</label>
+        {% if is_admin %}
+        <select name="trainer_id" class="form-select form-select-sm"
+                onchange="this.form.batch_id.value=''; this.form.submit();">
+          <option value="">All Trainers</option>
+          {% for t in trainers %}
+          <option value="{{ t.id }}" {% if selected_trainer_id == t.id %}selected{% endif %}>{{ t.full_name }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <input type="hidden" name="trainer_id" value="{{ selected_trainer_id }}">
+        <input type="text" class="form-control form-control-sm" value="{{ trainers[0].full_name if trainers else 'My Assignments' }}" disabled>
+        {% endif %}
+      </div>
+
+      <div>
+        <label class="form-label">Batch</label>
+        <select name="batch_id" class="form-select form-select-sm">
+          <option value="">All Active Batches</option>
+          {% for b in active_batches %}
+          <option value="{{ b.id }}" {% if selected_batch_id == b.id %}selected{% endif %}>{{ b.batch_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-action">
+        <button type="submit" class="btn btn-sm btn-primary w-100">Apply</button>
+      </div>
+      <div class="filter-action">
+        <a href="{{ url_for('lms_admin.all_assignments') }}" class="btn btn-sm btn-outline-secondary w-100">Clear</a>
+      </div>
+    </form>
   </div>
-
-  <!-- Trainer + Batch filters -->
-  <form method="GET" class="d-flex align-items-end gap-2 mb-3 flex-wrap">
-    <div>
-      <label class="form-label mb-1" style="font-size:12px;color:#6c757d;font-weight:600;">Trainer</label>
-      {% if is_admin %}
-      <select name="trainer_id" class="form-select form-select-sm" style="min-width:220px;"
-              onchange="this.form.batch_id.value=''; this.form.submit();">
-        <option value="">All Trainers</option>
-        {% for t in trainers %}
-        <option value="{{ t.id }}" {% if selected_trainer_id == t.id %}selected{% endif %}>{{ t.full_name }}</option>
-        {% endfor %}
-      </select>
-      {% else %}
-      <input type="hidden" name="trainer_id" value="{{ selected_trainer_id }}">
-      <input type="text" class="form-control form-control-sm" style="min-width:220px;" value="{{ trainers[0].full_name if trainers else 'My Assignments' }}" disabled>
-      {% endif %}
-    </div>
-
-    <div>
-      <label class="form-label mb-1" style="font-size:12px;color:#6c757d;font-weight:600;">Batch</label>
-      <select name="batch_id" class="form-select form-select-sm" style="min-width:220px;">
-        <option value="">All Active Batches</option>
-        {% for b in active_batches %}
-        <option value="{{ b.id }}" {% if selected_batch_id == b.id %}selected{% endif %}>{{ b.batch_name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <button type="submit" class="btn btn-sm btn-primary">Apply Filter</button>
-    <a href="{{ url_for('lms_admin.all_assignments') }}" class="btn btn-sm btn-outline-secondary">Clear Filter</a>
-  </form>
 
   {% if not active_batches and selected_trainer_id %}
   <div class="alert alert-warning py-2 px-3" style="font-size:13px;">
@@ -88,55 +539,107 @@
   </div>
   {% endif %}
 
-  {% if assignments %}
-  <div class="card">
-    <div class="card-body p-0">
-      <div class="table-responsive">
-      <table class="table table-hover mb-0 asn-table">
+  <div class="row dashboard-stat-row">
+    <div class="col-6 col-md-3">
+      <div class="card stat-card accent-blue">
+        <h3>Assignments</h3>
+        <p>{{ total }}</p>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card accent-cyan">
+        <h3>Total Submissions</h3>
+        <p>{{ total_sub }}</p>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card accent-orange">
+        <h3>Pending Review</h3>
+        <p>{{ total_pen }}</p>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card stat-card accent-green">
+        <h3>Reviewed</h3>
+        <p>{{ total_rev }}</p>
+      </div>
+    </div>
+  </div>
+
+  <section class="assignments-card" aria-labelledby="assignments-heading">
+    <div class="assignments-card-header">
+      <h2 id="assignments-heading">Assignment List</h2>
+      <span class="badge bg-secondary">{{ total }}</span>
+    </div>
+
+    {% if assignments %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle assignments-table">
         <thead class="table-light">
           <tr>
-            <th class="ps-4">Assignment</th>
+            <th>Assignment</th>
             <th>Chapter / Topic</th>
             <th>Added</th>
             <th class="text-center">Submissions</th>
             <th class="text-center">Reviewed</th>
             <th class="text-center">Pending</th>
-            <th class="pe-4">Actions</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for a in assignments %}
+          {% set pending = a.submission_count - a.reviewed_count %}
           <tr>
-            <td class="ps-4">
-              <div class="fw-semibold">{{ a.title }}</div>
+            <td data-label="Assignment">
+              <div class="assignment-title">{{ a.title }}</div>
               {% if a.description %}
-              <div class="text-muted" style="font-size:11px;">{{ a.description | truncate(60) }}</div>
+              <div class="assignment-desc">{{ a.description }}</div>
               {% endif %}
+              <div class="assignment-mobile-summary">
+                <div class="assignment-mobile-meta">
+                  <div class="assignment-mobile-topic">{{ a.topic_title }}</div>
+                  <div>{{ a.chapter_title }}</div>
+                  <div>Added {{ a.created_date or 'Not recorded' }}</div>
+                </div>
+                <div class="assignment-mobile-counts">
+                  <div class="assignment-count-tile sub">
+                    <span>Submissions</span>
+                    <strong>{{ a.submission_count }}</strong>
+                  </div>
+                  <div class="assignment-count-tile rev">
+                    <span>Reviewed</span>
+                    <strong>{{ a.reviewed_count }}</strong>
+                  </div>
+                  <div class="assignment-count-tile pen">
+                    <span>Pending</span>
+                    <strong>{{ pending }}</strong>
+                  </div>
+                </div>
+              </div>
             </td>
-            <td>
+            <td data-label="Topic" class="assignment-mobile-hide">
               <div>{{ a.chapter_title }}</div>
-              <div class="text-muted" style="font-size:11px;">{{ a.topic_title }}</div>
+              <div class="text-muted small">{{ a.topic_title }}</div>
             </td>
-            <td class="text-muted">{{ a.created_date }}</td>
-            <td class="text-center">
+            <td data-label="Added" class="text-muted assignment-mobile-hide">{{ a.created_date }}</td>
+            <td data-label="Submissions" class="text-center assignment-mobile-hide">
               <span class="badge-sub">{{ a.submission_count }}</span>
             </td>
-            <td class="text-center">
+            <td data-label="Reviewed" class="text-center assignment-mobile-hide">
               <span class="badge-rev">{{ a.reviewed_count }}</span>
             </td>
-            <td class="text-center">
-              {% set pending = a.submission_count - a.reviewed_count %}
+            <td data-label="Pending" class="text-center assignment-mobile-hide">
               <span class="{{ 'badge-pend' if pending > 0 else 'badge-rev' }}">{{ pending }}</span>
             </td>
-            <td class="pe-4">
-              <div class="d-flex gap-2 flex-wrap action-group">
-                 <a class="btn btn-sm btn-primary"
+            <td data-label="Actions" class="assignment-actions-cell">
+              <div class="assignment-actions">
+                <a class="btn btn-sm btn-primary"
                    href="{{ url_for('lms_admin.view_submissions', assignment_id=a.id, trainer_id=selected_trainer_id, batch_id=selected_batch_id) if selected_trainer_id or selected_batch_id else url_for('lms_admin.view_submissions', assignment_id=a.id) }}">
-                  📋 Submissions
+                  Submissions
                 </a>
                 <a class="btn btn-sm btn-outline-secondary"
                    href="{{ url_for('lms_admin.manage_assignments', master_topic_id=a.master_topic_id) }}">
-                  ⚙ Manage
+                  Manage
                 </a>
               </div>
             </td>
@@ -144,23 +647,20 @@
           {% endfor %}
         </tbody>
       </table>
-      </div>
     </div>
-  </div>
-  {% else %}
-  <div class="text-center text-muted py-5">
-    <div style="font-size:48px;">📋</div>
-    {% if selected_batch_id or selected_trainer_id %}
-    <p class="mt-3 mb-0 fw-semibold">No assignments match this filter</p>
-    <p class="small">No submissions were found for the selected trainer/batch scope.</p>
-    <a class="btn btn-outline-secondary mt-2" href="{{ url_for('lms_admin.all_assignments') }}">✕ Clear filter</a>
     {% else %}
-    <p class="mt-3 mb-0 fw-semibold">No assignments yet</p>
-    <p class="small">Go to a topic in the Master Library to create assignments.</p>
-    <a class="btn btn-primary mt-2" href="{{ url_for('lms_admin.list_master_chapters') }}">Open Master Library</a>
+    <div class="empty-state-card">
+      {% if selected_batch_id or selected_trainer_id %}
+      <p class="mb-1 fw-semibold">No assignments match this filter.</p>
+      <p class="small mb-3">No submissions were found for the selected trainer or batch scope.</p>
+      <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.all_assignments') }}">Clear Filter</a>
+      {% else %}
+      <p class="mb-1 fw-semibold">No assignments yet.</p>
+      <p class="small mb-3">Go to a topic in the Master Library to create assignments.</p>
+      <a class="btn btn-primary" href="{{ url_for('lms_admin.list_master_chapters') }}">Open Master Library</a>
+      {% endif %}
+    </div>
     {% endif %}
-  </div>
-  {% endif %}
-
+  </section>
 </div>
 {% endblock %}

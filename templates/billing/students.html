@@ -628,6 +628,7 @@
         <select id="batch" name="batch">
           <option value="">All Batches</option>
           <option value="none" {% if batch_filter == 'none' %}selected{% endif %}>— Not in any batch —</option>
+          <option value="unassigned" {% if batch_filter == 'unassigned' %}selected{% endif %}>— No trainer / active batch —</option>
           {% for bt in all_batches %}
             <option value="{{ bt.id }}" data-batch-status="{{ bt.status }}" {% if batch_filter|string == bt.id|string %}selected{% endif %}>{{ bt.batch_name }}</option>
           {% endfor %}
@@ -672,7 +673,7 @@
 
         {% if batch_filter %}
           {% if search_query or branch_filter or status_filter %} • {% endif %}
-          Batch: <strong>{% if batch_filter == 'none' %}Not in any batch{% else %}{% for bt in all_batches %}{% if bt.id|string == batch_filter|string %}{{ bt.batch_name }}{% endif %}{% endfor %}{% endif %}</strong>
+          Batch: <strong>{% if batch_filter == 'none' %}Not in any batch{% elif batch_filter == 'unassigned' %}No trainer / active batch{% else %}{% for bt in all_batches %}{% if bt.id|string == batch_filter|string %}{{ bt.batch_name }}{% endif %}{% endfor %}{% endif %}</strong>
         {% endif %}
       </div>
     {% endif %}
@@ -966,8 +967,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!batchEl) return;
     var isActive = statusEl && statusEl.value === 'active';
     Array.from(batchEl.options).forEach(function(opt) {
-      // Always keep "All Batches" (value="") and "Not in any batch" (value="none")
-      if (opt.value === '' || opt.value === 'none') return;
+      // Always keep synthetic filter options.
+      if (opt.value === '' || opt.value === 'none' || opt.value === 'unassigned') return;
       var batchStatus = opt.getAttribute('data-batch-status');
       opt.hidden = isActive && batchStatus !== 'active';
       // If current selection got hidden, reset to ""

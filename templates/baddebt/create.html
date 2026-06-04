@@ -5,18 +5,25 @@
 
 {% block extra_css %}
 <style>
+  .baddebt-create {
+    max-width: 1040px;
+    margin: 0 auto;
+  }
+
   .form-wizard-step {
-    background: #f8f9fa;
+    background: #f8fafc;
     padding: 1.5rem;
+    border: 1px solid #e5e7eb;
     border-radius: 10px;
     margin-bottom: 1.5rem;
   }
 
   .form-wizard-step h5 {
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid #0d6efd;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #dbeafe;
     color: #0d6efd;
+    font-weight: 800;
   }
 
   .invoice-details {
@@ -27,8 +34,15 @@
     margin: 1.5rem 0;
   }
 
-  .invoice-details .row > div {
-    margin-bottom: 1rem;
+  .invoice-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .invoice-detail-grid.amounts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 16px;
   }
 
   .invoice-details label {
@@ -43,6 +57,7 @@
     font-size: 1.1rem;
     font-weight: 600;
     color: #333;
+    overflow-wrap: anywhere;
   }
 
   .balance-display {
@@ -69,6 +84,7 @@
   .form-section {
     background: white;
     padding: 2rem;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
   }
@@ -84,13 +100,173 @@
     content: " *";
     color: red;
   }
+
+  .summary-list .list-group-item {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .summary-list ul {
+    padding-left: 18px;
+  }
+
+  @media (max-width: 767.98px) {
+    .baddebt-create {
+      max-width: none;
+    }
+
+    .form-section {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .form-wizard-step {
+      margin-bottom: 12px;
+      padding: 14px;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    }
+
+    .form-wizard-step h5 {
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      font-size: 0.98rem;
+      line-height: 1.3;
+    }
+
+    .form-label {
+      margin-bottom: 6px;
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+
+    .form-text {
+      display: block;
+      margin-top: 5px;
+      font-size: 0.76rem;
+      line-height: 1.3;
+    }
+
+    .form-select-lg,
+    .form-control-lg,
+    .input-group-lg > .form-control,
+    .input-group-lg > .input-group-text {
+      min-height: 44px;
+      font-size: 16px;
+    }
+
+    .ts-control {
+      min-height: 44px;
+      align-items: center;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    .ts-dropdown {
+      font-size: 0.9rem;
+    }
+
+    .invoice-details {
+      margin: 12px 0;
+      padding: 12px;
+      border-left-width: 3px;
+      border-radius: 10px;
+    }
+
+    .invoice-detail-grid,
+    .invoice-detail-grid.amounts {
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 0;
+    }
+
+    .invoice-detail-grid.amounts {
+      margin-top: 12px;
+    }
+
+    .invoice-details label {
+      font-size: 0.68rem;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .invoice-details p {
+      font-size: 0.92rem;
+      line-height: 1.3;
+    }
+
+    .balance-display {
+      margin: 12px 0 0;
+      padding: 14px;
+      border-width: 1px;
+      text-align: left;
+    }
+
+    .balance-display h6 {
+      margin-bottom: 4px;
+      font-size: 0.82rem;
+    }
+
+    .balance-display .amount {
+      font-size: 1.45rem;
+      line-height: 1.15;
+    }
+
+    textarea.form-control {
+      min-height: 112px;
+      font-size: 16px;
+    }
+
+    .summary-list .list-group-item {
+      display: block;
+      padding: 11px 12px;
+    }
+
+    .summary-list .list-group-item strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #64748b;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+    }
+
+    .summary-list ul {
+      padding-left: 17px;
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+
+    .btn-submit-wrapper {
+      position: sticky;
+      bottom: 0;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 0 -12px;
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+      border-top: 1px solid #e5e7eb;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 -4px 14px rgba(15, 23, 42, 0.08);
+    }
+
+    .btn-submit-wrapper .btn {
+      min-height: 44px;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.92rem;
+      font-weight: 800;
+    }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-  <div class="row justify-content-center">
-    <div class="col-lg-10">
+<div class="baddebt-create">
       <form method="POST" action="{{ url_for('baddebt.create') }}" class="form-section">
         
         <!-- Step 1: Select Invoice -->
@@ -121,35 +297,35 @@
           <!-- Invoice Details Display -->
           <div id="invoice-details-section" style="display: none;">
             <div class="invoice-details">
-              <div class="row">
-                <div class="col-md-3">
+              <div class="invoice-detail-grid">
+                <div>
                   <label>Invoice No</label>
                   <p id="detail-invoice-no">-</p>
                 </div>
-                <div class="col-md-3">
+                <div>
                   <label>Student Name</label>
                   <p id="detail-student-name">-</p>
                 </div>
-                <div class="col-md-3">
+                <div>
                   <label>Student Code</label>
                   <p id="detail-student-code">-</p>
                 </div>
-                <div class="col-md-3">
+                <div>
                   <label>Student Status</label>
                   <p id="detail-student-status">-</p>
                 </div>
               </div>
 
-              <div class="row mt-3">
-                <div class="col-md-4">
+              <div class="invoice-detail-grid amounts">
+                <div>
                   <label>Total Invoice Amount</label>
                   <p id="detail-total">₹0.00</p>
                 </div>
-                <div class="col-md-4">
+                <div>
                   <label>Paid Amount</label>
                   <p id="detail-paid">₹0.00</p>
                 </div>
-                <div class="col-md-4">
+                <div>
                   <label>Outstanding Balance</label>
                   <p id="detail-balance" style="color: #dc3545; font-weight: 700;">₹0.00</p>
                 </div>
@@ -213,7 +389,7 @@
           <h5><i class="bi bi-check-circle"></i> Review Summary</h5>
           <p class="text-muted">Please verify all details before submitting:</p>
           
-          <ul class="list-group">
+          <ul class="list-group summary-list">
             <li class="list-group-item">
               <strong>Invoice:</strong> <span id="summary-invoice">-</span>
             </li>
@@ -248,8 +424,6 @@
           </button>
         </div>
       </form>
-    </div>
-  </div>
 </div>
 
 {% endblock %}

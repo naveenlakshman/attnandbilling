@@ -1,327 +1,425 @@
 {% extends "lms_admin/base.html" %}
 
-{% block title %}LMS Dashboard - Global IT ERP{% endblock %}
-{% block page_title %}LMS Dashboard{% endblock %}
+{% block title %}LMS Dashboard - {{ company.company_short_name }}{% endblock %}
+{% block page_title %}{{ company.company_short_name }} - LMS{% endblock %}
 
 {% block extra_css %}
 <style>
-  .stat-card {
-    background: #fff;
-    border-radius: 12px;
-    padding: 24px;
-    border-left: 4px solid #0d6efd;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    margin-bottom: 20px;
-    transition: all 0.3s ease;
+  .lms-dashboard-page {
+    --lms-border: #e5e7eb;
+    --lms-soft: #f8fafc;
+    --lms-text: #111827;
+    --lms-muted: #64748b;
   }
 
-  .stat-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateY(-2px);
-  }
-
-  .stat-card.programs {
-    border-left-color: #0d6efd;
-  }
-
-  .stat-card.chapters {
-    border-left-color: #6f42c1;
-  }
-
-  .stat-card.topics {
-    border-left-color: #20c997;
-  }
-
-  .stat-card.tests {
-    border-left-color: #fd7e14;
-  }
-
-  .stat-value {
-    font-size: 2.8rem;
+  .dashboard-page-title {
+    margin-bottom: 14px;
+    color: var(--lms-text);
+    font-size: 1.75rem;
     font-weight: 700;
-    color: #212529;
-    margin: 12px 0;
   }
 
-  .stat-label {
-    color: #6c757d;
-    font-size: 0.95rem;
-    font-weight: 500;
+  .dashboard-page-subtitle {
+    margin-bottom: 18px;
+    color: var(--lms-muted);
   }
 
-  .stat-icon {
-    font-size: 2.2rem;
-    opacity: 0.7;
+  .lms-stat-row {
+    --bs-gutter-x: 1rem;
+    --bs-gutter-y: 1rem;
+    margin-bottom: 18px;
   }
 
-  .dashboard-section {
-    margin-top: 40px;
-  }
-
-  .dashboard-section-title {
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: #212529;
-    margin-bottom: 20px;
-    padding-bottom: 12px;
-    border-bottom: 2px solid #e9ecef;
-  }
-
-  .activity-table-card {
-    background: #fff;
+  .stat-card,
+  .dashboard-section-card,
+  .quick-card {
+    border: none;
     border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(15, 23, 42, 0.06);
   }
 
-  .activity-table-card table {
-    margin-bottom: 0;
+  .stat-card {
+    min-height: 124px;
+    padding: 22px;
   }
 
-  .activity-table-card thead {
-    background: #f8f9fa;
-    border-bottom: 2px solid #dee2e6;
-  }
-
-  .activity-table-card thead th {
-    color: #6c757d;
+  .stat-card h3 {
+    margin-bottom: 12px;
+    color: #334155;
+    font-size: 1.05rem;
     font-weight: 600;
+  }
+
+  .stat-card p {
+    margin: 0;
+    color: var(--lms-text);
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .stat-card.accent-blue { border-left: 4px solid #3b82f6; }
+  .stat-card.accent-violet { border-left: 4px solid #8b5cf6; }
+  .stat-card.accent-green { border-left: 4px solid #22c55e; }
+  .stat-card.accent-orange { border-left: 4px solid #f97316; }
+
+  .dashboard-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .quick-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .quick-card:hover {
+    color: inherit;
+    text-decoration: none;
+    box-shadow: 0 5px 16px rgba(15, 23, 42, 0.08);
+  }
+
+  .quick-card h3 {
+    margin: 0 0 5px;
+    color: var(--lms-text);
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+
+  .quick-card p {
+    margin: 0;
+    color: var(--lms-muted);
     font-size: 0.9rem;
+  }
+
+  .quick-card .btn {
+    flex-shrink: 0;
+  }
+
+  .dashboard-section-card {
+    overflow: hidden;
+    margin-bottom: 18px;
+  }
+
+  .dashboard-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--lms-border);
+    background: var(--lms-soft);
+  }
+
+  .dashboard-section-header h2 {
+    margin: 0;
+    color: var(--lms-text);
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+
+  .activity-table {
+    margin-bottom: 0;
+    font-size: 0.9rem;
+  }
+
+  .activity-table th {
+    color: #475569;
+    font-size: 0.73rem;
+    letter-spacing: 0;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 16px;
+    white-space: nowrap;
   }
 
-  .activity-table-card tbody td {
-    padding: 14px 16px;
+  .activity-table td {
     vertical-align: middle;
-    border-color: #dee2e6;
-  }
-
-  .activity-table-card tbody tr:hover {
-    background-color: #f8f9fa;
   }
 
   .activity-badge {
-    font-size: 0.8rem;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-weight: 500;
+    display: inline-block;
+    min-width: 68px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-align: center;
   }
 
-  .action-create {
-    background: #d1ecf1;
-    color: #0c5460;
-  }
+  .action-create { background: #dbeafe; color: #1d4ed8; }
+  .action-update { background: #dcfce7; color: #15803d; }
+  .action-delete { background: #fee2e2; color: #b91c1c; }
+  .action-other { background: #e2e8f0; color: #334155; }
 
-  .action-update {
-    background: #d4edda;
-    color: #155724;
-  }
-
-  .action-delete {
-    background: #f8d7da;
-    color: #721c24;
-  }
-
-  .action-other {
-    background: #e2e3e5;
-    color: #383d41;
+  .activity-description {
+    max-width: 360px;
+    color: #475569;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .empty-state {
+    padding: 42px 18px;
+    color: #94a3b8;
     text-align: center;
-    padding: 40px 20px;
-    color: #6c757d;
   }
 
-  .empty-state-icon {
-    font-size: 3rem;
-    opacity: 0.5;
-    margin-bottom: 16px;
+  .quick-start-body {
+    padding: 18px;
   }
 
-  .empty-state-text {
-    font-size: 1.1rem;
+  .quick-start-body p {
+    margin-bottom: 0;
+    color: #475569;
   }
 
-  .metrics-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin-bottom: 20px;
-  }
-
-  @media (max-width: 768px) {
-    .metrics-row {
-      grid-template-columns: repeat(2, 1fr);
-    }
-  }
-
-  @media (max-width: 480px) {
-    .metrics-row {
+  @media (max-width: 991.98px) {
+    .dashboard-action-grid {
       grid-template-columns: 1fr;
     }
+  }
 
-    .stat-value {
-      font-size: 2rem;
+  @media (max-width: 575.98px) {
+    .dashboard-page-title {
+      margin-bottom: 8px;
+      font-size: 1.5rem;
+    }
+
+    .dashboard-page-subtitle {
+      margin-bottom: 14px;
+      font-size: 0.86rem;
+      line-height: 1.35;
+    }
+
+    .lms-stat-row {
+      --bs-gutter-x: .75rem;
+      --bs-gutter-y: .75rem;
+      margin-bottom: 14px;
+    }
+
+    .stat-card,
+    .dashboard-section-card,
+    .quick-card {
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+    }
+
+    .stat-card {
+      min-height: 104px;
+      padding: 14px;
+    }
+
+    .stat-card h3 {
+      margin-bottom: 10px;
+      color: #475569;
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .stat-card p {
+      font-size: clamp(1rem, 6.2vw, 1.45rem);
+      white-space: nowrap;
+    }
+
+    .quick-card {
+      align-items: stretch;
+      display: grid;
+      grid-template-columns: 1fr;
+      padding: 14px;
+    }
+
+    .quick-card h3,
+    .dashboard-section-header h2 {
+      font-size: 1rem;
+    }
+
+    .quick-card .btn {
+      width: 100%;
+      min-height: 38px;
+      font-size: 0.85rem;
+    }
+
+    .dashboard-section-header {
+      padding: 12px 14px;
+    }
+
+    .activity-table,
+    .activity-table tbody,
+    .activity-table tr {
+      display: block;
+      width: 100%;
+    }
+
+    .activity-table thead {
+      display: none;
+    }
+
+    .activity-table tr {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--lms-border);
+    }
+
+    .activity-table tr:last-child {
+      border-bottom: 0;
+    }
+
+    .activity-table td {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      gap: 10px;
+      padding: 6px 0 !important;
+      border: 0 !important;
+      text-align: left;
+    }
+
+    .activity-table td::before {
+      content: attr(data-label);
+      margin-top: 1px;
+      color: var(--lms-muted);
+      font-size: 0.68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .activity-description {
+      max-width: none;
+      white-space: normal;
+    }
+
+    .empty-state,
+    .quick-start-body {
+      padding: 24px 14px;
     }
   }
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="lms-dashboard-page">
+  <h2 class="dashboard-page-title">Dashboard</h2>
+  <p class="dashboard-page-subtitle">Overview of LMS content, assignments, and recent admin activity.</p>
 
-<!-- Metrics Section -->
-<div class="metrics-row">
-  <!-- Programs Card -->
-  <div class="stat-card programs">
-    <div class="d-flex align-items-center justify-content-between">
-      <div>
-        <div class="stat-label">Total Programs</div>
-        <div class="stat-value">{{ metrics.total_programs }}</div>
+  <div class="row lms-stat-row">
+    <div class="col-6 col-md-3">
+      <div class="stat-card accent-blue">
+        <h3>Total Programs</h3>
+        <p>{{ metrics.total_programs }}</p>
       </div>
-      <div class="stat-icon">📖</div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="stat-card accent-violet">
+        <h3>Total Chapters</h3>
+        <p>{{ metrics.total_chapters }}</p>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="stat-card accent-green">
+        <h3>Total Topics</h3>
+        <p>{{ metrics.total_topics }}</p>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="stat-card accent-orange">
+        <h3>Total Mock Tests</h3>
+        <p>{{ metrics.total_tests }}</p>
+      </div>
     </div>
   </div>
 
-  <!-- Chapters Card -->
-  <div class="stat-card chapters">
-    <div class="d-flex align-items-center justify-content-between">
+  <div class="dashboard-action-grid">
+    <a class="quick-card" href="{{ url_for('lms_admin.list_batch_programs') }}">
       <div>
-        <div class="stat-label">Total Chapters</div>
-        <div class="stat-value">{{ metrics.total_chapters }}</div>
+        <h3>Batch Programs</h3>
+        <p>Manage batch-level program access and assignments.</p>
       </div>
-      <div class="stat-icon">📑</div>
-    </div>
+      <span class="btn btn-outline-primary btn-sm">Manage</span>
+    </a>
+
+    <a class="quick-card" href="{{ url_for('lms_admin.progress_dashboard') }}">
+      <div>
+        <h3>Student Progress</h3>
+        <p>Track learning activity, completion, and progress.</p>
+      </div>
+      <span class="btn btn-outline-primary btn-sm">View</span>
+    </a>
   </div>
 
-  <!-- Topics Card -->
-  <div class="stat-card topics">
-    <div class="d-flex align-items-center justify-content-between">
-      <div>
-        <div class="stat-label">Total Topics</div>
-        <div class="stat-value">{{ metrics.total_topics }}</div>
-      </div>
-      <div class="stat-icon">📝</div>
+  <section class="dashboard-section-card" aria-labelledby="recent-lms-activity-heading">
+    <div class="dashboard-section-header">
+      <h2 id="recent-lms-activity-heading">Recent LMS Activity</h2>
+      {% if metrics.recent_activity %}
+        <span class="badge bg-secondary">{{ metrics.recent_activity|length }}</span>
+      {% endif %}
     </div>
-  </div>
 
-  <!-- Tests Card -->
-  <div class="stat-card tests">
-    <div class="d-flex align-items-center justify-content-between">
-      <div>
-        <div class="stat-label">Total Mock Tests</div>
-        <div class="stat-value">{{ metrics.total_tests }}</div>
+    {% if metrics.recent_activity %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle activity-table">
+          <thead class="table-light">
+            <tr>
+              <th>Action</th>
+              <th>Module</th>
+              <th>Description</th>
+              <th>User</th>
+              <th>Date & Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for activity in metrics.recent_activity %}
+            <tr>
+              <td data-label="Action">
+                {% set action_class = 'action-create' if activity.action_type == 'create' else 'action-update' if activity.action_type == 'update' else 'action-delete' if activity.action_type == 'delete' else 'action-other' %}
+                <span class="activity-badge {{ action_class }}">
+                  {{ activity.action_type | upper }}
+                </span>
+              </td>
+              <td data-label="Module">
+                <span class="badge bg-info text-dark">{{ activity.module_name | upper }}</span>
+              </td>
+              <td data-label="Description">
+                <div class="activity-description">{{ activity.description }}</div>
+              </td>
+              <td data-label="User">
+                <span class="text-muted">
+                  {% if activity.full_name %}
+                    {{ activity.full_name }}
+                  {% else %}
+                    System
+                  {% endif %}
+                </span>
+              </td>
+              <td data-label="Date">
+                <span class="text-muted">{{ activity.created_at }}</span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
-      <div class="stat-icon">✍️</div>
-    </div>
-  </div>
+    {% else %}
+      <div class="empty-state">No LMS activity yet.</div>
+    {% endif %}
+  </section>
 
-  <!-- Batch Assignments Card -->
-  <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-    <div class="d-flex align-items-center justify-content-between">
-      <div>
-        <div class="stat-label" style="color: rgba(255,255,255,0.9);">Batch Programs</div>
-        <div class="stat-value" style="color: white;">
-          <a href="{{ url_for('lms_admin.list_batch_programs') }}" style="color: white; text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
-            Manage →
-          </a>
-        </div>
-      </div>
-      <div class="stat-icon" style="color: white; font-size: 2rem;">🎓</div>
+  <section class="dashboard-section-card" aria-labelledby="quick-start-heading">
+    <div class="dashboard-section-header">
+      <h2 id="quick-start-heading">Quick Start</h2>
     </div>
-  </div>
-
-  <!-- Progress Monitoring Card -->
-  <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
-    <div class="d-flex align-items-center justify-content-between">
-      <div>
-        <div class="stat-label" style="color: rgba(255,255,255,0.9);">Student Progress</div>
-        <div class="stat-value" style="color: white;">
-          <a href="{{ url_for('lms_admin.progress_dashboard') }}" style="color: white; text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
-            View →
-          </a>
-        </div>
-      </div>
-      <div class="stat-icon" style="color: white; font-size: 2rem;">📊</div>
+    <div class="quick-start-body">
+      <p><strong>LMS structure setup:</strong> programs, chapters, topics, and reusable content are available for admin setup.</p>
     </div>
-  </div>
+  </section>
 </div>
-
-<!-- Recent Activity Section -->
-<div class="dashboard-section">
-  <div class="dashboard-section-title">
-    📋 Recent LMS Activity
-  </div>
-
-  {% if metrics.recent_activity %}
-    <div class="activity-table-card">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Action</th>
-            <th>Module</th>
-            <th>Description</th>
-            <th>User</th>
-            <th>Date & Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for activity in metrics.recent_activity %}
-          <tr>
-            <td>
-              {% set action_class = 'action-create' if activity.action_type == 'create' else 'action-update' if activity.action_type == 'update' else 'action-delete' if activity.action_type == 'delete' else 'action-other' %}
-              <span class="activity-badge {{ action_class }}">
-                {{ activity.action_type | upper }}
-              </span>
-            </td>
-            <td>
-              <span class="badge bg-info text-dark">{{ activity.module_name | upper }}</span>
-            </td>
-            <td>
-              <span class="text-muted">{{ activity.description[:50] }}{% if activity.description|length > 50 %}...{% endif %}</span>
-            </td>
-            <td>
-              <small class="text-muted">
-                {% if activity.full_name %}
-                  {{ activity.full_name }}
-                {% else %}
-                  System
-                {% endif %}
-              </small>
-            </td>
-            <td>
-              <small class="text-muted">{{ activity.created_at }}</small>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% else %}
-    <div class="activity-table-card">
-      <div class="empty-state">
-        <div class="empty-state-icon">📭</div>
-        <div class="empty-state-text">No LMS activity yet</div>
-      </div>
-    </div>
-  {% endif %}
-</div>
-
-<!-- Quick Start Section -->
-<div class="dashboard-section">
-  <div class="dashboard-section-title">
-    🚀 Quick Start
-  </div>
-  <div class="row">
-    <div class="col-md-6">
-      <div class="alert alert-info" role="alert">
-        <strong>📚 Phase 1: LMS Structure Setup</strong>
-        <p class="mb-0 mt-2">Currently setting up the foundation — Programs, Chapters, Topics, and content structure. More features coming in Phase 2 and Phase 3!</p>
-      </div>
-    </div>
-  </div>
-</div>
-
 {% endblock %}

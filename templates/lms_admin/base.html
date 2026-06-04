@@ -8,8 +8,6 @@
   <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
-  {% block extra_css %}{% endblock %}
-
   <style>
     html {
       overflow-y: scroll;
@@ -25,6 +23,10 @@
     .lms-shell {
       width: 100%;
       max-width: 100%;
+    }
+
+    .min-w-0 {
+      min-width: 0;
     }
 
     .sidebar {
@@ -161,20 +163,20 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 1px;
+      gap: 2px;
       text-decoration: none;
       color: #6c757d;
       font-size: 10px;
-      padding: 4px 2px;
+      font-weight: 600;
+      padding: 6px 2px;
       border-radius: 8px;
-      transition: color .15s;
+      transition: color .15s, background-color .15s;
       border: 0;
       background: transparent;
-      font: inherit;
     }
 
     .mobile-bottom-nav .nav-icon {
-      font-size: 20px;
+      font-size: 19px;
       line-height: 1;
     }
 
@@ -182,6 +184,7 @@
     .mobile-bottom-nav a:hover,
     .mobile-bottom-nav button:hover {
       color: #0d6efd;
+      background: #eaf2ff;
     }
 
     .mobile-bottom-nav .fab-btn {
@@ -193,7 +196,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-top: -12px;
+      margin-top: -18px;
       box-shadow: 0 2px 8px rgba(13,110,253,.4);
       flex: none;
       padding: 0;
@@ -399,6 +402,19 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
+      }
+
+      .topbar .btn-sm {
+        min-height: 38px;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+      }
+
+      .topbar .sidebar-toggle {
+        width: 38px;
+        height: 38px;
+        min-height: 38px;
+        font-size: 1.25rem;
       }
 
       .filter-bar select,
@@ -627,6 +643,7 @@
       }
     }
   </style>
+  {% block extra_css %}{% endblock %}
 </head>
 <body>
 
@@ -742,15 +759,20 @@
   <!-- Main Content -->
   <div class="content-wrap">
     <!-- Topbar -->
-    <nav class="navbar navbar-light bg-white border-bottom topbar px-4 py-2">
-      <button class="sidebar-toggle" type="button" id="lmsSidebarToggle" aria-controls="lmsSidebar" aria-expanded="false" aria-label="Open LMS navigation">
-        <span aria-hidden="true">&#9776;</span>
-      </button>
-      <span class="navbar-brand mb-0 h5 topbar-title">{% block page_title %}LMS Admin{% endblock %}</span>
-      <div class="text-muted topbar-user">
-        {% if current_user %}
-          {{ session.get('user_name', 'User') }}
-        {% endif %}
+    <nav class="navbar navbar-light bg-white border-bottom topbar px-3 py-2">
+      <div class="d-flex align-items-center gap-2 min-w-0">
+        <button class="sidebar-toggle" type="button" id="lmsSidebarToggle" aria-controls="lmsSidebar" aria-expanded="false" aria-label="Open LMS navigation">
+          <span aria-hidden="true">&#9776;</span>
+        </button>
+        <span class="fw-semibold topbar-title">{% block page_title %}{{ company.company_short_name }} - LMS{% endblock %}</span>
+      </div>
+      <div class="d-flex align-items-center gap-2 flex-shrink-0">
+        <div class="small text-muted d-none d-sm-block">
+          Logged in:
+          <span class="fw-semibold">{{ session.get('username') or session.get('user_name') or 'User' }}</span>
+          <span class="d-none d-md-inline">({{ session.get('role', 'staff') }})</span>
+        </div>
+        <a href="{{ url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary" title="Back to Main Dashboard">🏠 Home</a>
       </div>
     </nav>
 
@@ -813,24 +835,27 @@
   'lms_admin.assignments_alias', 'lms_admin.all_assignments', 'lms_admin.manage_assignments',
   'lms_admin.edit_assignment', 'lms_admin.view_submissions', 'lms_admin.preview_submission'
 ] %}
+{% set lms_progress_endpoints = [
+  'lms_admin.progress_dashboard', 'lms_admin.view_batch_progress', 'lms_admin.view_student_progress'
+] %}
 {% set lms_program_active = request.endpoint in lms_program_endpoints %}
 {% set lms_assignment_active = request.endpoint in lms_assignment_endpoints %}
-{% set lms_tab_active = request.endpoint and request.endpoint.startswith('lms_admin.') and not lms_program_active and not lms_assignment_active %}
+{% set lms_progress_active = request.endpoint in lms_progress_endpoints %}
 <nav class="mobile-bottom-nav" aria-label="LMS mobile navigation">
-  <a href="{{ url_for('core.dashboard') }}" class="{{ 'active' if request.endpoint == 'core.dashboard' else '' }}">
-    <span class="nav-icon">🏠</span>
-    <span>Home</span>
+  <a href="{{ url_for('lms_admin.dashboard') }}" class="{{ 'active' if request.endpoint == 'lms_admin.dashboard' else '' }}">
+    <span class="nav-icon">📊</span>
+    <span>Dashboard</span>
   </a>
-  <a href="{{ url_for('lms_admin.dashboard') }}" class="{{ 'active' if lms_tab_active else '' }}">
+  <a href="{{ url_for('lms_admin.list_programs') }}" class="{{ 'active' if lms_program_active else '' }}">
     <span class="nav-icon">📚</span>
-    <span>LMS</span>
+    <span>Programs</span>
   </a>
   <a href="#" class="fab-btn" id="lmsFabToggle" title="LMS quick actions" role="button" aria-label="LMS quick actions menu" aria-expanded="false">
     <span class="nav-icon" id="lmsFabIcon">+</span>
   </a>
-  <a href="{{ url_for('lms_admin.list_programs') }}" class="{{ 'active' if lms_program_active else '' }}">
-    <span class="nav-icon">📖</span>
-    <span>Programs</span>
+  <a href="{{ url_for('lms_admin.progress_dashboard') }}" class="{{ 'active' if lms_progress_active else '' }}">
+    <span class="nav-icon">📈</span>
+    <span>Progress</span>
   </a>
   <a href="{{ url_for('lms_admin.assignments_alias') }}" class="{{ 'active' if lms_assignment_active else '' }}">
     <span class="nav-icon">📋</span>

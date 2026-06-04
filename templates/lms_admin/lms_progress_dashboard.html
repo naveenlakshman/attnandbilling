@@ -4,19 +4,28 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <style>
   /* Layout */
-  .pd-header { border-bottom: 2px solid #e9ecef; padding-bottom: 1rem; margin-bottom: 1.5rem; }
-  .pd-title  { font-size: 1.7rem; font-weight: 700; color: #1a1a2e; }
+  .progress-dashboard-page {
+    --pd-border: #e5e7eb;
+    --pd-soft: #f8fafc;
+    --pd-text: #111827;
+    --pd-muted: #64748b;
+  }
+  .pd-header { padding-bottom: .85rem; margin-bottom: .95rem; border-bottom: 1px solid var(--pd-border); }
+  .pd-title  { margin: 0; font-size: 1.7rem; font-weight: 800; color: var(--pd-text); line-height: 1.18; }
+  .pd-subtitle { margin: .35rem 0 0; color: var(--pd-muted); font-size: 13px; line-height: 1.4; }
   /* Filter bar */
   .filter-bar {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
+    background: #fff;
+    border: 1px solid var(--pd-border);
     border-radius: 10px;
-    padding: 1rem 1.25rem;
-    margin-bottom: 1.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
   }
   .filter-bar .form-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #6c757d; margin-bottom: 3px; }
   .filter-bar .form-control,
-  .filter-bar .form-select { font-size: 13px; }
+  .filter-bar .form-select { min-height: 38px; border-radius: 8px; font-size: 13px; }
+  .filter-bar .btn { min-height: 38px; border-radius: 8px; font-weight: 700; }
   .filter-active-badge { font-size: 10px; }
   /* KPI cards */
   .kpi-card {
@@ -59,29 +68,635 @@
   /* Unassigned row */
   .unassigned-row { background: #fff8e1; }
   .unassigned-row:hover { background: #fff3cd !important; }
+  .student-detail-card { border: none; border-radius: 10px; }
+  .student-detail-card .card-header { border-radius: 10px 10px 0 0; background: #f1f5f9; }
+  .branch-mobile-card { display: none; }
+  .batch-mobile-card { display: none; }
+  .staff-mobile-card { display: none; }
+  .student-mobile-card { display: none; }
   @media (max-width: 768px) {
-    .pd-title { font-size: 1.3rem; }
-    .kpi-value { font-size: 1.6rem; }
+    .progress-dashboard-page { margin-top: -2px; }
+    .pd-header { padding-bottom: .7rem; margin-bottom: .75rem; }
+    .pd-title { font-size: 1.28rem; }
+    .pd-subtitle { font-size: .84rem; }
+    .filter-bar { padding: .7rem; margin-bottom: .8rem; }
+    .filter-bar .row {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px !important;
+      margin: 0 !important;
+    }
+    .filter-bar .row > [class*="col-"] {
+      width: auto !important;
+      padding: 0 !important;
+    }
+    .filter-bar .row > [class*="col-"]:nth-child(5),
+    .filter-bar .row > [class*="col-"]:nth-child(6) {
+      grid-column: 1 / -1;
+    }
+    .filter-bar .row > [class*="col-"]:nth-child(6) {
+      display: grid !important;
+      grid-template-columns: 1fr auto;
+    }
+    .filter-bar .form-label { font-size: 10px; margin-bottom: 4px; }
+    .filter-bar .form-control,
+    .filter-bar .form-select,
+    .filter-bar .btn { min-height: 36px; font-size: 12px; }
+    .kpi-card .card-body { padding: .75rem; }
+    .kpi-value { font-size: 1.35rem; }
+    .kpi-label { font-size: 10px; letter-spacing: 0; }
+    .kpi-sub { margin-top: 3px; font-size: 10px; line-height: 1.25; }
+    .summary-card { margin-bottom: .5rem !important; }
+    .summary-card .accordion-button { padding: .75rem; font-size: .86rem; }
+    #branchSection .table-responsive { overflow: visible; }
+    #branchSection .summary-table {
+      min-width: 0 !important;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    #branchSection .summary-table thead { display: none; }
+    #branchSection .summary-table,
+    #branchSection .summary-table tbody,
+    #branchSection .summary-table tr,
+    #branchSection .summary-table td {
+      display: block;
+      width: 100%;
+    }
+    #branchSection .summary-table tbody {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      background: #f8fafc;
+    }
+    #branchSection .summary-table tbody tr {
+      padding: 0;
+      border: 1px solid var(--pd-border);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    }
+    #branchSection .summary-table tbody tr:hover { background: #fff; }
+    #branchSection .summary-table td {
+      padding: 0 !important;
+      border: 0 !important;
+    }
+    #branchSection .branch-desktop-name,
+    #branchSection .branch-desktop-cell {
+      display: none !important;
+    }
+    .branch-mobile-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+    .branch-mobile-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 9px;
+      border-bottom: 1px solid var(--pd-border);
+    }
+    .branch-mobile-name {
+      color: #111827;
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+    .branch-mobile-count {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: .32rem .55rem;
+      border-radius: 999px;
+      background: #e7f3ff;
+      color: #084298;
+      font-size: .78rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .branch-progress-row {
+      display: grid;
+      gap: 6px;
+    }
+    .branch-progress-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: #64748b;
+      font-size: .68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .branch-progress-head strong {
+      color: #111827;
+      font-size: .78rem;
+    }
+    .branch-progress-row .avg-bar {
+      width: 100%;
+      height: 7px;
+      min-width: 0;
+      border-radius: 999px;
+    }
+    .branch-progress-row .avg-fill {
+      height: 7px;
+      border-radius: 999px;
+    }
+    .branch-mobile-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .branch-mobile-metric {
+      min-width: 0;
+      padding: 8px 7px;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+    .branch-mobile-label {
+      color: #64748b;
+      font-size: .66rem;
+      font-weight: 800;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+    .branch-mobile-metric strong {
+      display: block;
+      margin-top: 3px;
+      color: #111827;
+      font-size: .9rem;
+      line-height: 1.15;
+    }
+    .branch-mobile-metric.completed strong { color: #15803d; }
+    .branch-mobile-metric.progressing strong { color: #b45309; }
+    .branch-mobile-metric.not-started strong { color: #dc3545; }
+    #batchSection .table-responsive { overflow: visible; }
+    #batchSection .summary-table {
+      min-width: 0 !important;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    #batchSection .summary-table thead { display: none; }
+    #batchSection .summary-table,
+    #batchSection .summary-table tbody,
+    #batchSection .summary-table tr,
+    #batchSection .summary-table td {
+      display: block;
+      width: 100%;
+    }
+    #batchSection .summary-table tbody {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      background: #f8fafc;
+    }
+    #batchSection .summary-table tbody tr {
+      padding: 0;
+      border: 1px solid var(--pd-border);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    }
+    #batchSection .summary-table tbody tr:hover { background: #fff; }
+    #batchSection .summary-table td {
+      padding: 0 !important;
+      border: 0 !important;
+    }
+    #batchSection .batch-desktop-name,
+    #batchSection .batch-desktop-cell {
+      display: none !important;
+    }
+    .batch-mobile-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+    .batch-mobile-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 9px;
+      border-bottom: 1px solid var(--pd-border);
+    }
+    .batch-mobile-name {
+      color: #111827;
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .batch-mobile-count {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: .32rem .55rem;
+      border-radius: 999px;
+      background: #e7f3ff;
+      color: #084298;
+      font-size: .78rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .batch-mobile-lines {
+      display: grid;
+      gap: 7px;
+    }
+    .batch-mobile-line {
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+    }
+    .batch-mobile-label {
+      color: #64748b;
+      font-size: .66rem;
+      font-weight: 800;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+    .batch-mobile-value {
+      min-width: 0;
+      color: #111827;
+      font-size: .86rem;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .batch-progress-row {
+      display: grid;
+      gap: 6px;
+    }
+    .batch-progress-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: #64748b;
+      font-size: .68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .batch-progress-head strong {
+      color: #111827;
+      font-size: .78rem;
+    }
+    .batch-progress-row .avg-bar {
+      width: 100%;
+      height: 7px;
+      min-width: 0;
+      border-radius: 999px;
+    }
+    .batch-progress-row .avg-fill {
+      height: 7px;
+      border-radius: 999px;
+    }
+    .batch-mobile-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .batch-mobile-metric {
+      min-width: 0;
+      padding: 8px 7px;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+    .batch-mobile-metric strong {
+      display: block;
+      margin-top: 3px;
+      color: #111827;
+      font-size: .9rem;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+    .batch-mobile-metric.low strong { color: #dc3545; }
+    #staffSection .table-responsive { overflow: visible; }
+    #staffSection .summary-table {
+      min-width: 0 !important;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    #staffSection .summary-table thead { display: none; }
+    #staffSection .summary-table,
+    #staffSection .summary-table tbody,
+    #staffSection .summary-table tr,
+    #staffSection .summary-table td {
+      display: block;
+      width: 100%;
+    }
+    #staffSection .summary-table tbody {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      background: #f8fafc;
+    }
+    #staffSection .summary-table tbody tr {
+      padding: 0;
+      border: 1px solid var(--pd-border);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    }
+    #staffSection .summary-table tbody tr:hover { background: #fff; }
+    #staffSection .summary-table tbody tr.unassigned-row {
+      background: #fff;
+      border-color: #fde68a;
+    }
+    #staffSection .summary-table td {
+      padding: 0 !important;
+      border: 0 !important;
+    }
+    #staffSection .staff-desktop-name,
+    #staffSection .staff-desktop-cell {
+      display: none !important;
+    }
+    .staff-mobile-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+    .staff-mobile-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 9px;
+      border-bottom: 1px solid var(--pd-border);
+    }
+    .staff-mobile-name {
+      color: #111827;
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .staff-mobile-sub {
+      margin-top: 3px;
+      color: #64748b;
+      font-size: .76rem;
+      line-height: 1.3;
+    }
+    .staff-mobile-count {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: .32rem .55rem;
+      border-radius: 999px;
+      background: #e7f3ff;
+      color: #084298;
+      font-size: .78rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .staff-progress-row {
+      display: grid;
+      gap: 6px;
+    }
+    .staff-progress-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: #64748b;
+      font-size: .68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .staff-progress-head strong {
+      color: #111827;
+      font-size: .78rem;
+    }
+    .staff-progress-row .avg-bar {
+      width: 100%;
+      height: 7px;
+      min-width: 0;
+      border-radius: 999px;
+    }
+    .staff-progress-row .avg-fill {
+      height: 7px;
+      border-radius: 999px;
+    }
+    .staff-mobile-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .staff-mobile-metric {
+      min-width: 0;
+      padding: 8px 7px;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+    .staff-mobile-label {
+      color: #64748b;
+      font-size: .62rem;
+      font-weight: 800;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+    .staff-mobile-metric strong {
+      display: block;
+      margin-top: 3px;
+      color: #111827;
+      font-size: .86rem;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+    .staff-mobile-metric.low strong { color: #dc3545; }
+    .staff-mobile-metric.high strong { color: #15803d; }
+    .staff-mobile-card.unassigned {
+      background: #fffbeb;
+      border-radius: 10px;
+    }
+    .staff-mobile-card.unassigned .staff-mobile-count {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .staff-mobile-action {
+      width: 100%;
+      min-height: 36px;
+      border-radius: 8px;
+      font-size: .84rem;
+      font-weight: 800;
+    }
+    .student-detail-card .card-header { padding: .75rem; }
+    .student-detail-card .table-responsive { overflow: visible; }
+    #studentTable {
+      min-width: 0 !important;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    #studentTable thead { display: none; }
+    #studentTable,
+    #studentTable tbody,
+    #studentTable tr,
+    #studentTable td {
+      display: block;
+      width: 100%;
+    }
+    #studentTable tbody {
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+      background: #f8fafc;
+    }
+    #studentTable tbody tr {
+      padding: 0;
+      border: 1px solid var(--pd-border);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    }
+    #studentTable tbody tr:hover { background: #fff; }
+    #studentTable td {
+      min-width: 0;
+      padding: 0 !important;
+      border: 0 !important;
+      color: #111827;
+      font-size: .82rem;
+      line-height: 1.35;
+      text-align: left !important;
+    }
+    #studentTable .student-card-head {
+      padding: 0 !important;
+      border: 0 !important;
+    }
+    #studentTable .desktop-student-name,
+    #studentTable .mobile-hidden-cell,
+    #studentTable .mobile-course-cell,
+    #studentTable .mobile-progress-cell,
+    #studentTable .mobile-action-cell,
+    #studentTable td:not(.student-card-head) {
+      display: none !important;
+    }
+    .student-mobile-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+    .student-mobile-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding-bottom: 9px;
+      border-bottom: 1px solid var(--pd-border);
+    }
+    .student-mobile-name {
+      display: block;
+      margin-bottom: 3px;
+      color: #111827;
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+    .student-mobile-code {
+      color: #e83e8c;
+      font-size: .78rem;
+      font-weight: 800;
+    }
+    .student-mobile-top .status-badge {
+      flex: 0 0 auto;
+      margin-top: 1px;
+    }
+    .student-mobile-lines {
+      display: grid;
+      gap: 7px;
+    }
+    .student-mobile-line {
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+    }
+    .student-mobile-label {
+      color: #64748b;
+      font-size: .68rem;
+      font-weight: 800;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+    .student-mobile-value {
+      min-width: 0;
+      color: #111827;
+      font-size: .86rem;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .student-mobile-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .student-mobile-metric {
+      min-width: 0;
+      padding: 8px 7px;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+    .student-mobile-metric strong {
+      display: block;
+      margin-top: 3px;
+      color: #111827;
+      font-size: .86rem;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+    .student-mobile-progress {
+      display: grid;
+      gap: 5px;
+    }
+    .student-progress-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: #64748b;
+      font-size: .68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .student-progress-head strong {
+      color: #111827;
+      font-size: .76rem;
+    }
+    .student-mobile-progress .pbar {
+      height: 7px;
+      border-radius: 999px;
+      background: #e9ecef;
+    }
+    .student-mobile-progress .pfill {
+      height: 7px;
+      border-radius: 999px;
+    }
+    .student-mobile-detail {
+      width: 100%;
+      min-height: 36px;
+      border-radius: 8px;
+      font-size: .86rem;
+      font-weight: 800;
+    }
+  }
+  @media (max-width: 420px) {
+    .filter-bar .row {
+      grid-template-columns: 1fr;
+    }
+    .staff-mobile-metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 </style>
 {% endblock %}
 {% block content %}
-<div class="container-fluid py-3">
-  <!-- Breadcrumb -->
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.dashboard') }}">Dashboard</a></li>
-      <li class="breadcrumb-item active">Progress Monitoring</li>
-    </ol>
-  </nav>
+<div class="progress-dashboard-page">
   <!-- Header -->
   <div class="pd-header d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
       <h1 class="pd-title">
         <i class="bi bi-bar-chart-line-fill me-2" style="color:#0d6efd;"></i>Student Progress Dashboard
       </h1>
-      <p class="text-muted mb-0" style="font-size:13px;">
-        Real-time overview of active student engagement and learning progress
+      <p class="pd-subtitle">
+        Active student engagement and learning progress
         {% if filters.is_filtered %}
           <span class="badge bg-primary filter-active-badge ms-2">Filtered</span>
         {% endif %}
@@ -143,7 +758,7 @@
     </form>
   </div>
   <!-- KPI CARDS -->
-  <div class="row g-3 mb-4">
+  <div class="row g-2 g-md-3 mb-3">
     <div class="col-6 col-lg-2">
       <div class="card kpi-card shadow-sm h-100">
         <div class="card-body">
@@ -200,7 +815,7 @@
     </div>
   </div>
   <!-- SUMMARY ACCORDIONS -->
-  <div class="accordion mb-4" id="summaryAccordion">
+  <div class="accordion mb-3" id="summaryAccordion">
     <!-- Branch-wise -->
     {% if branch_summary %}
     <div class="accordion-item summary-card mb-2 shadow-sm" style="border-radius:10px; overflow:hidden;">
@@ -228,9 +843,43 @@
               <tbody>
                 {% for b in branch_summary %}
                 <tr>
-                  <td class="ps-3 fw-semibold">{{ b.branch_name or '&mdash;' }}</td>
-                  <td class="text-center"><span class="badge bg-primary">{{ b.total_students }}</span></td>
-                  <td>
+                  <td class="ps-3 fw-semibold">
+                    <span class="branch-desktop-name">{{ b.branch_name or '&mdash;' }}</span>
+                    <div class="branch-mobile-card">
+                      <div class="branch-mobile-top">
+                        <div class="branch-mobile-name">{{ b.branch_name or '&mdash;' }}</div>
+                        <span class="branch-mobile-count">{{ b.total_students }} students</span>
+                      </div>
+
+                      <div class="branch-progress-row">
+                        <div class="branch-progress-head">
+                          <span>Avg Completion</span>
+                          <strong>{{ b.avg_pct }}%</strong>
+                        </div>
+                        <div class="avg-bar">
+                          <div class="avg-fill {% if b.avg_pct <= 25 %}pct-red{% elif b.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
+                               style="width:{{ b.avg_pct }}%;"></div>
+                        </div>
+                      </div>
+
+                      <div class="branch-mobile-metrics">
+                        <div class="branch-mobile-metric completed">
+                          <span class="branch-mobile-label">Completed</span>
+                          <strong>{{ b.completed }}</strong>
+                        </div>
+                        <div class="branch-mobile-metric progressing">
+                          <span class="branch-mobile-label">In Progress</span>
+                          <strong>{{ b.in_progress }}</strong>
+                        </div>
+                        <div class="branch-mobile-metric not-started">
+                          <span class="branch-mobile-label">Not Started</span>
+                          <strong>{{ b.not_started }}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="text-center branch-desktop-cell"><span class="badge bg-primary">{{ b.total_students }}</span></td>
+                  <td class="branch-desktop-cell">
                     <div class="d-flex align-items-center gap-2">
                       <div class="avg-bar flex-grow-1">
                         <div class="avg-fill {% if b.avg_pct <= 25 %}pct-red{% elif b.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
@@ -239,9 +888,9 @@
                       <small class="fw-bold" style="min-width:38px;">{{ b.avg_pct }}%</small>
                     </div>
                   </td>
-                  <td class="text-center"><span class="badge bg-success">{{ b.completed }}</span></td>
-                  <td class="text-center"><span class="badge bg-warning text-dark">{{ b.in_progress }}</span></td>
-                  <td class="text-center"><span class="badge bg-danger">{{ b.not_started }}</span></td>
+                  <td class="text-center branch-desktop-cell"><span class="badge bg-success">{{ b.completed }}</span></td>
+                  <td class="text-center branch-desktop-cell"><span class="badge bg-warning text-dark">{{ b.in_progress }}</span></td>
+                  <td class="text-center branch-desktop-cell"><span class="badge bg-danger">{{ b.not_started }}</span></td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -279,14 +928,59 @@
               <tbody>
                 {% for b in batch_summary %}
                 <tr>
-                  <td class="ps-3 fw-semibold">{{ b.batch_name or '&mdash;' }}</td>
-                  <td class="text-muted">{{ b.branch_name or '&mdash;' }}</td>
-                  <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ b.programs }}">
+                  <td class="ps-3 fw-semibold">
+                    <span class="batch-desktop-name">{{ b.batch_name or '&mdash;' }}</span>
+                    <div class="batch-mobile-card">
+                      <div class="batch-mobile-top">
+                        <div class="batch-mobile-name">{{ b.batch_name or '&mdash;' }}</div>
+                        <span class="batch-mobile-count">{{ b.student_count }} students</span>
+                      </div>
+
+                      <div class="batch-mobile-lines">
+                        <div class="batch-mobile-line">
+                          <span class="batch-mobile-label">Branch</span>
+                          <span class="batch-mobile-value">{{ b.branch_name or '&mdash;' }}</span>
+                        </div>
+                        <div class="batch-mobile-line">
+                          <span class="batch-mobile-label">Course</span>
+                          <span class="batch-mobile-value">{{ b.programs or '&mdash;' }}</span>
+                        </div>
+                        <div class="batch-mobile-line">
+                          <span class="batch-mobile-label">Trainer</span>
+                          <span class="batch-mobile-value">{{ b.trainer_name or '&mdash;' }}</span>
+                        </div>
+                      </div>
+
+                      <div class="batch-progress-row">
+                        <div class="batch-progress-head">
+                          <span>Avg Completion</span>
+                          <strong>{{ b.avg_pct }}%</strong>
+                        </div>
+                        <div class="avg-bar">
+                          <div class="avg-fill {% if b.avg_pct <= 25 %}pct-red{% elif b.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
+                               style="width:{{ b.avg_pct }}%;"></div>
+                        </div>
+                      </div>
+
+                      <div class="batch-mobile-metrics">
+                        <div class="batch-mobile-metric">
+                          <span class="batch-mobile-label">Students</span>
+                          <strong>{{ b.student_count }}</strong>
+                        </div>
+                        <div class="batch-mobile-metric low">
+                          <span class="batch-mobile-label">Low &lt;25%</span>
+                          <strong>{{ b.low_count if b.low_count > 0 else 0 }}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="text-muted batch-desktop-cell">{{ b.branch_name or '&mdash;' }}</td>
+                  <td class="batch-desktop-cell" style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ b.programs }}">
                     {{ b.programs or '&mdash;' }}
                   </td>
-                  <td>{{ b.trainer_name or '&mdash;' }}</td>
-                  <td class="text-center"><span class="badge bg-primary">{{ b.student_count }}</span></td>
-                  <td>
+                  <td class="batch-desktop-cell">{{ b.trainer_name or '&mdash;' }}</td>
+                  <td class="text-center batch-desktop-cell"><span class="badge bg-primary">{{ b.student_count }}</span></td>
+                  <td class="batch-desktop-cell">
                     <div class="d-flex align-items-center gap-2">
                       <div class="avg-bar flex-grow-1">
                         <div class="avg-fill {% if b.avg_pct <= 25 %}pct-red{% elif b.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
@@ -295,7 +989,7 @@
                       <small class="fw-bold" style="min-width:38px;">{{ b.avg_pct }}%</small>
                     </div>
                   </td>
-                  <td class="text-center">
+                  <td class="text-center batch-desktop-cell">
                     {% if b.low_count > 0 %}
                     <span class="badge bg-danger">{{ b.low_count }}</span>
                     {% else %}
@@ -317,7 +1011,7 @@
       <h2 class="accordion-header">
         <button class="accordion-button collapsed fw-bold" type="button"
                 data-bs-toggle="collapse" data-bs-target="#staffSection">
-          <i class="bi bi-mortarboard-fill me-2"></i>Staff / Trainer-wise Progress
+          <i class="bi bi-mortarboard-fill me-2"></i>Staff Wise Progress
           <span class="badge bg-secondary ms-2" style="font-size:10px;">{{ staff_summary|length }} trainer(s)</span>
           {% if unassigned_summary %}
           <span class="badge bg-warning text-dark ms-1" style="font-size:10px;">{{ unassigned_summary.student_count }} unassigned</span>
@@ -341,10 +1035,51 @@
               <tbody>
                 {% for s in staff_summary %}
                 <tr>
-                  <td class="ps-3 fw-semibold">{{ s.trainer_name }}</td>
-                  <td class="text-center"><span class="badge bg-info text-dark">{{ s.batch_count }}</span></td>
-                  <td class="text-center"><span class="badge bg-primary">{{ s.student_count }}</span></td>
-                  <td>
+                  <td class="ps-3 fw-semibold">
+                    <span class="staff-desktop-name">{{ s.trainer_name }}</span>
+                    <div class="staff-mobile-card">
+                      <div class="staff-mobile-top">
+                        <div class="min-w-0">
+                          <div class="staff-mobile-name">{{ s.trainer_name }}</div>
+                          <div class="staff-mobile-sub">Trainer progress summary</div>
+                        </div>
+                        <span class="staff-mobile-count">{{ s.student_count }} students</span>
+                      </div>
+
+                      <div class="staff-progress-row">
+                        <div class="staff-progress-head">
+                          <span>Avg Student Progress</span>
+                          <strong>{{ s.avg_pct }}%</strong>
+                        </div>
+                        <div class="avg-bar">
+                          <div class="avg-fill {% if s.avg_pct <= 25 %}pct-red{% elif s.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
+                               style="width:{{ s.avg_pct }}%;"></div>
+                        </div>
+                      </div>
+
+                      <div class="staff-mobile-metrics">
+                        <div class="staff-mobile-metric">
+                          <span class="staff-mobile-label">Batches</span>
+                          <strong>{{ s.batch_count }}</strong>
+                        </div>
+                        <div class="staff-mobile-metric">
+                          <span class="staff-mobile-label">Students</span>
+                          <strong>{{ s.student_count }}</strong>
+                        </div>
+                        <div class="staff-mobile-metric low">
+                          <span class="staff-mobile-label">Below 25</span>
+                          <strong>{{ s.below25 }}</strong>
+                        </div>
+                        <div class="staff-mobile-metric high">
+                          <span class="staff-mobile-label">Above 75</span>
+                          <strong>{{ s.above75 }}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="text-center staff-desktop-cell"><span class="badge bg-info text-dark">{{ s.batch_count }}</span></td>
+                  <td class="text-center staff-desktop-cell"><span class="badge bg-primary">{{ s.student_count }}</span></td>
+                  <td class="staff-desktop-cell">
                     <div class="d-flex align-items-center gap-2">
                       <div class="avg-bar flex-grow-1">
                         <div class="avg-fill {% if s.avg_pct <= 25 %}pct-red{% elif s.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
@@ -353,11 +1088,11 @@
                       <small class="fw-bold" style="min-width:38px;">{{ s.avg_pct }}%</small>
                     </div>
                   </td>
-                  <td class="text-center">
+                  <td class="text-center staff-desktop-cell">
                     {% if s.below25 > 0 %}<span class="badge bg-danger">{{ s.below25 }}</span>
                     {% else %}<span class="text-muted">&mdash;</span>{% endif %}
                   </td>
-                  <td class="text-center">
+                  <td class="text-center staff-desktop-cell">
                     {% if s.above75 > 0 %}<span class="badge bg-success">{{ s.above75 }}</span>
                     {% else %}<span class="text-muted">&mdash;</span>{% endif %}
                   </td>
@@ -367,17 +1102,62 @@
                 {% if unassigned_summary %}
                 <tr class="unassigned-row">
                   <td class="ps-3">
+                    <div class="staff-desktop-name">
                     <div class="fw-bold text-warning-emphasis">
                       <i class="bi bi-exclamation-circle me-1"></i>Unassigned Students
                     </div>
                     <small class="text-muted" style="font-size:10px;">
                       No trainer/batch assigned &mdash; not included in ranking &mdash;
-                      <a href="{{ url_for('billing.students') }}" class="text-muted">Assign trainer/batch</a>
+                      <a href="{{ url_for('billing.students', status='active', batch='unassigned') }}" class="text-muted">Assign trainer/batch</a>
                     </small>
+                    </div>
+                    <div class="staff-mobile-card unassigned">
+                      <div class="staff-mobile-top">
+                        <div class="min-w-0">
+                          <div class="staff-mobile-name">Unassigned Students</div>
+                          <div class="staff-mobile-sub">No trainer or batch assigned; excluded from ranking.</div>
+                        </div>
+                        <span class="staff-mobile-count">{{ unassigned_summary.student_count }} students</span>
+                      </div>
+
+                      <div class="staff-progress-row">
+                        <div class="staff-progress-head">
+                          <span>Avg Student Progress</span>
+                          <strong>{{ unassigned_summary.avg_pct }}%</strong>
+                        </div>
+                        <div class="avg-bar">
+                          <div class="avg-fill {% if unassigned_summary.avg_pct <= 25 %}pct-red{% elif unassigned_summary.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
+                               style="width:{{ unassigned_summary.avg_pct }}%;"></div>
+                        </div>
+                      </div>
+
+                      <div class="staff-mobile-metrics">
+                        <div class="staff-mobile-metric">
+                          <span class="staff-mobile-label">Batches</span>
+                          <strong>{{ unassigned_summary.batch_count }}</strong>
+                        </div>
+                        <div class="staff-mobile-metric">
+                          <span class="staff-mobile-label">Students</span>
+                          <strong>{{ unassigned_summary.student_count }}</strong>
+                        </div>
+                        <div class="staff-mobile-metric low">
+                          <span class="staff-mobile-label">Ranking</span>
+                          <strong>Excluded</strong>
+                        </div>
+                        <div class="staff-mobile-metric">
+                          <span class="staff-mobile-label">Action</span>
+                          <strong>Needed</strong>
+                        </div>
+                      </div>
+
+                      <a href="{{ url_for('billing.students', status='active', batch='unassigned') }}" class="btn btn-sm btn-outline-warning staff-mobile-action">
+                        Assign trainer/batch
+                      </a>
+                    </div>
                   </td>
-                  <td class="text-center"><span class="badge bg-secondary">{{ unassigned_summary.batch_count }}</span></td>
-                  <td class="text-center"><span class="badge bg-warning text-dark">{{ unassigned_summary.student_count }}</span></td>
-                  <td>
+                  <td class="text-center staff-desktop-cell"><span class="badge bg-secondary">{{ unassigned_summary.batch_count }}</span></td>
+                  <td class="text-center staff-desktop-cell"><span class="badge bg-warning text-dark">{{ unassigned_summary.student_count }}</span></td>
+                  <td class="staff-desktop-cell">
                     <div class="d-flex align-items-center gap-2">
                       <div class="avg-bar flex-grow-1">
                         <div class="avg-fill {% if unassigned_summary.avg_pct <= 25 %}pct-red{% elif unassigned_summary.avg_pct <= 60 %}pct-yellow{% else %}pct-green{% endif %}"
@@ -386,7 +1166,7 @@
                       <small class="fw-bold" style="min-width:38px;">{{ unassigned_summary.avg_pct }}%</small>
                     </div>
                   </td>
-                  <td class="text-center text-muted" colspan="2" style="font-size:11px;">Excluded from ranking</td>
+                  <td class="text-center text-muted staff-desktop-cell" colspan="2" style="font-size:11px;">Excluded from ranking</td>
                 </tr>
                 {% endif %}
               </tbody>
@@ -398,8 +1178,8 @@
     {% endif %}
   </div>
   <!-- STUDENT DETAIL TABLE -->
-  <div class="card shadow-sm" style="border-radius:10px; border:none;">
-    <div class="card-header d-flex justify-content-between align-items-center" style="border-radius:10px 10px 0 0; background:#f1f5f9;">
+  <div class="card shadow-sm student-detail-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
       <h6 class="mb-0 fw-bold">
         <i class="bi bi-clipboard-data me-1"></i>Student Progress Detail
       </h6>
@@ -427,19 +1207,72 @@
         <tbody>
           {% for r in student_rows %}
           <tr>
-            <td class="ps-3 fw-semibold" data-sort-key="name" data-sort-value="{{ r.full_name }}">{{ r.full_name }}</td>
-            <td data-sort-key="code" data-sort-value="{{ r.student_code }}">
+            <td class="ps-3 fw-semibold student-card-head" data-label="Student" data-sort-key="name" data-sort-value="{{ r.full_name }}">
+              <span class="desktop-student-name">{{ r.full_name }}</span>
+              <div class="student-mobile-card">
+                <div class="student-mobile-top">
+                  <div class="min-w-0">
+                    <span class="student-mobile-name">{{ r.full_name }}</span>
+                    <span class="student-mobile-code">{{ r.student_code }}</span>
+                  </div>
+                  <span class="status-badge status-{{ r.status|lower|replace(' ', '-') }}">{{ r.status }}</span>
+                </div>
+
+                <div class="student-mobile-lines">
+                  <div class="student-mobile-line">
+                    <span class="student-mobile-label">Batch</span>
+                    <span class="student-mobile-value">{{ r.batch_name or '&mdash;' }}</span>
+                  </div>
+                  <div class="student-mobile-line">
+                    <span class="student-mobile-label">Course</span>
+                    <span class="student-mobile-value">{{ r.program_name }}</span>
+                  </div>
+                </div>
+
+                <div class="student-mobile-metrics">
+                  <div class="student-mobile-metric">
+                    <span class="student-mobile-label">Trainer</span>
+                    <strong>{{ r.trainer_name or '&mdash;' }}</strong>
+                  </div>
+                  <div class="student-mobile-metric">
+                    <span class="student-mobile-label">Total</span>
+                    <strong>{{ r.total_topics }}</strong>
+                  </div>
+                  <div class="student-mobile-metric">
+                    <span class="student-mobile-label">Done</span>
+                    <strong>{{ r.completed_topics }}</strong>
+                  </div>
+                </div>
+
+                <div class="student-mobile-progress">
+                  <div class="student-progress-head">
+                    <span>Progress</span>
+                    <strong>{{ r.pct }}%</strong>
+                  </div>
+                  <div class="pbar">
+                    <div class="pfill {% if r.bar_color == 'danger' %}pct-red{% elif r.bar_color == 'warning' %}pct-yellow{% else %}pct-green{% endif %}"
+                         style="width:{{ r.pct }}%;"></div>
+                  </div>
+                </div>
+
+                <a href="{{ url_for('lms_admin.view_student_progress', student_id=r.student_id) }}"
+                   class="btn btn-sm btn-outline-primary student-mobile-detail">
+                  Detail
+                </a>
+              </div>
+            </td>
+            <td class="mobile-hidden-cell" data-label="Reg No" data-sort-key="code" data-sort-value="{{ r.student_code }}">
               <code style="font-size:11px;">{{ r.student_code }}</code>
             </td>
-            <td data-sort-key="branch" data-sort-value="{{ r.branch_name }}">{{ r.branch_name or '&mdash;' }}</td>
-            <td data-sort-key="batch"  data-sort-value="{{ r.batch_name }}">{{ r.batch_name or '&mdash;' }}</td>
-            <td data-sort-key="program" data-sort-value="{{ r.program_name }}" style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ r.program_name }}">
+            <td class="mobile-hidden-cell" data-label="Branch" data-sort-key="branch" data-sort-value="{{ r.branch_name }}">{{ r.branch_name or '&mdash;' }}</td>
+            <td data-label="Batch" data-sort-key="batch"  data-sort-value="{{ r.batch_name }}">{{ r.batch_name or '&mdash;' }}</td>
+            <td class="mobile-course-cell" data-label="Course" data-sort-key="program" data-sort-value="{{ r.program_name }}" style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ r.program_name }}">
               {{ r.program_name }}
             </td>
-            <td data-sort-key="trainer" data-sort-value="{{ r.trainer_name }}">{{ r.trainer_name or '&mdash;' }}</td>
-            <td class="text-center" data-sort-key="total" data-sort-value="{{ r.total_topics }}">{{ r.total_topics }}</td>
-            <td class="text-center" data-sort-key="done"  data-sort-value="{{ r.completed_topics }}">{{ r.completed_topics }}</td>
-            <td data-sort-key="pct" data-sort-value="{{ r.pct }}">
+            <td data-label="Trainer" data-sort-key="trainer" data-sort-value="{{ r.trainer_name }}">{{ r.trainer_name or '&mdash;' }}</td>
+            <td class="text-center" data-label="Total" data-sort-key="total" data-sort-value="{{ r.total_topics }}">{{ r.total_topics }}</td>
+            <td class="text-center" data-label="Done" data-sort-key="done"  data-sort-value="{{ r.completed_topics }}">{{ r.completed_topics }}</td>
+            <td class="mobile-progress-cell" data-label="Progress" data-sort-key="pct" data-sort-value="{{ r.pct }}">
               <div class="d-flex align-items-center gap-1">
                 <div class="progress-wrap flex-grow-1">
                   <div class="pbar">
@@ -450,13 +1283,13 @@
                 <small class="fw-bold" style="min-width:36px; font-size:11px;">{{ r.pct }}%</small>
               </div>
             </td>
-            <td data-sort-key="last" data-sort-value="{{ r.last_activity }}">
+            <td class="mobile-hidden-cell" data-label="Last Activity" data-sort-key="last" data-sort-value="{{ r.last_activity }}">
               <small class="text-muted">{{ r.last_activity }}</small>
             </td>
-            <td data-sort-key="status" data-sort-value="{{ r.status }}">
+            <td class="mobile-hidden-cell" data-label="Status" data-sort-key="status" data-sort-value="{{ r.status }}">
               <span class="status-badge status-{{ r.status|lower|replace(' ', '-') }}">{{ r.status }}</span>
             </td>
-            <td>
+            <td class="mobile-action-cell" data-label="Action">
               <a href="{{ url_for('lms_admin.view_student_progress', student_id=r.student_id) }}"
                  class="btn btn-sm btn-outline-primary" style="font-size:11px; padding:2px 8px;">
                 Detail

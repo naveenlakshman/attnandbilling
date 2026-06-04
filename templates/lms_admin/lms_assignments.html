@@ -1,117 +1,351 @@
 {% extends "lms_admin/base.html" %}
 
-{% block title %}Assignments — {{ topic.title }}{% endblock %}
-{% block page_title %}Assignments{% endblock %}
+{% block title %}Assignments - {{ topic.title }}{% endblock %}
+{% block page_title %}{{ company.company_short_name }} - LMS{% endblock %}
 
 {% block extra_css %}
 <style>
-  .assign-card {
-    background: #fff; border-radius: 12px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    margin-bottom: 16px; overflow: hidden;
+  .topic-assignments {
+    --ta-border: #e5e7eb;
+    --ta-soft: #f8fafc;
+    --ta-text: #111827;
+    --ta-muted: #64748b;
+    max-width: 980px;
+    margin: 0 auto;
   }
-  .assign-card-header {
-    padding: 14px 18px; border-bottom: 1px solid #eef0f2;
-    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+
+  .ta-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 14px;
   }
-  .assign-card-body { padding: 16px 18px; }
-  .badge-subs {
-    display: inline-block; background: #e7f3ff; color: #084298;
-    border-radius: 20px; padding: 2px 10px; font-size: 12px; font-weight: 600;
+
+  .ta-kicker {
+    margin-bottom: 6px;
+    color: var(--ta-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .ta-title {
+    margin: 0;
+    color: var(--ta-text);
+    font-size: 1.5rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .ta-subtitle {
+    margin: 8px 0 0;
+    color: var(--ta-muted);
+  }
+
+  .ta-card {
+    overflow: hidden;
+    border: 0;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(15, 23, 42, 0.06);
+  }
+
+  .ta-card + .ta-card {
+    margin-top: 14px;
+  }
+
+  .ta-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--ta-border);
+    background: var(--ta-soft);
+  }
+
+  .ta-card-header h2 {
+    margin: 0;
+    color: var(--ta-text);
+    font-size: 1.05rem;
+    font-weight: 800;
+  }
+
+  .ta-card-body {
+    padding: 18px;
+  }
+
+  .ta-form-grid {
+    display: grid;
+    gap: 14px;
+  }
+
+  .ta-form-grid .form-label {
+    color: #334155;
+    font-weight: 700;
+  }
+
+  .ta-form-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .ta-alert {
+    margin-bottom: 14px;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    background: #eff6ff;
+    color: #1e40af;
+    padding: 12px 14px;
+  }
+
+  .assignment-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .assignment-title {
+    color: var(--ta-text);
+    font-size: 1.08rem;
+    font-weight: 800;
+    line-height: 1.25;
+  }
+
+  .assignment-desc {
+    margin-top: 6px;
+    color: #475569;
+    line-height: 1.45;
+  }
+
+  .assignment-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .meta-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 4px 9px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ta-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .meta-chip.primary {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .assignment-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .assignment-actions form {
+    margin: 0;
+  }
+
+  .empty-state {
+    padding: 34px 18px;
+    color: #94a3b8;
+    text-align: center;
+  }
+
+  @media (max-width: 575.98px) {
+    .topic-assignments {
+      max-width: none;
+    }
+
+    .ta-header {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .ta-title {
+      font-size: 1.28rem;
+    }
+
+    .ta-subtitle {
+      font-size: 0.86rem;
+      line-height: 1.35;
+    }
+
+    .ta-header .btn,
+    .ta-form-actions .btn {
+      width: 100%;
+      min-height: 42px;
+      font-weight: 800;
+    }
+
+    .ta-card {
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+    }
+
+    .ta-card-header,
+    .ta-card-body,
+    .assignment-item {
+      padding: 14px;
+    }
+
+    .ta-card-header h2 {
+      font-size: 1rem;
+    }
+
+    .form-control {
+      min-height: 42px;
+      font-size: 16px;
+    }
+
+    textarea.form-control {
+      min-height: 98px;
+    }
+
+    .assignment-item {
+      display: block;
+    }
+
+    .assignment-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--ta-border);
+    }
+
+    .assignment-actions .btn,
+    .assignment-actions form,
+    .assignment-actions button {
+      width: 100%;
+    }
+
+    .assignment-actions .btn,
+    .assignment-actions button {
+      min-height: 42px;
+      font-weight: 800;
+    }
+
+    .empty-state {
+      padding: 28px 14px;
+    }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-3">
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=topic.chapter_id) }}">{{ topic.chapter_title }}</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) }}">{{ topic.title }}</a></li>
-      <li class="breadcrumb-item active">Assignments</li>
-    </ol>
-  </nav>
-
-  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+<div class="topic-assignments">
+  <div class="ta-header">
     <div>
-      <h2 class="h4 mb-1">Assignments — {{ topic.title }}</h2>
-      <p class="text-muted mb-0">Upload assignment files for students to download and submit.</p>
+      <div class="ta-kicker">{{ topic.chapter_title }}</div>
+      <h1 class="ta-title">{{ topic.title }}</h1>
+      <p class="ta-subtitle">Upload one downloadable assignment for students to complete and submit.</p>
     </div>
-    <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) }}">← Back to Topic Contents</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) }}">
+      Back to Topic Contents
+    </a>
   </div>
 
-  <!-- ── Add Assignment (only shown when none exists yet) ── -->
   {% if not assignments %}
-  <div class="card mb-4">
-    <div class="card-header fw-semibold">Add New Assignment</div>
-    <div class="card-body">
-      <form method="POST" enctype="multipart/form-data">
+  <section class="ta-card" aria-labelledby="add-assignment-heading">
+    <div class="ta-card-header">
+      <h2 id="add-assignment-heading">Add Assignment</h2>
+    </div>
+    <div class="ta-card-body">
+      <form method="POST" enctype="multipart/form-data" class="ta-form-grid">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
-          <input type="text" name="title" class="form-control" placeholder="e.g. Practice Exercise 1" required maxlength="200">
+
+        <div>
+          <label class="form-label">Title <span class="text-danger">*</span></label>
+          <input type="text" name="title" class="form-control" placeholder="Practice Exercise 1" required maxlength="200">
         </div>
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Description / Instructions</label>
-          <textarea name="description" class="form-control" rows="3"
-                    placeholder="Instructions for the student (optional)"></textarea>
+
+        <div>
+          <label class="form-label">Description / Instructions</label>
+          <textarea name="description" class="form-control" rows="3" placeholder="Instructions for the student"></textarea>
         </div>
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Assignment File <span class="text-muted fw-normal">(optional)</span></label>
-          <input type="file" name="assignment_file" class="form-control"
-                 accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png">
-          <div class="form-text">Allowed: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), PowerPoint (.ppt/.pptx), or image. Max 50 MB.</div>
+
+        <div>
+          <label class="form-label">Assignment File <span class="text-muted fw-normal">(optional)</span></label>
+          <input type="file" name="assignment_file" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png">
+          <div class="form-text">PDF, Word, Excel, PowerPoint, or image. Max 50 MB.</div>
         </div>
-        <button type="submit" class="btn btn-primary">➕ Create Assignment</button>
+
+        <div class="ta-form-actions">
+          <button type="submit" class="btn btn-primary">Create Assignment</button>
+        </div>
       </form>
     </div>
-  </div>
+  </section>
   {% else %}
-  <div class="alert alert-info">
-    ℹ️ This topic already has an assignment. Delete it first if you want to replace it.
+  <div class="ta-alert">
+    This topic already has an assignment. Delete it first if you want to replace it.
   </div>
   {% endif %}
 
-  <!-- ── Existing Assignments ── -->
-  {% if assignments %}
-    {% for a in assignments %}
-    <div class="assign-card">
-      <div class="assign-card-header">
+  <section class="ta-card" aria-labelledby="existing-assignments-heading">
+    <div class="ta-card-header">
+      <h2 id="existing-assignments-heading">Current Assignment</h2>
+      <span class="badge bg-secondary">{{ assignments|length }}</span>
+    </div>
+
+    {% if assignments %}
+      {% for a in assignments %}
+      <div class="assignment-item">
         <div>
-          <div class="fw-bold">{{ a.title }}</div>
-          {% if a.description %}<div class="text-muted small mt-1">{{ a.description }}</div>{% endif %}
-          <div class="text-muted small mt-1">Added {{ a.created_date }}</div>
-        </div>
-        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
-          <span class="badge-subs">{{ a.submission_count }} submission{{ 's' if a.submission_count != 1 else '' }}{% if a.reviewed_count %} · {{ a.reviewed_count }} reviewed{% endif %}</span>
-          {% if a.file_path %}
-          <a class="btn btn-sm btn-outline-secondary"
-             href="{{ url_for('lms_admin.admin_download_assignment', assignment_id=a.id) }}">⬇ File</a>
+          <div class="assignment-title">{{ a.title }}</div>
+          {% if a.description %}
+          <div class="assignment-desc">{{ a.description }}</div>
           {% endif %}
-           <a class="btn btn-sm btn-outline-primary"
-             href="{{ url_for('lms_admin.edit_assignment', assignment_id=a.id) }}">✏ Edit</a>
-          <a class="btn btn-sm btn-primary"
-             href="{{ url_for('lms_admin.view_submissions', assignment_id=a.id) }}">📋 Submissions</a>
+          <div class="assignment-meta">
+            <span class="meta-chip">Added {{ a.created_date }}</span>
+            <span class="meta-chip primary">{{ a.submission_count }} submission{{ 's' if a.submission_count != 1 else '' }}</span>
+            {% if a.reviewed_count %}
+            <span class="meta-chip">{{ a.reviewed_count }} reviewed</span>
+            {% endif %}
+            {% if a.original_filename %}
+            <span class="meta-chip">{{ a.original_filename }}</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="assignment-actions">
+          {% if a.file_path %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.admin_download_assignment', assignment_id=a.id) }}">File</a>
+          {% endif %}
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.edit_assignment', assignment_id=a.id) }}">Edit</a>
+          <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.view_submissions', assignment_id=a.id) }}">Submissions</a>
           <form method="POST"
                 action="{{ url_for('lms_admin.delete_assignment', assignment_id=a.id) }}"
                 data-title="{{ a.title|e }}"
                 onsubmit="return confirmAssignmentDelete(this);">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-sm btn-outline-danger">🗑 Delete</button>
+            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
           </form>
         </div>
       </div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="text-center text-muted py-5">
-      <div style="font-size:40px;">📋</div>
-      <p class="mt-2">No assignments yet. Add one above.</p>
-    </div>
-  {% endif %}
+      {% endfor %}
+    {% else %}
+    <div class="empty-state">No assignments yet. Add one above.</div>
+    {% endif %}
+  </section>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
 function confirmAssignmentDelete(formEl) {
   var title = (formEl && formEl.dataset && formEl.dataset.title) ? formEl.dataset.title : 'this assignment';

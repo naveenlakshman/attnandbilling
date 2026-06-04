@@ -5,135 +5,346 @@
 
 {% block extra_css %}
 <style>
-  .slot-card {
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    overflow: hidden;
-    margin-bottom: 16px;
+  .topic-content-page {
+    --topic-border: #e5e7eb;
+    --topic-soft: #f8fafc;
+    --topic-text: #111827;
+    --topic-muted: #64748b;
   }
-  .slot-header {
-    padding: 14px 18px;
-    border-bottom: 1px solid #eef0f2;
+
+  .topic-content-header {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .topic-back-link {
+    justify-self: start;
+    color: #0d6efd;
+    font-size: 0.86rem;
     font-weight: 700;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    text-decoration: none;
   }
-  .slot-body { padding: 16px 18px; }
-  .slot-empty { color: #6c757d; font-size: 13px; }
+
+  .topic-back-link:hover {
+    text-decoration: underline;
+  }
+
+  .topic-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .topic-page-title {
+    margin: 0;
+    color: var(--topic-text);
+    font-size: 1.55rem;
+    font-weight: 800;
+    line-height: 1.16;
+  }
+
+  .topic-page-subtitle {
+    margin: 4px 0 0;
+    color: var(--topic-muted);
+    font-size: 0.9rem;
+    line-height: 1.35;
+  }
+
+  .topic-nav-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(112px, 1fr));
+    gap: 8px;
+    min-width: min(300px, 100%);
+  }
+
+  .topic-nav-actions .btn {
+    min-height: 38px;
+    border-radius: 8px;
+    font-weight: 800;
+  }
+
+  .slot-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .slot-card {
+    overflow: hidden;
+    border: 0;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  }
+
+  .slot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 13px;
+    border-bottom: 1px solid var(--topic-border);
+    background: var(--topic-soft);
+  }
+
+  .slot-header-title {
+    min-width: 0;
+    margin: 0;
+    color: var(--topic-text);
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .slot-actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  .slot-actions .btn,
+  .slot-action-row .btn {
+    min-height: 36px;
+    border-radius: 8px;
+    font-size: 0.84rem;
+    font-weight: 800;
+  }
+
+  .slot-body {
+    padding: 12px 13px;
+  }
+
+  .slot-empty {
+    color: var(--topic-muted);
+    font-size: 0.86rem;
+  }
+
+  .slot-content-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .slot-content-title {
+    color: var(--topic-text);
+    font-weight: 800;
+    line-height: 1.25;
+  }
+
+  .slot-content-meta {
+    margin-top: 3px;
+    color: var(--topic-muted);
+    font-size: 0.78rem;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+
+  .slot-action-row {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  .assignments-copy {
+    margin: 0;
+    color: var(--topic-muted);
+    font-size: 0.86rem;
+    line-height: 1.4;
+  }
+
+  @media (max-width: 767.98px) {
+    .topic-content-page {
+      margin-top: -2px;
+    }
+
+    .topic-content-header {
+      margin-bottom: 10px;
+    }
+
+    .topic-title-row {
+      display: grid;
+      gap: 9px;
+    }
+
+    .topic-page-title {
+      font-size: 1.32rem;
+    }
+
+    .topic-page-subtitle {
+      font-size: 0.84rem;
+    }
+
+    .topic-nav-actions {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      min-width: 0;
+      width: 100%;
+    }
+
+    .topic-nav-actions .btn {
+      min-height: 36px;
+      padding: 0.35rem 0.45rem;
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+
+    .slot-header,
+    .slot-body {
+      padding: 11px 12px;
+    }
+
+    .slot-header-title {
+      font-size: 0.96rem;
+    }
+
+    .slot-actions .btn,
+    .slot-action-row .btn {
+      min-height: 36px;
+      padding: 0.35rem 0.55rem;
+      font-size: 0.8rem;
+    }
+
+    .slot-content-row {
+      display: grid;
+      gap: 10px;
+    }
+
+    .slot-action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 575.98px) {
+    .slot-header {
+      align-items: flex-start;
+    }
+
+    .slot-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    .slot-actions .btn {
+      min-width: 92px;
+    }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-3">
-  <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a></li>
-      <li class="breadcrumb-item"><a href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=data.chapter.id) }}">{{ data.chapter.title }}</a></li>
-      <li class="breadcrumb-item active" aria-current="page">{{ data.topic.title }}</li>
-    </ol>
-  </nav>
+<div class="topic-content-page">
+  <header class="topic-content-header">
+    <a class="topic-back-link" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=data.chapter.id) }}">
+      Back to Topics
+    </a>
 
-  <div class="d-flex justify-content-between align-items-start mb-3 w-100 gap-3 flex-wrap">
-    <div>
-      <h2 class="h4 mb-1">{{ data.topic.title }}</h2>
-      <p class="text-muted mb-0">Configure reusable video, lesson, and download slots.</p>
+    <div class="topic-title-row">
+      <div class="min-w-0">
+        <h1 class="topic-page-title">{{ data.topic.title }}</h1>
+        <p class="topic-page-subtitle">{{ data.chapter.title }} - reusable video, lesson, and assignment slots.</p>
+      </div>
+
+      <nav class="topic-nav-actions" aria-label="Topic navigation">
+        {% if data.prev_topic %}
+        <a class="btn btn-primary btn-sm" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=data.prev_topic.id) }}">Previous</a>
+        {% else %}
+        <button type="button" class="btn btn-primary btn-sm" disabled>Previous</button>
+        {% endif %}
+
+        {% if data.next_topic %}
+        <a class="btn btn-primary btn-sm" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=data.next_topic.id) }}">Next</a>
+        {% else %}
+        <button type="button" class="btn btn-primary btn-sm" disabled>Next</button>
+        {% endif %}
+
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=data.chapter.id) }}">Topics</a>
+      </nav>
     </div>
-    <div class="d-flex align-items-center gap-2 flex-wrap ms-auto justify-content-end">
-      {% if data.prev_topic %}
-      <a class="btn btn-primary" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=data.prev_topic.id) }}">&larr; Previous Topic</a>
-      {% else %}
-      <button type="button" class="btn btn-primary" disabled>&larr; Previous Topic</button>
-      {% endif %}
+  </header>
 
-      {% if data.next_topic %}
-      <a class="btn btn-primary" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=data.next_topic.id) }}">Next Topic &rarr;</a>
-      {% else %}
-      <button type="button" class="btn btn-primary" disabled>Next Topic &rarr;</button>
-      {% endif %}
-
-      <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=data.chapter.id) }}">Back to Topics</a>
-    </div>
-  </div>
-
-  <div class="slot-card">
-    <div class="slot-header">
-      <span>Video Slot (YouTube)</span>
-      {% if not data.video_content %}
-      <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.master_content_new', master_topic_id=data.topic.id) }}?type=youtube">Set Video</a>
-      {% endif %}
-    </div>
-    <div class="slot-body">
-      {% if data.video_content %}
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-          <div class="fw-semibold">{{ data.video_content.content_title }}</div>
-          <div class="text-muted small">{{ data.video_content.external_url }}</div>
+  <div class="slot-list">
+    <section class="slot-card" aria-labelledby="video-slot-title">
+      <div class="slot-header">
+        <h2 class="slot-header-title" id="video-slot-title">Video Slot</h2>
+        {% if not data.video_content %}
+        <div class="slot-actions">
+          <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.master_content_new', master_topic_id=data.topic.id) }}?type=youtube">Set Video</a>
         </div>
-        <div class="d-flex gap-2">
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.content_edit', content_id=data.video_content.id) }}">Edit</a>
-          {% if session.get('role') == 'admin' %}
-          <form method="POST" action="{{ url_for('lms_admin.delete_content', content_id=data.video_content.id) }}" onsubmit="return confirm('Remove this content?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
-          </form>
-          {% endif %}
+        {% endif %}
+      </div>
+      <div class="slot-body">
+        {% if data.video_content %}
+        <div class="slot-content-row">
+          <div class="min-w-0">
+            <div class="slot-content-title">{{ data.video_content.content_title }}</div>
+            <div class="slot-content-meta">{{ data.video_content.external_url }}</div>
+          </div>
+          <div class="slot-action-row">
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.content_edit', content_id=data.video_content.id) }}">Edit</a>
+            {% if session.get('role') == 'admin' %}
+            <form method="POST" action="{{ url_for('lms_admin.delete_content', content_id=data.video_content.id) }}" onsubmit="return confirm('Remove this content?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger w-100">Remove</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="slot-empty">No video configured.</div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="slot-card" aria-labelledby="lesson-slot-title">
+      <div class="slot-header">
+        <h2 class="slot-header-title" id="lesson-slot-title">Lesson Slot</h2>
+        {% if not data.lesson_content %}
+        <div class="slot-actions">
+          <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.master_content_new', master_topic_id=data.topic.id) }}?type=pdf">Upload PDF</a>
+          <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.master_content_new', master_topic_id=data.topic.id) }}?type=rich_text">Write</a>
+        </div>
+        {% endif %}
+      </div>
+      <div class="slot-body">
+        {% if data.lesson_content %}
+        <div class="slot-content-row">
+          <div class="min-w-0">
+            <div class="slot-content-title">{{ data.lesson_content.content_title }}</div>
+            <div class="slot-content-meta">Type: {{ data.lesson_content.content_mode }}</div>
+          </div>
+          <div class="slot-action-row">
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.content_edit', content_id=data.lesson_content.id) }}">Edit</a>
+            {% if session.get('role') == 'admin' %}
+            <form method="POST" action="{{ url_for('lms_admin.delete_content', content_id=data.lesson_content.id) }}" onsubmit="return confirm('Remove this content?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger w-100">Remove</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="slot-empty">No lesson content configured.</div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="slot-card" aria-labelledby="assignment-slot-title">
+      <div class="slot-header">
+        <h2 class="slot-header-title" id="assignment-slot-title">Assignments</h2>
+        <div class="slot-actions">
+          <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.manage_assignments', master_topic_id=data.topic.id) }}">Manage</a>
         </div>
       </div>
-      {% else %}
-      <div class="slot-empty">No video configured.</div>
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="slot-card">
-    <div class="slot-header">
-      <span>Lesson Slot (PDF or Rich Text)</span>
-      {% if not data.lesson_content %}
-      <div class="d-flex gap-2">
-        <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.master_content_new', master_topic_id=data.topic.id) }}?type=pdf">Upload PDF</a>
-        <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.master_content_new', master_topic_id=data.topic.id) }}?type=rich_text">Write Lesson</a>
+      <div class="slot-body">
+        <p class="assignments-copy">
+          Upload assignment sheets for students to complete and submit. Review status and feedback stay visible to students.
+        </p>
       </div>
-      {% endif %}
-    </div>
-    <div class="slot-body">
-      {% if data.lesson_content %}
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-          <div class="fw-semibold">{{ data.lesson_content.content_title }}</div>
-          <div class="text-muted small">Type: {{ data.lesson_content.content_mode }}</div>
-        </div>
-        <div class="d-flex gap-2">
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.content_edit', content_id=data.lesson_content.id) }}">Edit</a>
-          {% if session.get('role') == 'admin' %}
-          <form method="POST" action="{{ url_for('lms_admin.delete_content', content_id=data.lesson_content.id) }}" onsubmit="return confirm('Remove this content?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
-          </form>
-          {% endif %}
-        </div>
-      </div>
-      {% else %}
-      <div class="slot-empty">No lesson content configured.</div>
-      {% endif %}
-    </div>
+    </section>
   </div>
-
-  <!-- Assignments (student-submittable) -->
-  <div class="slot-card">
-    <div class="slot-header">
-      <span>📋 Assignments</span>
-      <a class="btn btn-sm btn-primary"
-         href="{{ url_for('lms_admin.manage_assignments', master_topic_id=data.topic.id) }}">Manage Assignments</a>
-    </div>
-    <div class="slot-body">
-      <p class="text-muted mb-0" style="font-size:13px;">
-        Upload assignment sheets for students to download, complete offline, and submit back.
-        Students will see submitted work status and any feedback you give.
-      </p>
-    </div>
-  </div>
-
 </div>
 {% endblock %}
