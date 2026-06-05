@@ -5229,6 +5229,7 @@ def progress_dashboard():
                 'student_id':      row['student_id'],
                 'student_code':    row['student_code'],
                 'full_name':       row['full_name'],
+                'program_id':      row['program_id'],
                 'branch_name':     row['branch_name'],
                 'batch_name':      row['batch_name'],
                 'program_name':    row['program_name'],
@@ -5384,6 +5385,7 @@ def view_student_progress(student_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        requested_program_id = _strict_positive_int(request.args.get('program_id'))
         
         # Get student info
         cur.execute("""
@@ -5398,22 +5400,73 @@ def view_student_progress(student_id):
             flash('Student not found', 'danger')
             return redirect(url_for('lms_admin.progress_dashboard'))
         
-        # Get student's assigned programs with access info
-        cur.execute("""
-            SELECT 
-                spa.id as assignment_id,
-                spa.program_id,
-                spa.access_start_date,
-                spa.access_end_date,
-                spa.is_active,
+        enroll_check = """(
+            EXISTS (
+                SELECT 1 FROM lms_student_program_access spa
+                WHERE spa.student_id = ? AND spa.program_id = lp.id
+                  AND spa.is_active = 1
+                  AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+            )
+            OR EXISTS (
+                SELECT 1 FROM lms_batch_program_access bpa
+                JOIN student_batches sb ON sb.batch_id = bpa.batch_id
+                WHERE sb.student_id = ? AND bpa.program_id = lp.id
+                  AND bpa.is_active = 1 AND sb.status = 'active'
+                  AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
+            )
+            OR EXISTS (
+                SELECT 1 FROM invoices inv
+                JOIN invoice_items ii ON ii.invoice_id = inv.id
+                WHERE inv.student_id = ? AND ii.course_id = lp.course_id
+                  AND lp.course_id IS NOT NULL
+            )
+            OR EXISTS (
+                SELECT 1 FROM invoices inv
+                JOIN invoice_items ii ON ii.invoice_id = inv.id
+                JOIN lms_course_program_map cpm ON cpm.course_id = ii.course_id
+                  AND cpm.program_id = lp.id
+                WHERE inv.student_id = ?
+            )
+        )"""
+
+        program_where = [
+            "lp.is_active = 1",
+            "lp.is_deleted = 0",
+            enroll_check,
+        ]
+        program_params = [student_id, student_id, student_id, student_id]
+        if requested_program_id:
+            program_where.append("lp.id = ?")
+            program_params.append(requested_program_id)
+
+        cur.execute(f"""
+            SELECT
+                NULL as assignment_id,
+                lp.id as program_id,
+                COALESCE((
+                    SELECT spa.access_start_date
+                    FROM lms_student_program_access spa
+                    WHERE spa.student_id = ? AND spa.program_id = lp.id
+                      AND spa.is_active = 1
+                    ORDER BY spa.access_start_date DESC
+                    LIMIT 1
+                ), '') as access_start_date,
+                COALESCE((
+                    SELECT spa.access_end_date
+                    FROM lms_student_program_access spa
+                    WHERE spa.student_id = ? AND spa.program_id = lp.id
+                      AND spa.is_active = 1
+                    ORDER BY spa.access_start_date DESC
+                    LIMIT 1
+                ), '') as access_end_date,
+                1 as is_active,
                 lp.program_name,
-                lp.description,
-                (SELECT COUNT(*) FROM lms_chapters WHERE program_id = lp.id) as total_chapters
-            FROM lms_student_program_access spa
-            LEFT JOIN lms_programs lp ON spa.program_id = lp.id
-            WHERE spa.student_id = ?
-            ORDER BY spa.access_start_date DESC
-        """, (student_id,))
+                lp.slug as program_code,
+                lp.description
+            FROM lms_programs lp
+            WHERE {" AND ".join(program_where)}
+            ORDER BY lp.program_name
+        """, [student_id, student_id] + program_params)
         programs = cur.fetchall()
         
         # Build hierarchical data for each program
@@ -5421,56 +5474,126 @@ def view_student_progress(student_id):
         
         for prog in programs:
             program_id = prog['program_id']
-            
-            # Get chapters for this program
+
             cur.execute("""
-                SELECT 
-                    lc.id,
-                    lc.chapter_title,
-                    lc.chapter_order,
-                    lc.description,
-                    (SELECT COUNT(*) FROM lms_topics WHERE chapter_id = lc.id) as total_topics,
-                    (SELECT COUNT(*) FROM lms_topic_progress 
-                     WHERE student_id = ? AND topic_id IN 
-                     (SELECT id FROM lms_topics WHERE chapter_id = lc.id) 
-                     AND is_completed = 1) as completed_topics
-                FROM lms_chapters lc
-                WHERE lc.program_id = ?
-                ORDER BY lc.chapter_order
-            """, (student_id, program_id))
-            chapters = cur.fetchall()
+                SELECT COUNT(*) as c
+                FROM lms_program_chapters pc
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+                WHERE pc.program_id = ? AND pc.is_visible = 1
+                  AND mc.status = 'active' AND mt.status = 'active'
+            """, (program_id,))
+            has_master_content = (cur.fetchone()['c'] or 0) > 0
             
-            # Build chapter details with topics
             chapters_with_topics = []
-            for chap in chapters:
-                chapter_id = chap['id']
-                
-                # Get topics for this chapter
+            if has_master_content:
                 cur.execute("""
-                    SELECT 
-                        lt.id,
-                        lt.topic_title,
-                        lt.topic_order,
-                        lt.is_required,
-                        COALESCE(CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END, 0) as completion_percentage,
-                        COALESCE(stp.completed_at, 'Not started') as last_accessed,
-                        0 as time_spent_minutes
-                    FROM lms_topics lt
-                    LEFT JOIN lms_topic_progress stp ON lt.id = stp.topic_id AND stp.student_id = ?
-                    WHERE lt.chapter_id = ?
-                    ORDER BY lt.topic_order
-                """, (student_id, chapter_id))
-                topics = cur.fetchall()
+                    SELECT
+                        pc.id,
+                        pc.master_chapter_id,
+                        COALESCE(NULLIF(pc.custom_title, ''), mc.title) as chapter_title,
+                        pc.chapter_order,
+                        mc.description,
+                        COUNT(mt.id) as total_topics,
+                        COALESCE(SUM(CASE WHEN mtp.is_completed = 1 THEN 1 ELSE 0 END), 0) as completed_topics
+                    FROM lms_program_chapters pc
+                    JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                    LEFT JOIN lms_master_topics mt
+                      ON mt.master_chapter_id = mc.id AND mt.status = 'active'
+                    LEFT JOIN lms_master_topic_progress mtp
+                      ON mtp.master_topic_id = mt.id
+                     AND mtp.student_id = ?
+                     AND mtp.program_id = pc.program_id
+                    WHERE pc.program_id = ? AND pc.is_visible = 1
+                      AND mc.status = 'active'
+                    GROUP BY pc.id, pc.master_chapter_id, mc.title, pc.custom_title,
+                             pc.chapter_order, mc.description
+                    ORDER BY pc.chapter_order
+                """, (student_id, program_id))
+                chapters = cur.fetchall()
                 
-                chapters_with_topics.append({
-                    'id': chap['id'],
-                    'chapter_title': chap['chapter_title'],
-                    'chapter_order': chap['chapter_order'],
-                    'description': chap['description'],
-                    'total_topics': chap['total_topics'],
-                    'completed_topics': chap['completed_topics'],
-                    'topics': topics
-                })
+                for index, chap in enumerate(chapters, start=1):
+                    cur.execute("""
+                        SELECT
+                            mt.id,
+                            mt.title as topic_title,
+                            mt.topic_order,
+                            1 as is_required,
+                            COALESCE(CASE WHEN mtp.is_completed = 1 THEN 100 ELSE 0 END, 0) as completion_percentage,
+                            COALESCE(mtp.completed_at, 'Not started') as last_accessed,
+                            0 as time_spent_minutes
+                        FROM lms_master_topics mt
+                        LEFT JOIN lms_master_topic_progress mtp
+                          ON mtp.master_topic_id = mt.id
+                         AND mtp.student_id = ?
+                         AND mtp.program_id = ?
+                        WHERE mt.master_chapter_id = ? AND mt.status = 'active'
+                        ORDER BY mt.topic_order
+                    """, (student_id, program_id, chap['master_chapter_id']))
+                    topics = [
+                        {**dict(topic), 'topic_number': topic['topic_order']}
+                        for topic in cur.fetchall()
+                    ]
+
+                    chapters_with_topics.append({
+                        'id': chap['id'],
+                        'chapter_number': chap['chapter_order'] or index,
+                        'chapter_title': chap['chapter_title'],
+                        'chapter_order': chap['chapter_order'],
+                        'description': chap['description'],
+                        'total_topics': chap['total_topics'],
+                        'completed_topics': chap['completed_topics'],
+                        'topics': topics
+                    })
+            else:
+                cur.execute("""
+                    SELECT
+                        lc.id,
+                        lc.chapter_title,
+                        lc.chapter_order,
+                        lc.description,
+                        (SELECT COUNT(*) FROM lms_topics WHERE chapter_id = lc.id AND is_active = 1) as total_topics,
+                        (SELECT COUNT(*) FROM lms_topic_progress
+                         WHERE student_id = ? AND topic_id IN
+                         (SELECT id FROM lms_topics WHERE chapter_id = lc.id AND is_active = 1)
+                         AND is_completed = 1) as completed_topics
+                    FROM lms_chapters lc
+                    WHERE lc.program_id = ? AND lc.is_active = 1
+                    ORDER BY lc.chapter_order
+                """, (student_id, program_id))
+                chapters = cur.fetchall()
+
+                for index, chap in enumerate(chapters, start=1):
+                    cur.execute("""
+                        SELECT
+                            lt.id,
+                            lt.topic_title,
+                            lt.topic_order,
+                            lt.is_required,
+                            COALESCE(CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END, 0) as completion_percentage,
+                            COALESCE(stp.completed_at, 'Not started') as last_accessed,
+                            0 as time_spent_minutes
+                        FROM lms_topics lt
+                        LEFT JOIN lms_topic_progress stp
+                          ON lt.id = stp.topic_id AND stp.student_id = ?
+                        WHERE lt.chapter_id = ? AND lt.is_active = 1
+                        ORDER BY lt.topic_order
+                    """, (student_id, chap['id']))
+                    topics = [
+                        {**dict(topic), 'topic_number': topic['topic_order']}
+                        for topic in cur.fetchall()
+                    ]
+
+                    chapters_with_topics.append({
+                        'id': chap['id'],
+                        'chapter_number': chap['chapter_order'] or index,
+                        'chapter_title': chap['chapter_title'],
+                        'chapter_order': chap['chapter_order'],
+                        'description': chap['description'],
+                        'total_topics': chap['total_topics'],
+                        'completed_topics': chap['completed_topics'],
+                        'topics': topics
+                    })
             
             # Calculate program completion percentage
             total_topics = sum(ch['total_topics'] for ch in chapters_with_topics)
@@ -5481,11 +5604,13 @@ def view_student_progress(student_id):
                 'assignment_id': prog['assignment_id'],
                 'program_id': prog['program_id'],
                 'program_name': prog['program_name'],
+                'program_title': prog['program_name'],
+                'program_code': prog['program_code'],
                 'description': prog['description'],
                 'access_start_date': prog['access_start_date'],
                 'access_end_date': prog['access_end_date'],
                 'is_active': prog['is_active'],
-                'total_chapters': prog['total_chapters'],
+                'total_chapters': len(chapters_with_topics),
                 'total_topics': total_topics,
                 'total_completed': total_completed,
                 'completion_percentage': round(program_completion, 1),
@@ -5496,7 +5621,7 @@ def view_student_progress(student_id):
         cur.execute("""
             SELECT 
                 str.test_id,
-                lmt.test_title,
+                lmt.test_title as test_name,
                 str.score,
                 str.total_marks,
                 str.obtained_percentage,
@@ -5508,6 +5633,51 @@ def view_student_progress(student_id):
             LIMIT 10
         """, (student_id,))
         test_results = cur.fetchall()
+
+        assignment_filters = ["s.student_id = ?", "s.is_latest = 1"]
+        assignment_params = [student_id]
+        if requested_program_id:
+            assignment_filters.append("""
+                EXISTS (
+                    SELECT 1
+                    FROM lms_program_chapters pc
+                    JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                    WHERE pc.program_id = ?
+                      AND pc.master_chapter_id = mt.master_chapter_id
+                      AND pc.is_visible = 1
+                      AND mc.status = 'active'
+                )
+            """)
+            assignment_params.append(requested_program_id)
+
+        cur.execute(f"""
+            SELECT
+                s.id,
+                s.assignment_id,
+                a.title as assignment_title,
+                mt.title as topic_title,
+                s.original_filename,
+                s.feedback,
+                s.rejection_reason,
+                COALESCE(s.review_status, 'submitted') as review_status,
+                s.submitted_at,
+                s.reviewed_at,
+                u.full_name as reviewed_by_name
+            FROM lms_assignment_submissions s
+            JOIN lms_assignments a ON a.id = s.assignment_id
+            JOIN lms_master_topics mt ON mt.id = a.master_topic_id
+            LEFT JOIN users u ON u.id = s.reviewed_by
+            WHERE {" AND ".join(assignment_filters)}
+            ORDER BY datetime(COALESCE(s.reviewed_at, s.submitted_at)) DESC, s.id DESC
+        """, assignment_params)
+        assignment_submissions = cur.fetchall()
+
+        assignment_stats = {
+            'total': len(assignment_submissions),
+            'accepted': sum(1 for row in assignment_submissions if row['review_status'] == 'accepted'),
+            'rejected': sum(1 for row in assignment_submissions if row['review_status'] == 'rejected'),
+            'pending': sum(1 for row in assignment_submissions if row['review_status'] == 'submitted'),
+        }
         
         # Get overall statistics
         total_topics = sum(p['total_topics'] for p in programs_with_details)
@@ -5516,17 +5686,34 @@ def view_student_progress(student_id):
         
         # Get most recent activity
         cur.execute("""
-            SELECT 
-                stp.student_id,
-                lt.topic_title,
-                CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END as completion_percentage,
-                stp.completed_at as last_accessed
-            FROM lms_topic_progress stp
-            LEFT JOIN lms_topics lt ON stp.topic_id = lt.id
-            WHERE stp.student_id = ?
-            ORDER BY stp.completed_at DESC
+            SELECT topic_title, completion_percentage, last_accessed
+            FROM (
+                SELECT
+                    mt.title as topic_title,
+                    CASE WHEN mtp.is_completed = 1 THEN 100 ELSE 0 END as completion_percentage,
+                    mtp.completed_at as last_accessed
+                FROM lms_master_topic_progress mtp
+                JOIN lms_master_topics mt ON mt.id = mtp.master_topic_id
+                WHERE mtp.student_id = ?
+                  AND (? IS NULL OR mtp.program_id = ?)
+                UNION ALL
+                SELECT
+                    lt.topic_title,
+                    CASE WHEN stp.is_completed = 1 THEN 100 ELSE 0 END as completion_percentage,
+                    stp.completed_at as last_accessed
+                FROM lms_topic_progress stp
+                JOIN lms_topics lt ON stp.topic_id = lt.id
+                JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                WHERE stp.student_id = ?
+                  AND (? IS NULL OR lc.program_id = ?)
+            )
+            WHERE last_accessed IS NOT NULL
+            ORDER BY last_accessed DESC
             LIMIT 5
-        """, (student_id,))
+        """, (
+            student_id, requested_program_id, requested_program_id,
+            student_id, requested_program_id, requested_program_id,
+        ))
         recent_activities = cur.fetchall()
         
         def format_date(date_str):
@@ -5544,6 +5731,8 @@ def view_student_progress(student_id):
             'student': student,
             'programs': programs_with_details,
             'test_results': test_results,
+            'assignment_submissions': assignment_submissions,
+            'assignment_stats': assignment_stats,
             'total_topics': total_topics,
             'total_completed': total_completed,
             'overall_completion': round(overall_completion, 1),

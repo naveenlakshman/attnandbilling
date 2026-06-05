@@ -1255,7 +1255,7 @@
                   </div>
                 </div>
 
-                <a href="{{ url_for('lms_admin.view_student_progress', student_id=r.student_id) }}"
+                <a href="{{ url_for('lms_admin.view_student_progress', student_id=r.student_id, program_id=r.program_id) }}"
                    class="btn btn-sm btn-outline-primary student-mobile-detail">
                   Detail
                 </a>
@@ -1290,7 +1290,7 @@
               <span class="status-badge status-{{ r.status|lower|replace(' ', '-') }}">{{ r.status }}</span>
             </td>
             <td class="mobile-action-cell" data-label="Action">
-              <a href="{{ url_for('lms_admin.view_student_progress', student_id=r.student_id) }}"
+              <a href="{{ url_for('lms_admin.view_student_progress', student_id=r.student_id, program_id=r.program_id) }}"
                  class="btn btn-sm btn-outline-primary" style="font-size:11px; padding:2px 8px;">
                 Detail
               </a>
