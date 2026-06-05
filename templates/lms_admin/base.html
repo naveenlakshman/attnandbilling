@@ -700,14 +700,7 @@
         href="{{ url_for('lms_admin.all_assignments') }}">
         📋 Assignments
       </a>
-
-      <!-- Batch Assignments -->
       {% if session.get('role') == 'admin' %}
-      <a
-        class="nav-link {{ 'active' if request.endpoint == 'lms_admin.list_batch_programs' else '' }}"
-        href="{{ url_for('lms_admin.list_batch_programs') }}">
-        🎓 Batch Access
-      </a>
 
       <a
         class="nav-link {{ 'active' if request.endpoint in ['lms_admin.phase6_rollout_view'] else '' }}"
@@ -717,7 +710,7 @@
 
       <!-- Course–Program Mapping -->
       <a
-        class="nav-link {{ 'active' if request.endpoint in ['lms_admin.list_course_mappings', 'lms_admin.bulk_assign_batch_programs'] else '' }}"
+        class="nav-link {{ 'active' if request.endpoint in ['lms_admin.list_course_mappings'] else '' }}"
         href="{{ url_for('lms_admin.list_course_mappings') }}">
         🔗 Course Mapping
       </a>
