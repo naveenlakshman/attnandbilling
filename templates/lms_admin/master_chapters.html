@@ -5,343 +5,386 @@
 
 {% block extra_css %}
 <style>
-  .master-chapters-page {
-    --mc-border: #e5e7eb;
-    --mc-soft: #f8fafc;
-    --mc-text: #111827;
-    --mc-muted: #64748b;
-  }
-
-  .master-chapters-header {
+  .master-library {
+    --ml-border: #e5e7eb;
+    --ml-soft: #f8fafc;
+    --ml-text: #111827;
+    --ml-muted: #64748b;
     display: grid;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: 14px;
   }
 
-  .master-chapters-title-row {
+  .library-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: 14px;
   }
 
-  .master-chapters-copy h2 {
+  .library-title h2 {
     margin: 0;
-    color: var(--mc-text);
+    font-size: 1.72rem;
+    line-height: 1.15;
     font-weight: 800;
+    color: var(--ml-text);
   }
 
-  .master-chapters-copy {
-    min-width: 0;
-  }
-
-  .master-chapters-copy p {
+  .library-title p {
     margin: 4px 0 0;
-    max-width: 42rem;
+    color: var(--ml-muted);
   }
 
-  .master-chapters-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-
-  .master-chapters-actions .btn {
-    white-space: nowrap;
-  }
-
-  .master-chapters-new-btn {
-    min-height: 36px;
-    padding: .35rem .9rem;
+  .library-new {
+    min-width: 78px;
+    min-height: 42px;
     border-radius: 8px;
     font-weight: 800;
   }
 
-  .master-chapter-search {
-    position: relative;
-  }
-
-  .master-chapter-search input {
-    width: 100%;
-    min-height: 40px;
-    padding: .45rem .75rem;
-    border: 1px solid var(--mc-border);
+  .library-toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 170px 170px minmax(190px, 240px);
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--ml-border);
     border-radius: 10px;
     background: #fff;
-    color: var(--mc-text);
-    font-size: .92rem;
   }
 
-  .master-chapter-search input:focus {
+  .library-toolbar input,
+  .library-toolbar select {
+    min-height: 42px;
+    border: 1px solid #d7dde5;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background-color: #fff;
+    color: var(--ml-text);
+  }
+
+  .library-toolbar input:focus,
+  .library-toolbar select:focus {
     outline: 0;
     border-color: #0d6efd;
     box-shadow: 0 0 0 3px rgba(13, 110, 253, .12);
   }
 
-  .master-chapter-empty-search {
-    display: none;
-    padding: 18px;
-    border: 1px solid var(--mc-border);
-    border-radius: 10px;
-    background: #fff;
-    color: var(--mc-muted);
-    text-align: center;
-  }
-
-  .chapter-row-actions {
+  .library-summary {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    align-items: center;
+  }
+
+  .summary-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #eef6ff;
+    color: #0b5ed7;
+    font-size: .82rem;
+    font-weight: 800;
+  }
+
+  .chapter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+    gap: 12px;
+  }
+
+  .chapter-card {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--ml-border);
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  }
+
+  .chapter-card[hidden] {
+    display: none !important;
+  }
+
+  .chapter-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .chapter-title {
+    margin: 0;
+    color: var(--ml-text);
+    font-size: 1rem;
+    line-height: 1.25;
+    font-weight: 800;
+  }
+
+  .status-pill,
+  .metric-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: .74rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .status-active {
+    background: #d1fae5;
+    color: #047857;
+  }
+
+  .status-archived {
+    background: #e5e7eb;
+    color: #4b5563;
+  }
+
+  .chapter-desc {
+    min-height: 36px;
+    margin: 0;
+    color: var(--ml-muted);
+    font-size: .84rem;
+    line-height: 1.35;
+  }
+
+  .chapter-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .metric-box {
+    min-width: 0;
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--ml-soft);
+  }
+
+  .metric-label {
+    display: block;
+    color: var(--ml-muted);
+    font-size: .68rem;
+    font-weight: 800;
+    line-height: 1.1;
+    text-transform: uppercase;
+  }
+
+  .metric-value {
+    display: block;
+    margin-top: 4px;
+    color: var(--ml-text);
+    font-weight: 800;
+  }
+
+  .chapter-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .chapter-actions form {
+    margin: 0;
+  }
+
+  .chapter-actions .btn {
+    width: 100%;
+    min-height: 38px;
+    border-radius: 8px;
+    font-weight: 800;
+  }
+
+  .chapter-actions .btn-primary {
+    grid-column: span 1;
+  }
+
+  .library-empty,
+  .library-empty-search {
+    padding: 30px 18px;
+    border: 1px solid var(--ml-border);
+    border-radius: 10px;
+    background: #fff;
+    text-align: center;
+    color: var(--ml-muted);
+  }
+
+  .library-empty-search {
+    display: none;
+  }
+
+  .show-more-wrap {
+    display: flex;
+    justify-content: center;
+  }
+
+  .show-more-wrap[hidden] {
+    display: none !important;
   }
 
   @media (max-width: 767.98px) {
-    .master-chapters-page {
-      margin-top: -2px;
+    .library-header {
+      align-items: center;
     }
 
-    .chapter-row-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
+    .library-title h2 {
+      font-size: 1.45rem;
     }
 
-    .chapter-row-actions > * {
-      width: 100%;
-    }
-
-    .chapter-row-actions form {
-      width: 100%;
-    }
-
-    .master-chapters-copy h2 {
-      margin-bottom: 4px !important;
-      font-size: 1.32rem;
-      line-height: 1.16;
-    }
-
-    .master-chapters-copy p {
-      font-size: 0.86rem;
+    .library-title p {
+      font-size: .86rem;
       line-height: 1.35;
     }
 
-    .master-chapters-new-btn {
-      flex: 0 0 auto;
-      min-height: 38px;
-      padding: .35rem .85rem;
+    .library-toolbar {
+      grid-template-columns: 1fr;
+      gap: 8px;
+      padding: 10px;
     }
 
-    .master-chapters-card {
-      border: 0;
-      background: transparent;
-      box-shadow: none !important;
+    .chapter-grid {
+      grid-template-columns: 1fr;
+      gap: 10px;
     }
 
-    .master-chapters-card .table-responsive {
-      overflow: visible;
-    }
-
-    .master-chapters-table {
-      min-width: 0 !important;
-      border-collapse: separate;
-      border-spacing: 0;
-    }
-
-    .master-chapters-table thead {
-      display: none;
-    }
-
-    .master-chapters-table,
-    .master-chapters-table tbody,
-    .master-chapters-table tr,
-    .master-chapters-table td {
-      display: block;
-      width: 100%;
-    }
-
-    .master-chapters-table tbody {
-      display: grid;
+    .chapter-card {
+      padding: 12px;
       gap: 9px;
     }
 
-    .master-chapters-table tr {
-      display: grid;
+    .chapter-metrics {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      padding: 12px;
-      border: 1px solid var(--mc-border);
-      border-radius: 10px;
-      background: #fff;
-      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+      gap: 7px;
     }
 
-    .master-chapters-table tr:hover {
-      background: #fff;
+    .metric-box {
+      padding: 7px;
     }
 
-    .master-chapters-table td {
-      min-width: 0;
-      padding: 0 !important;
-      border: 0 !important;
-      font-size: .86rem;
-      line-height: 1.35;
-      text-align: left !important;
-      white-space: normal;
-    }
-
-    .master-chapters-table td[data-label] {
-      padding: 8px 7px !important;
-      border-radius: 8px;
-      background: var(--mc-soft);
-    }
-
-    .master-chapters-table td::before {
-      content: attr(data-label);
-      display: block;
-      margin-bottom: 3px;
-      color: var(--mc-muted);
-      font-size: .66rem;
-      font-weight: 800;
-      line-height: 1.1;
-      text-transform: uppercase;
-    }
-
-    .chapter-title-cell,
-    .chapter-actions-cell {
-      grid-column: 1 / -1;
-    }
-
-    .chapter-title-cell {
-      padding-bottom: 9px !important;
-      border-bottom: 1px solid var(--mc-border) !important;
-    }
-
-    .chapter-title-cell::before {
-      display: none !important;
-    }
-
-    .chapter-title {
-      color: var(--mc-text);
-      font-size: 1rem;
-      font-weight: 800;
-      line-height: 1.25;
-    }
-
-    .chapter-desc {
-      margin-top: 5px;
-      color: var(--mc-muted);
-      font-size: .8rem;
-      line-height: 1.35;
-    }
-
-    .chapter-actions-cell {
-      padding-top: 10px !important;
-      border-top: 1px solid var(--mc-border) !important;
-    }
-
-    .chapter-actions-cell::before {
-      display: none !important;
-    }
-
-    .chapter-row-actions {
+    .chapter-actions {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .chapter-row-actions .btn {
-      width: 100%;
-      min-height: 36px;
-      border-radius: 8px;
-      font-weight: 800;
-      font-size: .84rem;
-    }
-
-    .chapter-row-actions > a:first-child {
+    .chapter-actions .btn-primary {
       grid-column: 1 / -1;
-    }
-
-    .chapter-row-actions form .btn {
-      width: 100%;
     }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="master-chapters-page">
-  <div class="master-chapters-header">
-    <div class="master-chapters-copy">
-      <div class="master-chapters-title-row">
-        <h2 class="h4">Reusable Chapters</h2>
-        <a class="btn btn-primary btn-sm master-chapters-new-btn" href="{{ url_for('lms_admin.master_chapter_new') }}">New</a>
-      </div>
-      <p class="text-muted">Create once, attach to many programs.</p>
+{% set active_count = chapters|selectattr('status', 'equalto', 'active')|list|length %}
+{% set archived_count = chapters|selectattr('status', 'equalto', 'archived')|list|length %}
+
+<div class="master-library">
+  <div class="library-header">
+    <div class="library-title">
+      <h2>Reusable Chapters</h2>
+      <p>Search, filter, and attach shared chapters to programs.</p>
     </div>
-    {% if chapters %}
-    <div class="master-chapter-search">
-      <input type="search" id="chapterSearch" placeholder="Search chapters" autocomplete="off">
-    </div>
-    {% endif %}
+    <a class="btn btn-primary library-new" href="{{ url_for('lms_admin.master_chapter_new') }}">New</a>
   </div>
 
   {% if chapters %}
-  <div class="card shadow-sm master-chapters-card">
-    <div class="table-responsive">
-      <table class="table table-hover mb-0 align-middle master-chapters-table">
-        <thead class="table-light">
-          <tr>
-            <th>Title</th>
-            <th style="width: 120px;">Topics</th>
-            <th style="width: 140px;">Status</th>
-            <th style="width: 140px;">Updated</th>
-            <th style="width: 300px;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for chapter in chapters %}
-          <tr data-chapter-search="{{ (chapter.title ~ ' ' ~ (chapter.description or '') ~ ' ' ~ chapter.status)|lower }}">
-            <td class="chapter-title-cell">
-              <div class="chapter-title">{{ chapter.title }}</div>
-              {% if chapter.description %}
-              <div class="chapter-desc">{{ chapter.description|truncate(120) }}</div>
-              {% endif %}
-            </td>
-            <td data-label="Topics"><span class="badge bg-primary">{{ chapter.topic_count }}</span></td>
-            <td data-label="Status">
-              {% if chapter.status == 'active' %}
-              <span class="badge bg-success">Active</span>
-              {% else %}
-              <span class="badge bg-secondary">Archived</span>
-              {% endif %}
-            </td>
-            <td data-label="Updated" class="small text-muted">{{ chapter.updated_at[:10] if chapter.updated_at else '-' }}</td>
-            <td class="chapter-actions-cell">
-              <div class="chapter-row-actions">
-                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}">Topics</a>
-                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.master_chapter_edit', master_chapter_id=chapter.id) }}">Edit</a>
-                {% if chapter.status != 'archived' and session.get('role') == 'admin' %}
-                <form method="POST" action="{{ url_for('lms_admin.master_chapter_archive', master_chapter_id=chapter.id) }}" onsubmit="return confirm('Archive this master chapter?');">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <button type="submit" class="btn btn-sm btn-outline-danger">Archive</button>
-                </form>
-                {% endif %}
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  <div class="library-summary" aria-label="Master chapter summary">
+    <span class="summary-chip"><span>{{ chapters|length }}</span> total</span>
+    <span class="summary-chip"><span>{{ active_count }}</span> active</span>
+    {% if archived_count %}
+    <span class="summary-chip"><span>{{ archived_count }}</span> archived</span>
+    {% endif %}
   </div>
-  <div class="master-chapter-empty-search" id="chapterSearchEmpty">
-    No chapters match your search.
+
+  <div class="library-toolbar">
+    <input type="search" id="chapterSearch" placeholder="Search chapters" autocomplete="off">
+    <select id="chapterStatusFilter" aria-label="Filter by status">
+      <option value="active">Active chapters</option>
+      <option value="all">All statuses</option>
+      <option value="archived">Archived only</option>
+    </select>
+    <select id="chapterUseFilter" aria-label="Filter by program usage">
+      <option value="all">All usage</option>
+      <option value="used">Used in programs</option>
+      <option value="unused">Not used yet</option>
+    </select>
+    <select id="chapterProgramFilter" aria-label="Filter by program">
+      <option value="all">All programs</option>
+      {% for program in programs %}
+      <option value="{{ program.id }}">{{ program.program_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="chapter-grid" id="chapterGrid">
+    {% for chapter in chapters %}
+    {% set linked_program_count = chapter.linked_program_count or 0 %}
+    <article
+      class="chapter-card"
+      data-chapter-search="{{ (chapter.title ~ ' ' ~ (chapter.description or '') ~ ' ' ~ chapter.status)|lower }}"
+      data-status="{{ chapter.status }}"
+      data-used="{{ 'used' if linked_program_count else 'unused' }}"
+      data-program-ids=",{{ chapter.linked_program_ids or '' }},">
+      <div class="chapter-head">
+        <h3 class="chapter-title">{{ chapter.title }}</h3>
+        {% if chapter.status == 'active' %}
+        <span class="status-pill status-active">Active</span>
+        {% else %}
+        <span class="status-pill status-archived">Archived</span>
+        {% endif %}
+      </div>
+
+      <p class="chapter-desc">
+        {{ chapter.description|truncate(105) if chapter.description else 'No description added.' }}
+      </p>
+
+      <div class="chapter-metrics">
+        <div class="metric-box">
+          <span class="metric-label">Topics</span>
+          <span class="metric-value">{{ chapter.topic_count }}</span>
+        </div>
+        <div class="metric-box">
+          <span class="metric-label">Programs</span>
+          <span class="metric-value">{{ linked_program_count }}</span>
+        </div>
+        <div class="metric-box">
+          <span class="metric-label">Updated</span>
+          <span class="metric-value">{{ chapter.updated_at[:10] if chapter.updated_at else '-' }}</span>
+        </div>
+      </div>
+
+      <div class="chapter-actions">
+        <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}">Topics</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.master_chapter_edit', master_chapter_id=chapter.id) }}">Edit</a>
+        {% if chapter.status != 'archived' and session.get('role') == 'admin' %}
+        <form method="POST" action="{{ url_for('lms_admin.master_chapter_archive', master_chapter_id=chapter.id) }}" onsubmit="return confirm('Archive this master chapter?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm btn-outline-danger">Archive</button>
+        </form>
+        {% else %}
+        <span></span>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  <div class="library-empty-search" id="chapterSearchEmpty">
+    No chapters match your filters.
+  </div>
+
+  <div class="show-more-wrap" id="showMoreWrap">
+    <button type="button" class="btn btn-outline-primary" id="showMoreChapters">Show more</button>
   </div>
   {% else %}
-  <div class="card shadow-sm">
-    <div class="card-body text-center py-5">
-      <h3 class="h5">No master chapters yet</h3>
-      <p class="text-muted">Start by creating reusable chapters like MS Excel.</p>
-      <a class="btn btn-primary" href="{{ url_for('lms_admin.master_chapter_new') }}">Create First Master Chapter</a>
-    </div>
+  <div class="library-empty">
+    <h3 class="h5">No master chapters yet</h3>
+    <p>Start by creating reusable chapters like MS Excel.</p>
+    <a class="btn btn-primary" href="{{ url_for('lms_admin.master_chapter_new') }}">Create First Master Chapter</a>
   </div>
   {% endif %}
 </div>
@@ -350,31 +393,89 @@
 {% block extra_js %}
 <script>
 (function () {
-  var input = document.getElementById('chapterSearch');
+  var search = document.getElementById('chapterSearch');
+  var statusFilter = document.getElementById('chapterStatusFilter');
+  var useFilter = document.getElementById('chapterUseFilter');
+  var programFilter = document.getElementById('chapterProgramFilter');
   var empty = document.getElementById('chapterSearchEmpty');
-  var rows = Array.from(document.querySelectorAll('.master-chapters-table tbody tr'));
+  var showMoreWrap = document.getElementById('showMoreWrap');
+  var showMoreBtn = document.getElementById('showMoreChapters');
+  var cards = Array.from(document.querySelectorAll('.chapter-card'));
+  var visibleLimit = 12;
 
-  if (!input || !rows.length) {
+  if (!cards.length) {
     return;
   }
 
-  input.addEventListener('input', function () {
-    var query = input.value.trim().toLowerCase();
-    var visible = 0;
+  function matchesFilters(card) {
+    var query = (search && search.value || '').trim().toLowerCase();
+    var status = statusFilter ? statusFilter.value : 'active';
+    var usage = useFilter ? useFilter.value : 'all';
+    var program = programFilter ? programFilter.value : 'all';
+    var haystack = card.dataset.chapterSearch || '';
 
-    rows.forEach(function (row) {
-      var haystack = row.dataset.chapterSearch || '';
-      var match = !query || haystack.indexOf(query) !== -1;
-      row.hidden = !match;
-      if (match) {
-        visible += 1;
-      }
+    if (query && haystack.indexOf(query) === -1) {
+      return false;
+    }
+
+    if (status !== 'all' && card.dataset.status !== status) {
+      return false;
+    }
+
+    if (usage !== 'all' && card.dataset.used !== usage) {
+      return false;
+    }
+
+    if (program !== 'all' && (card.dataset.programIds || ',').indexOf(',' + program + ',') === -1) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function applyFilters(resetLimit) {
+    var matched = cards.filter(matchesFilters);
+    if (resetLimit) {
+      visibleLimit = 12;
+    }
+
+    cards.forEach(function (card) {
+      card.hidden = true;
+    });
+
+    matched.slice(0, visibleLimit).forEach(function (card) {
+      card.hidden = false;
     });
 
     if (empty) {
-      empty.style.display = visible ? 'none' : 'block';
+      empty.style.display = matched.length ? 'none' : 'block';
     }
+
+    if (showMoreWrap) {
+      showMoreWrap.hidden = matched.length <= visibleLimit;
+    }
+  }
+
+  [search, statusFilter, useFilter, programFilter].forEach(function (control) {
+    if (!control) {
+      return;
+    }
+    control.addEventListener('input', function () {
+      applyFilters(true);
+    });
+    control.addEventListener('change', function () {
+      applyFilters(true);
+    });
   });
+
+  if (showMoreBtn) {
+    showMoreBtn.addEventListener('click', function () {
+      visibleLimit += 12;
+      applyFilters(false);
+    });
+  }
+
+  applyFilters(true);
 })();
 </script>
 {% endblock %}

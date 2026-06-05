@@ -905,15 +905,30 @@ def list_master_chapters():
                     mc.status,
                     mc.created_at,
                     mc.updated_at,
-                    COUNT(mt.id) AS topic_count
+                    COUNT(DISTINCT mt.id) AS topic_count,
+                    COUNT(DISTINCT pc.program_id) AS linked_program_count,
+                    GROUP_CONCAT(DISTINCT pc.program_id) AS linked_program_ids
                 FROM lms_master_chapters mc
                 LEFT JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+                LEFT JOIN lms_program_chapters pc ON pc.master_chapter_id = mc.id
                 GROUP BY mc.id
                 ORDER BY mc.created_at DESC
             """
         )
         chapters = cur.fetchall()
-        return render_template('master_chapters.html', chapters=chapters)
+        cur.execute(
+            """
+                SELECT id, program_name
+                FROM lms_programs
+                WHERE is_deleted = 0
+                  AND is_active = 1
+                  AND slug != ?
+                ORDER BY program_name ASC
+            """,
+            (_MASTER_BRIDGE_PROGRAM_SLUG,)
+        )
+        programs = cur.fetchall()
+        return render_template('master_chapters.html', chapters=chapters, programs=programs)
     finally:
         conn.close()
 
