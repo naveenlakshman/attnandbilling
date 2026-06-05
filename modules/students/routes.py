@@ -1215,6 +1215,24 @@ def master_topic_view(program_id, master_topic_id):
 # ---------------------------------------------------------------------------
 # Mark topic as complete / incomplete (AJAX POST)
 # ---------------------------------------------------------------------------
+_COMPLETION_CONFIRMATION_TEXT = {
+    'complete': 'Complated',
+    'incomplete': 'Not Complated',
+}
+
+
+def _validate_completion_action_confirmation(action):
+    expected_text = _COMPLETION_CONFIRMATION_TEXT.get(action)
+    if not expected_text:
+        return 'Invalid completion action.'
+
+    confirmation_text = (request.form.get('confirmation_text') or '').strip()
+    if confirmation_text != expected_text:
+        return f'Type "{expected_text}" to confirm this change.'
+
+    return None
+
+
 @students_bp.route('/topic/<int:topic_id>/complete', methods=['POST'])
 @limiter.exempt
 @student_login_required
@@ -1223,7 +1241,11 @@ def mark_complete(topic_id):
     if _is_demo():
         return jsonify({'status': 'demo', 'message': 'Read-only in demo mode'})
     student_id = session['student_id']
-    action = request.form.get('action', 'complete')  # 'complete' or 'incomplete'
+    action = (request.form.get('action', 'complete') or 'complete').strip().lower()
+    confirmation_error = _validate_completion_action_confirmation(action)
+    if confirmation_error:
+        return jsonify({'status': 'error', 'message': confirmation_error}), 400
+
     conn = get_conn()
     try:
         if action == 'complete':
@@ -1253,7 +1275,11 @@ def mark_master_complete(program_id, master_topic_id):
         return jsonify({'status': 'demo', 'message': 'Read-only in demo mode'})
 
     student_id = session['student_id']
-    action = request.form.get('action', 'complete')
+    action = (request.form.get('action', 'complete') or 'complete').strip().lower()
+    confirmation_error = _validate_completion_action_confirmation(action)
+    if confirmation_error:
+        return jsonify({'status': 'error', 'message': confirmation_error}), 400
+
     conn = get_conn()
     try:
         access = _has_program_access(conn, program_id, student_id)
