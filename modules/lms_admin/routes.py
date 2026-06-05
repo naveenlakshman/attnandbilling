@@ -547,6 +547,93 @@ def _ensure_master_bridge_topic(cur, master_topic_id, master_topic_title):
     return legacy_topic_id
 
 
+def _master_chapter_id_for_legacy_chapter(cur, chapter_id):
+    """Return the master chapter mapped from a legacy chapter, when migration bridge rows exist."""
+    row = cur.execute(
+        """
+            SELECT mt.master_chapter_id, COUNT(*) AS mapped_topics
+            FROM lms_master_topic_bridge b
+            JOIN lms_topics lt ON lt.id = b.legacy_topic_id
+            JOIN lms_master_topics mt ON mt.id = b.master_topic_id
+            WHERE lt.chapter_id = ?
+            GROUP BY mt.master_chapter_id
+            ORDER BY mapped_topics DESC, mt.master_chapter_id ASC
+            LIMIT 1
+        """,
+        (chapter_id,)
+    ).fetchone()
+    return row['master_chapter_id'] if row else None
+
+
+def _master_topic_id_for_legacy_topic(cur, topic_id):
+    row = cur.execute(
+        "SELECT master_topic_id FROM lms_master_topic_bridge WHERE legacy_topic_id = ?",
+        (topic_id,)
+    ).fetchone()
+    return row['master_topic_id'] if row else None
+
+
+def _legacy_chapter_program_id(cur, chapter_id):
+    row = cur.execute(
+        "SELECT program_id FROM lms_chapters WHERE id = ?",
+        (chapter_id,)
+    ).fetchone()
+    return row['program_id'] if row else None
+
+
+def _legacy_topic_program_id(cur, topic_id):
+    row = cur.execute(
+        """
+            SELECT lc.program_id
+            FROM lms_topics lt
+            JOIN lms_chapters lc ON lc.id = lt.chapter_id
+            WHERE lt.id = ?
+        """,
+        (topic_id,)
+    ).fetchone()
+    return row['program_id'] if row else None
+
+
+def _redirect_legacy_cleanup(program_id=None):
+    flash(
+        'Legacy program chapters are no longer edited directly. Use the Master Library flow, or migrate old content from Legacy Migration.',
+        'info'
+    )
+    if session.get('role') == 'admin':
+        return redirect(url_for('lms_admin.phase6_rollout_view'))
+    if program_id:
+        return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+    return redirect(url_for('lms_admin.list_programs'))
+
+
+def _redirect_legacy_chapter_to_master(cur, chapter_id, endpoint='topics'):
+    master_chapter_id = _master_chapter_id_for_legacy_chapter(cur, chapter_id)
+    if master_chapter_id:
+        flash('This legacy chapter is now managed in the Master Library.', 'info')
+        if endpoint == 'edit':
+            return redirect(url_for('lms_admin.master_chapter_edit', master_chapter_id=master_chapter_id))
+        if endpoint == 'new_topic':
+            return redirect(url_for('lms_admin.master_topic_new', master_chapter_id=master_chapter_id))
+        return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
+    return _redirect_legacy_cleanup(_legacy_chapter_program_id(cur, chapter_id))
+
+
+def _redirect_legacy_topic_to_master(cur, topic_id, endpoint='contents'):
+    master_topic_id = _master_topic_id_for_legacy_topic(cur, topic_id)
+    if master_topic_id:
+        flash('This legacy topic is now managed in the Master Library.', 'info')
+        if endpoint == 'edit':
+            return redirect(url_for('lms_admin.master_topic_edit', master_topic_id=master_topic_id))
+        if endpoint == 'new_content':
+            redirect_url = url_for('lms_admin.master_content_new', master_topic_id=master_topic_id)
+            preset = request.args.get('type', '')
+            if preset:
+                redirect_url += f'?type={preset}'
+            return redirect(redirect_url)
+        return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=master_topic_id))
+    return _redirect_legacy_cleanup(_legacy_topic_program_id(cur, topic_id))
+
+
 # File Upload Handler
 def upload_file(file_obj, content_type):
     """
@@ -1870,7 +1957,8 @@ def program_view(program_id):
             flash('Program not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
         
-        # Get chapter count and list
+        # Legacy chapters remain for migration/audit only. Current program content
+        # is driven by linked master chapters.
         cur.execute("""
             SELECT 
                 id,
@@ -1883,8 +1971,7 @@ def program_view(program_id):
             WHERE program_id = ?
             ORDER BY chapter_order ASC
         """, (program_id,))
-        chapters = cur.fetchall()
-        # Include master-linked chapters in the top-level chapter metric.
+        legacy_chapters = cur.fetchall()
         cur.execute(
             "SELECT COUNT(*) as count FROM lms_program_chapters WHERE program_id = ?",
             (program_id,)
@@ -1912,23 +1999,16 @@ def program_view(program_id):
             (program_id,)
         )
         linked_master_chapter_items = cur.fetchall()
-        total_chapters = len(chapters) + (linked_master_chapters or 0)
+        total_chapters = linked_master_chapters or 0
         
         # Get total topics count
         cur.execute("""
-            SELECT (
-                (SELECT COUNT(*)
-                 FROM lms_topics lt
-                 JOIN lms_chapters lc ON lc.id = lt.chapter_id
-                 WHERE lc.program_id = ?)
-                +
-                (SELECT COUNT(*)
-                 FROM lms_master_topics mt
-                 JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
-                 WHERE pc.program_id = ?
-                   AND mt.status = 'active')
-            ) as count
-        """, (program_id, program_id))
+            SELECT COUNT(*) as count
+            FROM lms_master_topics mt
+            JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+            WHERE pc.program_id = ?
+              AND mt.status = 'active'
+        """, (program_id,))
         total_topics = cur.fetchone()['count']
         
         # Mirror progress dashboard enrollment: direct access, batch access,
@@ -2019,7 +2099,8 @@ def program_view(program_id):
         
         summary = {
             'program': program,
-            'chapters': chapters,
+            'chapters': [],
+            'legacy_chapter_count': len(legacy_chapters),
             'linked_master_chapter_items': linked_master_chapter_items,
             'total_chapters': total_chapters,
             'linked_master_chapters': linked_master_chapters or 0,
@@ -2031,78 +2112,38 @@ def program_view(program_id):
             'recent_activity': recent_activity
         }
 
-        # Fetch topics for each chapter (for accordion display)
+        # Legacy topics are no longer displayed in the canonical program view.
         topics_by_chapter = {}
-        if chapters:
-            placeholders = ','.join('?' for _ in chapters)
-            chapter_ids = [c['id'] for c in chapters]
-            cur.execute(f"""
-                SELECT lt.id, lt.chapter_id, lt.topic_title, lt.topic_order, lt.content_type,
-                       lt.estimated_minutes, lt.is_active, lt.is_preview,
-                       COUNT(ltc.id) AS content_count
-                FROM lms_topics lt
-                LEFT JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
-                WHERE lt.chapter_id IN ({placeholders})
-                GROUP BY lt.id
-                ORDER BY lt.chapter_id, lt.topic_order
-            """, chapter_ids)
-            for t in cur.fetchall():
-                topics_by_chapter.setdefault(t['chapter_id'], []).append(dict(t))
         summary['topics_by_chapter'] = topics_by_chapter
 
         # Content coverage: count topics that have each content type
         if total_topics > 0:
             cur.execute("""
                 SELECT
-                    (
-                        (SELECT COUNT(DISTINCT lt.id)
-                         FROM lms_topics lt
-                         JOIN lms_chapters lc ON lc.id = lt.chapter_id
-                         JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
-                         WHERE lc.program_id = ?
-                           AND ltc.content_mode = 'youtube')
-                        +
-                        (SELECT COUNT(DISTINCT mt.id)
-                         FROM lms_master_topics mt
-                         JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
-                         JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
-                         WHERE pc.program_id = ?
-                           AND mt.status = 'active'
-                           AND ltc.content_mode = 'youtube')
-                    ) AS topics_with_video,
-                    (
-                        (SELECT COUNT(DISTINCT lt.id)
-                         FROM lms_topics lt
-                         JOIN lms_chapters lc ON lc.id = lt.chapter_id
-                         JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
-                         WHERE lc.program_id = ?
-                                                     AND ltc.content_mode IN ('pdf', 'rich_text', 'interactive_image'))
-                        +
-                        (SELECT COUNT(DISTINCT mt.id)
-                         FROM lms_master_topics mt
-                         JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
-                         JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
-                         WHERE pc.program_id = ?
-                           AND mt.status = 'active'
-                                                     AND ltc.content_mode IN ('pdf', 'rich_text', 'interactive_image'))
-                    ) AS topics_with_pdf,
-                    (
-                        (SELECT COUNT(DISTINCT lt.id)
-                         FROM lms_topics lt
-                         JOIN lms_chapters lc ON lc.id = lt.chapter_id
-                         JOIN lms_master_topic_bridge b ON b.legacy_topic_id = lt.id
-                         JOIN lms_assignments a ON a.master_topic_id = b.master_topic_id
-                         WHERE lc.program_id = ?)
-                        +
-                        (SELECT COUNT(DISTINCT mt.id)
-                         FROM lms_master_topics mt
-                         JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
-                         JOIN lms_assignments a ON a.master_topic_id = mt.id
-                         WHERE pc.program_id = ?
-                           AND pc.is_visible = 1
-                           AND mt.status = 'active')
-                    ) AS topics_with_assignments
-            """, (program_id, program_id, program_id, program_id, program_id, program_id))
+                    (SELECT COUNT(DISTINCT mt.id)
+                     FROM lms_master_topics mt
+                     JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                     JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
+                     WHERE pc.program_id = ?
+                       AND pc.is_visible = 1
+                       AND mt.status = 'active'
+                       AND ltc.content_mode = 'youtube') AS topics_with_video,
+                    (SELECT COUNT(DISTINCT mt.id)
+                     FROM lms_master_topics mt
+                     JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                     JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
+                     WHERE pc.program_id = ?
+                       AND pc.is_visible = 1
+                       AND mt.status = 'active'
+                       AND ltc.content_mode IN ('pdf', 'rich_text', 'interactive_image')) AS topics_with_pdf,
+                    (SELECT COUNT(DISTINCT mt.id)
+                     FROM lms_master_topics mt
+                     JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                     JOIN lms_assignments a ON a.master_topic_id = mt.id
+                     WHERE pc.program_id = ?
+                       AND pc.is_visible = 1
+                       AND mt.status = 'active') AS topics_with_assignments
+            """, (program_id, program_id, program_id))
             coverage = cur.fetchone()
             summary['topics_with_video'] = coverage['topics_with_video'] or 0
             summary['topics_with_pdf'] = coverage['topics_with_pdf'] or 0
@@ -2194,10 +2235,11 @@ def list_chapters(program_id):
                 lc.updated_at,
                 COUNT(DISTINCT lt.id) as topic_count,
                 COUNT(DISTINCT CASE WHEN ltc.id IS NOT NULL THEN lt.id END) as topics_with_content,
-                COUNT(DISTINCT CASE WHEN ltc.master_topic_id IS NOT NULL THEN lt.id END) as topics_mapped_master
+                COUNT(DISTINCT b.master_topic_id) as topics_mapped_master
             FROM lms_chapters lc
             LEFT JOIN lms_topics lt ON lc.id = lt.chapter_id
             LEFT JOIN lms_topic_contents ltc ON ltc.topic_id = lt.id
+            LEFT JOIN lms_master_topic_bridge b ON b.legacy_topic_id = lt.id
             WHERE lc.program_id = ?
             GROUP BY lc.id
             ORDER BY lc.chapter_order ASC
@@ -2255,6 +2297,12 @@ def list_chapters(program_id):
             (program_id,)
         )
         available_master_chapters = cur.fetchall()
+
+        unmigrated_legacy_chapters = [
+            chapter for chapter in chapters
+            if (chapter['topic_count'] or 0) > 0
+            and (chapter['topics_mapped_master'] or 0) == 0
+        ]
         
         data = {
             'program': program,
@@ -2262,8 +2310,9 @@ def list_chapters(program_id):
             'linked_master_chapters': linked_master_chapters,
             'available_master_chapters': available_master_chapters,
             'legacy_chapter_count': len(chapters),
+            'unmigrated_legacy_chapter_count': len(unmigrated_legacy_chapters),
             'linked_master_chapter_count': len(linked_master_chapters),
-            'total_chapters': len(chapters) + len(linked_master_chapters),
+            'total_chapters': len(linked_master_chapters),
         }
         
         return render_template('lms_chapters.html', data=data)
@@ -2275,6 +2324,9 @@ def list_chapters(program_id):
 @admin_required
 def migrate_legacy_chapter_pilot(program_id, chapter_id):
     """Phase 5 pilot: migrate one legacy chapter to master tables for one program."""
+    flash('Single-chapter pilot migration has moved to Legacy Migration.', 'info')
+    return redirect(url_for('lms_admin.phase6_rollout_view'))
+
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -2333,7 +2385,7 @@ def migrate_legacy_chapter_pilot(program_id, chapter_id):
 @lms_admin_bp.route('/phase6/rollout', methods=['GET'])
 @admin_required
 def phase6_rollout_view():
-    """Phase 6 rollout dashboard: discover unmigrated legacy chapters by program."""
+    """Legacy migration dashboard: discover unmigrated legacy chapters by program."""
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -2403,7 +2455,7 @@ def phase6_rollout_view():
 @lms_admin_bp.route('/phase6/rollout/migrate', methods=['POST'])
 @admin_required
 def phase6_rollout_migrate():
-    """Phase 6 controlled migration for selected legacy chapters of one program."""
+    """Controlled migration for selected legacy chapters of one program."""
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -2473,20 +2525,20 @@ def phase6_rollout_migrate():
             module_name='lms_phase6_rollout',
             record_id=program_id,
             description=(
-                f"Phase 6 rollout migrated {len(migrated)} chapter(s) in program {program['program_name']}; "
+                f"Legacy Migration moved {len(migrated)} chapter(s) in program {program['program_name']}; "
                 f"skipped {len(skipped)}; backup={os.path.basename(backup_path)}"
             )
         )
 
         flash(
-            f"Phase 6 rollout complete for {program['program_name']}: migrated {len(migrated)} chapter(s), "
+            f"Legacy Migration complete for {program['program_name']}: migrated {len(migrated)} chapter(s), "
             f"skipped {len(skipped)}. Backup: {os.path.basename(backup_path)}",
             'success'
         )
         return redirect(url_for('lms_admin.phase6_rollout_view'))
     except Exception as e:
         conn.rollback()
-        flash(f'Phase 6 rollout failed: {str(e)}', 'danger')
+        flash(f'Legacy Migration failed: {str(e)}', 'danger')
         return redirect(url_for('lms_admin.phase6_rollout_view'))
     finally:
         conn.close()
@@ -2724,6 +2776,8 @@ def toggle_program_master_chapter_visibility(program_id, link_id):
 @lms_content_manager_required
 def chapter_new(program_id):
     """Add new chapter to a program"""
+    return _redirect_legacy_cleanup(program_id)
+
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -2817,6 +2871,7 @@ def chapter_edit(chapter_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        return _redirect_legacy_chapter_to_master(cur, chapter_id, endpoint='edit')
         
         # Get chapter and program details
         cur.execute("""
@@ -2909,6 +2964,7 @@ def delete_chapter(chapter_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        return _redirect_legacy_chapter_to_master(cur, chapter_id)
         
         # Get chapter details
         cur.execute("""
@@ -2955,6 +3011,7 @@ def list_topics(chapter_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        return _redirect_legacy_chapter_to_master(cur, chapter_id)
         
         # Get chapter, program details
         cur.execute("""
@@ -3038,6 +3095,7 @@ def reorder_topics(chapter_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        return _redirect_legacy_chapter_to_master(cur, chapter_id)
 
         chapter = cur.execute(
             """
@@ -3141,6 +3199,7 @@ def topic_new(chapter_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        return _redirect_legacy_chapter_to_master(cur, chapter_id, endpoint='new_topic')
         
         # Get chapter and program details
         cur.execute("""
@@ -3286,6 +3345,7 @@ def topic_edit(topic_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        return _redirect_legacy_topic_to_master(cur, topic_id, endpoint='edit')
         
         # Get topic, chapter and program details
         cur.execute("""
@@ -3425,6 +3485,7 @@ def delete_topic(topic_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        return _redirect_legacy_topic_to_master(cur, topic_id)
         
         # Get topic details
         cur.execute("""
@@ -3503,6 +3564,8 @@ def list_topic_contents(topic_id):
         if bridge:
             return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=bridge['master_topic_id']))
 
+        return _redirect_legacy_cleanup(topic['program_id'])
+
         # Fetch the first content item of each type (one-per-type system)
         video_content = cur.execute("""
             SELECT * FROM lms_topic_contents
@@ -3566,6 +3629,8 @@ def topic_student_view(topic_id):
         if not topic:
             flash('Topic not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
+
+        return _redirect_legacy_topic_to_master(cur, topic_id)
         
         # Get all content items for this topic in display order
         cur.execute("""
@@ -3644,6 +3709,8 @@ def content_new(topic_id):
             if preset:
                 redirect_url += f'?type={preset}'
             return redirect(redirect_url)
+
+        return _redirect_legacy_cleanup(topic['program_id'])
 
         if request.method == 'POST':
             title = request.form.get('title', '').strip()
@@ -3785,6 +3852,7 @@ def content_view(content_id):
             SELECT 
                 ltc.id,
                 ltc.topic_id,
+                ltc.master_topic_id,
                 ltc.content_mode,
                 ltc.content_title,
                 ltc.external_url,
@@ -3810,6 +3878,13 @@ def content_view(content_id):
         if not content:
             flash('Content not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
+
+        if not content['master_topic_id']:
+            master_topic_id = _master_topic_id_for_legacy_topic(cur, content['topic_id'])
+            if master_topic_id:
+                flash('This legacy content is now managed in the Master Library.', 'info')
+                return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=master_topic_id))
+            return _redirect_legacy_cleanup(content['program_id'])
 
         # Convert YouTube watch URL to embed URL
         embed_url = None
@@ -4004,6 +4079,12 @@ def content_edit(content_id):
             return redirect(url_for('lms_admin.list_programs'))
 
         is_master_topic = bool(content['master_topic_id'])
+        if not is_master_topic:
+            master_topic_id = _master_topic_id_for_legacy_topic(cur, content['topic_id'])
+            if master_topic_id:
+                flash('This legacy content is now managed in the Master Library.', 'info')
+                return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=master_topic_id))
+            return _redirect_legacy_cleanup(_legacy_topic_program_id(cur, content['topic_id']))
 
         if is_master_topic:
             master_meta = cur.execute(
@@ -4193,6 +4274,13 @@ def delete_content(content_id):
         if not content:
             flash('Content not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
+
+        if not content['master_topic_id']:
+            master_topic_id = _master_topic_id_for_legacy_topic(cur, content['topic_id'])
+            if master_topic_id:
+                flash('This legacy content is now managed in the Master Library.', 'info')
+                return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=master_topic_id))
+            return _redirect_legacy_cleanup(_legacy_topic_program_id(cur, content['topic_id']))
         
         # Delete the content
         cur.execute("""
@@ -4248,6 +4336,8 @@ def list_topic_attachments(topic_id):
         if not topic:
             flash('Topic not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
+
+        return _redirect_legacy_topic_to_master(cur, topic_id)
         
         # Get all attachments for this topic
         cur.execute("""
@@ -4342,6 +4432,8 @@ def add_topic_attachment(topic_id):
         if not topic:
             flash('Topic not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
+
+        return _redirect_legacy_topic_to_master(cur, topic_id)
         
         if request.method == 'POST':
             # Get form data
@@ -4453,6 +4545,8 @@ def edit_topic_attachment(attachment_id):
         if not attachment:
             flash('Attachment not found.', 'danger')
             return redirect(url_for('lms_admin.list_programs'))
+
+        return _redirect_legacy_topic_to_master(cur, attachment['topic_id'])
         
         if request.method == 'POST':
             # Get form data
@@ -4551,6 +4645,7 @@ def delete_topic_attachment(attachment_id):
         
         topic_id = attachment['topic_id']
         file_name = attachment['file_name']
+        return _redirect_legacy_topic_to_master(cur, topic_id)
         
         # Delete attachment
         cur.execute("""

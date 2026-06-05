@@ -645,11 +645,6 @@
       <h2>Chapters</h2>
       <p class="chapter-program-name">{{ data.program.program_name }}</p>
     </div>
-    {% if can_manage_content %}
-    <a href="{{ url_for('lms_admin.chapter_new', program_id=data.program.id) }}" class="btn-add chapter-primary-action">
-      New
-    </a>
-    {% endif %}
   </div>
   <div>
     <input type="search" id="chapterSearch" class="chapter-search" placeholder="Search chapters" autocomplete="off" oninput="filterChapters()">
@@ -670,8 +665,14 @@
 <div class="info-box">
   <span>Total: <strong>{{ data.total_chapters }}</strong></span>
   <span>Shared: <strong>{{ data.linked_master_chapter_count }}</strong></span>
-  <span>Legacy: <strong>{{ data.legacy_chapter_count }}</strong></span>
 </div>
+
+{% if session.get('role') == 'admin' and data.unmigrated_legacy_chapter_count %}
+<div class="info-box" style="background:#fff8e1;border-left-color:#ffc107;color:#7a5600;">
+  <span><strong>{{ data.unmigrated_legacy_chapter_count }}</strong> legacy {{ 'chapter needs' if data.unmigrated_legacy_chapter_count == 1 else 'chapters need' }} migration.</span>
+  <a href="{{ url_for('lms_admin.phase6_rollout_view') }}" style="color:#7a5600;font-weight:800;">Open Legacy Migration</a>
+</div>
+{% endif %}
 
 <!-- Linked Master Chapters -->
 <h3 class="section-label">Linked Master Chapters</h3>
@@ -749,95 +750,9 @@
   </table>
   {% else %}
   <div class="empty-state" style="padding: 30px 20px;">
-    <div class="empty-state-text mb-0">No master chapters linked yet.</div>
+    <div class="empty-state-title">No linked chapters yet</div>
+    <div class="empty-state-text mb-0">Attach reusable chapters from the Master Library to build this program.</div>
   </div>
-  {% endif %}
-</div>
-
-<h3 class="section-label">Legacy Program Chapters</h3>
-
-<!-- Chapters Table -->
-<div class="chapters-table-card">
-  {% if data.chapters %}
-    <table class="chapters-table">
-      <thead>
-        <tr>
-          <th style="width: 70px;">Order</th>
-          <th>Chapter Title</th>
-          <th style="width: 100px;">Topics</th>
-          <th style="width: 100px;">Status</th>
-          <th style="width: 250px;">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for chapter in data.chapters %}
-        <tr class="chapter-row" data-chapter-id="{{ chapter.id }}" data-search="{{ (chapter.chapter_title ~ ' ' ~ (chapter.description or '') ~ ' legacy')|lower }}">
-          <td data-label="Order" style="text-align: center;">
-            <input type="number" class="chapter-order-input" value="{{ chapter.chapter_order }}" min="1" readonly>
-          </td>
-          <td class="chapter-title-cell">
-            <div class="chapter-title">{{ chapter.chapter_title }}</div>
-            <span class="source-badge source-legacy">Legacy</span>
-            {% if chapter.topics_mapped_master and chapter.topics_mapped_master > 0 %}
-            <div class="migrated-chip">Migrated to Master ({{ chapter.topics_mapped_master }}/{{ chapter.topic_count }} topics mapped)</div>
-            {% endif %}
-            {% if chapter.description %}
-            <div class="chapter-description" title="{{ chapter.description }}">{{ chapter.description }}</div>
-            {% endif %}
-            {% if chapter.topic_count > 0 %}
-            {% set cpct = ((chapter.topics_with_content / chapter.topic_count) * 100) | round(0) | int %}
-            <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
-              <div style="flex: 1; max-width: 180px; background: #e9ecef; border-radius: 4px; height: 6px; overflow: hidden;">
-                <div style="width: {{ cpct }}%; height: 100%; border-radius: 4px; background: {{ '#198754' if cpct == 100 else ('#fd7e14' if cpct >= 50 else '#dc3545') }};"></div>
-              </div>
-              <span style="font-size: 11px; color: #6c757d; white-space: nowrap;">{{ chapter.topics_with_content }}/{{ chapter.topic_count }} content</span>
-            </div>
-            {% endif %}
-          </td>
-          <td data-label="Topics">
-            <span class="topics-badge">{{ chapter.topic_count }} {{ 'Topic' if chapter.topic_count == 1 else 'Topics' }}</span>
-          </td>
-          <td data-label="Status">
-            <span class="status-badge {% if chapter.is_active %}status-active{% else %}status-inactive{% endif %}">
-              {{ 'Active' if chapter.is_active else 'Inactive' }}
-            </span>
-          </td>
-          <td class="chapter-actions-cell">
-            <div class="chapter-actions">
-              {% if can_manage_content %}
-              <a class="btn-action btn-edit" href="{{ url_for('lms_admin.chapter_edit', chapter_id=chapter.id) }}" title="Edit Chapter">
-                Edit
-              </a>
-              {% endif %}
-              <a class="btn-action btn-topics" href="#" onclick="manageTopics(event, {{ chapter.id }});" title="Manage Topics">
-                Topics
-              </a>
-              {% if session.get('role') == 'admin' and (not chapter.topics_mapped_master or chapter.topics_mapped_master == 0) %}
-              <form method="POST" action="{{ url_for('lms_admin.migrate_legacy_chapter_pilot', program_id=data.program.id, chapter_id=chapter.id) }}" onsubmit="return confirm('Run Phase 5 pilot migration for this legacy chapter? A DB backup will be created first.');">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button class="btn-action btn-edit" type="submit" title="Migrate this legacy chapter into master tables">Pilot Migrate</button>
-              </form>
-              {% endif %}
-              {% if session.get('role') == 'admin' %}
-              <button class="btn-action btn-delete" onclick="deleteChapter(event, {{ chapter.id }})" title="Delete Chapter">
-                Delete
-              </button>
-              {% endif %}
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <div class="empty-state">
-      <div class="empty-state-icon">+</div>
-      <div class="empty-state-title">No Chapters Yet</div>
-      <div class="empty-state-text">Start building your learning program by creating your first chapter.</div>
-      {% if can_manage_content %}
-      <a href="{{ url_for('lms_admin.chapter_new', program_id=data.program.id) }}" class="btn-add">Add Your First Chapter</a>
-      {% endif %}
-    </div>
   {% endif %}
 </div>
 
@@ -862,27 +777,6 @@
     }
   }
 
-  function deleteChapter(event, chapterId) {
-    event.preventDefault();
-    if (confirm('Are you sure you want to delete this chapter and all its topics? This action cannot be undone.')) {
-      // Create a hidden form and submit it
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = '/lms_admin/chapter/' + chapterId + '/delete';
-      const csrf = document.createElement('input');
-      csrf.type = 'hidden';
-      csrf.name = 'csrf_token';
-      csrf.value = '{{ csrf_token() }}';
-      form.appendChild(csrf);
-      document.body.appendChild(form);
-      form.submit();
-    }
-  }
-
-  function manageTopics(event, chapterId) {
-    event.preventDefault();
-    window.location.href = '/lms_admin/chapter/' + chapterId + '/topics';
-  }
 </script>
 
 {% include 'lms_admin/attach_chapter_modal.html' %}

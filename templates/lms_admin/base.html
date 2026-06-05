@@ -712,7 +712,7 @@
       <a
         class="nav-link {{ 'active' if request.endpoint in ['lms_admin.phase6_rollout_view'] else '' }}"
         href="{{ url_for('lms_admin.phase6_rollout_view') }}">
-        🚀 Phase 6 Rollout
+        Legacy Migration
       </a>
 
       <!-- Course–Program Mapping -->
@@ -807,14 +807,10 @@
     Add Program
   </a>
   {% endif %}
-  <button type="button" class="fab-menu-item disabled" disabled title="Open a program first to add a chapter">
-    <span class="fmi-icon" style="background:#f3f4f6;">#</span>
-    Add Chapter
-  </button>
-  <button type="button" class="fab-menu-item disabled" disabled title="Open a chapter first to add a topic">
-    <span class="fmi-icon" style="background:#f3f4f6;">#</span>
-    Add Topic
-  </button>
+  <a href="{{ url_for('lms_admin.master_chapter_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dbeafe;">+</span>
+    New Master Chapter
+  </a>
   <button type="button" class="fab-menu-item disabled" disabled title="Open a master topic first to add an assignment">
     <span class="fmi-icon" style="background:#f3f4f6;">#</span>
     Add Assignment
@@ -824,12 +820,12 @@
 <!-- Mobile Bottom Navigation -->
 {% set lms_program_endpoints = [
   'lms_admin.list_programs', 'lms_admin.program_new', 'lms_admin.program_edit', 'lms_admin.program_view',
-  'lms_admin.list_chapters', 'lms_admin.chapter_new', 'lms_admin.chapter_edit',
-  'lms_admin.list_topics', 'lms_admin.topic_new', 'lms_admin.topic_edit',
-  'lms_admin.list_topic_contents', 'lms_admin.content_new', 'lms_admin.content_edit',
+  'lms_admin.list_chapters',
+  'lms_admin.list_master_chapters', 'lms_admin.master_chapter_new', 'lms_admin.master_chapter_edit',
+  'lms_admin.list_master_topics', 'lms_admin.master_topic_new', 'lms_admin.master_topic_edit',
+  'lms_admin.list_master_topic_contents', 'lms_admin.master_content_new', 'lms_admin.content_edit',
   'lms_admin.content_view', 'lms_admin.list_program_resources', 'lms_admin.add_program_resource',
-  'lms_admin.edit_program_resource', 'lms_admin.list_topic_attachments',
-  'lms_admin.add_topic_attachment', 'lms_admin.edit_topic_attachment'
+  'lms_admin.edit_program_resource'
 ] %}
 {% set lms_assignment_endpoints = [
   'lms_admin.assignments_alias', 'lms_admin.all_assignments', 'lms_admin.manage_assignments',
