@@ -383,6 +383,53 @@
       max-width: 100%;
       min-width: 0;
     }
+    .rich-text-content,
+    .lms-rich-content {
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: hidden;
+    }
+    .lms-rich-content {
+      font-size: clamp(14px, 1.6vw, 15px);
+      line-height: 1.7;
+    }
+    .lms-rich-content * {
+      box-sizing: border-box;
+      max-width: 100% !important;
+    }
+    .lms-rich-content table {
+      max-width: 100% !important;
+      min-width: 0 !important;
+      table-layout: fixed;
+      width: 100% !important;
+    }
+    .lms-rich-content table colgroup,
+    .lms-rich-content table col {
+      display: none;
+    }
+    .lms-rich-content table,
+    .lms-rich-content table * {
+      line-height: 1.4 !important;
+    }
+    .lms-rich-content table td,
+    .lms-rich-content table th {
+      font-size: clamp(13px, 1.65vw, 16px) !important;
+      overflow-wrap: break-word;
+      padding: clamp(6px, 1vw, 10px);
+      white-space: normal !important;
+      word-break: normal;
+    }
+    .lms-rich-content table tr > :first-child {
+      width: 16% !important;
+    }
+    .lms-rich-content table tr > :nth-child(2) {
+      width: 34% !important;
+    }
+    .lms-rich-content table td *,
+    .lms-rich-content table th * {
+      font-size: inherit !important;
+      line-height: inherit !important;
+    }
     .topics-drawer-overlay {
       background: rgba(15, 23, 42, 0.48);
       display: none;
@@ -530,8 +577,7 @@
       font-size: 14px !important;
       line-height: 1.65 !important;
       max-width: 100%;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
+      overflow-x: hidden;
     }
     .lms-rich-content * {
       box-sizing: border-box;
@@ -542,20 +588,34 @@
     .lms-rich-content h3 { font-size: 1.1rem !important; }
     .lms-rich-content h4 { font-size: 1rem !important; }
     .lms-rich-content table {
-      max-width: none !important;
-      min-width: 600px;
-      width: max-content;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      table-layout: fixed;
+      width: 100% !important;
     }
-    .lms-rich-content table,
-    .lms-rich-content table * {
-      max-width: none !important;
+    .lms-rich-content table colgroup,
+    .lms-rich-content table col {
+      display: none;
     }
     .lms-rich-content table td,
     .lms-rich-content table th {
-      font-size: 14px !important;
+      font-size: clamp(12px, 3.55vw, 14px) !important;
       line-height: 1.45 !important;
-      padding: 7px 10px;
-      white-space: normal;
+      overflow-wrap: break-word;
+      padding: 6px 7px;
+      white-space: normal !important;
+      word-break: normal;
+    }
+    .lms-rich-content table tr > :first-child {
+      width: 18% !important;
+    }
+    .lms-rich-content table tr > :nth-child(2) {
+      width: 36% !important;
+    }
+    .lms-rich-content table td *,
+    .lms-rich-content table th * {
+      font-size: inherit !important;
+      line-height: inherit !important;
     }
     .lesson-content pre,
     .rich-text-content pre,
