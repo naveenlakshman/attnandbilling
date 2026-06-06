@@ -91,7 +91,7 @@
       width: 40px;
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 1100px) {
       .sidebar {
         transform: translateX(-100%);
         width: min(82vw, 290px) !important;  /* override collapsed on mobile */
@@ -105,6 +105,11 @@
       .sidebar.collapsed .brand-text { opacity: 1; }
       .sidebar.collapsed .sub-brand { opacity: 1; }
       .main-content { margin-left: 0 !important; padding: 16px; }
+      .mobile-sidebar-btn { display: inline-flex; align-items: center; justify-content: center; }
+      .sidebar-overlay { z-index: 9999; }
+    }
+
+    @media (max-width: 768px) {
       .topbar {
         align-items: flex-start;
         flex-wrap: wrap;
@@ -159,8 +164,6 @@
       .topbar .student-code {
         flex: 0 0 auto;
       }
-      .mobile-sidebar-btn { display: inline-flex; align-items: center; justify-content: center; }
-      .sidebar-overlay { z-index: 9999; }
       #demo-banner {
         flex-wrap: wrap;
         gap: 6px 12px !important;
@@ -257,7 +260,7 @@
 <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
 <script>
 // ── Left sidebar collapse ──────────────────────────────────────────────────
-var _isMobile = function(){ return window.innerWidth <= 768; };
+var _isMobile = function(){ return window.innerWidth <= 1100; };
 
 function toggleSidebar() {
   if (_isMobile()) {

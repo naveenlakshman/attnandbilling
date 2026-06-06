@@ -351,6 +351,93 @@
   .btn-lms-ctrl.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
 
 
+  @media (max-width: 1100px) {
+    .lesson-header {
+      gap: 10px;
+    }
+    .lesson-header h1 {
+      font-size: 18px;
+    }
+    .lesson-breadcrumb {
+      font-size: 13px;
+    }
+    .lms-layout {
+      overflow: visible;
+      position: relative;
+    }
+    .lms-content {
+      min-width: 0;
+    }
+    .lms-content-inner {
+      padding-left: 22px;
+      padding-right: 22px;
+    }
+    .content-tabs {
+      margin-left: -22px;
+      margin-right: -22px;
+      padding-left: 22px;
+      padding-right: 22px;
+    }
+    .content-block {
+      border-radius: 8px;
+      max-width: 100%;
+      min-width: 0;
+    }
+    .topics-drawer-overlay {
+      background: rgba(15, 23, 42, 0.48);
+      display: none;
+      inset: 0;
+      position: fixed;
+      z-index: 10001;
+    }
+    .topics-drawer-overlay.active {
+      display: block;
+    }
+    .lms-sidebar {
+      border-left: 1px solid #e9ecef;
+      bottom: 0;
+      box-shadow: -14px 0 30px rgba(15, 23, 42, 0.22);
+      left: auto;
+      max-width: 380px;
+      opacity: 1;
+      position: fixed;
+      right: 0;
+      top: 0;
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+      width: min(88vw, 380px) !important;
+      z-index: 10002;
+    }
+    .lms-sidebar.panel-hidden {
+      border-left: 1px solid #e9ecef;
+      opacity: 1;
+      width: min(88vw, 380px) !important;
+    }
+    .lms-sidebar.mobile-panel-open {
+      transform: translateX(0);
+    }
+    .sidebar-header {
+      padding-right: 56px;
+    }
+    .topics-drawer-close {
+      align-items: center;
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      color: #343a40;
+      cursor: pointer;
+      display: inline-flex;
+      font-size: 22px;
+      height: 36px;
+      justify-content: center;
+      line-height: 1;
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      width: 36px;
+    }
+  }
+
 
   @media (max-width: 768px) {
     html, body { overflow: hidden; }
@@ -1560,7 +1647,7 @@ function toggleComplete() {
 }
 
 /* ── Topics Panel Toggle ──────────────────────────────────────── */
-var _isMobileLms = function(){ return window.innerWidth <= 768; };
+var _isMobileLms = function(){ return window.innerWidth <= 1100; };
 
 function _updateTopicsBtn(hidden) {
   var btn = document.getElementById('btnTopics');
