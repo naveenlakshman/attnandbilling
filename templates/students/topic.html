@@ -1475,10 +1475,10 @@ function toggleComplete() {
   if (completionLockedByAssignment) return;
 
   var action = isCompleted ? 'incomplete' : 'complete';
-  var requiredConfirmation = action === 'complete' ? 'Complated' : 'Not Complated';
+  var requiredConfirmation = action === 'complete' ? 'Completed' : 'Not Completed';
   var confirmationMessage = action === 'complete'
-    ? 'Type "Complated" to mark this topic as complete.'
-    : 'Type "Not Complated" to mark this topic as not completed.';
+    ? 'Type "Completed" to mark this topic as complete.'
+    : 'Type "Not Completed" to mark this topic as not completed.';
   var confirmationText = window.prompt(confirmationMessage);
   if (confirmationText === null) return;
   confirmationText = confirmationText.trim();

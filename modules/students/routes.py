@@ -1216,8 +1216,8 @@ def master_topic_view(program_id, master_topic_id):
 # Mark topic as complete / incomplete (AJAX POST)
 # ---------------------------------------------------------------------------
 _COMPLETION_CONFIRMATION_TEXT = {
-    'complete': 'Complated',
-    'incomplete': 'Not Complated',
+    'complete': 'Completed',
+    'incomplete': 'Not Completed',
 }
 
 

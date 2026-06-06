@@ -135,7 +135,7 @@ def main() -> int:
     # Student POST: completion action idempotency and toggle
     r_complete_1 = client.post(
         f"/student/program/{program_id}/master-topic/{master_topic_id}/complete",
-        data={"action": "complete", "confirmation_text": "Complated"},
+        data={"action": "complete", "confirmation_text": "Completed"},
     )
     print(f"mark_complete_first_status={r_complete_1.status_code}; body={r_complete_1.get_json()}")
 
@@ -149,7 +149,7 @@ def main() -> int:
 
     r_complete_2 = client.post(
         f"/student/program/{program_id}/master-topic/{master_topic_id}/complete",
-        data={"action": "complete", "confirmation_text": "Complated"},
+        data={"action": "complete", "confirmation_text": "Completed"},
     )
     print(f"mark_complete_second_status={r_complete_2.status_code}; body={r_complete_2.get_json()}")
 
@@ -163,7 +163,7 @@ def main() -> int:
 
     r_incomplete = client.post(
         f"/student/program/{program_id}/master-topic/{master_topic_id}/complete",
-        data={"action": "incomplete", "confirmation_text": "Not Complated"},
+        data={"action": "incomplete", "confirmation_text": "Not Completed"},
     )
     print(f"mark_incomplete_status={r_incomplete.status_code}; body={r_incomplete.get_json()}")
 
@@ -177,7 +177,7 @@ def main() -> int:
     # End with complete state so there is positive completion evidence in Phase 7.
     r_complete_final = client.post(
         f"/student/program/{program_id}/master-topic/{master_topic_id}/complete",
-        data={"action": "complete", "confirmation_text": "Complated"},
+        data={"action": "complete", "confirmation_text": "Completed"},
     )
     print(f"mark_complete_final_status={r_complete_final.status_code}; body={r_complete_final.get_json()}")
 
