@@ -389,7 +389,8 @@
 <div class="master-topics-page">
 
   <div class="master-topics-header">
-    <a class="master-topics-back" href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a>
+    {% set library_filter_args = request.args.to_dict() %}
+    <a class="master-topics-back" href="{{ url_for('lms_admin.list_master_chapters', **library_filter_args) }}">Master Library</a>
 
     <div class="master-topics-copy">
       <div class="master-topics-title-row">

@@ -358,7 +358,10 @@
       </div>
 
       <div class="chapter-actions">
-        <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}">Topics</a>
+        <a
+          class="btn btn-sm btn-primary chapter-topics-link"
+          href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}"
+          data-base-href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}">Topics</a>
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.master_chapter_edit', master_chapter_id=chapter.id) }}">Edit</a>
         {% if chapter.status != 'archived' and session.get('role') == 'admin' %}
         <form method="POST" action="{{ url_for('lms_admin.master_chapter_archive', master_chapter_id=chapter.id) }}" onsubmit="return confirm('Archive this master chapter?');">
@@ -401,17 +404,143 @@
   var showMoreWrap = document.getElementById('showMoreWrap');
   var showMoreBtn = document.getElementById('showMoreChapters');
   var cards = Array.from(document.querySelectorAll('.chapter-card'));
+  var topicsLinks = Array.from(document.querySelectorAll('.chapter-topics-link'));
   var visibleLimit = 12;
+  var storageKey = 'lmsMasterChapterFilters';
+  var defaultFilters = {
+    q: '',
+    status: 'active',
+    usage: 'all',
+    program: 'all'
+  };
 
   if (!cards.length) {
     return;
   }
 
-  function matchesFilters(card) {
-    var query = (search && search.value || '').trim().toLowerCase();
-    var status = statusFilter ? statusFilter.value : 'active';
-    var usage = useFilter ? useFilter.value : 'all';
-    var program = programFilter ? programFilter.value : 'all';
+  function hasOption(select, value) {
+    return !!select && Array.from(select.options).some(function (option) {
+      return option.value === value;
+    });
+  }
+
+  function readStoredFilters() {
+    try {
+      return JSON.parse(sessionStorage.getItem(storageKey) || '{}');
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function readUrlFilters() {
+    var params = new URLSearchParams(window.location.search);
+    var hasFilters = ['q', 'status', 'usage', 'program'].some(function (key) {
+      return params.has(key);
+    });
+
+    if (!hasFilters) {
+      return null;
+    }
+
+    return {
+      q: params.get('q') || '',
+      status: params.get('status') || defaultFilters.status,
+      usage: params.get('usage') || defaultFilters.usage,
+      program: params.get('program') || defaultFilters.program
+    };
+  }
+
+  function normalizeFilters(filters) {
+    filters = Object.assign({}, defaultFilters, filters || {});
+    filters.q = String(filters.q || '');
+    filters.status = hasOption(statusFilter, filters.status) ? filters.status : defaultFilters.status;
+    filters.usage = hasOption(useFilter, filters.usage) ? filters.usage : defaultFilters.usage;
+    filters.program = hasOption(programFilter, filters.program) ? filters.program : defaultFilters.program;
+    return filters;
+  }
+
+  function getCurrentFilters() {
+    return normalizeFilters({
+      q: search ? search.value.trim() : '',
+      status: statusFilter ? statusFilter.value : defaultFilters.status,
+      usage: useFilter ? useFilter.value : defaultFilters.usage,
+      program: programFilter ? programFilter.value : defaultFilters.program
+    });
+  }
+
+  function setControls(filters) {
+    if (search) {
+      search.value = filters.q;
+    }
+    if (statusFilter) {
+      statusFilter.value = filters.status;
+    }
+    if (useFilter) {
+      useFilter.value = filters.usage;
+    }
+    if (programFilter) {
+      programFilter.value = filters.program;
+    }
+  }
+
+  function writeStoredFilters(filters) {
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify(filters));
+    } catch (err) {
+      // Filtering still works if browser storage is unavailable.
+    }
+  }
+
+  function filterParams(filters) {
+    var params = new URLSearchParams();
+    if (filters.q) {
+      params.set('q', filters.q);
+    }
+    if (filters.status !== defaultFilters.status) {
+      params.set('status', filters.status);
+    }
+    if (filters.usage !== defaultFilters.usage) {
+      params.set('usage', filters.usage);
+    }
+    if (filters.program !== defaultFilters.program) {
+      params.set('program', filters.program);
+    }
+    return params;
+  }
+
+  function syncFilterUrl(filters) {
+    var params = filterParams(filters);
+    var nextUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState(null, '', nextUrl);
+  }
+
+  function updateTopicLinks(filters) {
+    var params = filterParams(filters);
+
+    topicsLinks.forEach(function (link) {
+      var url = new URL(link.dataset.baseHref || link.getAttribute('href'), window.location.origin);
+      url.search = params.toString();
+      link.href = url.pathname + url.search;
+    });
+  }
+
+  function syncFilterState(filters) {
+    writeStoredFilters(filters);
+    syncFilterUrl(filters);
+    updateTopicLinks(filters);
+  }
+
+  function initializeFilters() {
+    var filters = normalizeFilters(readUrlFilters() || readStoredFilters());
+    setControls(filters);
+    syncFilterState(filters);
+  }
+
+  function matchesFilters(card, filters) {
+    var query = filters.q.toLowerCase();
+    var status = filters.status;
+    var usage = filters.usage;
+    var program = filters.program;
     var haystack = card.dataset.chapterSearch || '';
 
     if (query && haystack.indexOf(query) === -1) {
@@ -434,7 +563,10 @@
   }
 
   function applyFilters(resetLimit) {
-    var matched = cards.filter(matchesFilters);
+    var filters = getCurrentFilters();
+    var matched = cards.filter(function (card) {
+      return matchesFilters(card, filters);
+    });
     if (resetLimit) {
       visibleLimit = 12;
     }
@@ -454,6 +586,8 @@
     if (showMoreWrap) {
       showMoreWrap.hidden = matched.length <= visibleLimit;
     }
+
+    syncFilterState(filters);
   }
 
   [search, statusFilter, useFilter, programFilter].forEach(function (control) {
@@ -475,6 +609,7 @@
     });
   }
 
+  initializeFilters();
   applyFilters(true);
 })();
 </script>
