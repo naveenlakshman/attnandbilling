@@ -682,7 +682,7 @@
 
       <!-- Programs -->
       <a
-        class="nav-link {{ 'active' if request.endpoint == 'lms_admin.list_programs' else '' }}"
+        class="nav-link {{ 'active' if request.endpoint in ['lms_admin.list_programs', 'lms_admin.program_new', 'lms_admin.program_edit', 'lms_admin.program_view', 'lms_admin.list_chapters', 'lms_admin.list_program_chapter_topics', 'lms_admin.list_program_resources', 'lms_admin.add_program_resource', 'lms_admin.edit_program_resource'] else '' }}"
         href="{{ url_for('lms_admin.list_programs') }}">
         📖 Programs
       </a>
@@ -813,7 +813,7 @@
 <!-- Mobile Bottom Navigation -->
 {% set lms_program_endpoints = [
   'lms_admin.list_programs', 'lms_admin.program_new', 'lms_admin.program_edit', 'lms_admin.program_view',
-  'lms_admin.list_chapters',
+  'lms_admin.list_chapters', 'lms_admin.list_program_chapter_topics',
   'lms_admin.list_master_chapters', 'lms_admin.master_chapter_new', 'lms_admin.master_chapter_edit',
   'lms_admin.list_master_topics', 'lms_admin.master_topic_new', 'lms_admin.master_topic_edit',
   'lms_admin.list_master_topic_contents', 'lms_admin.master_content_new', 'lms_admin.content_edit',

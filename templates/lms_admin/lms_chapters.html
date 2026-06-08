@@ -731,7 +731,7 @@
         </td>
         <td class="chapter-actions-cell">
           <div class="chapter-actions">
-            <a class="btn-action btn-topics" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=link.master_chapter_id) }}">Topics</a>
+            <a class="btn-action btn-topics" href="{{ url_for('lms_admin.list_program_chapter_topics', program_id=data.program.id, chapter_id=link.master_chapter_id) }}">Topics</a>
             {% if can_manage_content %}
             <form method="POST" action="{{ url_for('lms_admin.toggle_program_master_chapter_visibility', program_id=data.program.id, link_id=link.link_id) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

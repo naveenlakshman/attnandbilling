@@ -1,7 +1,7 @@
 {% extends "lms_admin/base.html" %}
 
-{% block title %}Master Topics - {{ chapter.title }}{% endblock %}
-{% block page_title %}Master Topics{% endblock %}
+{% block title %}{% if is_program_context|default(false) %}Topics - {{ chapter.title }} - {{ program.program_name }}{% else %}Master Topics - {{ chapter.title }}{% endif %}{% endblock %}
+{% block page_title %}{% if is_program_context|default(false) %}Program Topics{% else %}Master Topics{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -28,6 +28,28 @@
 
   .master-topics-back:hover {
     text-decoration: underline;
+  }
+
+  .master-topics-breadcrumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: .9rem;
+    line-height: 1.4;
+  }
+
+  .master-topics-breadcrumb a {
+    color: #0d6efd;
+    text-decoration: none;
+  }
+
+  .master-topics-breadcrumb a:hover {
+    text-decoration: underline;
+  }
+
+  .master-topics-breadcrumb-separator {
+    color: #94a3b8;
   }
 
   .master-topics-title-row {
@@ -389,19 +411,37 @@
 <div class="master-topics-page">
 
   <div class="master-topics-header">
+    {% if is_program_context|default(false) %}
+    <nav class="master-topics-breadcrumb" aria-label="Breadcrumb">
+      <a href="{{ url_for('lms_admin.list_programs') }}">Programs</a>
+      <span class="master-topics-breadcrumb-separator">/</span>
+      <a href="{{ url_for('lms_admin.program_view', program_id=program.id) }}">{{ program.program_name }}</a>
+      <span class="master-topics-breadcrumb-separator">/</span>
+      <a href="{{ url_for('lms_admin.list_chapters', program_id=program.id) }}">{{ chapter.title }}</a>
+      <span class="master-topics-breadcrumb-separator">/</span>
+      <a href="{{ request.path }}">Topics</a>
+    </nav>
+    {% else %}
     {% set library_filter_args = request.args.to_dict() %}
     <a class="master-topics-back" href="{{ url_for('lms_admin.list_master_chapters', **library_filter_args) }}">Master Library</a>
+    {% endif %}
 
     <div class="master-topics-copy">
       <div class="master-topics-title-row">
         <h2 class="h4">{{ chapter.title }}</h2>
+        {% if not is_program_context|default(false) %}
         <a class="btn btn-primary btn-sm master-topics-new-btn" href="{{ url_for('lms_admin.master_topic_new', master_chapter_id=chapter.id) }}">New</a>
+        {% endif %}
       </div>
+      {% if is_program_context|default(false) %}
+      <p class="text-muted">{{ program.program_name }}</p>
+      {% else %}
       <p class="text-muted">Reusable topics for linked programs.</p>
+      {% endif %}
     </div>
 
     <div class="master-actions">
-      {% if session.get('role') in ['admin', 'staff'] and topics %}
+      {% if not is_program_context|default(false) and session.get('role') in ['admin', 'staff'] and topics %}
       <form id="saveMasterOrderForm" method="POST" action="{{ url_for('lms_admin.reorder_master_topics', master_chapter_id=chapter.id) }}" class="order-actions">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" id="masterTopicOrdersPayload" name="topic_orders" value="">
@@ -419,9 +459,11 @@
     {% endif %}
   </div>
 
+  {% if not is_program_context|default(false) %}
   <div class="alert alert-info master-topic-info" role="alert">
     Content rows are prepared for master topics through <strong>master_topic_id</strong>. Full editor wiring is introduced in the next compatibility step to keep legacy behavior safe.
   </div>
+  {% endif %}
 
   {% if topics %}
   <div class="card shadow-sm master-topics-card">
@@ -439,8 +481,8 @@
         </thead>
         <tbody>
           {% for topic in topics %}
-          {% set can_manage = session.get('role') in ['admin', 'staff'] %}
-          <tr class="master-topic-row" data-topic-id="{{ topic.id }}" data-topic-search="{{ (topic.title ~ ' ' ~ (topic.short_description or '') ~ ' ' ~ topic.status)|lower }}" {% if can_manage %}draggable="true"{% endif %}>
+          {% set can_manage = (not is_program_context|default(false)) and session.get('role') in ['admin', 'staff'] %}
+          <tr id="master-topic-{{ topic.id }}" class="master-topic-row" data-topic-id="{{ topic.id }}" data-topic-search="{{ (topic.title ~ ' ' ~ (topic.short_description or '') ~ ' ' ~ topic.status)|lower }}" {% if can_manage %}draggable="true"{% endif %}>
             <td class="drag-cell">{% if can_manage %}<span class="drag-handle" title="Drag to reorder">↕</span>{% endif %}</td>
             <td class="topic-order-cell" data-label="Order">
               <input type="number" class="form-control form-control-sm topic-order-input" min="1" value="{{ topic.topic_order }}" {% if not can_manage %}readonly{% endif %}>
@@ -470,6 +512,12 @@
             </td>
             <td class="topic-actions-cell">
               <div class="master-topic-row-actions">
+                {% if is_program_context|default(false) %}
+                <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.preview_program_master_topic', program_id=program.id, master_topic_id=topic.id) }}" target="_blank" rel="noopener">Preview</a>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=topic.master_chapter_id) }}#master-topic-{{ topic.id }}">Open Master</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) }}">View Content</a>
+                <span class="badge bg-light text-dark">Shared topic</span>
+                {% else %}
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) }}">Manage Content</a>
                 {% if topic.lesson_content_id %}
                 <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.content_edit', content_id=topic.lesson_content_id) }}">Edit Lesson</a>
@@ -482,6 +530,7 @@
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <button type="submit" class="btn btn-sm btn-outline-danger">Archive</button>
                 </form>
+                {% endif %}
                 {% endif %}
               </div>
             </td>
@@ -497,9 +546,14 @@
   {% else %}
   <div class="card shadow-sm">
     <div class="card-body text-center py-5">
+      {% if is_program_context|default(false) %}
+      <h3 class="h5">No topics yet</h3>
+      <p class="text-muted">This linked chapter does not have topics yet.</p>
+      {% else %}
       <h3 class="h5">No master topics yet</h3>
       <p class="text-muted">Add reusable topics once, then attach this chapter to any program.</p>
       <a class="btn btn-primary" href="{{ url_for('lms_admin.master_topic_new', master_chapter_id=chapter.id) }}">Create First Topic</a>
+      {% endif %}
     </div>
   </div>
   {% endif %}
@@ -537,7 +591,7 @@
 </script>
 {% endif %}
 
-{% if session.get('role') in ['admin', 'staff'] and topics %}
+{% if not is_program_context|default(false) and session.get('role') in ['admin', 'staff'] and topics %}
 <script>
   (function initMasterTopicReorder() {
     const tbody = document.querySelector('table tbody');

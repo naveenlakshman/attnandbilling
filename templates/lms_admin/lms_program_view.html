@@ -748,7 +748,7 @@
       <div class="chapters-list">
         {% for link in summary.linked_master_chapter_items %}
         <div class="chapter-item">
-          <a class="chapter-toggle chapter-link" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=link.master_chapter_id) }}">
+          <a class="chapter-toggle chapter-link" href="{{ url_for('lms_admin.list_program_chapter_topics', program_id=summary.program.id, chapter_id=link.master_chapter_id) }}">
             <div class="chapter-info">
               <h4>{{ link.chapter_order }}. {{ link.custom_title if link.custom_title else link.master_title }}</h4>
               <div class="chapter-meta">

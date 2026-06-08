@@ -336,10 +336,12 @@
       <div class="slot-header">
         <h2 class="slot-header-title" id="assignment-slot-title">Assignments</h2>
         <div class="slot-actions">
-          <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.manage_assignments', master_topic_id=data.topic.id) }}">Manage</a>
+          <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.manage_assignments', master_topic_id=data.topic.id) }}">Manage Assignments</a>
         </div>
       </div>
       <div class="slot-body">
+        <div class="slot-content-title">Assignments</div>
+        <div class="slot-content-meta">Current Assignment: {{ data.assignment_count }}</div>
         <p class="assignments-copy">
           Upload assignment sheets for students to complete and submit. Review status and feedback stay visible to students.
         </p>

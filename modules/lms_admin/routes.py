@@ -1144,6 +1144,145 @@ def list_master_topics(master_chapter_id):
         conn.close()
 
 
+@lms_admin_bp.route('/program/<int:program_id>/chapter/<int:chapter_id>/topics', methods=['GET'])
+@login_required
+def list_program_chapter_topics(program_id, chapter_id):
+    """List shared master topics for a chapter while staying in program context."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        link = cur.execute(
+            """
+                SELECT
+                    pc.id AS link_id,
+                    pc.program_id,
+                    pc.master_chapter_id,
+                    pc.chapter_order,
+                    pc.custom_title,
+                    pc.is_visible,
+                    lp.program_name,
+                    mc.title,
+                    mc.description,
+                    mc.status,
+                    mc.created_at,
+                    mc.updated_at
+                FROM lms_program_chapters pc
+                JOIN lms_programs lp ON lp.id = pc.program_id
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                WHERE pc.program_id = ?
+                  AND pc.master_chapter_id = ?
+            """,
+            (program_id, chapter_id)
+        ).fetchone()
+
+        if not link:
+            flash('Program chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        topics = cur.execute(
+            """
+                SELECT
+                    mt.id,
+                    mt.master_chapter_id,
+                    mt.title,
+                    mt.short_description,
+                    mt.topic_order,
+                    mt.status,
+                    mt.created_at,
+                    mt.updated_at,
+                    (
+                        SELECT ltc_lesson.id
+                        FROM lms_topic_contents ltc_lesson
+                        WHERE ltc_lesson.master_topic_id = mt.id
+                          AND ltc_lesson.content_mode IN ('pdf', 'rich_text', 'interactive_image')
+                        ORDER BY ltc_lesson.display_order ASC, ltc_lesson.id ASC
+                        LIMIT 1
+                    ) AS lesson_content_id,
+                    COUNT(ltc.id) AS content_count
+                FROM lms_master_topics mt
+                LEFT JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
+                WHERE mt.master_chapter_id = ?
+                GROUP BY mt.id
+                ORDER BY mt.topic_order ASC, mt.id ASC
+            """,
+            (chapter_id,)
+        ).fetchall()
+
+        chapter = {
+            'id': link['master_chapter_id'],
+            'title': link['custom_title'] or link['title'],
+            'master_title': link['title'],
+            'description': link['description'],
+            'status': link['status'],
+            'created_at': link['created_at'],
+            'updated_at': link['updated_at'],
+            'chapter_order': link['chapter_order'],
+            'is_visible': link['is_visible'],
+        }
+        program = {
+            'id': link['program_id'],
+            'program_name': link['program_name'],
+        }
+
+        return render_template(
+            'master_topics.html',
+            chapter=chapter,
+            program=program,
+            topics=topics,
+            total_topics=len(topics),
+            is_program_context=True,
+        )
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/program/<int:program_id>/master-topic/<int:master_topic_id>/preview', methods=['GET'])
+@login_required
+def preview_program_master_topic(program_id, master_topic_id):
+    """Open a linked master topic in the student portal using read-only demo mode."""
+    conn = get_conn()
+    try:
+        topic = conn.execute(
+            """
+                SELECT mt.id, mt.title
+                FROM lms_master_topics mt
+                JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                JOIN lms_program_chapters pc
+                    ON pc.master_chapter_id = mt.master_chapter_id
+                   AND pc.program_id = ?
+                WHERE mt.id = ?
+                  AND pc.is_visible = 1
+                  AND mc.status = 'active'
+                  AND mt.status = 'active'
+                LIMIT 1
+            """,
+            (program_id, master_topic_id)
+        ).fetchone()
+
+        if not topic:
+            flash('Topic not found in this program.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+    finally:
+        conn.close()
+
+    session['student_id'] = 0
+    session['student_name'] = 'Demo Student'
+    session['student_code'] = 'DEMO'
+    session['student_login_at'] = int(datetime.utcnow().timestamp())
+    session['demo_mode'] = True
+    log_activity(
+        session.get('user_id'),
+        session.get('branch_id'),
+        'preview',
+        'lms_master_topics',
+        master_topic_id,
+        f"{session.get('role', 'user').title()} previewed master topic: {topic['title']}"
+    )
+    flash('Demo mode active - previewing this topic as a student.', 'info')
+    return redirect(url_for('students.master_topic_view', program_id=program_id, master_topic_id=master_topic_id))
+
+
 @lms_admin_bp.route('/master/chapter/<int:master_chapter_id>/topics/reorder', methods=['POST'])
 @lms_content_manager_required
 def reorder_master_topics(master_chapter_id):
@@ -1290,6 +1429,14 @@ def list_master_topic_contents(master_topic_id):
             """,
             (master_topic_id,)
         ).fetchone()
+        assignment_count = cur.execute(
+            """
+                SELECT COUNT(*) AS count
+                FROM lms_assignments
+                WHERE master_topic_id = ?
+            """,
+            (master_topic_id,)
+        ).fetchone()['count']
         # Topic-to-topic navigation within the same master chapter.
         prev_topic = cur.execute(
             """
@@ -1339,6 +1486,7 @@ def list_master_topic_contents(master_topic_id):
             'topic': topic,
             'video_content': video_content,
             'lesson_content': lesson_content,
+            'assignment_count': assignment_count,
             'prev_topic': prev_topic,
             'next_topic': next_topic,
         }
