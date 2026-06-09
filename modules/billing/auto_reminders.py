@@ -117,11 +117,15 @@ def _already_processed_today(cur, installment_id, reminder_type, run_date):
         WHERE installment_id = ?
           AND reminder_type = ?
           AND sent_via = ?
-          AND status IN ('queued', 'sent')
+          AND status IN ('queued', 'sent', 'skipped_bad_phone')
           AND substr(sent_at, 1, 10) = ?
         LIMIT 1
     """, (installment_id, reminder_type, AUTO_SMS_SENT_VIA, run_date.isoformat()))
     return cur.fetchone() is not None
+
+
+def _is_bad_phone_error(error):
+    return "invalid phone number" in (error or "").lower()
 
 
 def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
@@ -203,7 +207,13 @@ def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
                 conn.commit()
 
                 result = send_sms(phone, message)
-                status = "sent" if result.get("success") else "failed"
+                error = result.get("error")
+                if result.get("success"):
+                    status = "sent"
+                elif _is_bad_phone_error(error):
+                    status = "skipped_bad_phone"
+                else:
+                    status = "failed"
                 cur.execute(
                     "UPDATE reminder_logs SET status = ? WHERE id = ?",
                     (status, log_id),
@@ -229,7 +239,7 @@ def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
                     "phone": phone,
                     "reminder_type": reminder_type,
                     "status": status,
-                    "error": result.get("error"),
+                    "error": error,
                 })
 
             if limit and summary["eligible"] >= limit:
