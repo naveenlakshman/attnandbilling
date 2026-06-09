@@ -117,6 +117,7 @@ def _already_processed_today(cur, installment_id, reminder_type, run_date):
         WHERE installment_id = ?
           AND reminder_type = ?
           AND sent_via = ?
+          AND status IN ('queued', 'sent')
           AND substr(sent_at, 1, 10) = ?
         LIMIT 1
     """, (installment_id, reminder_type, AUTO_SMS_SENT_VIA, run_date.isoformat()))
