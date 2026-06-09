@@ -16,6 +16,23 @@ _GATEWAY_USER = os.environ.get("SMS_GATEWAY_USER", "SJDFUJ")
 _GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "2_new7cfd8f20u")
 
 
+def normalize_sms_phone(phone_number: str) -> str:
+    phone = (phone_number or "").strip()
+    if not phone:
+        return ""
+
+    if phone.startswith("+"):
+        digits = "".join(ch for ch in phone[1:] if ch.isdigit())
+        return f"+{digits}" if digits else ""
+
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if len(digits) == 10:
+        return f"+91{digits}"
+    if digits.startswith("91") and len(digits) == 12:
+        return f"+{digits}"
+    return f"+{digits}" if digits else ""
+
+
 def send_sms(phone_number: str, message_text: str) -> dict:
     """
     Send an SMS via the SMS-Gate cloud relay.

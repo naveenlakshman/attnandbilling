@@ -671,6 +671,7 @@
         <div class="d-flex gap-2 flex-wrap">
           <button class="btn btn-outline-dark btn-sm" onclick="copyReminderMessage()">📋 Copy</button>
           <button class="btn btn-success btn-sm" onclick="openWhatsApp()">💬 WhatsApp</button>
+          <button class="btn btn-info btn-sm text-white" id="smsReminderBtn" onclick="sendReminderSms()">📩 SMS</button>
           <button class="btn btn-primary btn-sm" onclick="logReminderSent()">✓ Mark Sent</button>
         </div>
       </div>
@@ -838,6 +839,47 @@ function openWhatsApp() {
   const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
   window.open(url, '_blank');
   logReminder('whatsapp_opened', 'whatsapp');
+}
+
+async function sendReminderSms() {
+  const msg = document.getElementById('rm_message').value.trim();
+  if (!msg) {
+    showToast('Message cannot be empty.', 'danger');
+    return;
+  }
+
+  const btn = document.getElementById('smsReminderBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  const payload = {
+    installment_id: currentReminder.installmentId,
+    reminder_type: currentReminder.reminderType,
+    message_text: msg
+  };
+
+  try {
+    const res = await fetch('/billing/reminder/send-sms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      updateReminderInfo(currentReminder.installmentId, data.sent_at);
+      showToast('SMS reminder sent!', 'success');
+      if (reminderModalInstance) reminderModalInstance.hide();
+    } else {
+      showToast(data.error || 'SMS failed.', 'danger');
+    }
+  } catch (e) {
+    console.error('Failed to send SMS reminder:', e);
+    showToast('SMS failed. Please try again.', 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
 }
 
 function logReminderSent() {

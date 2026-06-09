@@ -5,7 +5,7 @@ import logging
 import uuid
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
-from modules.core.sms import send_sms
+from modules.core.sms import normalize_sms_phone, send_sms
 from werkzeug.security import generate_password_hash
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 import io
@@ -4957,12 +4957,7 @@ def receivables():
     today = datetime.now().date().isoformat()
     branch_id = request.args.get("branch_id", "").strip()
     trainer_id = request.args.get("trainer_id", "").strip()
-    user_id = session.get("user_id")
     user_role = session.get("role", "staff")
-
-    # Staff users auto-filtered to their own students
-    if not trainer_id and user_role != "admin":
-        trainer_id = str(user_id)
 
     # Branches for filter
     cur.execute("""
@@ -5371,6 +5366,103 @@ def reminder_log():
     conn.close()
 
     return jsonify({"success": True, "log_id": log_id, "sent_at": now})
+
+
+@billing_bp.route("/reminder/send-sms", methods=["POST"])
+@login_required
+def reminder_send_sms():
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "No data"}), 400
+
+    installment_id = data.get("installment_id")
+    reminder_type = data.get("reminder_type", "")
+    message_text = (data.get("message_text") or "").strip()
+
+    if not installment_id or not reminder_type or not message_text:
+        return jsonify({"success": False, "error": "Missing required fields"}), 400
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            ip.id AS installment_id,
+            i.id AS invoice_id,
+            i.invoice_no,
+            i.branch_id,
+            s.id AS student_id,
+            s.full_name AS student_name,
+            s.phone AS student_phone
+        FROM installment_plans ip
+        JOIN invoices i
+            ON ip.invoice_id = i.id
+        JOIN students s
+            ON i.student_id = s.id
+        WHERE ip.id = ?
+    """, (installment_id,))
+    reminder = cur.fetchone()
+
+    if not reminder:
+        conn.close()
+        return jsonify({"success": False, "error": "Installment not found"}), 404
+
+    phone = normalize_sms_phone(reminder["student_phone"])
+    if not phone:
+        conn.close()
+        return jsonify({"success": False, "error": "Student has no phone number on record"}), 400
+
+    result = send_sms(phone, message_text)
+    now = datetime.now().isoformat(timespec="seconds")
+    status = "sent" if result.get("success") else "failed"
+    user_id = session.get("user_id")
+
+    cur.execute("""
+        INSERT INTO reminder_logs (
+            student_id, invoice_id, installment_id, phone_number,
+            reminder_type, message_text, status, sent_via, sent_by, sent_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        reminder["student_id"],
+        reminder["invoice_id"],
+        reminder["installment_id"],
+        phone,
+        reminder_type,
+        message_text,
+        status,
+        "sms",
+        user_id,
+        now,
+    ))
+    log_id = cur.lastrowid
+    conn.commit()
+
+    if result.get("success"):
+        log_activity(
+            user_id=user_id,
+            branch_id=reminder["branch_id"],
+            action_type="sms",
+            module_name="receivables",
+            record_id=reminder["installment_id"],
+            description=f"Fee reminder SMS sent to {phone} for {reminder['invoice_no']}"
+        )
+        conn.close()
+        return jsonify({
+            "success": True,
+            "log_id": log_id,
+            "sent_at": now,
+            "message_id": result.get("message_id"),
+            "status": result.get("status"),
+        })
+
+    error = result.get("error", "SMS failed")
+    conn.close()
+    return jsonify({
+        "success": False,
+        "log_id": log_id,
+        "sent_at": now,
+        "error": error,
+    }), 502
 
 
 @billing_bp.route("/expenses")
