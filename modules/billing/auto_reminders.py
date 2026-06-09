@@ -181,8 +181,6 @@ def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
                     "status": "dry_run",
                 })
             else:
-                result = send_sms(phone, message)
-                status = "sent" if result.get("success") else "failed"
                 cur.execute("""
                     INSERT INTO reminder_logs (
                         student_id, invoice_id, installment_id, phone_number,
@@ -195,11 +193,20 @@ def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
                     phone,
                     reminder_type,
                     message,
-                    status,
+                    "queued",
                     AUTO_SMS_SENT_VIA,
                     None,
                     now,
                 ))
+                log_id = cur.lastrowid
+                conn.commit()
+
+                result = send_sms(phone, message)
+                status = "sent" if result.get("success") else "failed"
+                cur.execute(
+                    "UPDATE reminder_logs SET status = ? WHERE id = ?",
+                    (status, log_id),
+                )
                 if result.get("success"):
                     summary["sent"] += 1
                     log_activity(
