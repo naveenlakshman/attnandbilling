@@ -1622,17 +1622,30 @@ function toggleComplete() {
   if (completionLockedByAssignment) return;
 
   var action = isCompleted ? 'incomplete' : 'complete';
-  var requiredConfirmation = action === 'complete' ? 'Completed' : 'Not Completed';
-  var confirmationMessage = action === 'complete'
-    ? 'Type "Completed" to mark this topic as complete.'
-    : 'Type "Not Completed" to mark this topic as not completed.';
+
+  var requiredConfirmation =
+    action === 'complete'
+      ? 'Completed'
+      : 'Not Completed';
+
+  var confirmationMessage =
+    action === 'complete'
+      ? 'Type "Completed" to mark this topic as complete.'
+      : 'Type "Not Completed" to mark this topic as not completed.';
+
   var confirmationText = window.prompt(confirmationMessage);
+
   if (confirmationText === null) return;
-  confirmationText = confirmationText.trim();
-  if (confirmationText !== requiredConfirmation) {
+
+  confirmationText = confirmationText.trim().toUpperCase();
+
+  if (confirmationText !== requiredConfirmation.toUpperCase()) {
     alert('Confirmation did not match. No changes were made.');
     return;
   }
+
+  // Continue with your existing logic here
+  console.log('Confirmation successful');
 
   var formData = new FormData();
   formData.append('action', action);

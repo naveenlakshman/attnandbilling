@@ -1227,7 +1227,7 @@ def _validate_completion_action_confirmation(action):
         return 'Invalid completion action.'
 
     confirmation_text = (request.form.get('confirmation_text') or '').strip()
-    if confirmation_text != expected_text:
+    if confirmation_text.upper() != expected_text.upper():
         return f'Type "{expected_text}" to confirm this change.'
 
     return None
