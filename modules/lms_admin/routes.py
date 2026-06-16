@@ -1729,8 +1729,8 @@ def master_topic_new(master_chapter_id):
                 description=f'Created master topic: {title} in chapter {chapter["title"]}'
             )
 
-            flash('Master topic created. Content slots will be enabled in the next compatibility step.', 'success')
-            return redirect(url_for('lms_admin.list_master_topics', master_chapter_id=master_chapter_id))
+            flash('Master topic created. Add content to complete the topic.', 'success')
+            return redirect(url_for('lms_admin.list_master_topic_contents', master_topic_id=topic_id))
 
         next_order_row = cur.execute(
             "SELECT MAX(topic_order) AS max_order FROM lms_master_topics WHERE master_chapter_id = ?",

@@ -258,7 +258,7 @@
         {% if data.next_topic %}
         <a class="btn btn-primary btn-sm" href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=data.next_topic.id) }}">Next</a>
         {% else %}
-        <button type="button" class="btn btn-primary btn-sm" disabled>Next</button>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('lms_admin.master_topic_new', master_chapter_id=data.chapter.id) }}">New</a>
         {% endif %}
 
         <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=data.chapter.id) }}">Topics</a>

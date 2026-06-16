@@ -600,7 +600,7 @@ def init_db():
             FOREIGN KEY (done_by) REFERENCES users(id)
         )
     """)
-
+    # ---------- REMINDER LOGS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS reminder_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
