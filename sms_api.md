@@ -9,8 +9,8 @@ Your SMS Gateway app runs as a background service on your Xiaomi phone. Your Fla
 
 **Cloud Server Details:**
 - **API Endpoint:** `https://api.sms-gate.app/3rdparty/v1/message`
-- **Username:** `SJDFUJ`
-- **Password:** `2_new7cfd8f20u`
+- **Username:** `DP4VDN`
+- **Password:** `qrbwcqfz-gwayf`
 - **Device ID:** `JiJwvc0JqYeBSw__15Arg`
 - **Notification Channel:** SSE Only (no Firebase required)
 
@@ -54,8 +54,8 @@ def send_sms(phone_number, message_text):
     
     # SMS Gateway Cloud API configuration
     GATEWAY_URL = "https://api.sms-gate.app/3rdparty/v1/message"
-    GATEWAY_USER = "SJDFUJ"
-    GATEWAY_PASSWORD = "2_new7cfd8f20u"
+    GATEWAY_USER = "DP4VDN"
+    GATEWAY_PASSWORD = "qrbwcqfz-gwayf"
     
     # Prepare request payload
     payload = {
@@ -200,7 +200,7 @@ def send_sms_with_retry(phone_number, message_text, retries=3):
 ### 3. **Keep Cloud Server Enabled**
 - Go to app's HOME tab
 - Cloud Server toggle must be **ON**
-- Credentials: username `SJDFUJ`, password `2_new7cfd8f20u`
+- Credentials: username `DP4VDN`, password `qrbwcqfz-gwayf`
 
 ### 4. **Production Considerations**
 - Store credentials in environment variables, not hardcoded
@@ -318,7 +318,7 @@ def send_sms(phone_number, message_text):
     response = requests.post(
         "https://api.sms-gate.app/3rdparty/v1/message",
         json={"textMessage": {"text": message_text}, "phoneNumbers": [phone_number]},
-        auth=HTTPBasicAuth("SJDFUJ", "2_new7cfd8f20u"),
+        auth=HTTPBasicAuth("DP4VDN", "qrbwcqfz-gwayf"),
         timeout=10
     )
     return response.json()

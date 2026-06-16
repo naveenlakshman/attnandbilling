@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 # Read credentials from environment — set these in your .env file.
 _GATEWAY_URL = "https://api.sms-gate.app/3rdparty/v1/message"
-_GATEWAY_USER = os.environ.get("SMS_GATEWAY_USER", "SJDFUJ")
-_GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "2_new7cfd8f20u")
+_GATEWAY_USER = os.environ.get("SMS_GATEWAY_USER", "DP4VDN")
+_GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "qrbwcqfz-gwayf")
 
 
 def normalize_sms_phone(phone_number: str) -> str:
