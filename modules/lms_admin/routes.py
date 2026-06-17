@@ -1127,6 +1127,13 @@ def list_master_topics(master_chapter_id):
                         ORDER BY ltc_lesson.display_order ASC, ltc_lesson.id ASC
                         LIMIT 1
                     ) AS lesson_content_id,
+                    MAX(CASE WHEN ltc.content_mode = 'youtube' THEN 1 ELSE 0 END) AS has_video_content,
+                    MAX(CASE WHEN ltc.content_mode IN ('pdf', 'rich_text', 'interactive_image') THEN 1 ELSE 0 END) AS has_lesson_content,
+                    (
+                        SELECT COUNT(*)
+                        FROM lms_assignments la
+                        WHERE la.master_topic_id = mt.id
+                    ) AS assignment_count,
                     COUNT(ltc.id) AS content_count
                 FROM lms_master_topics mt
                 LEFT JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id
@@ -1199,6 +1206,13 @@ def list_program_chapter_topics(program_id, chapter_id):
                         ORDER BY ltc_lesson.display_order ASC, ltc_lesson.id ASC
                         LIMIT 1
                     ) AS lesson_content_id,
+                    MAX(CASE WHEN ltc.content_mode = 'youtube' THEN 1 ELSE 0 END) AS has_video_content,
+                    MAX(CASE WHEN ltc.content_mode IN ('pdf', 'rich_text', 'interactive_image') THEN 1 ELSE 0 END) AS has_lesson_content,
+                    (
+                        SELECT COUNT(*)
+                        FROM lms_assignments la
+                        WHERE la.master_topic_id = mt.id
+                    ) AS assignment_count,
                     COUNT(ltc.id) AS content_count
                 FROM lms_master_topics mt
                 LEFT JOIN lms_topic_contents ltc ON ltc.master_topic_id = mt.id

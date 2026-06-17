@@ -170,6 +170,47 @@
     gap: 8px;
   }
 
+  .content-slot-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 210px;
+  }
+
+  .content-slot-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 26px;
+    padding: .22rem .48rem;
+    border: 1px solid #d1d5db;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: .76rem;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .content-slot-pill::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #cbd5e1;
+  }
+
+  .content-slot-pill.is-ready {
+    border-color: #86efac;
+    background: #ecfdf3;
+    color: #166534;
+  }
+
+  .content-slot-pill.is-ready::before {
+    background: #16a34a;
+  }
+
   @media (max-width: 767.98px) {
     .master-topics-page {
       margin-top: -2px;
@@ -361,6 +402,10 @@
       order: 3;
     }
 
+    .content-slot-list {
+      min-width: 0;
+    }
+
     .topic-status-cell {
       display: none !important;
     }
@@ -474,7 +519,7 @@
             <th class="drag-cell"></th>
             <th style="width: 90px;">Order</th>
             <th>Topic</th>
-            <th style="width: 120px;">Content</th>
+            <th style="width: 280px;">Content</th>
             <th style="width: 140px;">Status</th>
             <th style="width: 420px;">Actions</th>
           </tr>
@@ -482,7 +527,8 @@
         <tbody>
           {% for topic in topics %}
           {% set can_manage = (not is_program_context|default(false)) and session.get('role') in ['admin', 'staff'] %}
-          <tr id="master-topic-{{ topic.id }}" class="master-topic-row" data-topic-id="{{ topic.id }}" data-topic-search="{{ (topic.title ~ ' ' ~ (topic.short_description or '') ~ ' ' ~ topic.status)|lower }}" {% if can_manage %}draggable="true"{% endif %}>
+          {% set content_search = (' video' if topic.has_video_content else '') ~ (' lesson pdf rich text' if topic.has_lesson_content else '') ~ (' assignment' if topic.assignment_count else '') %}
+          <tr id="master-topic-{{ topic.id }}" class="master-topic-row" data-topic-id="{{ topic.id }}" data-topic-search="{{ (topic.title ~ ' ' ~ (topic.short_description or '') ~ ' ' ~ topic.status ~ content_search)|lower }}" {% if can_manage %}draggable="true"{% endif %}>
             <td class="drag-cell">{% if can_manage %}<span class="drag-handle" title="Drag to reorder">↕</span>{% endif %}</td>
             <td class="topic-order-cell" data-label="Order">
               <input type="number" class="form-control form-control-sm topic-order-input" min="1" value="{{ topic.topic_order }}" {% if not can_manage %}readonly{% endif %}>
@@ -502,7 +548,15 @@
                 {% endif %}
               </div>
             </td>
-            <td class="topic-content-cell" data-label="Content"><span class="badge bg-primary">{{ topic.content_count }}</span></td>
+            <td class="topic-content-cell" data-label="Content">
+              <div class="content-slot-list" aria-label="Content slots">
+                <span class="content-slot-pill {% if topic.has_video_content %}is-ready{% endif %}" title="{% if topic.has_video_content %}Video added{% else %}Video missing{% endif %}">Video</span>
+                <span class="content-slot-pill {% if topic.has_lesson_content %}is-ready{% endif %}" title="{% if topic.has_lesson_content %}Lesson added{% else %}Lesson missing{% endif %}">Lesson</span>
+                <span class="content-slot-pill {% if topic.assignment_count %}is-ready{% endif %}" title="{% if topic.assignment_count %}Assignment added{% else %}Assignment missing{% endif %}">
+                  Assignment{% if topic.assignment_count and topic.assignment_count > 1 %} {{ topic.assignment_count }}{% endif %}
+                </span>
+              </div>
+            </td>
             <td class="topic-status-cell" data-label="Status">
               {% if topic.status == 'active' %}
               <span class="badge bg-success">Active</span>
