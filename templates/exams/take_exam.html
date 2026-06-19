@@ -1,0 +1,195 @@
+{% extends "students/base.html" %}
+
+{% block title %}Chapter Mock Test{% endblock %}
+
+{% block content %}
+<style>
+  .mock-test-page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 18px;
+  }
+
+  .mock-test-header {
+    margin-bottom: 16px;
+  }
+
+  .mock-test-header h1 {
+    margin: 0;
+    color: #111827;
+    font-size: 1.55rem;
+    font-weight: 800;
+  }
+
+  .mock-test-header p {
+    margin: 4px 0 0;
+    color: #64748b;
+  }
+
+  #exam-timer-wrapper {
+    font-size: 1.1rem;
+  }
+
+  .question-list {
+    display: grid;
+    gap: 14px;
+  }
+
+  .question-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+  }
+
+  .question-card-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: .82rem;
+    font-weight: 800;
+  }
+
+  .question-card-body {
+    padding: 14px;
+  }
+
+  .question-text {
+    color: #111827;
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  .question-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  .option-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .option-choice {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    min-height: 42px;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .mock-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 18px;
+  }
+
+  @media (max-width: 767.98px) {
+    .option-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<main class="mock-test-page">
+  <header class="mock-test-header">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="mb-0">Chapter Mock Test</h4>
+      <div id="exam-timer-wrapper" class="badge badge-danger bg-danger p-2">
+        Time Left: <span id="timer-countdown">--:--</span>
+      </div>
+    </div>
+    <div>
+      <p>{{ chapter.title }} · {{ question_count }} question{{ '' if question_count == 1 else 's' }}</p>
+    </div>
+  </header>
+
+  <form method="POST" action="{{ url_for('exams.submit_chapter_mock') }}" id="chapterMockForm" data-duration-seconds="{{ exam_duration_seconds|default(1200) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <section class="question-list">
+      {% for question in questions %}
+      <article class="question-card">
+        <div class="question-card-header">Question {{ loop.index }}</div>
+        <div class="question-card-body">
+          <div class="question-text">{{ question.question_text|safe }}</div>
+          <div class="option-grid">
+            <label class="option-choice">
+              <input type="radio" name="answer_{{ question.id }}" value="A">
+              <span><strong>A.</strong> {{ question.option_a }}</span>
+            </label>
+            <label class="option-choice">
+              <input type="radio" name="answer_{{ question.id }}" value="B">
+              <span><strong>B.</strong> {{ question.option_b }}</span>
+            </label>
+            <label class="option-choice">
+              <input type="radio" name="answer_{{ question.id }}" value="C">
+              <span><strong>C.</strong> {{ question.option_c }}</span>
+            </label>
+            <label class="option-choice">
+              <input type="radio" name="answer_{{ question.id }}" value="D">
+              <span><strong>D.</strong> {{ question.option_d }}</span>
+            </label>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </section>
+
+    <div class="mock-actions">
+      <button type="submit" class="btn btn-primary" id="submitExamBtn" disabled>Submit Test</button>
+    </div>
+  </form>
+</main>
+
+<script>
+  (function () {
+    var form = document.getElementById('chapterMockForm');
+    var countdown = document.getElementById('timer-countdown');
+    var submitBtn = document.getElementById('submitExamBtn');
+    if (!form || !countdown || !submitBtn) {
+      return;
+    }
+
+    var remainingSeconds = parseInt(form.getAttribute('data-duration-seconds') || '1200', 10);
+    var submitted = false;
+
+    function renderTimer() {
+      var safeSeconds = Math.max(remainingSeconds, 0);
+      var minutes = Math.floor(safeSeconds / 60);
+      var seconds = safeSeconds % 60;
+      countdown.textContent = String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    }
+
+    submitBtn.disabled = false;
+    renderTimer();
+
+    var timer = window.setInterval(function () {
+      remainingSeconds -= 1;
+      renderTimer();
+
+      if (remainingSeconds <= 0) {
+        window.clearInterval(timer);
+        if (!submitted) {
+          submitted = true;
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Submitting...';
+          form.submit();
+        }
+      }
+    }, 1000);
+
+    form.addEventListener('submit', function () {
+      submitted = true;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+    });
+  })();
+</script>
+{% endblock %}

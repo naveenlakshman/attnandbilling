@@ -1,3 +1,5 @@
+import random
+
 from flask import flash, redirect, render_template, request, session, url_for
 
 from db import get_conn, log_activity
@@ -92,7 +94,14 @@ def _validate_question_fields(fields):
     return None
 
 
-@exams_bp.route("/manage", methods=["GET"])
+def _student_required_redirect():
+    if "student_id" not in session:
+        flash("Please login first.", "warning")
+        return redirect(url_for("students.login"))
+    return None
+
+
+@exams_bp.route("/lms_admin/questions/manage", methods=["GET"])
 @lms_content_manager_required
 def manage_questions():
     conn = get_conn()
@@ -114,7 +123,7 @@ def manage_questions():
         conn.close()
 
 
-@exams_bp.route("/view", methods=["GET"])
+@exams_bp.route("/lms_admin/questions/view", methods=["GET"])
 @lms_content_manager_required
 def view_questions():
     conn = get_conn()
@@ -131,7 +140,7 @@ def view_questions():
         conn.close()
 
 
-@exams_bp.route("/edit/<int:question_id>", methods=["GET"])
+@exams_bp.route("/lms_admin/questions/edit/<int:question_id>", methods=["GET"])
 @lms_content_manager_required
 def edit_question(question_id):
     conn = get_conn()
@@ -161,7 +170,7 @@ def edit_question(question_id):
         conn.close()
 
 
-@exams_bp.route("/add", methods=["POST"])
+@exams_bp.route("/lms_admin/questions/add", methods=["POST"])
 @lms_content_manager_required
 def add_question():
     fields = _question_form_fields()
@@ -224,7 +233,7 @@ def add_question():
     return redirect(url_for("exams.view_questions"))
 
 
-@exams_bp.route("/update/<int:question_id>", methods=["POST"])
+@exams_bp.route("/lms_admin/questions/update/<int:question_id>", methods=["POST"])
 @lms_content_manager_required
 def update_question(question_id):
     fields = _question_form_fields()
@@ -296,7 +305,7 @@ def update_question(question_id):
     return redirect(url_for("exams.view_questions"))
 
 
-@exams_bp.route("/delete/<int:question_id>", methods=["GET", "POST"])
+@exams_bp.route("/lms_admin/questions/delete/<int:question_id>", methods=["GET", "POST"])
 @lms_content_manager_required
 def delete_question(question_id):
     conn = get_conn()
@@ -326,3 +335,125 @@ def delete_question(question_id):
         conn.close()
 
     return redirect(url_for("exams.view_questions"))
+
+
+@exams_bp.route("/student/mock/setup/<int:chapter_id>", methods=["GET"])
+def chapter_mock_intro(chapter_id):
+    auth_redirect = _student_required_redirect()
+    if auth_redirect:
+        return auth_redirect
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        chapter = cur.execute(
+            "SELECT id, title FROM lms_master_chapters WHERE id = ?",
+            (chapter_id,),
+        ).fetchone()
+        if not chapter:
+            flash("Chapter mock test was not found.", "warning")
+            return redirect(url_for("students.dashboard"))
+
+        questions = cur.execute(
+            """
+                SELECT
+                    id,
+                    chapter_id,
+                    question_text,
+                    option_a,
+                    option_b,
+                    option_c,
+                    option_d,
+                    question_type
+                FROM lms_question_bank
+                WHERE chapter_id = ?
+            """,
+            (chapter_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    questions = list(questions)
+    if not questions:
+        flash("No mock test questions are available for this chapter yet.", "warning")
+        return redirect(url_for("students.dashboard"))
+
+    random.shuffle(questions)
+    selected_questions = questions[:20]
+    selected_ids = [question["id"] for question in selected_questions]
+
+    conn = get_conn()
+    try:
+        answer_rows = conn.execute(
+            f"""
+                SELECT id, correct_option
+                FROM lms_question_bank
+                WHERE id IN ({','.join('?' for _ in selected_ids)})
+            """,
+            selected_ids,
+        ).fetchall()
+    finally:
+        conn.close()
+
+    session["chapter_mock_answers"] = {
+        "chapter_id": chapter_id,
+        "question_ids": selected_ids,
+        "answers": {str(row["id"]): row["correct_option"] for row in answer_rows},
+    }
+    session.modified = True
+
+    return render_template(
+        "exams/take_exam.html",
+        chapter=chapter,
+        questions=selected_questions,
+        question_count=len(selected_questions),
+        exam_duration_seconds=20 * 60,
+    )
+
+
+@exams_bp.route("/student/mock/submit", methods=["POST"])
+def submit_chapter_mock():
+    auth_redirect = _student_required_redirect()
+    if auth_redirect:
+        return auth_redirect
+
+    mock = session.get("chapter_mock_answers") or {}
+    answer_key = mock.get("answers") or {}
+    question_ids = mock.get("question_ids") or []
+    chapter_id = mock.get("chapter_id")
+
+    if not answer_key or not question_ids or not chapter_id:
+        flash("Your mock test session has expired. Please start the mock test again.", "warning")
+        return redirect(url_for("students.dashboard"))
+
+    submitted_answers = {
+        str(question_id): request.form.get(f"answer_{question_id}", "").strip().upper()
+        for question_id in question_ids
+    }
+    correct_count = sum(
+        1
+        for question_id, correct_option in answer_key.items()
+        if submitted_answers.get(question_id) == correct_option
+    )
+    total_questions = len(question_ids)
+    score_percent = round((correct_count / total_questions) * 100, 1) if total_questions else 0
+
+    conn = get_conn()
+    try:
+        chapter = conn.execute(
+            "SELECT id, title FROM lms_master_chapters WHERE id = ?",
+            (chapter_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    session.pop("chapter_mock_answers", None)
+    session.modified = True
+
+    return render_template(
+        "exams/mock_result.html",
+        chapter=chapter,
+        correct_count=correct_count,
+        total_questions=total_questions,
+        score_percent=score_percent,
+    )

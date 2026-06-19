@@ -1,0 +1,22 @@
+{% extends "students/base.html" %}
+
+{% block title %}Mock Test Result{% endblock %}
+
+{% block content %}
+<main class="container py-4" style="max-width: 760px;">
+  <div class="card shadow-sm">
+    <div class="card-body text-center p-4">
+      <h1 class="h4 mb-2">Mock Test Result</h1>
+      <p class="text-muted mb-4">{{ chapter.title if chapter else 'Chapter Mock Test' }}</p>
+
+      <div class="display-6 fw-bold text-primary mb-2">{{ score_percent }}%</div>
+      <p class="mb-4">
+        You answered <strong>{{ correct_count }}</strong> out of
+        <strong>{{ total_questions }}</strong> questions correctly.
+      </p>
+
+      <a class="btn btn-primary" href="{{ url_for('students.dashboard') }}">Back to Dashboard</a>
+    </div>
+  </div>
+</main>
+{% endblock %}

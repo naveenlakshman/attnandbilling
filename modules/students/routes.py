@@ -362,6 +362,102 @@ def _next_master_topic_for_program(conn, program_id, master_topic_id):
     return ordered_topic_ids[current_index + 1]
 
 
+def _completed_legacy_chapter_mock_url(conn, student_id, topic_id):
+    """Return a mock setup URL when a legacy chapter's active topics are all complete."""
+    topic = conn.execute(
+        """
+            SELECT lt.id, lt.chapter_id
+            FROM lms_topics lt
+            WHERE lt.id = ?
+        """,
+        (topic_id,)
+    ).fetchone()
+    if not topic:
+        return None
+
+    counts = conn.execute(
+        """
+            SELECT
+                COUNT(*) AS total_topics,
+                SUM(CASE WHEN COALESCE(tp.is_completed, 0) = 1 THEN 1 ELSE 0 END) AS completed_topics
+            FROM lms_topics lt
+            LEFT JOIN lms_topic_progress tp
+                ON tp.topic_id = lt.id
+               AND tp.student_id = ?
+            WHERE lt.chapter_id = ?
+              AND lt.is_active = 1
+        """,
+        (student_id, topic['chapter_id'])
+    ).fetchone()
+
+    if not counts or not counts['total_topics'] or counts['completed_topics'] != counts['total_topics']:
+        return None
+
+    master_chapter = conn.execute(
+        """
+            SELECT mt.master_chapter_id
+            FROM lms_master_topic_bridge b
+            JOIN lms_master_topics mt ON mt.id = b.master_topic_id
+            JOIN lms_topics lt ON lt.id = b.legacy_topic_id
+            WHERE lt.chapter_id = ?
+            LIMIT 1
+        """,
+        (topic['chapter_id'],)
+    ).fetchone()
+
+    question_chapter_id = master_chapter['master_chapter_id'] if master_chapter else topic['chapter_id']
+    has_questions = conn.execute(
+        "SELECT 1 FROM lms_question_bank WHERE chapter_id = ? LIMIT 1",
+        (question_chapter_id,)
+    ).fetchone()
+    if not has_questions:
+        return None
+
+    return url_for('exams.chapter_mock_intro', chapter_id=question_chapter_id)
+
+
+def _completed_master_chapter_mock_url(conn, student_id, program_id, master_topic_id):
+    """Return a mock setup URL when a reusable chapter's active topics are all complete."""
+    topic = conn.execute(
+        """
+            SELECT master_chapter_id
+            FROM lms_master_topics
+            WHERE id = ?
+        """,
+        (master_topic_id,)
+    ).fetchone()
+    if not topic:
+        return None
+
+    counts = conn.execute(
+        """
+            SELECT
+                COUNT(*) AS total_topics,
+                SUM(CASE WHEN COALESCE(mp.is_completed, 0) = 1 THEN 1 ELSE 0 END) AS completed_topics
+            FROM lms_master_topics mt
+            LEFT JOIN lms_master_topic_progress mp
+                ON mp.master_topic_id = mt.id
+               AND mp.student_id = ?
+               AND mp.program_id = ?
+            WHERE mt.master_chapter_id = ?
+              AND mt.status = 'active'
+        """,
+        (student_id, program_id, topic['master_chapter_id'])
+    ).fetchone()
+
+    if not counts or not counts['total_topics'] or counts['completed_topics'] != counts['total_topics']:
+        return None
+
+    has_questions = conn.execute(
+        "SELECT 1 FROM lms_question_bank WHERE chapter_id = ? LIMIT 1",
+        (topic['master_chapter_id'],)
+    ).fetchone()
+    if not has_questions:
+        return None
+
+    return url_for('exams.chapter_mock_intro', chapter_id=topic['master_chapter_id'])
+
+
 def _last_master_topic_for_program(conn, student_id, program_id):
     """Return the student's last valid active master topic for this program."""
     if not student_id or _is_demo():
@@ -1260,8 +1356,13 @@ def mark_complete(topic_id):
                 VALUES (?, ?, 0)
                 ON CONFLICT(student_id, topic_id) DO UPDATE SET is_completed=0, completed_at=NULL
             """, (student_id, topic_id))
+        mock_url = (
+            _completed_legacy_chapter_mock_url(conn, student_id, topic_id)
+            if action == 'complete'
+            else None
+        )
         conn.commit()
-        return jsonify({'status': 'ok', 'action': action})
+        return jsonify({'status': 'ok', 'action': action, 'next_topic_url': mock_url})
     finally:
         conn.close()
 
@@ -1333,6 +1434,13 @@ def mark_master_complete(program_id, master_topic_id):
             )
             if next_master_topic_id and action == 'complete':
                 _save_last_master_topic(conn, student_id, program_id, next_master_topic_id)
+            mock_url = (
+                _completed_master_chapter_mock_url(conn, student_id, program_id, master_topic_id)
+                if action == 'complete'
+                else None
+            )
+            if mock_url:
+                next_topic_url = mock_url
             conn.commit()
             if action != 'complete':
                 return jsonify({
@@ -1363,6 +1471,9 @@ def mark_master_complete(program_id, master_topic_id):
             )
             if next_master_topic_id:
                 _save_last_master_topic(conn, student_id, program_id, next_master_topic_id)
+            mock_url = _completed_master_chapter_mock_url(conn, student_id, program_id, master_topic_id)
+            if mock_url:
+                next_topic_url = mock_url
         else:
             conn.execute(
                 """
