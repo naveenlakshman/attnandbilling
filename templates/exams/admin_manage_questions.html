@@ -1,0 +1,253 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}{{ page_heading|default('Add Question') }} - LMS Admin{% endblock %}
+{% block page_title %}Question Bank{% endblock %}
+
+{% block extra_css %}
+<style>
+  .question-form-page {
+    display: grid;
+    gap: 18px;
+  }
+
+  .question-form-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .question-form-header h1 {
+    margin: 0;
+    color: #111827;
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .question-form-header p {
+    margin: 4px 0 0;
+    color: #64748b;
+  }
+
+  .question-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+  }
+
+  .question-card .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+    font-weight: 800;
+  }
+
+  .question-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .question-form-grid .full-span {
+    grid-column: 1 / -1;
+  }
+
+  .form-label {
+    color: #111827;
+    font-size: .88rem;
+    font-weight: 700;
+  }
+
+  .form-control,
+  .form-select {
+    border-radius: 8px;
+  }
+
+  .form-action-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  @media (max-width: 767.98px) {
+    .question-form-header {
+      display: grid;
+    }
+
+    .question-form-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .form-action-row {
+      display: grid;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="question-form-page">
+  <header class="question-form-header">
+    <div>
+      <h1>{{ page_heading|default('Add Question') }}</h1>
+      <p>{{ page_subtitle|default('Create MCQ questions linked to reusable LMS chapters.') }}</p>
+    </div>
+    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('exams.view_questions') }}">View Questions</a>
+  </header>
+
+  <section class="card question-card">
+    <div class="card-header">
+      <span>{{ submit_label|default('Add Question') }}</span>
+      <span class="badge bg-primary">MCQ</span>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="{{ form_action|default(url_for('exams.add_question')) }}" id="questionForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="question-form-grid">
+          <div>
+            <label class="form-label" for="programFilter">Program / Course</label>
+            <select class="form-select" id="programFilter">
+              <option value="">All programs</option>
+              {% for program in programs %}
+              <option value="{{ program.id }}">
+                {{ program.program_name }}{% if program.course_name %} - {{ program.course_name }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label class="form-label" for="chapterSelect">Chapter <span class="text-danger">*</span></label>
+            <select class="form-select" id="chapterSelect" name="chapter_id" required>
+              <option value="">Select chapter</option>
+              {% for chapter in chapters %}
+              <option
+                value="{{ chapter.id }}"
+                data-program-ids="{{ chapter.program_ids or '' }}"
+                {% if question and question.chapter_id == chapter.id %}selected{% endif %}>
+                {{ chapter.title }}{% if chapter.status == 'archived' %} (Archived){% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="full-span">
+            <label class="form-label" for="question_text">Question Text <span class="text-danger">*</span></label>
+            <textarea class="form-control" id="question_text" name="question_text" rows="4" required>{{ question.question_text if question else '' }}</textarea>
+          </div>
+
+          <div>
+            <label class="form-label" for="optionA">Option A <span class="text-danger">*</span></label>
+            <input class="form-control" id="optionA" name="option_a" value="{{ question.option_a if question else '' }}" required>
+          </div>
+
+          <div>
+            <label class="form-label" for="optionB">Option B <span class="text-danger">*</span></label>
+            <input class="form-control" id="optionB" name="option_b" value="{{ question.option_b if question else '' }}" required>
+          </div>
+
+          <div>
+            <label class="form-label" for="optionC">Option C <span class="text-danger">*</span></label>
+            <input class="form-control" id="optionC" name="option_c" value="{{ question.option_c if question else '' }}" required>
+          </div>
+
+          <div>
+            <label class="form-label" for="optionD">Option D <span class="text-danger">*</span></label>
+            <input class="form-control" id="optionD" name="option_d" value="{{ question.option_d if question else '' }}" required>
+          </div>
+
+          <div>
+            <label class="form-label" for="correctOption">Correct Answer Option <span class="text-danger">*</span></label>
+            <select class="form-select" id="correctOption" name="correct_option" required>
+              <option value="">Select answer</option>
+              {% for option in ['A', 'B', 'C', 'D'] %}
+              <option value="{{ option }}" {% if question and question.correct_option == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="d-flex align-items-end">
+            <button type="submit" class="btn btn-primary w-100">{{ submit_label|default('Add Question') }}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+
+<script>
+  (function () {
+    var programFilter = document.getElementById('programFilter');
+    var chapterSelect = document.getElementById('chapterSelect');
+    if (!programFilter || !chapterSelect) {
+      return;
+    }
+
+    var chapterOptions = Array.prototype.slice.call(chapterSelect.options);
+
+    function optionMatchesProgram(option, programId) {
+      if (!option.value || !programId) {
+        return true;
+      }
+      var ids = (option.getAttribute('data-program-ids') || '').split(',').filter(Boolean);
+      return ids.indexOf(programId) !== -1;
+    }
+
+    function filterChapters() {
+      var programId = programFilter.value;
+      var selectedOption = chapterSelect.options[chapterSelect.selectedIndex];
+      var selectedStillVisible = selectedOption && optionMatchesProgram(selectedOption, programId);
+
+      chapterOptions.forEach(function (option) {
+        option.hidden = !optionMatchesProgram(option, programId);
+      });
+
+      if (!selectedStillVisible) {
+        chapterSelect.value = '';
+      }
+    }
+
+    programFilter.addEventListener('change', filterChapters);
+    filterChapters();
+  })();
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.tiny.cloud/1/{{ config['TINYMCE_API_KEY'] }}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    if (!window.tinymce || !document.getElementById('question_text')) {
+      return;
+    }
+
+    tinymce.init({
+      selector: '#question_text',
+      plugins: 'lists link table code wordcount autoresize',
+      toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link table | code',
+      menubar: false,
+      branding: false,
+      min_height: 220,
+      autoresize_bottom_margin: 16,
+      content_style: 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.6; }',
+      setup: function (editor) {
+        editor.on('change keyup', function () {
+          editor.save();
+        });
+      }
+    });
+
+    var form = document.getElementById('questionForm');
+    if (form) {
+      form.addEventListener('submit', function () {
+        tinymce.triggerSave();
+      });
+    }
+  });
+</script>
+{% endblock %}

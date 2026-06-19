@@ -857,6 +857,22 @@ def init_db():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_question_bank (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chapter_id INTEGER NOT NULL,
+            question_text TEXT NOT NULL,
+            option_a TEXT NOT NULL,
+            option_b TEXT NOT NULL,
+            option_c TEXT NOT NULL,
+            option_d TEXT NOT NULL,
+            correct_option TEXT NOT NULL CHECK(correct_option IN ('A', 'B', 'C', 'D')),
+            question_type TEXT NOT NULL DEFAULT 'MCQ',
+            FOREIGN KEY (chapter_id) REFERENCES lms_master_chapters(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_question_bank_chapter ON lms_question_bank(chapter_id)")
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_master_topics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             master_chapter_id INTEGER NOT NULL,

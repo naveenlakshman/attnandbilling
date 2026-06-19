@@ -14,6 +14,7 @@ from modules.import_export.routes import import_export_bp
 from modules.baddebt.routes import baddebt_bp
 from modules.attendance.routes import attendance_bp
 from modules.lms_admin import lms_admin_bp
+from modules.exams.routes import exams_bp
 from modules.students import students_bp
 from modules.website import website_bp
 from modules.core.utils import login_required
@@ -70,6 +71,7 @@ def create_app():
     app.register_blueprint(baddebt_bp, url_prefix="/baddebt")
     app.register_blueprint(attendance_bp, url_prefix="/attendance")
     app.register_blueprint(lms_admin_bp)
+    app.register_blueprint(exams_bp)
     app.register_blueprint(students_bp)
 
     # File serving route for uploaded content

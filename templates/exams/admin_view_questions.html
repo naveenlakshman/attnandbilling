@@ -1,0 +1,302 @@
+{% extends "lms_admin/base.html" %}
+
+{% block title %}View Questions - LMS Admin{% endblock %}
+{% block page_title %}Question Bank{% endblock %}
+
+{% block extra_css %}
+<style>
+  .question-view-page {
+    display: grid;
+    gap: 16px;
+  }
+
+  .question-view-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .question-view-header h1 {
+    margin: 0;
+    color: #111827;
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .question-view-header p {
+    margin: 4px 0 0;
+    color: #64748b;
+  }
+
+  .question-controls {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+    padding: 14px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+  }
+
+  .question-card-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .question-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+  }
+
+  .question-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f8fafc;
+  }
+
+  .question-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    color: #64748b;
+    font-size: .82rem;
+    font-weight: 700;
+  }
+
+  .question-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .question-actions form {
+    display: contents;
+  }
+
+  .question-body {
+    padding: 16px;
+  }
+
+  .question-text {
+    color: #111827;
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  .question-text p:last-child {
+    margin-bottom: 0;
+  }
+
+  .answer-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .answer-option {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    color: #334155;
+  }
+
+  .answer-option.is-correct {
+    border-color: #86efac;
+    background: #dcfce7;
+    color: #166534;
+    font-weight: 800;
+  }
+
+  .empty-state {
+    padding: 34px 18px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    color: #64748b;
+    text-align: center;
+  }
+
+  @media (max-width: 767.98px) {
+    .question-view-header,
+    .question-card-header {
+      display: grid;
+    }
+
+    .question-controls,
+    .answer-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .question-actions {
+      justify-content: stretch;
+    }
+
+    .question-actions .btn {
+      flex: 1 1 auto;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="question-view-page">
+  <header class="question-view-header">
+    <div>
+      <h1>View Questions</h1>
+      <p>Browse, filter, edit, and delete question bank entries.</p>
+    </div>
+    <span class="badge bg-primary align-self-start">{{ questions|length }} question{{ '' if questions|length == 1 else 's' }}</span>
+  </header>
+
+  <section class="question-controls" aria-label="Question filters">
+    <div>
+      <label class="form-label" for="programFilter">Program / Course</label>
+      <select class="form-select" id="programFilter">
+        <option value="">All programs</option>
+        {% for program in programs %}
+        <option value="{{ program.id }}">
+          {{ program.program_name }}{% if program.course_name %} - {{ program.course_name }}{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label class="form-label" for="chapterFilter">Chapter</label>
+      <select class="form-select" id="chapterFilter">
+        <option value="">All chapters</option>
+        {% for chapter in chapters %}
+        <option value="{{ chapter.id }}" data-program-ids="{{ chapter.program_ids or '' }}">
+          {{ chapter.title }}{% if chapter.status == 'archived' %} (Archived){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <a class="btn btn-primary" href="{{ url_for('exams.manage_questions') }}">+ Add New Question</a>
+  </section>
+
+  {% if questions %}
+  <section class="question-card-list" id="questionCardList">
+    {% for question in questions %}
+    <article
+      class="card question-card"
+      data-question-card
+      data-chapter-id="{{ question.chapter_id }}"
+      data-program-ids="{{ question.program_ids or '' }}">
+      <div class="question-card-header">
+        <div class="question-meta">
+          <span>#{{ question.id }}</span>
+          <span>{{ question.chapter_name }}</span>
+          <span class="badge bg-light text-dark">{{ question.question_type or 'MCQ' }}</span>
+        </div>
+        <div class="question-actions">
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('exams.edit_question', question_id=question.id) }}">Edit</a>
+          <form method="POST" action="{{ url_for('exams.delete_question', question_id=question.id) }}" onsubmit="return confirm('Delete this question?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
+        </div>
+      </div>
+      <div class="question-body">
+        <div class="question-text">{{ question.question_text|safe }}</div>
+        <div class="answer-grid">
+          <div class="answer-option {% if question.correct_option == 'A' %}is-correct{% endif %}"><strong>A.</strong> {{ question.option_a }}</div>
+          <div class="answer-option {% if question.correct_option == 'B' %}is-correct{% endif %}"><strong>B.</strong> {{ question.option_b }}</div>
+          <div class="answer-option {% if question.correct_option == 'C' %}is-correct{% endif %}"><strong>C.</strong> {{ question.option_c }}</div>
+          <div class="answer-option {% if question.correct_option == 'D' %}is-correct{% endif %}"><strong>D.</strong> {{ question.option_d }}</div>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </section>
+  <div class="empty-state" id="emptyFilterState" hidden>No questions match the selected filters.</div>
+  {% else %}
+  <div class="empty-state">
+    No questions have been added yet.
+    <div class="mt-3">
+      <a class="btn btn-primary btn-sm" href="{{ url_for('exams.manage_questions') }}">Add First Question</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+  (function () {
+    var programFilter = document.getElementById('programFilter');
+    var chapterFilter = document.getElementById('chapterFilter');
+    var cards = Array.prototype.slice.call(document.querySelectorAll('[data-question-card]'));
+    var emptyState = document.getElementById('emptyFilterState');
+    if (!programFilter || !chapterFilter) {
+      return;
+    }
+
+    var chapterOptions = Array.prototype.slice.call(chapterFilter.options);
+
+    function idsFor(element) {
+      return (element.getAttribute('data-program-ids') || '').split(',').filter(Boolean);
+    }
+
+    function matchesProgram(element, programId) {
+      if (!programId) {
+        return true;
+      }
+      return idsFor(element).indexOf(programId) !== -1;
+    }
+
+    function filterChapterOptions() {
+      var programId = programFilter.value;
+      var selectedOption = chapterFilter.options[chapterFilter.selectedIndex];
+      chapterOptions.forEach(function (option) {
+        option.hidden = Boolean(option.value) && !matchesProgram(option, programId);
+      });
+      if (selectedOption && selectedOption.hidden) {
+        chapterFilter.value = '';
+      }
+    }
+
+    function filterCards() {
+      var programId = programFilter.value;
+      var chapterId = chapterFilter.value;
+      var visibleCount = 0;
+
+      cards.forEach(function (card) {
+        var programOk = matchesProgram(card, programId);
+        var chapterOk = !chapterId || card.getAttribute('data-chapter-id') === chapterId;
+        var visible = programOk && chapterOk;
+        card.hidden = !visible;
+        if (visible) {
+          visibleCount += 1;
+        }
+      });
+
+      if (emptyState) {
+        emptyState.hidden = visibleCount !== 0;
+      }
+    }
+
+    function applyFilters() {
+      filterChapterOptions();
+      filterCards();
+    }
+
+    programFilter.addEventListener('change', applyFilters);
+    chapterFilter.addEventListener('change', filterCards);
+    applyFilters();
+  })();
+</script>
+{% endblock %}

@@ -700,6 +700,13 @@
         href="{{ url_for('lms_admin.all_assignments') }}">
         📋 Assignments
       </a>
+
+      <!-- Question Bank -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint in ['exams.view_questions', 'exams.manage_questions', 'exams.add_question', 'exams.edit_question', 'exams.update_question', 'exams.delete_question'] else '' }}"
+        href="{{ url_for('exams.view_questions') }}">
+        Question Bank
+      </a>
       {% if session.get('role') == 'admin' %}
 
       <a
@@ -822,7 +829,9 @@
 ] %}
 {% set lms_assignment_endpoints = [
   'lms_admin.assignments_alias', 'lms_admin.all_assignments', 'lms_admin.manage_assignments',
-  'lms_admin.edit_assignment', 'lms_admin.view_submissions', 'lms_admin.preview_submission'
+  'lms_admin.edit_assignment', 'lms_admin.view_submissions', 'lms_admin.preview_submission',
+  'exams.view_questions', 'exams.manage_questions', 'exams.add_question',
+  'exams.edit_question', 'exams.update_question', 'exams.delete_question'
 ] %}
 {% set lms_progress_endpoints = [
   'lms_admin.progress_dashboard', 'lms_admin.view_batch_progress', 'lms_admin.view_student_progress'
