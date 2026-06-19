@@ -384,6 +384,61 @@
     color: white;
   }
 
+  /* Discount type and value select group */
+  .discount-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    width: 100%;
+  }
+
+  .discount-group select.discount-type {
+    width: 58px !important;
+    min-width: 58px !important;
+    padding: 10px 6px !important;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    background: white;
+    min-height: 44px !important;
+    box-sizing: border-box;
+    text-align: center;
+    cursor: pointer;
+    color: var(--primary-color);
+  }
+
+  .discount-group select.discount-type:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  .discount-group input.discount-value {
+    flex: 1;
+    padding: 10px 12px !important;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    min-height: 44px !important;
+    box-sizing: border-box;
+    color: var(--primary-color);
+  }
+
+  .discount-group input.discount-value:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  .discount-calc-helper {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-top: 4px;
+    min-height: 14px;
+  }
+
   .course-info {
     font-size: 11px;
     color: var(--text-muted);
@@ -1103,10 +1158,16 @@
 
       <div class="item-field-group">
         <label>Discount</label>
-        <div class="currency-wrapper">
-          <input type="number" name="item_discount[]" class="item-discount" min="0" step="0.01"
+        <div class="discount-group">
+          <select class="discount-type" onchange="calculateInvoiceTotals()">
+            <option value="flat">₹</option>
+            <option value="percent">%</option>
+          </select>
+          <input type="number" class="discount-value" min="0" step="0.01"
                  value="${discount.toFixed(2)}" oninput="calculateInvoiceTotals()">
         </div>
+        <input type="hidden" name="item_discount[]" class="item-discount" value="${discount.toFixed(2)}">
+        <div class="discount-calc-helper"></div>
       </div>
 
       <div class="item-field-group">
@@ -1188,14 +1249,45 @@
     rows.forEach(row => {
       const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
       const rate = parseFloat(row.querySelector('.item-rate').value) || 0;
-      let discount = parseFloat(row.querySelector('.item-discount').value) || 0;
+      
+      const discValEl = row.querySelector('.discount-value');
+      const discTypeEl = row.querySelector('.discount-type');
+      const discHiddenEl = row.querySelector('.item-discount');
+      const discHelperEl = row.querySelector('.discount-calc-helper');
 
       const gross = qty * rate;
-      if (discount > gross) discount = gross;
-      const amount = gross - discount;
+      let absDiscount = 0;
+
+      if (discValEl && discTypeEl) {
+        const discountValue = parseFloat(discValEl.value) || 0;
+        const discountType = discTypeEl.value;
+
+        if (discountType === 'percent') {
+          absDiscount = gross * (discountValue / 100);
+          if (discHelperEl) {
+            discHelperEl.innerText = `(₹ ${absDiscount.toFixed(2)})`;
+          }
+        } else {
+          absDiscount = discountValue;
+          if (discHelperEl) {
+            discHelperEl.innerText = '';
+          }
+        }
+      } else {
+        absDiscount = parseFloat(discHiddenEl?.value) || 0;
+      }
+
+      if (absDiscount > gross) absDiscount = gross;
+      if (absDiscount < 0) absDiscount = 0;
+
+      if (discHiddenEl) {
+        discHiddenEl.value = absDiscount.toFixed(2);
+      }
+
+      const amount = gross - absDiscount;
 
       subtotal += gross;
-      totalDiscount += discount;
+      totalDiscount += absDiscount;
       netTotal += amount;
 
       row.querySelector('.item-amount').value = amount.toFixed(2);
