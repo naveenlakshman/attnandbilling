@@ -245,7 +245,7 @@
     padding: 16px;
     margin-bottom: 16px;
     display: grid;
-    grid-template-columns: 2.5fr 0.9fr 1.1fr 1.1fr 1.1fr auto;
+    grid-template-columns: 2.2fr 0.8fr 1.1fr 1.6fr 1.1fr auto;
     gap: 16px;
     align-items: start;
     transition: all 0.2s ease;
@@ -258,22 +258,26 @@
     box-shadow: 0 8px 16px -1px rgba(0, 0, 0, 0.04);
   }
 
-  .item-row.header {
+  .item-header-row {
+    display: grid;
+    grid-template-columns: 2.2fr 0.8fr 1.1fr 1.6fr 1.1fr auto;
+    gap: 16px;
     background: var(--primary-color);
     color: white;
-    padding: 12px 20px;
+    padding: 12px 16px;
     margin-bottom: 12px;
     font-weight: 700;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 1px;
-    border: none;
-    grid-template-columns: 2.5fr 0.9fr 1.1fr 1.1fr 1.1fr auto;
     border-radius: 10px;
+    box-sizing: border-box;
+    border: 1.5px solid transparent;
   }
 
-  .item-row.header .item-field-group label {
-    color: #94a3b8;
+  .item-header-row div {
+    color: #cbd5e1;
+    font-weight: 700;
   }
 
   .item-field-group {
@@ -290,8 +294,10 @@
     letter-spacing: 0.5px;
   }
 
-  .item-row.header label {
-    display: block;
+  @media (min-width: 993px) {
+    .item-row label {
+      display: none !important;
+    }
   }
 
   .item-field-group .course-select,
@@ -769,9 +775,6 @@
       margin-top: 20px;
     }
 
-    .item-row {
-      grid-template-columns: 2.5fr 0.9fr 1.1fr 1.1fr 1.1fr auto;
-    }
   }
 
   @media (max-width: 992px) {
@@ -779,8 +782,8 @@
       grid-template-columns: 1fr;
     }
 
-    .item-row.header {
-      display: none;
+    .item-header-row {
+      display: none !important;
     }
 
     /* Transform grid into stacked mobile cards */
@@ -993,6 +996,14 @@
         </div>
 
         <div id="itemsContainer">
+          <div class="item-header-row">
+            <div>Course</div>
+            <div>Qty</div>
+            <div>Rate</div>
+            <div>Discount</div>
+            <div>Amount</div>
+            <div></div>
+          </div>
           <!-- Items will be populated here -->
           {% if mode == "edit" and items %}
             {% for item in items %}
@@ -1075,6 +1086,8 @@
 </div>
 
 <script>
+  const isAdmin = {% if session.get('role') == 'admin' %}true{% else %}false{% endif %};
+
   // Data for edit mode
   const editModeData = {
     items: {% if mode == "edit" and items %}{{ items|tojson }}{% else %}[]{% endif %},
@@ -1257,6 +1270,7 @@
 
       const gross = qty * rate;
       let absDiscount = 0;
+      let isInvalidDiscount = false;
 
       if (discValEl && discTypeEl) {
         const discountValue = parseFloat(discValEl.value) || 0;
@@ -1264,17 +1278,50 @@
 
         if (discountType === 'percent') {
           absDiscount = Math.round(gross * (discountValue / 100));
-          if (discHelperEl) {
-            discHelperEl.innerText = `(₹ ${absDiscount.toFixed(2)})`;
-          }
         } else {
           absDiscount = Math.round(discountValue);
-          if (discHelperEl) {
-            discHelperEl.innerText = '';
+        }
+
+        // Apply 15% max discount validation if not admin
+        if (!isAdmin) {
+          const maxAllowed = Math.round(gross * 0.15);
+          if (absDiscount > maxAllowed) {
+            isInvalidDiscount = true;
+            if (discHelperEl) {
+              discHelperEl.innerText = `⚠ Max discount is 15% (₹ ${maxAllowed.toFixed(2)})`;
+              discHelperEl.style.color = 'var(--danger-color)';
+              discHelperEl.style.fontWeight = '700';
+            }
+            discValEl.style.borderColor = 'var(--danger-color)';
+            discValEl.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.15)';
+          } else {
+            if (discHelperEl) {
+              discHelperEl.innerText = discountType === 'percent' ? `(₹ ${absDiscount.toFixed(2)})` : '';
+              discHelperEl.style.color = '';
+              discHelperEl.style.fontWeight = '';
+            }
+            discValEl.style.borderColor = '';
+            discValEl.style.boxShadow = '';
           }
+        } else {
+          // Standard helper display for admin
+          if (discHelperEl) {
+            discHelperEl.innerText = discountType === 'percent' ? `(₹ ${absDiscount.toFixed(2)})` : '';
+            discHelperEl.style.color = '';
+            discHelperEl.style.fontWeight = '';
+          }
+          discValEl.style.borderColor = '';
+          discValEl.style.boxShadow = '';
         }
       } else {
         absDiscount = Math.round(parseFloat(discHiddenEl?.value) || 0);
+      }
+
+      // Mark row validation state for submit block
+      if (isInvalidDiscount) {
+        row.setAttribute('data-discount-invalid', 'true');
+      } else {
+        row.removeAttribute('data-discount-invalid');
       }
 
       if (absDiscount > gross) absDiscount = gross;
@@ -1447,6 +1494,14 @@
 
   // Form submission
   document.getElementById('invoiceForm').addEventListener('submit', function(e) {
+    // Check for validation errors (e.g. non-admin exceeding 15% discount)
+    const invalidRows = document.querySelectorAll('.item-row[data-discount-invalid="true"]');
+    if (invalidRows.length > 0) {
+      e.preventDefault();
+      alert('❌ Non-admin users cannot give more than a 15% discount. Please adjust the discount values.');
+      return;
+    }
+
     const rows = document.querySelectorAll('.item-row');
     let validItems = 0;
     let totalAmount = 0;
@@ -1496,7 +1551,7 @@
           setTimeout(() => initCourseSelect(courseSelect), 150);
         }
       });
-    } else if (document.getElementById('itemsContainer').children.length === 0) {
+    } else if (document.querySelectorAll('.item-row').length === 0) {
       addItemRow();
     }
 
