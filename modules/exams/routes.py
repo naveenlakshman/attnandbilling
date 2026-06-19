@@ -1,4 +1,5 @@
 import random
+import json
 
 from flask import flash, redirect, render_template, request, session, url_for
 
@@ -411,6 +412,44 @@ def chapter_mock_intro(chapter_id):
     )
 
 
+def _build_mock_review_items(cur, question_ids, submitted_answers, correct_answers):
+    if not question_ids:
+        return []
+
+    rows = cur.execute(
+        f"""
+            SELECT
+                id,
+                question_text,
+                option_a,
+                option_b,
+                option_c,
+                option_d
+            FROM lms_question_bank
+            WHERE id IN ({','.join('?' for _ in question_ids)})
+        """,
+        question_ids,
+    ).fetchall()
+    by_id = {row["id"]: row for row in rows}
+    review_items = []
+
+    for question_id in question_ids:
+        question = by_id.get(question_id)
+        if not question:
+            continue
+        question_key = str(question_id)
+        student_answer = submitted_answers.get(question_key, "")
+        correct_answer = correct_answers.get(question_key, "")
+        review_items.append({
+            "question": question,
+            "student_answer": student_answer,
+            "correct_answer": correct_answer,
+            "is_correct": bool(student_answer and student_answer == correct_answer),
+        })
+
+    return review_items
+
+
 @exams_bp.route("/student/mock/submit", methods=["POST"])
 def submit_chapter_mock():
     auth_redirect = _student_required_redirect()
@@ -440,10 +479,38 @@ def submit_chapter_mock():
 
     conn = get_conn()
     try:
-        chapter = conn.execute(
+        cur = conn.cursor()
+        chapter = cur.execute(
             "SELECT id, title FROM lms_master_chapters WHERE id = ?",
             (chapter_id,),
         ).fetchone()
+        cur.execute(
+            """
+                INSERT INTO lms_chapter_mock_attempts (
+                    student_id,
+                    chapter_id,
+                    question_ids_json,
+                    submitted_answers_json,
+                    correct_answers_json,
+                    correct_count,
+                    total_questions,
+                    score_percent,
+                    submitted_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            """,
+            (
+                session["student_id"],
+                chapter_id,
+                json.dumps(question_ids),
+                json.dumps(submitted_answers),
+                json.dumps(answer_key),
+                correct_count,
+                total_questions,
+                score_percent,
+            ),
+        )
+        review_items = _build_mock_review_items(cur, question_ids, submitted_answers, answer_key)
+        conn.commit()
     finally:
         conn.close()
 
@@ -456,4 +523,52 @@ def submit_chapter_mock():
         correct_count=correct_count,
         total_questions=total_questions,
         score_percent=score_percent,
+        review_items=review_items,
+    )
+
+
+@exams_bp.route("/student/mock/review/<int:chapter_id>", methods=["GET"])
+def review_chapter_mock(chapter_id):
+    auth_redirect = _student_required_redirect()
+    if auth_redirect:
+        return auth_redirect
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        attempt = cur.execute(
+            """
+                SELECT *
+                FROM lms_chapter_mock_attempts
+                WHERE student_id = ?
+                  AND chapter_id = ?
+                ORDER BY submitted_at DESC, id DESC
+                LIMIT 1
+            """,
+            (session["student_id"], chapter_id),
+        ).fetchone()
+        if not attempt:
+            flash("Complete the chapter mock test first.", "warning")
+            return redirect(url_for("exams.chapter_mock_intro", chapter_id=chapter_id))
+
+        chapter = cur.execute(
+            "SELECT id, title FROM lms_master_chapters WHERE id = ?",
+            (chapter_id,),
+        ).fetchone()
+
+        question_ids = json.loads(attempt["question_ids_json"] or "[]")
+        submitted_answers = json.loads(attempt["submitted_answers_json"] or "{}")
+        correct_answers = json.loads(attempt["correct_answers_json"] or "{}")
+        review_items = _build_mock_review_items(cur, question_ids, submitted_answers, correct_answers)
+    finally:
+        conn.close()
+
+    return render_template(
+        "exams/mock_result.html",
+        chapter=chapter,
+        correct_count=attempt["correct_count"],
+        total_questions=attempt["total_questions"],
+        score_percent=attempt["score_percent"],
+        review_items=review_items,
+        submitted_at=attempt["submitted_at"],
     )

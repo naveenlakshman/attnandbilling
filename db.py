@@ -873,6 +873,27 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_question_bank_chapter ON lms_question_bank(chapter_id)")
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_chapter_mock_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            chapter_id INTEGER NOT NULL,
+            question_ids_json TEXT NOT NULL,
+            submitted_answers_json TEXT NOT NULL,
+            correct_answers_json TEXT NOT NULL,
+            correct_count INTEGER NOT NULL DEFAULT 0,
+            total_questions INTEGER NOT NULL DEFAULT 0,
+            score_percent REAL NOT NULL DEFAULT 0,
+            submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (student_id) REFERENCES students(id),
+            FOREIGN KEY (chapter_id) REFERENCES lms_master_chapters(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_chapter_mock_attempts_student_chapter
+        ON lms_chapter_mock_attempts(student_id, chapter_id, submitted_at)
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_master_topics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             master_chapter_id INTEGER NOT NULL,

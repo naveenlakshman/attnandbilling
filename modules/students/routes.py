@@ -406,14 +406,8 @@ def _completed_legacy_chapter_mock_url(conn, student_id, topic_id):
     ).fetchone()
 
     question_chapter_id = master_chapter['master_chapter_id'] if master_chapter else topic['chapter_id']
-    has_questions = conn.execute(
-        "SELECT 1 FROM lms_question_bank WHERE chapter_id = ? LIMIT 1",
-        (question_chapter_id,)
-    ).fetchone()
-    if not has_questions:
-        return None
-
-    return url_for('exams.chapter_mock_intro', chapter_id=question_chapter_id)
+    status = _mock_status_for_question_chapter(conn, student_id, question_chapter_id)
+    return status['url'] if status else None
 
 
 def _completed_master_chapter_mock_url(conn, student_id, program_id, master_topic_id):
@@ -448,14 +442,75 @@ def _completed_master_chapter_mock_url(conn, student_id, program_id, master_topi
     if not counts or not counts['total_topics'] or counts['completed_topics'] != counts['total_topics']:
         return None
 
+    status = _mock_status_for_question_chapter(conn, student_id, topic['master_chapter_id'])
+    return status['url'] if status else None
+
+
+def _latest_mock_attempt(conn, student_id, chapter_id):
+    return conn.execute(
+        """
+            SELECT id, score_percent, submitted_at
+            FROM lms_chapter_mock_attempts
+            WHERE student_id = ?
+              AND chapter_id = ?
+            ORDER BY submitted_at DESC, id DESC
+            LIMIT 1
+        """,
+        (student_id, chapter_id)
+    ).fetchone()
+
+
+def _mock_status_for_question_chapter(conn, student_id, question_chapter_id):
     has_questions = conn.execute(
         "SELECT 1 FROM lms_question_bank WHERE chapter_id = ? LIMIT 1",
-        (topic['master_chapter_id'],)
+        (question_chapter_id,)
     ).fetchone()
     if not has_questions:
         return None
 
-    return url_for('exams.chapter_mock_intro', chapter_id=topic['master_chapter_id'])
+    attempt = _latest_mock_attempt(conn, student_id, question_chapter_id)
+    if attempt:
+        return {
+            'is_completed': True,
+            'score_percent': attempt['score_percent'],
+            'url': url_for('exams.review_chapter_mock', chapter_id=question_chapter_id),
+        }
+
+    return {
+        'is_completed': False,
+        'score_percent': None,
+        'url': url_for('exams.chapter_mock_intro', chapter_id=question_chapter_id),
+    }
+
+
+def _master_mock_status_by_chapter(conn, student_id, chapter_ids):
+    result = {}
+    for chapter_id in chapter_ids:
+        status = _mock_status_for_question_chapter(conn, student_id, chapter_id)
+        if status:
+            result[chapter_id] = status
+    return result
+
+
+def _legacy_mock_status_by_chapter(conn, student_id, chapter_ids):
+    result = {}
+    for chapter_id in chapter_ids:
+        mapped = conn.execute(
+            """
+                SELECT mt.master_chapter_id
+                FROM lms_master_topic_bridge b
+                JOIN lms_master_topics mt ON mt.id = b.master_topic_id
+                JOIN lms_topics lt ON lt.id = b.legacy_topic_id
+                WHERE lt.chapter_id = ?
+                LIMIT 1
+            """,
+            (chapter_id,)
+        ).fetchone()
+        question_chapter_id = mapped['master_chapter_id'] if mapped else chapter_id
+        status = _mock_status_for_question_chapter(conn, student_id, question_chapter_id)
+        if status:
+            result[chapter_id] = status
+    return result
 
 
 def _last_master_topic_for_program(conn, student_id, program_id):
@@ -1142,6 +1197,12 @@ def topic_view(topic_id):
         for t in sidebar_topics:
             topics_by_chapter.setdefault(t['chapter_id'], []).append(t)
 
+        chapter_mock_map = _legacy_mock_status_by_chapter(
+            conn,
+            student_id,
+            [chapter['id'] for chapter in chapters_sidebar],
+        )
+
         # Progress counts
         total_topics = len(sidebar_topics)
         completed_topics = sum(1 for t in sidebar_topics if t['is_completed'])
@@ -1165,6 +1226,7 @@ def topic_view(topic_id):
                            next_topic_id=next_topic_id,
                            chapters_sidebar=chapters_sidebar,
                            topics_by_chapter=topics_by_chapter,
+                           chapter_mock_map=chapter_mock_map,
                            total_topics=total_topics,
                            completed_topics=completed_topics,
                            is_completed=is_completed,
@@ -1256,6 +1318,11 @@ def master_topic_view(program_id, master_topic_id):
         lesson_content = next((c for c in contents if c['content_mode'] in ('pdf', 'rich_text', 'interactive_image')), None)
 
         chapters_sidebar, sidebar_topics, topics_by_chapter = _master_curriculum_sidebar(conn, program_id, student_id)
+        chapter_mock_map = _master_mock_status_by_chapter(
+            conn,
+            student_id,
+            [chapter['id'] for chapter in chapters_sidebar],
+        )
 
         ordered_topic_ids = [r['id'] for r in sidebar_topics]
         idx = ordered_topic_ids.index(master_topic_id) if master_topic_id in ordered_topic_ids else -1
@@ -1297,6 +1364,7 @@ def master_topic_view(program_id, master_topic_id):
         next_topic_id=next_topic_id,
         chapters_sidebar=chapters_sidebar,
         topics_by_chapter=topics_by_chapter,
+        chapter_mock_map=chapter_mock_map,
         total_topics=total_topics,
         completed_topics=completed_topics,
         is_completed=is_completed,

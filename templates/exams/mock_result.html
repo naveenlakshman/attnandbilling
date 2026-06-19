@@ -3,20 +3,159 @@
 {% block title %}Mock Test Result{% endblock %}
 
 {% block content %}
-<main class="container py-4" style="max-width: 760px;">
-  <div class="card shadow-sm">
-    <div class="card-body text-center p-4">
-      <h1 class="h4 mb-2">Mock Test Result</h1>
-      <p class="text-muted mb-4">{{ chapter.title if chapter else 'Chapter Mock Test' }}</p>
+<style>
+  .mock-result-page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 18px;
+  }
 
-      <div class="display-6 fw-bold text-primary mb-2">{{ score_percent }}%</div>
-      <p class="mb-4">
-        You answered <strong>{{ correct_count }}</strong> out of
-        <strong>{{ total_questions }}</strong> questions correctly.
-      </p>
+  .result-summary {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+  }
 
-      <a class="btn btn-primary" href="{{ url_for('students.dashboard') }}">Back to Dashboard</a>
-    </div>
+  .review-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .review-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+  }
+
+  .review-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: .82rem;
+    font-weight: 800;
+  }
+
+  .review-card-body {
+    padding: 14px;
+  }
+
+  .review-question {
+    color: #111827;
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  .review-question p:last-child {
+    margin-bottom: 0;
+  }
+
+  .answer-review-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .answer-review {
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .answer-review.is-student {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+  }
+
+  .answer-review.is-correct {
+    border-color: #86efac;
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .answer-review.is-wrong {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+  }
+
+  @media (max-width: 767.98px) {
+    .answer-review-grid,
+    .review-card-header {
+      grid-template-columns: 1fr;
+      display: grid;
+    }
+  }
+</style>
+
+<main class="mock-result-page">
+  <section class="result-summary text-center p-4">
+    <h1 class="h4 mb-2">Mock Test Result</h1>
+    <p class="text-muted mb-3">
+      {{ chapter.title if chapter else 'Chapter Mock Test' }}
+      {% if submitted_at %}<span class="d-block small">Submitted: {{ submitted_at }}</span>{% endif %}
+    </p>
+
+    <div class="display-6 fw-bold text-primary mb-2">{{ score_percent }}%</div>
+    <p class="mb-0">
+      You answered <strong>{{ correct_count }}</strong> out of
+      <strong>{{ total_questions }}</strong> questions correctly.
+    </p>
+  </section>
+
+  {% if review_items %}
+  <section class="review-list" aria-label="Mock test review">
+    {% for item in review_items %}
+    {% set question = item.question %}
+    {% set student_answer = item.student_answer or 'Not answered' %}
+    {% set correct_answer = item.correct_answer %}
+    <article class="review-card">
+      <div class="review-card-header">
+        <span>Question {{ loop.index }}</span>
+        {% if item.is_correct %}
+        <span class="badge bg-success">Correct</span>
+        {% else %}
+        <span class="badge bg-danger">Review</span>
+        {% endif %}
+      </div>
+      <div class="review-card-body">
+        <div class="review-question">{{ question.question_text|safe }}</div>
+
+        <div class="answer-review-grid">
+          {% for option in ['A', 'B', 'C', 'D'] %}
+          {% set option_text = question['option_' ~ option|lower] %}
+          {% set is_student = student_answer == option %}
+          {% set is_correct = correct_answer == option %}
+          <div class="answer-review {% if is_correct %}is-correct{% endif %} {% if is_student and not is_correct %}is-wrong{% elif is_student %}is-student{% endif %}">
+            <strong>{{ option }}.</strong> {{ option_text }}
+            {% if is_student %}<div class="small mt-1">Your answer</div>{% endif %}
+            {% if is_correct and not item.is_correct %}<div class="small mt-1">Correct answer</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+
+        {% if not item.is_correct %}
+        <div class="alert alert-warning mt-3 mb-0">
+          Your answer: <strong>{{ student_answer }}</strong>.
+          Correct answer: <strong>{{ correct_answer }}</strong>.
+        </div>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <div class="d-flex justify-content-end mt-3">
+    <a class="btn btn-primary" href="{{ url_for('students.dashboard') }}">Back to Dashboard</a>
   </div>
 </main>
 {% endblock %}

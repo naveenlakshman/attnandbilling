@@ -333,6 +333,27 @@
     background: #198754; border-color: #198754; color: #fff;
   }
 
+  .topic-item.mock-test-item {
+    background: #fff7ed;
+    color: #9a3412;
+    font-weight: 700;
+  }
+  .topic-item.mock-test-item:hover {
+    background: #ffedd5;
+    color: #c2410c;
+  }
+  .topic-item.mock-test-item.done .check {
+    background: #f97316;
+    border-color: #f97316;
+    color: #fff;
+  }
+  .mock-score {
+    margin-left: auto;
+    color: #9a3412;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
   /* IP protection */
   .content-block { user-select: none; -webkit-user-select: none; }
   @media print { body * { visibility: hidden !important; } }
@@ -1039,6 +1060,17 @@
           <span>{{ t.topic_order }}. {{ t.topic_title }}</span>
         </a>
         {% endfor %}
+        {% set mock = (chapter_mock_map|default({})).get(chapter.id) %}
+        {% if mock %}
+        <a href="{{ mock.url }}"
+           class="topic-item mock-test-item {% if mock.is_completed %}done{% endif %}">
+          <span class="check">{% if mock.is_completed %}✓{% endif %}</span>
+          <span>Mock Test</span>
+          {% if mock.is_completed %}
+          <span class="mock-score">{{ mock.score_percent }}%</span>
+          {% endif %}
+        </a>
+        {% endif %}
       </div>
     </div>
     {% endfor %}
