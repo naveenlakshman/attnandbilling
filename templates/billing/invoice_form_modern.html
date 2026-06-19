@@ -80,6 +80,10 @@
     align-items: start;
   }
 
+  .form-main {
+    min-width: 0;
+  }
+
   /* Card Styling */
   .modern-card {
     background: white;
@@ -117,6 +121,10 @@
     margin-bottom: 20px;
   }
 
+  .invoice-details-card .invoice-header-grid {
+    margin-bottom: 0;
+  }
+
   .form-field {
     display: flex;
     flex-direction: column;
@@ -152,6 +160,31 @@
     outline: none;
     border-color: var(--accent-color);
     box-shadow: 0 0 0 4px var(--accent-glow);
+  }
+
+  .invoice-details-card .form-field .ts-wrapper {
+    width: 100%;
+  }
+
+  .invoice-details-card .form-field .ts-control {
+    padding: 12px 16px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    min-height: 60px;
+    font-size: 18px;
+    font-family: inherit;
+    color: var(--primary-color);
+    box-shadow: none;
+  }
+
+  .invoice-details-card .form-field .ts-control.focus,
+  .invoice-details-card .form-field .ts-wrapper.focus .ts-control {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 4px var(--accent-glow);
+  }
+
+  .invoice-details-card .form-field .ts-control input {
+    font-size: 18px;
   }
 
   /* Installment Type Tabs */
@@ -214,6 +247,38 @@
     letter-spacing: -0.3px;
   }
 
+  .items-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    margin-left: auto;
+  }
+
+  .payment-type-inline {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 430px;
+  }
+
+  .payment-type-inline .payment-type-label {
+    font-weight: 700;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .payment-type-inline .installment-type-tabs {
+    min-height: 44px;
+  }
+
+  .payment-type-inline .installment-type-tabs label {
+    padding: 9px 18px;
+    font-size: 13px;
+    min-height: 38px;
+  }
+
   .add-item-btn {
     background: var(--accent-color);
     color: white;
@@ -245,7 +310,7 @@
     padding: 16px;
     margin-bottom: 16px;
     display: grid;
-    grid-template-columns: 2.2fr 0.8fr 1.1fr 1.6fr 1.1fr auto;
+    grid-template-columns: minmax(240px, 2.4fr) minmax(72px, 0.6fr) minmax(116px, 1fr) minmax(180px, 1.35fr) minmax(116px, 1fr) 44px;
     gap: 16px;
     align-items: start;
     transition: all 0.2s ease;
@@ -260,7 +325,7 @@
 
   .item-header-row {
     display: grid;
-    grid-template-columns: 2.2fr 0.8fr 1.1fr 1.6fr 1.1fr auto;
+    grid-template-columns: minmax(240px, 2.4fr) minmax(72px, 0.6fr) minmax(116px, 1fr) minmax(180px, 1.35fr) minmax(116px, 1fr) 44px;
     gap: 16px;
     background: var(--primary-color);
     color: white;
@@ -295,8 +360,63 @@
   }
 
   @media (min-width: 993px) {
+    .bill-items-card {
+      padding: 28px 30px;
+    }
+
+    .bill-items-card .items-header {
+      margin-bottom: 24px;
+    }
+
+    .bill-items-card .items-toolbar {
+      flex: 0 1 660px;
+    }
+
+    .bill-items-card .item-row,
+    .bill-items-card .item-header-row {
+      gap: 14px;
+      grid-template-columns: minmax(260px, 2.4fr) minmax(74px, 0.55fr) minmax(120px, 0.95fr) minmax(190px, 1.45fr) minmax(120px, 0.95fr) 46px;
+    }
+
+    .bill-items-card .item-row {
+      padding: 18px 20px;
+      align-items: start;
+    }
+
+    .bill-items-card .item-header-row {
+      padding: 13px 20px;
+    }
+
     .item-row label {
       display: none !important;
+    }
+
+    .bill-items-card .item-field-group .course-select,
+    .bill-items-card .item-field-group input,
+    .bill-items-card .item-field-group .ts-control {
+      min-height: 46px;
+    }
+
+    .bill-items-card .item-qty {
+      text-align: center;
+    }
+
+    .bill-items-card .discount-group {
+      gap: 8px;
+    }
+
+    .bill-items-card .discount-group select.discount-type {
+      width: 64px !important;
+      min-width: 64px !important;
+    }
+
+    .bill-items-card .discount-group input.discount-value {
+      min-width: 0;
+    }
+
+    .bill-items-card .item-delete-btn {
+      width: 46px;
+      height: 46px;
     }
   }
 
@@ -697,6 +817,40 @@
     font-size: 20px;
   }
 
+  @media (min-width: 1201px) {
+    .form-wrapper {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+
+    .form-main {
+      display: contents;
+    }
+
+    .invoice-details-card {
+      order: 1;
+    }
+
+    .bill-items-card {
+      order: 2;
+    }
+
+    .summary-sticky {
+      order: 3;
+      position: static;
+      top: auto;
+      margin-bottom: 20px;
+    }
+
+    .notes-card {
+      order: 4;
+    }
+
+    .installment-section {
+      order: 5;
+    }
+  }
+
   .installment-status {
     padding: 12px;
     border-radius: 10px;
@@ -784,6 +938,22 @@
 
     .item-header-row {
       display: none !important;
+    }
+
+    .items-toolbar {
+      width: 100%;
+      margin-left: 0;
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .payment-type-inline {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .add-item-btn {
+      justify-content: center;
     }
 
     /* Transform grid into stacked mobile cards */
@@ -934,10 +1104,10 @@
   <form method="post" id="invoiceForm" class="form-wrapper">
 
     <!-- Left Column -->
-    <div>
+    <div class="form-main">
 
       <!-- Header Information -->
-      <div class="modern-card">
+      <div class="modern-card invoice-details-card">
         <div class="card-title">Invoice Details</div>
 
         <div class="invoice-header-grid">
@@ -960,22 +1130,7 @@
           </div>
         </div>
 
-        <div class="form-field" style="margin-bottom: 20px;">
-          <label>Payment Type *</label>
-          <div class="installment-type-tabs" style="margin-top: 8px;">
-            <input type="radio" id="type_full" name="installment_type" value="full"
-                   {% if mode != "edit" or invoice.installment_type == "full" %}checked{% endif %}
-                   onchange="toggleInstallmentType()">
-            <label for="type_full">Full Payment</label>
-
-            <input type="radio" id="type_custom" name="installment_type" value="custom"
-                   {% if mode == "edit" and invoice.installment_type == "custom" %}checked{% endif %}
-                   onchange="toggleInstallmentType()">
-            <label for="type_custom">Installments</label>
-          </div>
-        </div>
-
-        <div class="invoice-header-grid" id="full_due_date_field">
+        <div class="invoice-header-grid" id="full_due_date_field" style="display: none;">
           <div class="form-field">
             <label>Full Payment Due Date *</label>
             <input type="date" name="full_due_date" id="full_due_date"
@@ -987,12 +1142,28 @@
 
 
       <!-- Items Section -->
-      <div class="modern-card">
+      <div class="modern-card bill-items-card">
         <div class="items-header">
           <h3>📋 Bill Items</h3>
-          <button type="button" class="add-item-btn" onclick="addItemRow()">
-            ➕ Add Item
-          </button>
+          <div class="items-toolbar">
+            <div class="payment-type-inline">
+              <span class="payment-type-label">Payment Type *</span>
+              <div class="installment-type-tabs">
+                <input type="radio" id="type_full" name="installment_type" value="full"
+                       {% if mode != "edit" or invoice.installment_type == "full" %}checked{% endif %}
+                       onchange="toggleInstallmentType()">
+                <label for="type_full">Full Payment</label>
+
+                <input type="radio" id="type_custom" name="installment_type" value="custom"
+                       {% if mode == "edit" and invoice.installment_type == "custom" %}checked{% endif %}
+                       onchange="toggleInstallmentType()">
+                <label for="type_custom">Installments</label>
+              </div>
+            </div>
+            <button type="button" class="add-item-btn" onclick="addItemRow()">
+              ➕ Add Item
+            </button>
+          </div>
         </div>
 
         <div id="itemsContainer">
@@ -1014,7 +1185,7 @@
       </div>
 
       <!-- Notes Section -->
-      <div class="modern-card">
+      <div class="modern-card notes-card">
         <div class="card-title">Additional Notes</div>
         <div class="notes-section">
           <textarea name="notes" placeholder="Add any additional notes or remarks for this invoice...">{% if mode == "edit" and invoice %}{{ invoice.notes or '' }}{% endif %}</textarea>
@@ -1144,6 +1315,7 @@
     `;
 
     const discount = item ? (item.quantity * item.unit_price - (item.line_total || 0)) : 0;
+    const discountDisplayValue = discount > 0 ? discount.toFixed(2) : '';
 
     row.innerHTML = `
       <div class="item-field-group">
@@ -1177,7 +1349,7 @@
             <option value="percent">%</option>
           </select>
           <input type="number" class="discount-value" min="0" step="0.01"
-                 value="${discount.toFixed(2)}" oninput="calculateInvoiceTotals()">
+                 value="${discountDisplayValue}" oninput="calculateInvoiceTotals()">
         </div>
         <input type="hidden" name="item_discount[]" class="item-discount" value="${discount.toFixed(2)}">
         <div class="discount-calc-helper"></div>
@@ -1355,7 +1527,7 @@
 
     if (type === 'full') {
       installmentSection.classList.remove('active');
-      fullDueDateField.style.display = 'grid';
+      fullDueDateField.style.display = 'none';
     } else {
       installmentSection.classList.add('active');
       fullDueDateField.style.display = 'none';
