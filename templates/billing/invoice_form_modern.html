@@ -1263,18 +1263,18 @@
         const discountType = discTypeEl.value;
 
         if (discountType === 'percent') {
-          absDiscount = gross * (discountValue / 100);
+          absDiscount = Math.round(gross * (discountValue / 100));
           if (discHelperEl) {
             discHelperEl.innerText = `(₹ ${absDiscount.toFixed(2)})`;
           }
         } else {
-          absDiscount = discountValue;
+          absDiscount = Math.round(discountValue);
           if (discHelperEl) {
             discHelperEl.innerText = '';
           }
         }
       } else {
-        absDiscount = parseFloat(discHiddenEl?.value) || 0;
+        absDiscount = Math.round(parseFloat(discHiddenEl?.value) || 0);
       }
 
       if (absDiscount > gross) absDiscount = gross;
