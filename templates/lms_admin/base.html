@@ -707,6 +707,13 @@
         href="{{ url_for('exams.view_questions') }}">
         Question Bank
       </a>
+
+      <!-- Final Exam Applications -->
+      <a
+        class="nav-link {{ 'active' if request.endpoint in ['exams.final_exam_applications', 'exams.approve_final_exam_application', 'exams.reject_final_exam_application'] else '' }}"
+        href="{{ url_for('exams.final_exam_applications') }}">
+        Final Exam Applications
+      </a>
       {% if session.get('role') == 'admin' %}
 
       <a

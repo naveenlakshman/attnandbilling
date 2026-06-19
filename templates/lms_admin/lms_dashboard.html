@@ -346,6 +346,13 @@
       </div>
       <span class="btn btn-outline-primary btn-sm">View</span>
     </a>
+    <a class="quick-card" href="{{ url_for('exams.final_exam_applications') }}">
+      <div>
+        <h3>Final Exam Applications</h3>
+        <p>{{ metrics.pending_final_exam_applications }} pending request{{ '' if metrics.pending_final_exam_applications == 1 else 's' }} need staff review.</p>
+      </div>
+      <span class="btn btn-outline-primary btn-sm">Review</span>
+    </a>
   </div>
 
   <section class="dashboard-section-card" aria-labelledby="recent-lms-activity-heading">

@@ -1,0 +1,218 @@
+{% extends "students/base.html" %}
+
+{% block title %}Final Exam Application{% endblock %}
+{% block page_title %}Final Exam Application{% endblock %}
+
+{% block extra_css %}
+<style>
+  .exam-shell {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 24px 28px 36px;
+  }
+  .exam-card {
+    background: #fff;
+    border: 1px solid #e3e7ee;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+    margin-bottom: 18px;
+  }
+  .exam-card-header {
+    padding: 16px 18px;
+    border-bottom: 1px solid #e8edf3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .exam-card-body { padding: 18px; }
+  .exam-card .form-group { margin-bottom: 1rem; }
+  .check-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .check-panel {
+    border: 1px solid #dfe6ef;
+    border-radius: 8px;
+    padding: 14px;
+    background: #f8fafc;
+  }
+  .check-panel.pass {
+    border-color: #b8e2ca;
+    background: #f2fbf5;
+  }
+  .check-panel.fail {
+    border-color: #f3c3c3;
+    background: #fff7f7;
+  }
+  .check-label {
+    font-weight: 700;
+    color: #101827;
+    margin-bottom: 6px;
+  }
+  .check-detail {
+    color: #5c6b82;
+    font-size: 14px;
+    margin: 0;
+  }
+  .status-pill {
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .02em;
+  }
+  .status-pending { color: #7a4d00; background: #fff4cf; }
+  .status-approved { color: #0f6b3a; background: #dff7e9; }
+  .status-rejected { color: #9b1c1c; background: #ffe1e1; }
+  .unlock-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  @media (max-width: 900px) {
+    .check-grid { grid-template-columns: 1fr; }
+    .exam-card-header { align-items: flex-start; flex-direction: column; }
+    .unlock-action { align-items: flex-start; flex-direction: column; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="exam-shell">
+  <div class="exam-card">
+    <div class="exam-card-header">
+      <div>
+        <h3 class="mb-1">Apply for Final Exam</h3>
+        <div class="text-muted">Complete the automated checks before submitting your certificate exam request.</div>
+      </div>
+    </div>
+    <div class="exam-card-body">
+      {% if programs %}
+        <form method="get" class="row align-items-end">
+          <div class="form-group col-md-8">
+            <label for="program_id">Program</label>
+            <select class="form-control" id="program_id" name="program_id" onchange="this.form.submit()">
+              <option value="">Select program</option>
+              {% for program in programs %}
+                <option value="{{ program.id }}" {% if selected_program_id == program.id %}selected{% endif %}>
+                  {{ program.program_name }}{% if program.course_name %} - {{ program.course_name }}{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group col-md-4">
+            <button type="submit" class="btn btn-primary btn-block">Check Eligibility</button>
+          </div>
+        </form>
+      {% else %}
+        <div class="alert alert-warning mb-0">No LMS program is currently linked to your student account.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if selected_program %}
+    <div class="exam-card">
+      <div class="exam-card-header">
+        <div>
+          <h4 class="mb-1">{{ selected_program.program_name }}</h4>
+          <div class="text-muted">Requirement checks</div>
+        </div>
+        {% if application %}
+          <span class="status-pill status-{{ application.status|lower }}">{{ application.status }}</span>
+        {% endif %}
+      </div>
+      <div class="exam-card-body">
+        <div class="check-grid">
+          <div class="check-panel {{ 'pass' if checks.syllabus.passed else 'fail' }}">
+            <div class="check-label">Syllabus Completion</div>
+            <p class="check-detail">{{ checks.syllabus.completed }} / {{ checks.syllabus.total }} topics completed.</p>
+          </div>
+          <div class="check-panel {{ 'pass' if checks.assignments.passed else 'fail' }}">
+            <div class="check-label">Assignments</div>
+            <p class="check-detail">{{ checks.assignments.submitted }} / {{ checks.assignments.total }} submitted.</p>
+          </div>
+          <div class="check-panel {{ 'pass' if checks.dues.passed else 'fail' }}">
+            <div class="check-label">Fee Clearance</div>
+            <p class="check-detail">Pending balance: Rs. {{ "%.2f"|format(checks.dues.balance) }}</p>
+          </div>
+        </div>
+
+        {% if not checks.all_passed %}
+          <div class="alert alert-danger mt-3 mb-0">
+            {% if not checks.syllabus.passed %}
+              <div>Complete all remaining LMS topics for this program.</div>
+            {% endif %}
+            {% if not checks.assignments.passed %}
+              <div>Submit all pending assignments before applying.</div>
+            {% endif %}
+            {% if not checks.dues.passed %}
+              <div>Clear the pending fee balance of Rs. {{ "%.2f"|format(checks.dues.balance) }}.</div>
+            {% endif %}
+          </div>
+        {% elif application and application.status == 'PENDING' %}
+          <div class="alert alert-warning mt-3 mb-0">
+            Your application is pending staff approval for {{ application.requested_exam_date }}.
+          </div>
+        {% elif application and application.status == 'APPROVED' %}
+          {% if application.requested_exam_date <= today %}
+            <div class="alert alert-success mt-3 mb-0">
+              <div class="unlock-action">
+                <span>Your final exam is approved and unlocked for the scheduled date.</span>
+                <a class="btn btn-success" href="{{ url_for('exams.take_final_exam', application_id=application.id) }}">Take Final Exam</a>
+              </div>
+            </div>
+          {% else %}
+            <div class="alert alert-info mt-3 mb-0">
+              Your final exam is approved and scheduled for {{ application.requested_exam_date }}.
+            </div>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    {% if checks.all_passed and (not application or application.status == 'REJECTED') %}
+      <div class="exam-card">
+        <div class="exam-card-header">
+          <div>
+            <h4 class="mb-1">Profile Verification</h4>
+            <div class="text-muted">These details will be used for staff review and certificate preparation.</div>
+          </div>
+        </div>
+        <div class="exam-card-body">
+          {% if application and application.status == 'REJECTED' %}
+            <div class="alert alert-danger">Your previous application was rejected. You can submit a corrected request.</div>
+          {% endif %}
+          <form method="post" action="{{ url_for('exams.final_exam_apply') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="program_id" value="{{ selected_program.id }}">
+            <div class="row">
+              <div class="form-group col-md-6">
+                <label for="verified_name">Verified Name</label>
+                <input type="text" class="form-control" id="verified_name" name="verified_name" value="{{ student.full_name }}" required>
+              </div>
+              <div class="form-group col-md-6">
+                <label for="verified_phone">Verified Phone</label>
+                <input type="text" class="form-control" id="verified_phone" name="verified_phone" value="{{ student.phone }}" required>
+              </div>
+            </div>
+            <div class="row">
+              <div class="form-group col-md-6">
+                <label for="verified_dob">Verified Date of Birth</label>
+                <input type="date" class="form-control" id="verified_dob" name="verified_dob" value="{{ student.date_of_birth or '' }}" required>
+              </div>
+              <div class="form-group col-md-6">
+                <label for="requested_exam_date">Requested Exam Date</label>
+                <input type="date" class="form-control" id="requested_exam_date" name="requested_exam_date" min="{{ today }}" required>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-success">Submit Application</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

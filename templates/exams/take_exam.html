@@ -1,6 +1,6 @@
 {% extends "students/base.html" %}
 
-{% block title %}Chapter Mock Test{% endblock %}
+{% block title %}{{ exam_title|default('Chapter Mock Test') }}{% endblock %}
 
 {% block content %}
 <style>
@@ -101,17 +101,17 @@
 <main class="mock-test-page">
   <header class="mock-test-header">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="mb-0">Chapter Mock Test</h4>
+      <h4 class="mb-0">{{ exam_title|default('Chapter Mock Test') }}</h4>
       <div id="exam-timer-wrapper" class="badge badge-danger bg-danger p-2">
         Time Left: <span id="timer-countdown">--:--</span>
       </div>
     </div>
     <div>
-      <p>{{ chapter.title }} · {{ question_count }} question{{ '' if question_count == 1 else 's' }}</p>
+      <p>{{ exam_context|default(chapter.title if chapter else 'Exam') }} · {{ question_count }} question{{ '' if question_count == 1 else 's' }}</p>
     </div>
   </header>
 
-  <form method="POST" action="{{ url_for('exams.submit_chapter_mock') }}" id="chapterMockForm" data-duration-seconds="{{ exam_duration_seconds|default(1200) }}">
+  <form method="POST" action="{{ form_action|default(url_for('exams.submit_chapter_mock')) }}" id="{{ form_id|default('chapterMockForm') }}" data-duration-seconds="{{ exam_duration_seconds|default(1200) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <section class="question-list">
       {% for question in questions %}
@@ -143,14 +143,14 @@
     </section>
 
     <div class="mock-actions">
-      <button type="submit" class="btn btn-primary" id="submitExamBtn" disabled>Submit Test</button>
+      <button type="submit" class="btn btn-primary" id="submitExamBtn" disabled>{{ submit_label|default('Submit Test') }}</button>
     </div>
   </form>
 </main>
 
 <script>
   (function () {
-    var form = document.getElementById('chapterMockForm');
+    var form = document.getElementById('{{ form_id|default("chapterMockForm") }}');
     var countdown = document.getElementById('timer-countdown');
     var submitBtn = document.getElementById('submitExamBtn');
     if (!form || !countdown || !submitBtn) {

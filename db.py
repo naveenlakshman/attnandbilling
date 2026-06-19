@@ -894,6 +894,47 @@ def init_db():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_final_exam_applications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            course_id INTEGER NOT NULL,
+            verified_name TEXT NOT NULL,
+            verified_phone TEXT NOT NULL,
+            verified_dob TEXT NOT NULL,
+            requested_exam_date TEXT NOT NULL,
+            status TEXT DEFAULT 'PENDING',
+            applied_on TEXT NOT NULL,
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_final_exam_applications_student_course
+        ON lms_final_exam_applications(student_id, course_id, status)
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_final_exam_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            application_id INTEGER NOT NULL UNIQUE,
+            student_id INTEGER NOT NULL,
+            course_id INTEGER NOT NULL,
+            question_ids_json TEXT NOT NULL,
+            submitted_answers_json TEXT NOT NULL,
+            correct_answers_json TEXT NOT NULL,
+            correct_count INTEGER NOT NULL DEFAULT 0,
+            total_questions INTEGER NOT NULL DEFAULT 0,
+            score_percent REAL NOT NULL DEFAULT 0,
+            submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (application_id) REFERENCES lms_final_exam_applications(id),
+            FOREIGN KEY (student_id) REFERENCES students(id)
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_final_exam_attempts_student_course
+        ON lms_final_exam_attempts(student_id, course_id, submitted_at)
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_master_topics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             master_chapter_id INTEGER NOT NULL,

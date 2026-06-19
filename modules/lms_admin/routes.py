@@ -737,6 +737,13 @@ def dashboard():
         
         cur.execute("SELECT COUNT(*) as count FROM lms_mock_tests")
         total_tests = cur.fetchone()['count']
+
+        cur.execute("""
+            SELECT COUNT(*) as count
+            FROM lms_final_exam_applications
+            WHERE status = 'PENDING'
+        """)
+        pending_final_exam_applications = cur.fetchone()['count']
         
         # Get recent LMS activity (last 10 records)
         cur.execute("""
@@ -760,6 +767,7 @@ def dashboard():
             'total_chapters': total_chapters,
             'total_topics': total_topics,
             'total_tests': total_tests,
+            'pending_final_exam_applications': pending_final_exam_applications,
             'recent_activity': recent_activity
         }
         
