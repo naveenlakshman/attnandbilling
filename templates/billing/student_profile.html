@@ -1975,7 +1975,7 @@
               </div>
               <div class="profile-meta-item">
                 <span class="profile-meta-label">Joined Date</span>
-                <div class="profile-meta-value">{{ format_datetime(student.joined_date) }}</div>
+                <div class="profile-meta-value">{{ student.joined_date | format_ist_datetime }}</div>
               </div>
               <div class="profile-meta-item">
                 <span class="profile-meta-label">Source Lead</span>
@@ -2526,7 +2526,7 @@
             <div class="profile-activity-main">
               <div>
                 <div class="profile-activity-title">{{ activity.description or (activity.module_name | replace('_', ' ') | title ~ ' ' ~ activity.action_type | replace('_', ' ') | title) }}</div>
-                <div class="profile-activity-meta">{{ activity.actor_name or activity.actor_username or 'System' }} • {{ format_datetime(activity.created_at) }}</div>
+                <div class="profile-activity-meta">{{ activity.actor_name or activity.actor_username or 'System' }} • {{ activity.created_at | format_ist_datetime }}</div>
               </div>
               <span class="profile-activity-badge">{{ activity.module_name | replace('_', ' ') | title }}</span>
             </div>

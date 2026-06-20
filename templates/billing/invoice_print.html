@@ -159,7 +159,7 @@
   <div class="card">
     <h3>Bill of Supply</h3>
     <p><strong>Bill No:</strong> {{ invoice.invoice_no }}</p>
-    <p><strong>Bill Date:</strong> {{ invoice.invoice_date }}</p>
+    <p><strong>Bill Date:</strong> {{ invoice.invoice_date | format_ist_datetime }}</p>
     <p><strong>Student:</strong> {{ invoice.student_code }} - {{ invoice.student_name }}</p>
     <p><strong>Phone:</strong> {{ invoice.student_phone or '-' }}</p>
     <p><strong>Branch:</strong> {{ invoice.branch_name }}</p>

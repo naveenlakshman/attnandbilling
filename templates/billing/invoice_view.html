@@ -381,7 +381,7 @@
     <div class="card">
       <h3>Bill of Supply</h3>
       <p><strong>Bill No:</strong> {{ invoice.invoice_no }}</p>
-      <p><strong>Bill Date:</strong> {{ invoice.invoice_date }}</p>
+      <p><strong>Bill Date:</strong> {{ invoice.invoice_date | format_ist_datetime }}</p>
       <p><strong>Student:</strong> <a href="{{ url_for('billing.student_profile', student_id=invoice.student_id) }}" style="text-decoration: none; color: #0d6efd;">{{ invoice.student_code }} - {{ invoice.full_name }}</a></p>
       <p><strong>Phone:</strong> {{ invoice.phone }}</p>
       <p><strong>Branch:</strong> {{ invoice.branch_name or "-" }}</p>
