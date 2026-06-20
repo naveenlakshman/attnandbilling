@@ -860,6 +860,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS lms_question_bank (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chapter_id INTEGER NOT NULL,
+            master_topic_id INTEGER,
             question_text TEXT NOT NULL,
             option_a TEXT NOT NULL,
             option_b TEXT NOT NULL,
@@ -867,10 +868,20 @@ def init_db():
             option_d TEXT NOT NULL,
             correct_option TEXT NOT NULL CHECK(correct_option IN ('A', 'B', 'C', 'D')),
             question_type TEXT NOT NULL DEFAULT 'MCQ',
-            FOREIGN KEY (chapter_id) REFERENCES lms_master_chapters(id) ON DELETE CASCADE
+            FOREIGN KEY (chapter_id) REFERENCES lms_master_chapters(id) ON DELETE CASCADE,
+            FOREIGN KEY (master_topic_id) REFERENCES lms_master_topics(id) ON DELETE SET NULL
         )
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_question_bank_chapter ON lms_question_bank(chapter_id)")
+
+    # Migration: add master_topic_id to lms_question_bank if it doesn't exist yet
+    cur.execute("PRAGMA table_info(lms_question_bank)")
+    _qb_cols = {row[1] for row in cur.fetchall()}
+    if 'master_topic_id' not in _qb_cols:
+        cur.execute("ALTER TABLE lms_question_bank ADD COLUMN master_topic_id INTEGER")
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_question_bank_topic ON lms_question_bank(master_topic_id)")
+
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_chapter_mock_attempts (

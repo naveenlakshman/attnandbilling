@@ -187,7 +187,10 @@
       </select>
     </div>
 
-    <a class="btn btn-primary" href="{{ url_for('exams.manage_questions') }}">+ Add New Question</a>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importQuestionsModal">📥 Import CSV</button>
+      <a class="btn btn-primary" href="{{ url_for('exams.manage_questions') }}">+ Add New Question</a>
+    </div>
   </section>
 
   {% if questions %}
@@ -201,7 +204,7 @@
       <div class="question-card-header">
         <div class="question-meta">
           <span>#{{ question.id }}</span>
-          <span>{{ question.chapter_name }}</span>
+          <span>{{ question.chapter_name }}{% if question.topic_name %} &bull; {{ question.topic_name }}{% endif %}</span>
           <span class="badge bg-light text-dark">{{ question.question_type or 'MCQ' }}</span>
         </div>
         <div class="question-actions">
@@ -297,6 +300,124 @@
     programFilter.addEventListener('change', applyFilters);
     chapterFilter.addEventListener('change', filterCards);
     applyFilters();
+  })();
+</script>
+
+<!-- Import CSV Modal -->
+<div class="modal fade" id="importQuestionsModal" tabindex="-1" aria-labelledby="importQuestionsModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="importQuestionsModalLabel">Import Questions from CSV / Excel</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('exams.import_questions') }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body text-start">
+          <p class="text-muted" style="font-size: 0.9rem;">Import multiple MCQ questions at once. Select a target chapter to unlock the dynamic Excel template download.</p>
+          
+          <div class="mb-3">
+            <label for="importProgramSelect" class="form-label">Program / Course</label>
+            <select class="form-select" id="importProgramSelect" required>
+              <option value="" disabled selected>-- Select Program --</option>
+              {% for program in programs %}
+              <option value="{{ program.id }}">
+                {{ program.program_name }}{% if program.course_name %} - {{ program.course_name }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="importChapterSelect" class="form-label">Target Chapter</label>
+            <select class="form-select" id="importChapterSelect" name="chapter_id" required>
+              <option value="" disabled selected>-- Select Target Chapter --</option>
+              {% for chapter in chapters %}
+              {% if chapter.status == 'active' %}
+              <option value="{{ chapter.id }}" data-program-ids="{{ chapter.program_ids or '' }}">
+                {{ chapter.title }}
+              </option>
+              {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+          
+          <div class="mb-3">
+            <label for="csvFileInput" class="form-label">CSV / Excel File</label>
+            <input class="form-control" type="file" id="csvFileInput" name="csv_file" accept=".csv,.xlsx" required>
+          </div>
+          
+          <div class="alert alert-secondary py-2 px-3 mb-0" style="font-size: 0.85rem; line-height: 1.4;">
+            <strong>Format Guidelines:</strong>
+            <ul class="mb-0 ps-3">
+              <li>Columns: <em>Topic Title (optional), Question Text, Option A, Option B, Option C, Option D, Correct Answer</em></li>
+              <li>Correct Answer values must be single letters: <strong>A, B, C, or D</strong></li>
+              <li>Download: <a id="downloadTemplateLink" href="#" class="alert-link fw-bold" style="pointer-events: none; opacity: 0.5;">Excel Template (Select Target Chapter First)</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Import Questions</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var importProgramSelect = document.getElementById('importProgramSelect');
+    var importChapterSelect = document.getElementById('importChapterSelect');
+    var downloadLink = document.getElementById('downloadTemplateLink');
+    if (!importProgramSelect || !importChapterSelect || !downloadLink) {
+      return;
+    }
+    
+    var chapterOptions = Array.prototype.slice.call(importChapterSelect.options);
+    
+    function matchesProgram(option, programId) {
+      if (!programId) {
+        return true;
+      }
+      var ids = (option.getAttribute('data-program-ids') || '').split(',').filter(Boolean);
+      return ids.indexOf(programId) !== -1;
+    }
+
+    function updateDownloadLink() {
+      var chapterId = importChapterSelect.value;
+      if (chapterId) {
+        downloadLink.href = '/lms_admin/questions/download-template?chapter_id=' + chapterId;
+        downloadLink.style.pointerEvents = 'auto';
+        downloadLink.style.opacity = '1';
+        downloadLink.innerText = 'Excel Template (with topic dropdowns)';
+      } else {
+        downloadLink.href = '#';
+        downloadLink.style.pointerEvents = 'none';
+        downloadLink.style.opacity = '0.5';
+        downloadLink.innerText = 'Excel Template (Select Target Chapter First)';
+      }
+    }
+    
+    importProgramSelect.addEventListener('change', function () {
+      var programId = importProgramSelect.value;
+      var selectedOption = importChapterSelect.options[importChapterSelect.selectedIndex];
+      
+      chapterOptions.forEach(function (option) {
+        if (option.value === "") {
+          option.hidden = false;
+        } else {
+          option.hidden = !matchesProgram(option, programId);
+        }
+      });
+      
+      if (selectedOption && selectedOption.hidden) {
+        importChapterSelect.value = '';
+      }
+      updateDownloadLink();
+    });
+
+    importChapterSelect.addEventListener('change', updateDownloadLink);
   })();
 </script>
 {% endblock %}

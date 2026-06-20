@@ -136,6 +136,21 @@
             </select>
           </div>
 
+          <div>
+            <label class="form-label" for="topicSelect">Topic (Optional)</label>
+            <select class="form-select" id="topicSelect" name="master_topic_id">
+              <option value="">Select topic</option>
+              {% for topic in topics %}
+              <option
+                value="{{ topic.id }}"
+                data-chapter-id="{{ topic.master_chapter_id }}"
+                {% if question and question.master_topic_id == topic.id %}selected{% endif %}>
+                {{ topic.title }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
           <div class="full-span">
             <label class="form-label" for="question_text">Question Text <span class="text-danger">*</span></label>
             <textarea class="form-control" id="question_text" name="question_text" rows="4" required>{{ question.question_text if question else '' }}</textarea>
@@ -184,11 +199,13 @@
   (function () {
     var programFilter = document.getElementById('programFilter');
     var chapterSelect = document.getElementById('chapterSelect');
-    if (!programFilter || !chapterSelect) {
+    var topicSelect = document.getElementById('topicSelect');
+    if (!programFilter || !chapterSelect || !topicSelect) {
       return;
     }
 
     var chapterOptions = Array.prototype.slice.call(chapterSelect.options);
+    var topicOptions = Array.prototype.slice.call(topicSelect.options);
 
     function optionMatchesProgram(option, programId) {
       if (!option.value || !programId) {
@@ -210,9 +227,29 @@
       if (!selectedStillVisible) {
         chapterSelect.value = '';
       }
+      filterTopics();
+    }
+
+    function filterTopics() {
+      var chapterId = chapterSelect.value;
+      var selectedOption = topicSelect.options[topicSelect.selectedIndex];
+      var selectedStillVisible = selectedOption && (!selectedOption.value || selectedOption.getAttribute('data-chapter-id') === chapterId);
+
+      topicOptions.forEach(function (option) {
+        if (!option.value) {
+          option.hidden = false;
+        } else {
+          option.hidden = option.getAttribute('data-chapter-id') !== chapterId;
+        }
+      });
+
+      if (!selectedStillVisible) {
+        topicSelect.value = '';
+      }
     }
 
     programFilter.addEventListener('change', filterChapters);
+    chapterSelect.addEventListener('change', filterTopics);
     filterChapters();
   })();
 </script>

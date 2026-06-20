@@ -132,23 +132,29 @@ def _clone_master_chapter(cur, master_chapter_id):
     ))
     new_master_chapter_id = cur.lastrowid
 
-    # 3. Duplicate all linked master topics
+    # 3. Duplicate all linked master topics and build a mapping dictionary
+    topic_mapping = {}
     cur.execute("SELECT id FROM lms_master_topics WHERE master_chapter_id = ?", (master_chapter_id,))
     topics = cur.fetchall()
     for topic in topics:
-        _clone_master_topic(cur, topic['id'], new_master_chapter_id)
+        new_topic_id = _clone_master_topic(cur, topic['id'], new_master_chapter_id)
+        topic_mapping[topic['id']] = new_topic_id
 
     # 4. Duplicate questions in the question bank (lms_question_bank)
     cur.execute("SELECT * FROM lms_question_bank WHERE chapter_id = ?", (master_chapter_id,))
     questions = cur.fetchall()
     for q in questions:
+        old_topic_id = q['master_topic_id'] if 'master_topic_id' in q.keys() else None
+        new_topic_id = topic_mapping.get(old_topic_id) if old_topic_id else None
+
         cur.execute("""
             INSERT INTO lms_question_bank (
-                chapter_id, question_text, option_a, option_b, option_c, option_d,
+                chapter_id, master_topic_id, question_text, option_a, option_b, option_c, option_d,
                 correct_option, question_type
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             new_master_chapter_id,
+            new_topic_id,
             q['question_text'],
             q['option_a'],
             q['option_b'],

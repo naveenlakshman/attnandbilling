@@ -49,6 +49,7 @@ def _get_questions(cur):
             SELECT
                 qb.id,
                 qb.chapter_id,
+                qb.master_topic_id,
                 qb.question_text,
                 qb.option_a,
                 qb.option_b,
@@ -57,9 +58,11 @@ def _get_questions(cur):
                 qb.correct_option,
                 qb.question_type,
                 COALESCE(mc.title, 'Unknown Chapter') AS chapter_name,
+                mt.title AS topic_name,
                 GROUP_CONCAT(DISTINCT pc.program_id) AS program_ids
             FROM lms_question_bank qb
             LEFT JOIN lms_master_chapters mc ON mc.id = qb.chapter_id
+            LEFT JOIN lms_master_topics mt ON mt.id = qb.master_topic_id
             LEFT JOIN lms_program_chapters pc ON pc.master_chapter_id = mc.id
             GROUP BY qb.id
             ORDER BY qb.id DESC
@@ -80,15 +83,21 @@ def _question_form_fields():
         "option_c": request.form.get("option_c", "").strip(),
         "option_d": request.form.get("option_d", "").strip(),
         "correct_option": request.form.get("correct_option", "").strip().upper(),
+        "master_topic_id": request.form.get("master_topic_id", "").strip(),
     }
 
 
 def _validate_question_fields(fields):
-    if any(not value for value in fields.values()):
+    # Exclude master_topic_id from the required fields check since it is optional
+    required_fields = {k: v for k, v in fields.items() if k != "master_topic_id"}
+    if any(not value for value in required_fields.values()):
         return "All question fields are required."
 
     if not fields["chapter_id"].isdigit():
         return "Please select a valid chapter."
+
+    if fields["master_topic_id"] and not fields["master_topic_id"].isdigit():
+        return "Please select a valid topic."
 
     if fields["correct_option"] not in VALID_CORRECT_OPTIONS:
         return "Correct answer must be A, B, C, or D."
@@ -492,10 +501,14 @@ def manage_questions():
         cur = conn.cursor()
         programs = _get_programs(cur)
         chapters = _get_chapters(cur)
+        topics = cur.execute(
+            "SELECT id, master_chapter_id, title FROM lms_master_topics WHERE status = 'active' ORDER BY topic_order"
+        ).fetchall()
         return render_template(
             "exams/admin_manage_questions.html",
             programs=programs,
             chapters=chapters,
+            topics=topics,
             question=None,
             form_action=url_for("exams.add_question"),
             submit_label="Add Question",
@@ -539,10 +552,14 @@ def edit_question(question_id):
 
         programs = _get_programs(cur)
         chapters = _get_chapters(cur)
+        topics = cur.execute(
+            "SELECT id, master_chapter_id, title FROM lms_master_topics WHERE status = 'active' ORDER BY topic_order"
+        ).fetchall()
         return render_template(
             "exams/admin_manage_questions.html",
             programs=programs,
             chapters=chapters,
+            topics=topics,
             question=question,
             form_action=url_for("exams.update_question", question_id=question_id),
             submit_label="Update Question",
@@ -563,6 +580,7 @@ def add_question():
         return redirect(url_for("exams.manage_questions"))
 
     chapter_id = int(fields["chapter_id"])
+    master_topic_id = int(fields["master_topic_id"]) if fields["master_topic_id"] else None
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -578,6 +596,7 @@ def add_question():
             """
                 INSERT INTO lms_question_bank (
                     chapter_id,
+                    master_topic_id,
                     question_text,
                     option_a,
                     option_b,
@@ -585,10 +604,11 @@ def add_question():
                     option_d,
                     correct_option,
                     question_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'MCQ')
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'MCQ')
             """,
             (
                 chapter_id,
+                master_topic_id,
                 fields["question_text"],
                 fields["option_a"],
                 fields["option_b"],
@@ -626,6 +646,7 @@ def update_question(question_id):
         return redirect(url_for("exams.edit_question", question_id=question_id))
 
     chapter_id = int(fields["chapter_id"])
+    master_topic_id = int(fields["master_topic_id"]) if fields["master_topic_id"] else None
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -650,6 +671,7 @@ def update_question(question_id):
                 UPDATE lms_question_bank
                 SET
                     chapter_id = ?,
+                    master_topic_id = ?,
                     question_text = ?,
                     option_a = ?,
                     option_b = ?,
@@ -661,6 +683,7 @@ def update_question(question_id):
             """,
             (
                 chapter_id,
+                master_topic_id,
                 fields["question_text"],
                 fields["option_a"],
                 fields["option_b"],
@@ -718,6 +741,368 @@ def delete_question(question_id):
         conn.close()
 
     return redirect(url_for("exams.view_questions"))
+
+
+@exams_bp.route("/lms_admin/questions/import", methods=["POST"])
+@lms_content_manager_required
+def import_questions():
+    """Import multiple questions from a CSV or Excel file into a selected chapter."""
+    import csv
+    import io
+    from openpyxl import load_workbook
+    
+    chapter_id = request.form.get("chapter_id", type=int)
+    if not chapter_id:
+        flash("Please select a target chapter.", "danger")
+        return redirect(url_for("exams.view_questions"))
+        
+    uploaded_file = request.files.get("csv_file") # keeping input name "csv_file" for form compatibility
+    if not uploaded_file or not uploaded_file.filename:
+        flash("Please upload a file.", "danger")
+        return redirect(url_for("exams.view_questions"))
+        
+    filename = uploaded_file.filename.lower()
+    is_xlsx = filename.endswith('.xlsx')
+    is_csv = filename.endswith('.csv')
+    
+    if not is_xlsx and not is_csv:
+        flash("Please upload a valid CSV (.csv) or Excel (.xlsx) file.", "danger")
+        return redirect(url_for("exams.view_questions"))
+        
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        # Verify chapter exists
+        chapter = cur.execute("SELECT id, title FROM lms_master_chapters WHERE id = ?", (chapter_id,)).fetchone()
+        if not chapter:
+            flash("Selected chapter not found.", "danger")
+            return redirect(url_for("exams.view_questions"))
+            
+        # Fetch active topics for lookup mapping
+        topics = cur.execute(
+            "SELECT id, title FROM lms_master_topics WHERE master_chapter_id = ? AND status = 'active'",
+            (chapter_id,)
+        ).fetchall()
+        topic_lookup = {t["title"].strip().lower(): t["id"] for t in topics}
+        
+        rows_to_import = []
+        
+        if is_xlsx:
+            # Parse Excel using openpyxl
+            wb = load_workbook(uploaded_file, data_only=True)
+            ws = wb.active
+            
+            iter_rows = ws.iter_rows(values_only=True)
+            headers = next(iter_rows, None)
+            if not headers:
+                flash("The Excel sheet is empty.", "danger")
+                return redirect(url_for("exams.view_questions"))
+                
+            headers = [str(h).strip().lower() for h in headers if h is not None]
+            
+            col_map = {
+                "topic_title": ["topic title", "topic", "topic_title"],
+                "question_text": ["question_text", "question", "question text"],
+                "option_a": ["option_a", "option a", "a"],
+                "option_b": ["option_b", "option b", "b"],
+                "option_c": ["option_c", "option c", "c"],
+                "option_d": ["option_d", "option d", "d"],
+                "correct_option": ["correct_option", "correct option", "correct answer", "correct"]
+            }
+            
+            indices = {}
+            for col, aliases in col_map.items():
+                idx = -1
+                for alias in aliases:
+                    if alias in headers:
+                        idx = headers.index(alias)
+                        break
+                if col != "topic_title" and idx == -1:
+                    flash(f"Required column '{col}' was not found in the Excel sheet. Headers must contain: Question Text, Option A, Option B, Option C, Option D, Correct Answer.", "danger")
+                    return redirect(url_for("exams.view_questions"))
+                indices[col] = idx
+                
+            row_num = 1
+            for row in iter_rows:
+                row_num += 1
+                if not row or not any(x is not None and str(x).strip() for x in row):
+                    continue
+                    
+                def get_val(col_name):
+                    idx = indices.get(col_name, -1)
+                    if idx != -1 and idx < len(row) and row[idx] is not None:
+                        return str(row[idx]).strip()
+                    return ""
+                    
+                q_text = get_val("question_text")
+                opt_a = get_val("option_a")
+                opt_b = get_val("option_b")
+                opt_c = get_val("option_c")
+                opt_d = get_val("option_d")
+                corr = get_val("correct_option").upper()
+                t_title = get_val("topic_title")
+                
+                if not q_text or not opt_a or not opt_b or not opt_c or not opt_d or not corr:
+                    flash(f"Error in row {row_num}: Question text, options (A-D), and correct answer must all be filled.", "danger")
+                    return redirect(url_for("exams.view_questions"))
+                    
+                if corr not in ('A', 'B', 'C', 'D'):
+                    flash(f"Error in row {row_num}: Correct answer must be A, B, C, or D. Got '{corr}'.", "danger")
+                    return redirect(url_for("exams.view_questions"))
+                    
+                # Resolve topic_id
+                master_topic_id = None
+                if t_title:
+                    master_topic_id = topic_lookup.get(t_title.lower())
+                    if not master_topic_id:
+                        flash(f"Error in row {row_num}: Topic '{t_title}' not found in the selected chapter. Please check or add the topic first.", "danger")
+                        return redirect(url_for("exams.view_questions"))
+                        
+                rows_to_import.append((master_topic_id, q_text, opt_a, opt_b, opt_c, opt_d, corr))
+                
+        else:
+            # Parse CSV
+            stream = io.StringIO(uploaded_file.stream.read().decode("utf-8-sig"), newline=None)
+            reader = csv.reader(stream)
+            
+            headers = next(reader, None)
+            if not headers:
+                flash("The CSV file is empty.", "danger")
+                return redirect(url_for("exams.view_questions"))
+                
+            headers = [h.strip().lower() for h in headers]
+            
+            col_map = {
+                "topic_title": ["topic title", "topic", "topic_title"],
+                "question_text": ["question_text", "question", "question text"],
+                "option_a": ["option_a", "option a", "a"],
+                "option_b": ["option_b", "option b", "b"],
+                "option_c": ["option_c", "option c", "c"],
+                "option_d": ["option_d", "option d", "d"],
+                "correct_option": ["correct_option", "correct option", "correct answer", "correct"]
+            }
+            
+            indices = {}
+            for col, aliases in col_map.items():
+                idx = -1
+                for alias in aliases:
+                    if alias in headers:
+                        idx = headers.index(alias)
+                        break
+                if col != "topic_title" and idx == -1:
+                    flash(f"Required column '{col}' was not found in the CSV. Headers must contain: Question Text, Option A, Option B, Option C, Option D, Correct Answer.", "danger")
+                    return redirect(url_for("exams.view_questions"))
+                indices[col] = idx
+                
+            row_num = 1
+            for row in reader:
+                row_num += 1
+                if not row or not any(field.strip() for field in row):
+                    continue
+                    
+                def get_val(col_name):
+                    idx = indices.get(col_name, -1)
+                    if idx != -1 and idx < len(row):
+                        return row[idx].strip()
+                    return ""
+                    
+                q_text = get_val("question_text")
+                opt_a = get_val("option_a")
+                opt_b = get_val("option_b")
+                opt_c = get_val("option_c")
+                opt_d = get_val("option_d")
+                corr = get_val("correct_option").upper()
+                t_title = get_val("topic_title")
+                
+                if not q_text or not opt_a or not opt_b or not opt_c or not opt_d or not corr:
+                    flash(f"Error in row {row_num}: Question text, options (A-D), and correct answer must all be filled.", "danger")
+                    return redirect(url_for("exams.view_questions"))
+                    
+                if corr not in ('A', 'B', 'C', 'D'):
+                    flash(f"Error in row {row_num}: Correct answer must be A, B, C, or D. Got '{corr}'.", "danger")
+                    return redirect(url_for("exams.view_questions"))
+                    
+                # Resolve topic_id
+                master_topic_id = None
+                if t_title:
+                    master_topic_id = topic_lookup.get(t_title.lower())
+                    if not master_topic_id:
+                        flash(f"Error in row {row_num}: Topic '{t_title}' not found in the selected chapter. Please check or add the topic first.", "danger")
+                        return redirect(url_for("exams.view_questions"))
+                        
+                rows_to_import.append((master_topic_id, q_text, opt_a, opt_b, opt_c, opt_d, corr))
+                
+        # Perform insertion of collected rows
+        imported_count = 0
+        for r in rows_to_import:
+            cur.execute("""
+                INSERT INTO lms_question_bank (
+                    chapter_id, master_topic_id, question_text, option_a, option_b, option_c, option_d, correct_option, question_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'MCQ')
+            """, (chapter_id, r[0], r[1], r[2], r[3], r[4], r[5], r[6]))
+            imported_count += 1
+            
+        conn.commit()
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=session.get("branch_id"),
+            action_type="create",
+            module_name="lms_question_bank",
+            record_id=None,
+            description=f"Imported {imported_count} questions from file into chapter: {chapter['title']}",
+            conn=conn,
+        )
+        flash(f"Successfully imported {imported_count} questions into '{chapter['title']}'.", "success")
+        
+    except Exception as e:
+        flash(f"Error importing file: {str(e)}", "danger")
+    finally:
+        conn.close()
+        
+    return redirect(url_for("exams.view_questions"))
+
+
+@exams_bp.route("/lms_admin/questions/download-template", methods=["GET"])
+@lms_content_manager_required
+def download_template():
+    """Download a dynamic questions Excel template (.xlsx) for a selected chapter."""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.worksheet.datavalidation import DataValidation
+    from flask import Response
+
+    chapter_id = request.args.get("chapter_id", type=int)
+    if not chapter_id:
+        return "Chapter ID is required to generate the template.", 400
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        chapter = cur.execute(
+            "SELECT id, title FROM lms_master_chapters WHERE id = ?",
+            (chapter_id,),
+        ).fetchone()
+        if not chapter:
+            return "Chapter not found.", 404
+
+        # Fetch active topics for this chapter
+        topics = cur.execute(
+            """
+                SELECT id, title
+                FROM lms_master_topics
+                WHERE master_chapter_id = ? AND status = 'active'
+                ORDER BY topic_order
+            """,
+            (chapter_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    wb = Workbook()
+    
+    # 1. Sheet 1: Questions
+    ws_q = wb.active
+    ws_q.title = "Questions"
+    headers = [
+        "Topic Title",
+        "Question Text",
+        "Option A",
+        "Option B",
+        "Option C",
+        "Option D",
+        "Correct Answer",
+    ]
+    ws_q.append(headers)
+
+    # 2. Sheet 2: Valid Topics
+    ws_t = wb.create_sheet(title="Valid Topics")
+    topic_titles = [t["title"] for t in topics]
+    for title in topic_titles:
+        ws_t.append([title])
+
+    # Sample rows on Sheet 1 (if topics exist)
+    sample_topic = topic_titles[0] if topic_titles else "General (No Topic)"
+    ws_q.append([
+        sample_topic,
+        "What is the capital of France?",
+        "Berlin",
+        "Madrid",
+        "Paris",
+        "Rome",
+        "C"
+    ])
+    ws_q.append([
+        sample_topic,
+        "Which keyword is used to define a function in Python?",
+        "func",
+        "def",
+        "function",
+        "define",
+        "B"
+    ])
+
+    # 3. Data Validation Dropdowns
+    if topic_titles:
+        # Reference the Valid Topics sheet range
+        formula_topics = f"'Valid Topics'!$A$1:$A${len(topic_titles)}"
+        dv_topic = DataValidation(
+            type="list",
+            formula1=formula_topics,
+            allow_blank=True
+        )
+        dv_topic.error = "Please select a valid topic from the list."
+        dv_topic.errorTitle = "Invalid Topic"
+        dv_topic.prompt = "Select the topic for this question"
+        dv_topic.promptTitle = "Topic Title"
+        ws_q.add_data_validation(dv_topic)
+        # Apply validation from A2 down to A500
+        dv_topic.add("A2:A500")
+
+    # Excel Data validation for Correct Answer (Column G)
+    dv_correct = DataValidation(
+        type="list",
+        formula1='"A,B,C,D"',
+        allow_blank=False
+    )
+    dv_correct.error = "Correct Answer must be A, B, C, or D."
+    dv_correct.errorTitle = "Invalid Option"
+    dv_correct.prompt = "Choose the correct answer option"
+    dv_correct.promptTitle = "Correct Answer"
+    ws_q.add_data_validation(dv_correct)
+    # Apply validation from G2 down to G500
+    dv_correct.add("G2:G500")
+
+    # Save to BytesIO
+    out = io.BytesIO()
+    wb.save(out)
+    out.seek(0)
+
+    filename = f"template_chapter_{chapter_id}.xlsx"
+    resp = Response(
+        out.read(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    resp.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    return resp
+
+
+@exams_bp.route("/lms_admin/questions/sample-csv", methods=["GET"])
+@lms_content_manager_required
+def download_sample_csv():
+    """Download a sample questions CSV template."""
+    import io
+    import csv
+    from flask import Response
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Question Text", "Option A", "Option B", "Option C", "Option D", "Correct Answer"])
+    writer.writerow(["What is the capital of France?", "Berlin", "Madrid", "Paris", "Rome", "C"])
+    writer.writerow(["Which keyword is used to define a function in Python?", "func", "def", "function", "define", "B"])
+    
+    response = Response(output.getvalue(), mimetype="text/csv")
+    response.headers["Content-Disposition"] = "attachment; filename=sample_questions.csv"
+    return response
 
 
 @exams_bp.route("/student/final-exam/apply", methods=["GET", "POST"])
@@ -1141,6 +1526,7 @@ def chapter_mock_intro(chapter_id):
                 SELECT
                     id,
                     chapter_id,
+                    master_topic_id,
                     question_text,
                     option_a,
                     option_b,
@@ -1160,8 +1546,33 @@ def chapter_mock_intro(chapter_id):
         flash("No mock test questions are available for this chapter yet.", "warning")
         return redirect(url_for("students.dashboard"))
 
-    random.shuffle(questions)
-    selected_questions = questions[:20]
+    # Group questions by master_topic_id (using None for no topic)
+    grouped = {}
+    for q in questions:
+        tid = q["master_topic_id"]
+        if tid not in grouped:
+            grouped[tid] = []
+        grouped[tid].append(dict(q))
+
+    # Shuffle each group's questions
+    for tid in grouped:
+        random.shuffle(grouped[tid])
+
+    # Round-robin distribution
+    selected_questions = []
+    keys = list(grouped.keys())
+    # Shuffle keys to prevent topic order bias in round-robin
+    random.shuffle(keys)
+
+    while len(selected_questions) < 20 and any(grouped[k] for k in keys):
+        for k in keys:
+            if len(selected_questions) >= 20:
+                break
+            if grouped[k]:
+                selected_questions.append(grouped[k].pop())
+
+    # Shuffle the final selection so they are not ordered by topic round-robin
+    random.shuffle(selected_questions)
     selected_ids = [question["id"] for question in selected_questions]
 
     conn = get_conn()
