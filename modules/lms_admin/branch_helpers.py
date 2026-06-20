@@ -138,4 +138,25 @@ def _clone_master_chapter(cur, master_chapter_id):
     for topic in topics:
         _clone_master_topic(cur, topic['id'], new_master_chapter_id)
 
+    # 4. Duplicate questions in the question bank (lms_question_bank)
+    cur.execute("SELECT * FROM lms_question_bank WHERE chapter_id = ?", (master_chapter_id,))
+    questions = cur.fetchall()
+    for q in questions:
+        cur.execute("""
+            INSERT INTO lms_question_bank (
+                chapter_id, question_text, option_a, option_b, option_c, option_d,
+                correct_option, question_type
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            new_master_chapter_id,
+            q['question_text'],
+            q['option_a'],
+            q['option_b'],
+            q['option_c'],
+            q['option_d'],
+            q['correct_option'],
+            q['question_type']
+        ))
+
     return new_master_chapter_id
+
