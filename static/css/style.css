@@ -45,6 +45,112 @@ body {
   background-color: #0d6efd;
   color: #fff;
 }
+.erp-master-nav {
+  width: 100%;
+}
+.erp-master-nav .erp-primary-link {
+  margin-bottom: 10px;
+}
+.erp-module {
+  margin-bottom: 6px;
+}
+.erp-module-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #212529;
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  transition: background-color 0.15s, color 0.15s;
+}
+.erp-module-toggle > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.erp-module-toggle:hover,
+.erp-module-toggle.active {
+  background-color: #eef5ff;
+  color: #0d6efd;
+}
+.erp-module-toggle.active[aria-expanded="true"] {
+  background-color: #0d6efd;
+  color: #fff;
+}
+.erp-module-chevron {
+  color: currentColor;
+  font-weight: 800;
+  opacity: 0.65;
+  transition: transform 0.15s ease;
+}
+.erp-module-toggle[aria-expanded="true"] .erp-module-chevron {
+  transform: rotate(90deg);
+}
+.erp-nav-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #eef2f7;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+.nav-link.active .erp-nav-mark,
+.erp-module-toggle.active[aria-expanded="true"] .erp-nav-mark {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+.erp-module-menu {
+  margin: 6px 0 10px 26px;
+  padding: 2px 0 2px 10px;
+  border-left: 1px solid #e5eaf1;
+}
+.erp-module-menu .nav-link {
+  border-radius: 9px;
+  padding: 8px 11px;
+  margin-bottom: 2px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #475569;
+}
+.erp-module-menu .nav-link:hover {
+  color: #0d6efd;
+  background: #f4f7fb;
+}
+.erp-module-menu .nav-link.active {
+  background: #eaf2ff;
+  color: #0d6efd;
+  box-shadow: inset 3px 0 0 #0d6efd;
+}
+.erp-subsection {
+  color: #8a94a6;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  margin: 12px 0 4px 10px;
+  text-transform: uppercase;
+}
+.erp-demo-link {
+  color: #b7791f !important;
+  background: #fff8e1;
+}
+.erp-demo-link:hover {
+  color: #8a5a00 !important;
+  background: #fff3bf !important;
+}
 .erp-sidebar .section-title {
   font-size: 0.78rem;
   font-weight: 700;

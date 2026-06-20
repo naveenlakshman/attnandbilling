@@ -33,7 +33,7 @@
 <body>
 
 <div class="erp-shell">
-  <!-- Dynamic Sidebar -->
+  <!-- Master ERP Sidebar -->
   <aside class="erp-sidebar offcanvas-lg offcanvas-start" id="erpSidebar" tabindex="-1" aria-label="Sidebar navigation">
     <div class="offcanvas-header border-bottom d-lg-none">
       <h6 class="offcanvas-title fw-bold mb-0">{{ company.company_name }}</h6>
@@ -47,38 +47,12 @@
           <br>
         {% endif %}
         <div class="fw-bold text-dark" style="font-size: 1.25rem;">{{ company.company_name }}</div>
-        <div class="text-muted small">
-          {% if request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) %}
-            LMS Module
-          {% elif request.endpoint and request.endpoint.startswith('attendance.') %}
-            Attendance Module
-          {% elif request.endpoint and request.endpoint.startswith('leads.') %}
-            Leads Module
-          {% elif request.endpoint and request.endpoint.startswith('billing.') %}
-            Billing Module
-          {% elif request.endpoint and request.endpoint.startswith('baddebt.') %}
-            Bad Debt Management
-          {% else %}
-            {{ company.tagline or 'ERP System' }}
-          {% endif %}
-        </div>
+        <div class="text-muted small">{{ company.tagline or 'ERP System' }}</div>
         <hr>
       </div>
 
       <nav class="nav flex-column erp-nav">
-        {% if request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) %}
-          {% include 'includes/sidebar_lms.html' %}
-        {% elif request.endpoint and request.endpoint.startswith('attendance.') %}
-          {% include 'includes/sidebar_attendance.html' %}
-        {% elif request.endpoint and request.endpoint.startswith('leads.') %}
-          {% include 'includes/sidebar_leads.html' %}
-        {% elif request.endpoint and request.endpoint.startswith('billing.') %}
-          {% include 'includes/sidebar_billing.html' %}
-        {% elif request.endpoint and request.endpoint.startswith('baddebt.') %}
-          {% include 'includes/sidebar_baddebt.html' %}
-        {% else %}
-          {% include 'includes/sidebar_main.html' %}
-        {% endif %}
+        {% include 'includes/sidebar_master.html' %}
       </nav>
     </div>
   </aside>
@@ -137,20 +111,8 @@
   </main>
 </div>
 
-<!-- Dynamic Mobile Bottom Navigation -->
-{% if request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) %}
-  {% include 'includes/mobile_nav_lms.html' %}
-{% elif request.endpoint and request.endpoint.startswith('attendance.') %}
-  {% include 'includes/mobile_nav_attendance.html' %}
-{% elif request.endpoint and request.endpoint.startswith('leads.') %}
-  {% include 'includes/mobile_nav_leads.html' %}
-{% elif request.endpoint and request.endpoint.startswith('billing.') %}
-  {% include 'includes/mobile_nav_billing.html' %}
-{% elif request.endpoint and request.endpoint.startswith('baddebt.') %}
-  {% include 'includes/mobile_nav_baddebt.html' %}
-{% else %}
-  {% include 'includes/mobile_nav_main.html' %}
-{% endif %}
+<!-- Global Mobile Bottom Navigation -->
+{% include 'includes/mobile_nav_master.html' %}
 
 <!-- Dynamic FAB Menu Overlays -->
 {% if request.endpoint and request.endpoint.startswith('attendance.') %}

@@ -1,0 +1,174 @@
+{% set ep = request.endpoint or '' %}
+{% set is_admin = session.get('role') == 'admin' %}
+{% set leads_active = ep.startswith('leads.') or ep.startswith('reports.') %}
+{% set billing_active = ep.startswith('billing.') or ep.startswith('baddebt.') %}
+{% set attendance_active = ep.startswith('attendance.') %}
+{% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') %}
+{% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.')) %}
+
+<div class="erp-master-nav accordion accordion-flush" id="erpSidebarAccordion">
+  <a class="nav-link erp-primary-link {{ 'active' if ep == 'core.dashboard' else '' }}"
+     href="{{ url_for('core.dashboard') }}">
+    <span class="erp-nav-mark">DB</span>
+    <span>Dashboard</span>
+  </a>
+
+  <div class="erp-module">
+    <button class="erp-module-toggle {{ 'active' if leads_active else '' }}"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#sidebarLeads"
+            aria-expanded="{{ 'true' if leads_active else 'false' }}"
+            aria-controls="sidebarLeads">
+      <span><span class="erp-nav-mark">LD</span> Leads Module</span>
+      <span class="erp-module-chevron">&gt;</span>
+    </button>
+    <div id="sidebarLeads"
+         class="accordion-collapse collapse {{ 'show' if leads_active else '' }}"
+         data-bs-parent="#erpSidebarAccordion">
+      <div class="erp-module-menu">
+        <a class="nav-link {{ 'active' if ep == 'leads.dashboard' else '' }}" href="{{ url_for('leads.dashboard') }}">Leads Dashboard</a>
+        <a class="nav-link {{ 'active' if ep in ['leads.leads_list', 'leads.lead_detail', 'leads.lead_edit'] else '' }}" href="{{ url_for('leads.leads_list') }}">Leads</a>
+        <a class="nav-link {{ 'active' if ep == 'leads.lead_create' else '' }}" href="{{ url_for('leads.lead_create') }}">Add Lead</a>
+        <a class="nav-link {{ 'active' if ep in ['leads.followups_today', 'leads.followups_quick_complete'] else '' }}" href="{{ url_for('leads.followups_today') }}">Follow-ups</a>
+        <a class="nav-link {{ 'active' if ep == 'leads.pipeline' else '' }}" href="{{ url_for('leads.pipeline') }}">Pipeline</a>
+        {% if is_admin %}
+          <div class="erp-subsection">Reports</div>
+          <a class="nav-link {{ 'active' if ep == 'leads.reports' else '' }}" href="{{ url_for('leads.reports') }}">Leads Reports</a>
+          <a class="nav-link {{ 'active' if ep == 'reports.dashboard' else '' }}" href="{{ url_for('reports.dashboard') }}">Analytics</a>
+          <a class="nav-link {{ 'active' if ep == 'reports.daily_report' else '' }}" href="{{ url_for('reports.daily_report') }}">Daily Report</a>
+          <a class="nav-link {{ 'active' if ep == 'reports.import_page' else '' }}" href="{{ url_for('reports.import_page') }}">Import Data</a>
+          <a class="nav-link {{ 'active' if ep == 'leads.activity_log' else '' }}" href="{{ url_for('leads.activity_log') }}">My Activity</a>
+        {% else %}
+          <a class="nav-link {{ 'active' if ep == 'leads.activity_log' else '' }}" href="{{ url_for('leads.activity_log') }}">My Activity</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="erp-module">
+    <button class="erp-module-toggle {{ 'active' if billing_active else '' }}"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#sidebarBilling"
+            aria-expanded="{{ 'true' if billing_active else 'false' }}"
+            aria-controls="sidebarBilling">
+      <span><span class="erp-nav-mark">BL</span> Billing Module</span>
+      <span class="erp-module-chevron">&gt;</span>
+    </button>
+    <div id="sidebarBilling"
+         class="accordion-collapse collapse {{ 'show' if billing_active else '' }}"
+         data-bs-parent="#erpSidebarAccordion">
+      <div class="erp-module-menu">
+        {% if is_admin %}
+          <a class="nav-link {{ 'active' if ep == 'billing.dashboard' else '' }}" href="{{ url_for('billing.dashboard') }}">Billing Dashboard</a>
+        {% else %}
+          <a class="nav-link {{ 'active' if ep == 'billing.menu' else '' }}" href="{{ url_for('billing.menu') }}">Billing Menu</a>
+        {% endif %}
+        <a class="nav-link {{ 'active' if ep in ['billing.students', 'billing.student_new', 'billing.student_profile', 'billing.student_edit'] else '' }}" href="{{ url_for('billing.students') }}">Students</a>
+        <a class="nav-link {{ 'active' if ep in ['billing.courses', 'billing.course_new', 'billing.course_edit'] else '' }}" href="{{ url_for('billing.courses') }}">Courses</a>
+        <a class="nav-link {{ 'active' if ep in ['billing.invoices', 'billing.invoice_new', 'billing.invoice_view', 'billing.invoice_edit'] else '' }}" href="{{ url_for('billing.invoices') }}">Invoices</a>
+        <a class="nav-link {{ 'active' if ep in ['billing.receipts', 'billing.receipt_new', 'billing.receipt_view', 'billing.receipt_edit'] else '' }}" href="{{ url_for('billing.receipts') }}">Payments</a>
+        <a class="nav-link {{ 'active' if ep == 'billing.receivables' else '' }}" href="{{ url_for('billing.receivables') }}">Receivables</a>
+        <a class="nav-link {{ 'active' if ep in ['billing.expenses', 'billing.expense_new', 'billing.expense_categories', 'billing.expense_category_new'] else '' }}" href="{{ url_for('billing.expenses') }}">Expenses</a>
+        <a class="nav-link {{ 'active' if ep == 'billing.activity_logs' else '' }}" href="{{ url_for('billing.activity_logs') }}">Activity Logs</a>
+        {% if is_admin %}
+          <a class="nav-link {{ 'active' if ep in ['baddebt.dashboard', 'baddebt.create'] or ep.startswith('baddebt.') else '' }}" href="{{ url_for('baddebt.dashboard') }}">Bad Debt Write-offs</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="erp-module">
+    <button class="erp-module-toggle {{ 'active' if attendance_active else '' }}"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#sidebarAttendance"
+            aria-expanded="{{ 'true' if attendance_active else 'false' }}"
+            aria-controls="sidebarAttendance">
+      <span><span class="erp-nav-mark">AT</span> Attendance Module</span>
+      <span class="erp-module-chevron">&gt;</span>
+    </button>
+    <div id="sidebarAttendance"
+         class="accordion-collapse collapse {{ 'show' if attendance_active else '' }}"
+         data-bs-parent="#erpSidebarAccordion">
+      <div class="erp-module-menu">
+        <a class="nav-link {{ 'active' if ep == 'attendance.dashboard' else '' }}" href="{{ url_for('attendance.dashboard') }}">Attendance Dashboard</a>
+        <a class="nav-link {{ 'active' if ep == 'attendance.mark_attendance' else '' }}" href="{{ url_for('attendance.mark_attendance') }}">Mark Attendance</a>
+        <a class="nav-link {{ 'active' if ep == 'attendance.attendance_pattern' else '' }}" href="{{ url_for('attendance.attendance_pattern') }}">Attendance Pattern</a>
+        <div class="erp-subsection">Batches</div>
+        <a class="nav-link {{ 'active' if ep in ['attendance.list_batches', 'attendance.view_batch', 'attendance.edit_batch', 'attendance.assign_students'] else '' }}" href="{{ url_for('attendance.list_batches') }}">Manage Batches</a>
+        <a class="nav-link {{ 'active' if ep == 'attendance.create_batch' else '' }}" href="{{ url_for('attendance.create_batch') }}">Create Batch</a>
+        <a class="nav-link {{ 'active' if ep == 'attendance.batch_planner' else '' }}" href="{{ url_for('attendance.batch_planner') }}">Batch Planner</a>
+        <div class="erp-subsection">Reports</div>
+        <a class="nav-link {{ 'active' if ep == 'attendance.daily_report' else '' }}" href="{{ url_for('attendance.daily_report') }}">Daily Report</a>
+        <a class="nav-link {{ 'active' if ep == 'attendance.monthly_summary' else '' }}" href="{{ url_for('attendance.monthly_summary') }}">Monthly Summary</a>
+        <a class="nav-link {{ 'active' if ep == 'attendance.defaulters' else '' }}" href="{{ url_for('attendance.defaulters') }}">Defaulters</a>
+        <div class="erp-subsection">Follow-ups</div>
+        <a class="nav-link {{ 'active' if ep in ['attendance.followups', 'attendance.followup_detail'] else '' }}" href="{{ url_for('attendance.followups') }}">Follow-ups</a>
+        <a class="nav-link {{ 'active' if ep == 'attendance.leave_requests' else '' }}" href="{{ url_for('attendance.leave_requests') }}">Leave Requests</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="erp-module">
+    <button class="erp-module-toggle {{ 'active' if lms_active else '' }}"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#sidebarLms"
+            aria-expanded="{{ 'true' if lms_active else 'false' }}"
+            aria-controls="sidebarLms">
+      <span><span class="erp-nav-mark">LM</span> LMS Module</span>
+      <span class="erp-module-chevron">&gt;</span>
+    </button>
+    <div id="sidebarLms"
+         class="accordion-collapse collapse {{ 'show' if lms_active else '' }}"
+         data-bs-parent="#erpSidebarAccordion">
+      <div class="erp-module-menu">
+        <a class="nav-link {{ 'active' if ep == 'lms_admin.dashboard' else '' }}" href="{{ url_for('lms_admin.dashboard') }}">LMS Dashboard</a>
+        <a class="nav-link {{ 'active' if ep == 'lms_admin.progress_dashboard' else '' }}" href="{{ url_for('lms_admin.progress_dashboard') }}">Progress</a>
+        <a class="nav-link {{ 'active' if ep in ['lms_admin.list_programs', 'lms_admin.program_new', 'lms_admin.program_edit', 'lms_admin.program_view', 'lms_admin.list_chapters', 'lms_admin.list_program_chapter_topics', 'lms_admin.list_program_resources', 'lms_admin.add_program_resource', 'lms_admin.edit_program_resource'] else '' }}" href="{{ url_for('lms_admin.list_programs') }}">Programs</a>
+        <a class="nav-link {{ 'active' if ep in ['lms_admin.list_master_chapters', 'lms_admin.master_chapter_new', 'lms_admin.master_chapter_edit', 'lms_admin.list_master_topics', 'lms_admin.master_topic_new', 'lms_admin.master_topic_edit', 'lms_admin.list_master_topic_contents', 'lms_admin.master_content_new'] else '' }}" href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a>
+        <a class="nav-link {{ 'active' if ep in ['lms_admin.all_assignments', 'lms_admin.manage_assignments', 'lms_admin.edit_assignment', 'lms_admin.view_submissions', 'lms_admin.review_submission'] else '' }}" href="{{ url_for('lms_admin.all_assignments') }}">Assignments</a>
+        <a class="nav-link {{ 'active' if ep in ['exams.view_questions', 'exams.manage_questions', 'exams.add_question', 'exams.edit_question', 'exams.update_question', 'exams.delete_question', 'exams.import_questions'] else '' }}" href="{{ url_for('exams.view_questions') }}">Question Bank</a>
+        <a class="nav-link {{ 'active' if ep in ['exams.final_exam_applications', 'exams.approve_final_exam_application', 'exams.reject_final_exam_application'] else '' }}" href="{{ url_for('exams.final_exam_applications') }}">Final Exam Applications</a>
+        {% if is_admin %}
+          <a class="nav-link {{ 'active' if ep == 'lms_admin.phase6_rollout_view' else '' }}" href="{{ url_for('lms_admin.phase6_rollout_view') }}">Legacy Migration</a>
+          <a class="nav-link {{ 'active' if ep in ['lms_admin.list_course_mappings', 'lms_admin.manage_course_mapping'] else '' }}" href="{{ url_for('lms_admin.list_course_mappings') }}">Course Mapping</a>
+        {% endif %}
+        <a class="nav-link erp-demo-link" href="{{ url_for('lms_admin.launch_demo') }}">Student Demo View</a>
+      </div>
+    </div>
+  </div>
+
+  {% if is_admin %}
+  <div class="erp-module">
+    <button class="erp-module-toggle {{ 'active' if admin_active else '' }}"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#sidebarAdmin"
+            aria-expanded="{{ 'true' if admin_active else 'false' }}"
+            aria-controls="sidebarAdmin">
+      <span><span class="erp-nav-mark">AD</span> Administration</span>
+      <span class="erp-module-chevron">&gt;</span>
+    </button>
+    <div id="sidebarAdmin"
+         class="accordion-collapse collapse {{ 'show' if admin_active else '' }}"
+         data-bs-parent="#erpSidebarAccordion">
+      <div class="erp-module-menu">
+        <a class="nav-link {{ 'active' if ep in ['core.users', 'core.user_new', 'core.user_edit'] else '' }}" href="{{ url_for('core.users') }}">Users</a>
+        <a class="nav-link {{ 'active' if ep in ['core.branches', 'core.branch_new', 'core.branch_edit'] else '' }}" href="{{ url_for('core.branches') }}">Branches</a>
+        <a class="nav-link {{ 'active' if ep == 'core.company_profile' else '' }}" href="{{ url_for('core.company_profile') }}">Company Profile</a>
+        <a class="nav-link {{ 'active' if ep and ep.startswith('assets.') else '' }}" href="{{ url_for('assets.list_assets') }}">Assets</a>
+        <a class="nav-link {{ 'active' if ep and ep.startswith('import_export.') else '' }}" href="{{ url_for('import_export.import_export_dashboard') }}">Export Data</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <hr>
+  <a class="nav-link text-danger" href="{{ url_for('core.logout') }}">
+    <span class="erp-nav-mark">LO</span>
+    <span>Logout</span>
+  </a>
+</div>
