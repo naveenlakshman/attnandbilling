@@ -3016,6 +3016,7 @@ def invoice_view(invoice_id):
             invoices.status,
             invoices.notes,
             invoices.created_at,
+            invoices.sms_sent_at,
             students.id AS student_id,
             students.student_code,
             students.full_name,
@@ -3654,7 +3655,24 @@ def invoice_new():
                 record_id=invoice_id,
                 description=f"Created invoice {invoice_no} for student {student_full_name}"
             )
-            flash("Invoice created successfully.", "success")
+            try:
+                sms_result = _send_invoice_sms_link(
+                    invoice_id,
+                    user_id=session.get("user_id"),
+                    branch_id=branch_id,
+                )
+                if sms_result.get("success"):
+                    flash(f"Invoice created successfully. SMS sent to {sms_result.get('phone')}.", "success")
+                else:
+                    logger.warning(
+                        "Auto-SMS failed for invoice %s: %s",
+                        invoice_no,
+                        sms_result.get("error", "Unknown error"),
+                    )
+                    flash("Invoice created successfully.", "success")
+            except Exception as sms_exc:
+                logger.warning("Auto-SMS failed for invoice %s: %s", invoice_no, sms_exc)
+                flash("Invoice created successfully.", "success")
             return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
 
         except ValueError:
@@ -4812,13 +4830,136 @@ def _receipt_serializer():
     return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="receipt-download")
 
 
+def _invoice_serializer():
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="invoice-download")
+
+
 def _make_receipt_token(receipt_id: int) -> str:
     return _receipt_serializer().dumps(receipt_id)
+
+
+def _make_invoice_token(invoice_id: int) -> str:
+    return _invoice_serializer().dumps(invoice_id)
 
 
 def _verify_receipt_token(token: str, max_age_days: int = 30):
     """Returns receipt_id (int) or raises BadSignature / SignatureExpired."""
     return _receipt_serializer().loads(token, max_age=max_age_days * 86400)
+
+
+def _verify_invoice_token(token: str, max_age_days: int = 30):
+    """Returns invoice_id (int) or raises BadSignature / SignatureExpired."""
+    return _invoice_serializer().loads(token, max_age=max_age_days * 86400)
+
+
+def _load_invoice_print_context(invoice_id, prepared_by_user_id=None):
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                invoices.id,
+                invoices.invoice_no,
+                invoices.invoice_date,
+                invoices.subtotal,
+                invoices.discount_amount,
+                invoices.total_amount,
+                invoices.status,
+                invoices.notes,
+                invoices.created_at,
+                students.id AS student_id,
+                students.student_code,
+                students.full_name AS student_name,
+                students.phone AS student_phone,
+                students.email,
+                students.address,
+                branches.branch_name
+            FROM invoices
+            JOIN students ON invoices.student_id = students.id
+            LEFT JOIN branches ON invoices.branch_id = branches.id
+            WHERE invoices.id = ?
+        """, (invoice_id,))
+        invoice = cur.fetchone()
+
+        if not invoice:
+            return None
+
+        cur.execute("""
+            SELECT
+                id,
+                course_id,
+                description,
+                quantity,
+                unit_price,
+                discount,
+                line_total
+            FROM invoice_items
+            WHERE invoice_id = ?
+            ORDER BY id ASC
+        """, (invoice_id,))
+        items = cur.fetchall()
+
+        cur.execute("""
+            SELECT
+                id,
+                installment_no,
+                due_date,
+                amount_due,
+                amount_paid,
+                status,
+                remarks
+            FROM installment_plans
+            WHERE invoice_id = ?
+            ORDER BY installment_no ASC
+        """, (invoice_id,))
+        installments = cur.fetchall()
+
+        cur.execute("""
+            SELECT
+                receipts.id,
+                receipts.receipt_no,
+                receipts.receipt_date,
+                receipts.amount_received,
+                receipts.created_at,
+                receipts.created_by,
+                IFNULL(users.full_name, 'System') AS created_by_name
+            FROM receipts
+            LEFT JOIN users ON receipts.created_by = users.id
+            WHERE receipts.invoice_id = ?
+            ORDER BY receipts.id DESC
+        """, (invoice_id,))
+        payments = cur.fetchall()
+
+        cur.execute("""
+            SELECT IFNULL(SUM(amount_received), 0) AS total_paid
+            FROM receipts
+            WHERE invoice_id = ?
+        """, (invoice_id,))
+        paid_result = cur.fetchone()
+        total_paid = float(paid_result["total_paid"] or 0) if paid_result else 0.0
+
+        balance_amount = float(invoice["total_amount"] or 0) - total_paid
+        net_total = float(invoice["total_amount"] or 0)
+
+        prepared_by = "Administrator"
+        if prepared_by_user_id:
+            cur.execute("SELECT full_name FROM users WHERE id = ?", (prepared_by_user_id,))
+            user_result = cur.fetchone()
+            if user_result:
+                prepared_by = user_result["full_name"]
+
+        return {
+            "invoice": invoice,
+            "invoice_items": items,
+            "installment_plans": installments,
+            "receipts": payments,
+            "total_paid": total_paid,
+            "balance_amount": balance_amount,
+            "net_total": net_total,
+            "prepared_by": prepared_by,
+        }
+    finally:
+        conn.close()
 
 
 # ── Public receipt download (no login required) ──────────────────────────────
@@ -4864,6 +5005,106 @@ def receipt_public_download(token):
 
 
 # ── Send Receipt SMS ──────────────────────────────────────────────────────────
+
+@billing_bp.route("/invoice/download/<token>")
+def invoice_public_download(token):
+    """Token-protected public link; lets a student view/download their invoice PDF."""
+    try:
+        invoice_id = _verify_invoice_token(token)
+    except SignatureExpired:
+        return render_template("billing/receipt_token_expired.html"), 410
+    except (BadSignature, Exception):
+        return render_template("billing/receipt_token_invalid.html"), 403
+
+    context = _load_invoice_print_context(invoice_id)
+    if not context:
+        return "Invoice not found.", 404
+
+    return render_template("billing/invoice_print.html", **context, pdf_mode=True)
+
+
+def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                invoices.id,
+                invoices.invoice_no,
+                invoices.total_amount,
+                invoices.sms_token,
+                students.full_name,
+                students.phone
+            FROM invoices
+            JOIN students ON invoices.student_id = students.id
+            WHERE invoices.id = ?
+        """, (invoice_id,))
+        invoice = cur.fetchone()
+
+        if not invoice:
+            return {"success": False, "error": "Invoice not found."}
+
+        phone = normalize_sms_phone(invoice["phone"])
+        if not phone:
+            return {"success": False, "error": "Student has no phone number on record."}
+
+        token = invoice["sms_token"]
+        if not token:
+            token = _make_invoice_token(invoice_id)
+            cur.execute("UPDATE invoices SET sms_token = ? WHERE id = ?", (token, invoice_id))
+            conn.commit()
+
+        download_url = url_for(
+            "billing.invoice_public_download",
+            token=token,
+            _external=True,
+        )
+
+        student_name = (invoice["full_name"] or "Student").split()[0]
+        amount = float(invoice["total_amount"] or 0)
+        invoice_no = invoice["invoice_no"]
+        message = (
+            f"Dear {student_name}, invoice {invoice_no} for Rs.{amount:.0f} is ready. "
+            f"Download your invoice: {download_url} - Global IT Education"
+        )
+
+        result = send_sms(phone, message)
+        if result.get("success"):
+            sms_now = datetime.now().isoformat(timespec="seconds")
+            cur.execute(
+                "UPDATE invoices SET sms_sent_at = ? WHERE id = ?",
+                (sms_now, invoice_id),
+            )
+            conn.commit()
+            log_activity(
+                user_id=user_id,
+                branch_id=branch_id,
+                action_type="sms",
+                module_name="invoices",
+                record_id=invoice_id,
+                description=f"Invoice SMS sent to {phone} for {invoice_no}",
+            )
+            return {"success": True, "phone": phone, "invoice_no": invoice_no}
+
+        return {"success": False, "error": result.get("error", "Unknown error")}
+    finally:
+        conn.close()
+
+
+@billing_bp.route("/invoice/<int:invoice_id>/send-sms", methods=["POST"])
+@login_required
+def invoice_send_sms(invoice_id):
+    result = _send_invoice_sms_link(
+        invoice_id,
+        user_id=session.get("user_id"),
+        branch_id=session.get("branch_id"),
+    )
+    if result.get("success"):
+        flash(f"Invoice SMS sent to {result.get('phone')}.", "success")
+    else:
+        flash(f"SMS failed: {result.get('error', 'Unknown error')}", "danger")
+    return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
+
 
 @billing_bp.route("/receipt/<int:receipt_id>/send-sms", methods=["POST"])
 @login_required

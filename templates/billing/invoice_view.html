@@ -363,6 +363,17 @@
   {% endif %}
   <a class="btn btn-secondary" href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}" target="_blank"> Print Bill </a>
   <a href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}?mode=pdf" target="_blank" class="btn btn-success">⬇️ Download PDF</a>
+  {% if invoice.phone %}
+  <form method="post" action="{{ url_for('billing.invoice_send_sms', invoice_id=invoice.id) }}" style="display:inline;" onsubmit="return confirm('Send invoice download link to {{ invoice.phone }}?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-info" style="color:#fff;" title="Send invoice download link via SMS">
+      📱 Send SMS
+      {% if invoice.sms_sent_at %}
+        <span style="font-size:11px; opacity:0.85; margin-left:4px;">(sent {{ invoice.sms_sent_at[:10] }})</span>
+      {% endif %}
+    </button>
+  </form>
+  {% endif %}
 </div>
 <div id="invoice-pdf-content">
 

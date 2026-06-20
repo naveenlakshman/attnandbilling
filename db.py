@@ -1196,6 +1196,8 @@ def init_db():
     add_column_if_not_exists(cur, "courses", "course_slug", "TEXT")
 
     add_column_if_not_exists(cur, "invoices", "branch_id", "INTEGER")
+    add_column_if_not_exists(cur, "invoices", "sms_token", "TEXT")
+    add_column_if_not_exists(cur, "invoices", "sms_sent_at", "TEXT")
 
     add_column_if_not_exists(cur, "invoice_items", "discount", "REAL NOT NULL DEFAULT 0")
 
