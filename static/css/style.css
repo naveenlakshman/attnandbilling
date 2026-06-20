@@ -581,3 +581,468 @@ body {
     width: 100% !important;
   }
 }
+
+/* ==========================================
+   DESIGN SYSTEM ALIGNMENT OVERRIDES 
+   ========================================== */
+
+/* 4.1 Cards & Containers */
+.card {
+  border-radius: 12px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+/* 6.3 Smooth transitions for interactive elements */
+.btn,
+.card,
+.form-control,
+.form-select,
+.nav-link,
+.erp-module-toggle {
+  transition: all 0.2s ease-in-out;
+}
+
+/* 4.3 Form Touch Targets (Mobile-first check) */
+@media (max-width: 575.98px) {
+  .btn,
+  .form-control,
+  .form-select {
+    min-height: 44px;
+  }
+  .form-check-input {
+    width: 22px;
+    height: 22px;
+    margin-top: 0;
+  }
+  .form-check-label {
+    padding-left: 8px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/* ==========================================
+   ADMIN DASHBOARD STYLING OVERRIDES
+   ========================================== */
+
+/* Local color system & variables aligned with Design System */
+:root {
+  --primary-blue: #2563eb;
+  --growth-green: #16a34a;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --bg-page: #f8fafc;
+  --bg-card: #ffffff;
+  
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+  
+  --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --border-radius-lg: 12px;
+}
+
+/* Page Header & Greeting */
+.dashboard-header {
+  margin-bottom: 2rem;
+}
+.greeting-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+.greeting-sub {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+.dashboard-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.15);
+  color: var(--primary-blue);
+  border-radius: 9999px;
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease-in-out;
+}
+.dashboard-switch:hover {
+  background: var(--primary-blue);
+  color: #ffffff;
+}
+
+/* Alert/Notice Banners */
+.alert-notice {
+  background-color: #fffbeb;
+  border: 1px solid #fef3c7;
+  border-left: 5px solid var(--color-warning);
+  border-radius: var(--border-radius-lg);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.alert-notice-icon {
+  font-size: 1.5rem;
+}
+.alert-notice-title {
+  font-weight: 700;
+  color: #92400e;
+  font-size: 0.95rem;
+  margin-bottom: 0.15rem;
+}
+.alert-notice-sub {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+.btn-notice {
+  background-color: var(--color-warning);
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.btn-notice:hover {
+  background-color: #d97706;
+  color: #ffffff;
+}
+
+/* Section Subtitle Header */
+.dashboard-sec-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.dashboard-sec-title::after {
+  content: '';
+  flex-grow: 1;
+  height: 1px;
+  background-color: #e2e8f0;
+}
+
+/* KPI Cards Layout */
+.kpi-card {
+  border: 1px solid #e2e8f0;
+  border-radius: var(--border-radius-lg);
+  background-color: var(--bg-card);
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.2s, box-shadow 0.2s;
+  overflow: hidden;
+  height: 100%;
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
+}
+.kpi-card.kpi-revenue { border-top: 4px solid var(--primary-blue); }
+.kpi-card.kpi-expenses { border-top: 4px solid var(--color-danger); }
+.kpi-card.kpi-students { border-top: 4px solid var(--color-info); }
+.kpi-card.kpi-leads { border-top: 4px solid #a855f7; }
+
+.kpi-body {
+  padding: 1.25rem;
+}
+.kpi-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+.kpi-value {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.kpi-value.text-revenue { color: var(--primary-blue); }
+.kpi-value.text-expenses { color: var(--color-danger); }
+.kpi-value.text-students { color: var(--color-info); }
+.kpi-value.text-leads { color: #a855f7; }
+
+.kpi-subtext {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+.kpi-action-btn {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+/* Secondary KPI Stats cards */
+.stats-card-box {
+  text-align: center;
+  padding: 1.25rem 0.5rem;
+}
+.stats-card-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+}
+
+/* Action Items Header Collapses */
+.action-card {
+  border: 1px solid #e2e8f0;
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+  background-color: var(--bg-card);
+}
+.action-header {
+  padding: 1rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.action-header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+.action-header.overdue-payments {
+  background-color: #fff5f5;
+  border-bottom: 1px solid #fee2e2;
+  color: var(--color-danger);
+}
+.action-header.overdue-leads {
+  background-color: #fffbeb;
+  border-bottom: 1px solid #fef3c7;
+  color: #d97706;
+}
+.action-badge-danger {
+  background-color: var(--color-danger);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+}
+.action-badge-warning {
+  background-color: var(--color-warning);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+}
+.action-sum {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.action-toggle-arrow {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+}
+.action-toggle-arrow.open {
+  transform: rotate(90deg);
+}
+
+/* Tables in Action Items */
+.action-table-container {
+  padding: 0;
+}
+.action-table {
+  width: 100%;
+  margin-bottom: 0;
+  border-collapse: collapse;
+}
+.action-table th {
+  background-color: #f1f5f9;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+.action-table td {
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: middle;
+}
+.action-table tr.bg-payment-overdue { background-color: #fffdfd; }
+.action-table tr.bg-payment-today { background-color: #fffdf5; }
+.action-table tr.bg-lead-overdue { background-color: #fffdfd; }
+.action-table tr.bg-lead-today { background-color: #fffdf5; }
+
+.table-student-code {
+  font-weight: 700;
+  color: var(--primary-blue);
+  margin-right: 0.25rem;
+}
+.table-student-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.table-date-highlight {
+  font-weight: 700;
+}
+.table-amount-highlight {
+  font-weight: 700;
+}
+.table-action-btn {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+.action-card-footer {
+  padding: 0.75rem 1.25rem;
+  background-color: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  text-align: right;
+}
+
+/* Lead score colors */
+.score-badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.score-badge.high { background-color: #dcfce7; color: #15803d; }
+.score-badge.medium { background-color: #fef9c3; color: #a16207; }
+.score-badge.low { background-color: #f1f5f9; color: #475569; }
+
+/* Stage badge styling */
+.pipeline-badges-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.stage-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 9999px;
+}
+.bg-primary-light { background-color: rgba(37, 99, 235, 0.1); }
+.text-primary-custom { color: var(--primary-blue); }
+.bg-success-light { background-color: rgba(22, 163, 74, 0.1); }
+.text-success-custom { color: var(--growth-green); }
+.bg-warning-light { background-color: rgba(245, 158, 11, 0.1); }
+.text-warning-custom { color: #d97706; }
+.bg-danger-light { background-color: rgba(239, 68, 68, 0.1); }
+.text-danger-custom { color: var(--color-danger); }
+
+/* Recent Activity Timeline */
+.timeline-container {
+  padding: 0.5rem 0;
+}
+.timeline-item {
+  position: relative;
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: 4.5px;
+  top: 0;
+  bottom: -1.25rem;
+  width: 2px;
+  background-color: #e2e8f0;
+}
+.timeline-item:last-child::before {
+  display: none;
+}
+.timeline-marker {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background-color: #cbd5e1;
+}
+.timeline-marker.module-billing { background-color: var(--growth-green); }
+.timeline-marker.module-leads { background-color: var(--primary-blue); }
+.timeline-marker.module-attendance { background-color: var(--color-info); }
+.timeline-marker.module-students { background-color: #a855f7; }
+
+.timeline-content {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+.timeline-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.15rem;
+}
+.timeline-module {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+}
+.timeline-module.module-billing { color: var(--growth-green); }
+.timeline-module.module-leads { color: var(--primary-blue); }
+.timeline-module.module-attendance { color: var(--color-info); }
+.timeline-module.module-students { color: #a855f7; }
+
+.timeline-time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.timeline-author {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Quick Action Grid */
+.quick-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+.quick-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.6rem;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s ease-in-out;
+}
+
+
