@@ -529,6 +529,87 @@ def logout():
     return redirect(url_for("core.login"))
 
 
+@core_bp.route("/api/sidebar-badges")
+@login_required
+def sidebar_badges():
+    role = session.get("role")
+    user_id = session.get("user_id")
+    branch_id = session.get("branch_id")
+    can_view_all = session.get("can_view_all_branches", 0)
+
+    today = datetime.now().date().isoformat()
+
+    leads_count = 0
+    billing_count = 0
+    attendance_count = 0
+    lms_count = 0
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        # 1. Leads Badge: count of active, non-deleted leads due today or overdue
+        if role == "admin" or can_view_all:
+            cur.execute("""
+                SELECT COUNT(*) AS cnt FROM leads
+                WHERE status = 'active' AND is_deleted = 0
+                  AND next_followup_date IS NOT NULL
+                  AND parse_date(next_followup_date) <= ?
+            """, [today])
+            leads_count = cur.fetchone()["cnt"]
+        else:
+            cur.execute("""
+                SELECT COUNT(*) AS cnt FROM leads
+                WHERE assigned_to_id = ? AND status = 'active' AND is_deleted = 0
+                  AND next_followup_date IS NOT NULL
+                  AND parse_date(next_followup_date) <= ?
+            """, [user_id, today])
+            leads_count = cur.fetchone()["cnt"]
+
+        # 2. Billing Badge: count of past due / today due installments
+        if role == "admin" or can_view_all:
+            cur.execute("""
+                SELECT COUNT(DISTINCT ip.id) AS cnt
+                FROM installment_plans ip
+                JOIN invoices i ON ip.invoice_id = i.id
+                WHERE ip.status != 'paid'
+                  AND parse_date(ip.due_date) <= ?
+                  AND i.status NOT IN ('write_off', 'partially_written_off')
+            """, [today])
+            billing_count = cur.fetchone()["cnt"]
+        else:
+            cur.execute("""
+                SELECT COUNT(DISTINCT ip.id) AS cnt
+                FROM installment_plans ip
+                JOIN invoices i ON ip.invoice_id = i.id
+                WHERE ip.status != 'paid'
+                  AND parse_date(ip.due_date) <= ?
+                  AND i.status NOT IN ('write_off', 'partially_written_off')
+                  AND i.branch_id = ?
+            """, [today, branch_id])
+            billing_count = cur.fetchone()["cnt"]
+
+        # 3. Attendance Badge: count of pending leave requests
+        cur.execute("SELECT COUNT(*) AS cnt FROM leave_requests WHERE status = 'pending'")
+        attendance_count = cur.fetchone()["cnt"]
+
+        # 4. LMS Badge: count of pending final exam applications
+        cur.execute("SELECT COUNT(*) AS cnt FROM lms_final_exam_applications WHERE status = 'PENDING'")
+        lms_count = cur.fetchone()["cnt"]
+
+    except Exception as e:
+        print(f"Error querying sidebar badges: {e}")
+    finally:
+        conn.close()
+
+    return jsonify({
+        "leads": leads_count,
+        "billing": billing_count,
+        "attendance": attendance_count,
+        "lms": lms_count
+    })
+
+
+
 @core_bp.route("/users")
 @login_required
 @admin_required

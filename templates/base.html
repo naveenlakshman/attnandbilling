@@ -6,7 +6,16 @@
   <title>{% block title %}{{ company.company_short_name }}{% endblock %}</title>
   
   <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+  <script>
+    (function() {
+      var isCollapsed = localStorage.getItem('erp_sidebar_collapsed') === 'true';
+      if (isCollapsed) {
+        document.documentElement.classList.add('sidebar-collapsed');
+      }
+    })();
+  </script>
   
   {% if request.endpoint and (request.endpoint.startswith('billing.') or request.endpoint.startswith('baddebt.')) %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.css">
@@ -33,6 +42,8 @@
 <body>
 
 <div class="erp-shell">
+
+
   <!-- Master ERP Sidebar -->
   <aside class="erp-sidebar offcanvas-lg offcanvas-start" id="erpSidebar" tabindex="-1" aria-label="Sidebar navigation">
     <div class="offcanvas-header border-bottom d-lg-none">
@@ -40,15 +51,18 @@
       <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#erpSidebar" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body p-0 d-lg-block">
-      <div class="mb-4 d-none d-lg-block">
+      <div class="mb-4 d-none d-lg-block sidebar-full-header">
         {% if company.logo_filename %}
           <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
-               alt="{{ company.company_name }}" style="max-height:54px; max-width:200px; margin-bottom:6px;">
+               alt="{{ company.company_name }}" style="max-height:54px; max-width:180px; margin-bottom:6px;">
           <br>
         {% endif %}
-        <div class="fw-bold text-dark" style="font-size: 1.25rem;">{{ company.company_name }}</div>
-        <div class="text-muted small">{{ company.tagline or 'ERP System' }}</div>
-        <hr>
+        <div class="fw-bold text-white" style="font-size: 1.15rem;">{{ company.company_name }}</div>
+        <div class="text-muted small" style="color: #64748b !important;">{{ company.tagline or 'ERP System' }}</div>
+        <hr class="sidebar-divider">
+      </div>
+      <div class="sidebar-collapsed-header mb-4 text-center" style="display: none;">
+        <span class="mini-logo"><i class="bi bi-mortarboard-fill" style="font-size: 1.6rem; color: #818cf8 !important;"></i></span>
       </div>
 
       <nav class="nav flex-column erp-nav">
@@ -64,6 +78,9 @@
     <div class="erp-topbar no-print">
       <div class="d-flex align-items-center gap-2 min-w-0">
         <button class="sidebar-toggle d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#erpSidebar" aria-controls="erpSidebar" aria-label="Menu">☰</button>
+        <button class="sidebar-toggle d-none d-lg-inline-flex" id="erpSidebarDesktopToggle" type="button" aria-label="Toggle Sidebar" style="border: 1px solid #e2e8f0; background: #fff; border-radius: 8px; width: 38px; height: 38px; align-items: center; justify-content: center; font-size: 1.1rem; cursor: pointer; color: #1e293b;">
+          <i class="bi bi-list"></i>
+        </button>
         <div class="erp-topbar-title">
           {% block page_title %}
             {% if request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) %}
@@ -187,6 +204,78 @@
         el.addEventListener('click', closeFab);
       });
     }
+
+    // 3. Desktop Sidebar Toggle and Persistence
+    var deskToggleBtn = document.getElementById('erpSidebarDesktopToggle');
+    if (deskToggleBtn) {
+      deskToggleBtn.addEventListener('click', function() {
+        var isCollapsed = document.documentElement.classList.toggle('sidebar-collapsed');
+        localStorage.setItem('erp_sidebar_collapsed', isCollapsed);
+      });
+    }
+
+    // 4. Dynamic Sidebar Badge Updates
+    function loadSidebarBadges() {
+      fetch('/api/sidebar-badges')
+        .then(function(res) {
+          if (!res.ok) throw new Error('Network error');
+          return res.json();
+        })
+        .then(function(data) {
+          // Leads Badge
+          var leadsToggle = document.getElementById('badge-leads-toggle');
+          var leadsSub = document.getElementById('badge-leads-followups');
+          if (data.leads > 0) {
+            if (leadsToggle) { leadsToggle.textContent = data.leads; leadsToggle.style.display = 'inline-block'; }
+            if (leadsSub) { leadsSub.textContent = data.leads; leadsSub.style.display = 'inline-block'; }
+          } else {
+            if (leadsToggle) leadsToggle.style.display = 'none';
+            if (leadsSub) leadsSub.style.display = 'none';
+          }
+
+          // Billing Badge
+          var billingToggle = document.getElementById('badge-billing-toggle');
+          var billingSub = document.getElementById('badge-billing-receivables');
+          if (data.billing > 0) {
+            if (billingToggle) { billingToggle.textContent = data.billing; billingToggle.style.display = 'inline-block'; }
+            if (billingSub) { billingSub.textContent = data.billing; billingSub.style.display = 'inline-block'; }
+          } else {
+            if (billingToggle) billingToggle.style.display = 'none';
+            if (billingSub) billingSub.style.display = 'none';
+          }
+
+          // Attendance Badge
+          var attendanceToggle = document.getElementById('badge-attendance-toggle');
+          var attendanceSub = document.getElementById('badge-attendance-leaves');
+          if (data.attendance > 0) {
+            if (attendanceToggle) { attendanceToggle.textContent = data.attendance; attendanceToggle.style.display = 'inline-block'; }
+            if (attendanceSub) { attendanceSub.textContent = data.attendance; attendanceSub.style.display = 'inline-block'; }
+          } else {
+            if (attendanceToggle) attendanceToggle.style.display = 'none';
+            if (attendanceSub) attendanceSub.style.display = 'none';
+          }
+
+          // LMS Badge
+          var lmsToggle = document.getElementById('badge-lms-toggle');
+          var lmsSub = document.getElementById('badge-lms-exams');
+          if (data.lms > 0) {
+            if (lmsToggle) { lmsToggle.textContent = data.lms; lmsToggle.style.display = 'inline-block'; }
+            if (lmsSub) { lmsSub.textContent = data.lms; lmsSub.style.display = 'inline-block'; }
+          } else {
+            if (lmsToggle) lmsToggle.style.display = 'none';
+            if (lmsSub) lmsSub.style.display = 'none';
+          }
+        })
+        .catch(function(err) {
+          console.warn('Could not load sidebar badges:', err);
+        });
+    }
+
+    // Initialize badges if logged in
+    {% if session.get('user_id') %}
+    loadSidebarBadges();
+    setInterval(loadSidebarBadges, 60000);
+    {% endif %}
   })();
 </script>
 
