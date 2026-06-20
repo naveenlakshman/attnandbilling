@@ -1909,6 +1909,65 @@ def master_topic_archive(master_topic_id):
         conn.close()
 
 
+@lms_admin_bp.route('/master/topic/<int:master_topic_id>/clone', methods=['POST'])
+@admin_required
+def master_topic_clone(master_topic_id):
+    """Clone a master topic and all its contents within the same chapter."""
+    from modules.lms_admin.branch_helpers import _clone_master_topic
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        
+        # 1. Fetch original master topic details
+        cur.execute("SELECT * FROM lms_master_topics WHERE id = ?", (master_topic_id,))
+        src_topic = cur.fetchone()
+        if not src_topic:
+            flash('Master topic not found.', 'danger')
+            return redirect(request.referrer or url_for('lms_admin.list_programs'))
+
+        master_chapter_id = src_topic['master_chapter_id']
+
+        # 2. Get all existing topic IDs in order
+        existing_rows = cur.execute(
+            "SELECT id FROM lms_master_topics WHERE master_chapter_id = ? ORDER BY topic_order ASC, id ASC",
+            (master_chapter_id,)
+        ).fetchall()
+        existing_ids = [r['id'] for r in existing_rows]
+
+        # 3. Call helper to clone topic details, content, attachments, assignments
+        new_master_topic_id = _clone_master_topic(cur, master_topic_id, master_chapter_id)
+        if not new_master_topic_id:
+            flash('Error cloning topic.', 'danger')
+            return redirect(request.referrer or url_for('lms_admin.list_programs'))
+
+        # Insert new topic ID immediately after the cloned one
+        if master_topic_id in existing_ids:
+            idx = existing_ids.index(master_topic_id)
+            existing_ids.insert(idx + 1, new_master_topic_id)
+        else:
+            existing_ids.append(new_master_topic_id)
+
+        # Run renumber
+        _renumber_master_topics(cur, master_chapter_id, existing_ids)
+        conn.commit()
+
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='create',
+            module_name='lms_master_topics',
+            record_id=new_master_topic_id,
+            description=f"Cloned master topic from '{src_topic['title']}' to new topic ID {new_master_topic_id}"
+        )
+        flash(f"Topic '{src_topic['title']}' cloned successfully.", 'success')
+        return redirect(request.referrer or url_for('lms_admin.list_master_topic_contents', master_topic_id=new_master_topic_id))
+    except Exception as e:
+        flash(f'Error cloning topic: {str(e)}', 'danger')
+        return redirect(request.referrer or url_for('lms_admin.list_programs'))
+    finally:
+        conn.close()
+
+
 def generate_slug(title):
     """Generate URL-friendly slug from title"""
     slug = title.lower().strip()
@@ -2105,6 +2164,99 @@ def program_edit(program_id):
         courses = cur.fetchall()
         
         return render_template('lms_program_form.html', program=program, courses=courses)
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/program/<int:program_id>/clone', methods=['POST'])
+@admin_required
+def program_clone(program_id):
+    """Clone an existing LMS program and duplicate its chapter links"""
+    import uuid
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        
+        # 1. Fetch source program
+        cur.execute("SELECT * FROM lms_programs WHERE id = ?", (program_id,))
+        src_program = cur.fetchone()
+        if not src_program:
+            flash('Source program not found.', 'danger')
+            return redirect(url_for('lms_admin.list_programs'))
+            
+        # Generate cloned name and slug
+        cloned_name = f"{src_program['program_name']} (Copy)"
+        cloned_slug = f"{src_program['slug']}-copy"
+        
+        # Check slug uniqueness and append random parts if necessary
+        cur.execute("SELECT 1 FROM lms_programs WHERE slug = ?", (cloned_slug,))
+        if cur.fetchone():
+            cloned_slug = f"{cloned_slug}-{uuid.uuid4().hex[:6]}"
+            
+        now = datetime.now().isoformat(timespec='seconds')
+        
+        # 2. Insert new program
+        cur.execute("""
+            INSERT INTO lms_programs (
+                course_id, program_name, slug, description, thumbnail_path, 
+                is_published, is_active, is_deleted, created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            src_program['course_id'],
+            cloned_name,
+            cloned_slug,
+            src_program['description'],
+            src_program['thumbnail_path'],
+            0, # default to unpublished
+            src_program['is_active'],
+            0, # is_deleted = 0
+            session['user_id'],
+            now,
+            now
+        ))
+        
+        new_program_id = cur.lastrowid
+        
+        # 3. Duplicate and automatically branch links in lms_program_chapters
+        cur.execute("""
+            SELECT * FROM lms_program_chapters WHERE program_id = ?
+        """, (program_id,))
+        chapter_links = cur.fetchall()
+        
+        from modules.lms_admin.branch_helpers import _clone_master_chapter
+        for link in chapter_links:
+            # Automatically clone/branch the master chapter so the cloned program starts fully decoupled
+            new_master_chapter_id = _clone_master_chapter(cur, link['master_chapter_id'])
+            cur.execute("""
+                INSERT INTO lms_program_chapters (
+                    program_id, master_chapter_id, chapter_order, custom_title, is_visible, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                new_program_id,
+                new_master_chapter_id,
+                link['chapter_order'],
+                link['custom_title'],
+                link['is_visible'],
+                now
+            ))
+            
+        conn.commit()
+        
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='create',
+            module_name='lms_programs',
+            record_id=new_program_id,
+            description=f"Cloned LMS program from '{src_program['program_name']}' to '{cloned_name}'"
+        )
+        
+        flash(f"Program cloned successfully as '{cloned_name}'.", 'success')
+        return redirect(url_for('lms_admin.list_programs'))
+        
+    except Exception as e:
+        flash(f"Error cloning program: {str(e)}", 'danger')
+        return redirect(url_for('lms_admin.list_programs'))
     finally:
         conn.close()
 
@@ -2446,7 +2598,8 @@ def list_chapters(program_id):
                     mc.description,
                     mc.status,
                     COUNT(DISTINCT mt.id) AS topic_count,
-                    COUNT(DISTINCT CASE WHEN ltc.id IS NOT NULL THEN mt.id END) AS topics_with_content
+                    COUNT(DISTINCT CASE WHEN ltc.id IS NOT NULL THEN mt.id END) AS topics_with_content,
+                    (SELECT COUNT(*) FROM lms_program_chapters pc2 WHERE pc2.master_chapter_id = pc.master_chapter_id) AS link_count
                 FROM lms_program_chapters pc
                 JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
                 LEFT JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id AND mt.status = 'active'
@@ -2863,6 +3016,64 @@ def unlink_master_chapter_from_program(program_id, link_id):
             description=f'Unlinked master chapter {link_row["master_title"]} from program id {program_id}'
         )
         flash('Master chapter unlinked from program.', 'success')
+        return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/program/<int:program_id>/chapter-link/<int:link_id>/branch', methods=['POST'])
+@admin_required
+def branch_program_chapter(program_id, link_id):
+    """Branch a shared master chapter to make it program-specific by cloning it and all its topics."""
+    from modules.lms_admin.branch_helpers import _clone_master_chapter
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        link_row = cur.execute(
+            """
+                SELECT pc.*, mc.title AS master_title
+                FROM lms_program_chapters pc
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                WHERE pc.id = ? AND pc.program_id = ?
+            """,
+            (link_id, program_id)
+        ).fetchone()
+
+        if not link_row:
+            flash('Linked chapter not found.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        old_master_chapter_id = link_row['master_chapter_id']
+
+        # Call branching helper to duplicate the chapter
+        new_master_chapter_id = _clone_master_chapter(cur, old_master_chapter_id)
+        if not new_master_chapter_id:
+            flash('Error branching chapter.', 'danger')
+            return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+
+        # Update link to point to the branched master chapter
+        cur.execute(
+            """
+                UPDATE lms_program_chapters
+                SET master_chapter_id = ?
+                WHERE id = ?
+            """,
+            (new_master_chapter_id, link_id)
+        )
+        conn.commit()
+
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='edit',
+            module_name='lms_program_chapters',
+            record_id=link_id,
+            description=f'Branched master chapter {link_row["master_title"]} for program id {program_id}'
+        )
+        flash('Chapter branched successfully to a private copy.', 'success')
+        return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
+    except Exception as e:
+        flash(f'Error branching chapter: {str(e)}', 'danger')
         return redirect(url_for('lms_admin.list_chapters', program_id=program_id))
     finally:
         conn.close()

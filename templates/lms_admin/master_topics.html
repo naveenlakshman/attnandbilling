@@ -579,6 +579,12 @@
                 <a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.master_content_new', master_topic_id=topic.id) }}?type=rich_text">Add Lesson</a>
                 {% endif %}
                 <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.master_topic_edit', master_topic_id=topic.id) }}">Edit</a>
+                {% if session.get('role') == 'admin' %}
+                <form method="POST" action="{{ url_for('lms_admin.master_topic_clone', master_topic_id=topic.id) }}" onsubmit="return confirm('Clone this topic and all its contents?');" style="margin: 0; display: inline-block;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-outline-info">Clone</button>
+                </form>
+                {% endif %}
                 {% if topic.status != 'archived' and session.get('role') == 'admin' %}
                 <form method="POST" action="{{ url_for('lms_admin.master_topic_archive', master_topic_id=topic.id) }}" onsubmit="return confirm('Archive this master topic?');">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

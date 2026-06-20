@@ -709,7 +709,11 @@
         <td class="chapter-title-cell">
           <div class="chapter-title">
             {{ link.custom_title if link.custom_title else link.master_title }}
-            <span class="source-badge source-master">Shared</span>
+            {% if link.link_count > 1 %}
+            <span class="source-badge source-master" title="This chapter is shared across {{ link.link_count }} programs. Edits will affect all of them.">Shared</span>
+            {% else %}
+            <span class="source-badge" style="background: #e2f0d9; color: #385723;" title="This chapter is unique to this program version.">Private</span>
+            {% endif %}
           </div>
           {% if link.description %}
           <div class="chapter-description" title="{{ link.description }}">{{ link.description }}</div>
@@ -740,6 +744,12 @@
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn-action btn-edit" type="submit">{{ 'Hide' if link.is_visible else 'Show' }}</button>
             </form>
+            {% if link.link_count > 1 %}
+            <form method="POST" action="{{ url_for('lms_admin.branch_program_chapter', program_id=data.program.id, link_id=link.link_id) }}" onsubmit="return confirm('Branching this chapter will create a copy specifically for this program version, so any edits won\'t affect other programs. Proceed?');" style="margin: 0; display: inline-block;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn-action btn-edit" style="background: #e0f2fe; color: #0369a1;" type="submit">Branch</button>
+            </form>
+            {% endif %}
             <form method="POST" action="{{ url_for('lms_admin.unlink_master_chapter_from_program', program_id=data.program.id, link_id=link.link_id) }}" onsubmit="return confirm('Unlink this shared chapter from the program?');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn-action btn-delete" type="submit">Unlink</button>

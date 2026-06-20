@@ -3348,6 +3348,45 @@ def installment_edit(installment_id):
         if conn:
             conn.close()
 
+
+def _provision_program_access_for_course(cur, student_id, course_id):
+    """
+    Find the default/active program mapped to the course and grant explicit access
+    to the student if they don't already have access.
+    """
+    cur.execute("""
+        SELECT DISTINCT lp.id
+        FROM lms_programs lp
+        WHERE lp.is_active = 1 AND lp.is_deleted = 0
+          AND (
+              lp.course_id = ?
+              OR EXISTS (
+                  SELECT 1 FROM lms_course_program_map cpm 
+                  WHERE cpm.program_id = lp.id AND cpm.course_id = ?
+              )
+          )
+    """, (course_id, course_id))
+    programs = cur.fetchall()
+    
+    now_date = datetime.now().strftime("%Y-%m-%d")
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    
+    for prog in programs:
+        program_id = prog['id']
+        # Check if the student already has access to this program
+        cur.execute("""
+            SELECT 1 FROM lms_student_program_access
+            WHERE student_id = ? AND program_id = ? AND is_active = 1
+        """, (student_id, program_id))
+        if not cur.fetchone():
+            # Grant access!
+            cur.execute("""
+                INSERT INTO lms_student_program_access (
+                    student_id, program_id, access_start_date, access_status, is_active, created_at, updated_at
+                ) VALUES (?, ?, ?, 'active', 1, ?, ?)
+            """, (student_id, program_id, now_date, now_iso, now_iso))
+
+
 @billing_bp.route("/invoice/new", methods=["GET", "POST"])
 @login_required
 def invoice_new():
@@ -3639,6 +3678,11 @@ def invoice_new():
             else:
                 flash("Invalid installment type selected.", "danger")
                 return redirect(url_for("billing.invoice_new"))
+
+            # Provision program access based on courses in the invoice
+            for item in invoice_items_to_save:
+                if item.get("course_id"):
+                    _provision_program_access_for_course(cur, student_id, item["course_id"])
 
             conn.commit()
 
@@ -4093,6 +4137,11 @@ def invoice_edit(invoice_id):
                                 WHERE id = ?
                             """, (remaining_payment, f"Partial payment of {remaining_payment}", now, inst_id))
                             remaining_payment = 0
+
+            # Provision program access based on updated courses in the invoice
+            for item in invoice_items_to_save:
+                if item.get("course_id"):
+                    _provision_program_access_for_course(cur, student_id_form, item["course_id"])
 
             conn.commit()
             conn.close()

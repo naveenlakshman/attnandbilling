@@ -613,6 +613,15 @@
               <a class="btn-sm-action btn-resources" href="{{ url_for('lms_admin.list_chapters', program_id=program.id) }}" title="Chapters">
                 📑 Chapters
               </a>
+              {% if session.get('role') == 'admin' %}
+              <form method="POST" action="{{ url_for('lms_admin.program_clone', program_id=program.id) }}" style="margin: 0; display: inline-block;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-sm-action btn-edit" title="Clone Program"
+                        onclick="return prompt('Type \'clone\' to confirm cloning this program:') === 'clone'">
+                  👥 Clone
+                </button>
+              </form>
+              {% endif %}
             </div>
           </td>
         </tr>
