@@ -1,0 +1,21 @@
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+  <a href="{{ url_for('attendance.dashboard') }}" class="{{ 'active' if request.endpoint == 'attendance.dashboard' else '' }}">
+    <span class="nav-icon">📊</span>
+    <span>Dashboard</span>
+  </a>
+  <a href="{{ url_for('attendance.list_batches') }}" class="{{ 'active' if request.endpoint in ['attendance.list_batches', 'attendance.batch_detail', 'attendance.create_batch'] else '' }}">
+    <span class="nav-icon">📚</span>
+    <span>Batches</span>
+  </a>
+  <a href="#" class="fab-btn" id="fabToggle" title="Quick Actions" role="button" aria-label="Quick actions menu" aria-expanded="false">
+    &#10003;
+  </a>
+  <a href="{{ url_for('attendance.daily_report') }}" class="{{ 'active' if request.endpoint == 'attendance.daily_report' else '' }}">
+    <span class="nav-icon">📅</span>
+    <span>Report</span>
+  </a>
+  <a href="{{ url_for('attendance.defaulters') }}" class="{{ 'active' if request.endpoint == 'attendance.defaulters' else '' }}">
+    <span class="nav-icon">⚠️</span>
+    <span>Defaulters</span>
+  </a>
+</nav>

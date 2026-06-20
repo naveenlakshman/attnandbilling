@@ -1,0 +1,28 @@
+<nav class="mobile-bottom-nav no-print" aria-label="Mobile navigation">
+  {% if request.endpoint == 'core.dashboard' %}
+  <a href="{{ url_for('lms_admin.dashboard') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('lms_admin.') else '' }}">
+    <span class="nav-icon">📚</span>
+    <span>LMS</span>
+  </a>
+  {% else %}
+  <a href="{{ url_for('core.dashboard') }}" class="{{ 'active' if request.endpoint == 'core.dashboard' else '' }}">
+    <span class="nav-icon">🏠</span>
+    <span>Home</span>
+  </a>
+  {% endif %}
+  <a href="{{ url_for('leads.dashboard') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('leads.') else '' }}">
+    <span class="nav-icon">👥</span>
+    <span>Leads</span>
+  </a>
+  <a href="#" class="fab-btn" id="fabToggle" title="Quick Create" role="button" aria-label="Quick create menu" aria-expanded="false">
+    <span class="nav-icon" id="fabIcon">+</span>
+  </a>
+  <a href="{% if session.get('role') == 'admin' %}{{ url_for('billing.dashboard') }}{% else %}{{ url_for('billing.menu') }}{% endif %}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('billing.') else '' }}">
+    <span class="nav-icon">💰</span>
+    <span>Billing</span>
+  </a>
+  <a href="{{ url_for('attendance.dashboard') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('attendance.') else '' }}">
+    <span class="nav-icon">📋</span>
+    <span>Attendance</span>
+  </a>
+</nav>

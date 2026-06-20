@@ -1,0 +1,21 @@
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+  <a href="{{ url_for('billing.students') }}" class="{{ 'active' if request.endpoint == 'billing.students' or request.endpoint == 'billing.student_profile' else '' }}">
+    <span class="nav-icon">🎓</span>
+    <span>Students</span>
+  </a>
+  <a href="{{ url_for('billing.invoices') }}" class="{{ 'active' if request.endpoint == 'billing.invoices' or request.endpoint == 'billing.invoice_view' else '' }}">
+    <span class="nav-icon">🧾</span>
+    <span>Invoices</span>
+  </a>
+  <a href="#" class="add-btn" id="fabToggle" title="Quick Create" role="button" aria-label="Quick create menu">
+    <span class="nav-icon" id="fabIcon">+</span>
+  </a>
+  <a href="{{ url_for('billing.receipts') }}" class="{{ 'active' if request.endpoint == 'billing.receipts' or request.endpoint == 'billing.receipt_view' else '' }}">
+    <span class="nav-icon">💵</span>
+    <span>Receipts</span>
+  </a>
+  <a href="{{ url_for('billing.receivables') }}" class="{{ 'active' if request.endpoint == 'billing.receivables' else '' }}">
+    <span class="nav-icon">📊</span>
+    <span>Receivables</span>
+  </a>
+</nav>

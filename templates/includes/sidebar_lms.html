@@ -1,0 +1,66 @@
+      <a class="nav-link {{ 'active' if request.endpoint == 'core.dashboard' else '' }}"
+         href="{{ url_for('core.dashboard') }}">
+        🏠 Main Menu
+      </a>
+
+      <div class="section-title mt-3">📚 LMS Management</div>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'lms_admin.dashboard' else '' }}"
+         href="{{ url_for('lms_admin.dashboard') }}">
+        📊 Dashboard
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'lms_admin.progress_dashboard' else '' }}"
+         href="{{ url_for('lms_admin.progress_dashboard') }}">
+        📈 Progress
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint in ['lms_admin.list_programs', 'lms_admin.program_new', 'lms_admin.program_edit', 'lms_admin.program_view', 'lms_admin.list_chapters', 'lms_admin.list_program_chapter_topics', 'lms_admin.list_program_resources', 'lms_admin.add_program_resource', 'lms_admin.edit_program_resource'] else '' }}"
+         href="{{ url_for('lms_admin.list_programs') }}">
+        📖 Programs
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint in ['lms_admin.list_master_chapters', 'lms_admin.master_chapter_new', 'lms_admin.master_chapter_edit', 'lms_admin.list_master_topics', 'lms_admin.master_topic_new', 'lms_admin.master_topic_edit'] else '' }}"
+         href="{{ url_for('lms_admin.list_master_chapters') }}">
+        🧩 Master Library
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint in ['lms_admin.all_assignments', 'lms_admin.manage_assignments', 'lms_admin.view_submissions', 'lms_admin.review_submission'] else '' }}"
+         href="{{ url_for('lms_admin.all_assignments') }}">
+        📋 Assignments
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint in ['exams.view_questions', 'exams.manage_questions', 'exams.add_question', 'exams.edit_question', 'exams.update_question', 'exams.delete_question'] else '' }}"
+         href="{{ url_for('exams.view_questions') }}">
+        Question Bank
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint in ['exams.final_exam_applications', 'exams.approve_final_exam_application', 'exams.reject_final_exam_application'] else '' }}"
+         href="{{ url_for('exams.final_exam_applications') }}">
+        Final Exam Applications
+      </a>
+
+      {% if session.get('role') == 'admin' %}
+      <a class="nav-link {{ 'active' if request.endpoint in ['lms_admin.phase6_rollout_view'] else '' }}"
+         href="{{ url_for('lms_admin.phase6_rollout_view') }}">
+        Legacy Migration
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint in ['lms_admin.list_course_mappings'] else '' }}"
+         href="{{ url_for('lms_admin.list_course_mappings') }}">
+        🔗 Course Mapping
+      </a>
+      {% endif %}
+
+      <hr style="border-color:rgba(255,255,255,0.1);margin:12px 0 8px;">
+      <a href="{{ url_for('lms_admin.launch_demo') }}"
+         class="nav-link"
+         style="background:rgba(255,193,7,0.15);color:#ffc107;font-weight:600;"
+         title="Open student portal in read-only demo mode">
+        🎓 Student Demo View
+      </a>
+
+      <hr>
+      <a class="nav-link text-danger" href="{{ url_for('core.logout') }}">
+        🚪 Logout
+      </a>

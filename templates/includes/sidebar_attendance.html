@@ -1,0 +1,78 @@
+      <a class="nav-link {{ 'active' if request.endpoint == 'core.dashboard' else '' }}"
+         href="{{ url_for('core.dashboard') }}">
+        🏠 Main Menu
+      </a>
+
+      <div class="section-title mt-3">📋 Core Functions</div>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.dashboard' else '' }}"
+         href="{{ url_for('attendance.dashboard') }}">
+        📊 Dashboard
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.mark_attendance' else '' }}"
+         href="{{ url_for('attendance.mark_attendance') }}">
+        ✓ Mark Attendance
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.attendance_pattern' else '' }}"
+         href="{{ url_for('attendance.attendance_pattern') }}">
+        🟩 Attendance Pattern
+      </a>
+
+      <div class="section-title mt-3">🎓 Batch Management</div>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.list_batches' else '' }}"
+         href="{{ url_for('attendance.list_batches') }}">
+        📚 Manage Batches
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.create_batch' else '' }}"
+         href="{{ url_for('attendance.create_batch') }}">
+        ➕ Create Batch
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.batch_planner' else '' }}"
+         href="{{ url_for('attendance.batch_planner') }}">
+        🗓️ Batch Planner
+      </a>
+
+      <div class="section-title mt-3">📈 Reports & Analytics</div>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.daily_report' else '' }}"
+         href="{{ url_for('attendance.daily_report') }}">
+        📅 Daily Report
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.monthly_summary' else '' }}"
+         href="{{ url_for('attendance.monthly_summary') }}">
+        📊 Monthly Summary
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.defaulters' else '' }}"
+         href="{{ url_for('attendance.defaulters') }}">
+        ⚠️ Defaulters
+      </a>
+
+      <div class="section-title mt-3">📞 Follow-ups</div>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.followups' else '' }}"
+         href="{{ url_for('attendance.followups') }}">
+        📋 Follow-ups
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'attendance.leave_requests' else '' }}"
+         href="{{ url_for('attendance.leave_requests') }}">
+        🗒️ Leave Requests
+      </a>
+
+      <div class="section-title mt-3">🔗 Quick Links</div>
+
+      <a class="nav-link text-muted small" href="{{ url_for('core.dashboard') }}">
+        ← Back to ERP
+      </a>
+
+      <hr>
+      <a class="nav-link text-danger" href="{{ url_for('core.logout') }}">
+        🚪 Logout
+      </a>

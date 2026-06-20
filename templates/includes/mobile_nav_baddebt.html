@@ -1,0 +1,7 @@
+<nav class="baddebt-mobile-tabs" aria-label="Bad debt navigation">
+  <a class="{% if request.endpoint == 'baddebt.dashboard' %}active{% endif %}"
+     href="{{ url_for('baddebt.dashboard') }}">Write-offs</a>
+  <a class="{% if request.endpoint == 'baddebt.create' %}active{% endif %}"
+     href="{{ url_for('baddebt.create') }}">New Write-off</a>
+  <a href="{{ url_for('billing.dashboard') }}">Billing</a>
+</nav>

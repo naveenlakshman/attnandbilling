@@ -1,0 +1,63 @@
+      <a class="nav-link {{ 'active' if request.endpoint == 'core.dashboard' else '' }}"
+         href="{{ url_for('core.dashboard') }}">
+        🏠 Main Menu
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'leads.dashboard' else '' }}"
+         href="{{ url_for('leads.dashboard') }}">
+        📊 Leads Dashboard
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'leads.leads_list' else '' }}" 
+         href="{{ url_for('leads.leads_list') }}">
+        👥 Leads
+      </a>
+
+      <a class="nav-link"
+         href="{{ url_for('leads.lead_create') }}">
+        ➕ Add Lead
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'leads.followups_today' else '' }}"
+         href="{{ url_for('leads.followups_today') }}">
+        📞 Follow-ups
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'leads.pipeline' else '' }}"
+         href="{{ url_for('leads.pipeline') }}">
+        🧩 Pipeline
+      </a>
+
+      {% if session.get("role") == "admin" %}
+      <hr>
+        <a class="nav-link {{ 'active' if request.endpoint == 'leads.reports' else '' }}"
+           href="{{ url_for('leads.reports') }}">
+          📊 Leads Reports
+        </a>
+
+        <a class="nav-link {{ 'active' if request.endpoint and request.endpoint.startswith('reports.') else '' }}"
+           href="{{ url_for('reports.dashboard') }}">
+          📈 Analytics
+        </a>
+
+        <a class="nav-link {{ 'active' if request.endpoint == 'reports.import_page' else '' }}"
+           href="{{ url_for('reports.import_page') }}">
+          📥 Import Data
+        </a>
+
+        <a class="nav-link {{ 'active' if request.endpoint == 'leads.activity_log' else '' }}"
+           href="{{ url_for('leads.activity_log') }}">
+          📋 My Activity
+        </a>
+      {% else %}
+      <hr>
+      <a class="nav-link {{ 'active' if request.endpoint == 'leads.activity_log' else '' }}"
+         href="#">
+        📋 My Activity
+      </a>
+      {% endif %}
+
+      <hr>
+      <a class="nav-link text-danger" href="{{ url_for('core.logout') }}">
+        🚪 Logout
+      </a>

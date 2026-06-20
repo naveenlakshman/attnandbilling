@@ -4,283 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ company.company_short_name }}{% endblock %}</title>
+  
   <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
-
-  <style>
-    body {
-      background: #f8f9fa;
-      min-height: 100vh;
-    }
-    .erp-shell {
-      display: flex;
-      min-height: 100vh;
-    }
-    .erp-sidebar {
-      width: 280px;
-      background: #ffffff;
-      border-right: 1px solid #dee2e6;
-      padding: 24px 16px;
-      flex-shrink: 0;
-    }
-
-    @media (max-width: 991.98px) {
-      .erp-sidebar {
-        padding: 16px;
-      }
-    }
-    .erp-brand-title {
-      font-size: 1.9rem;
-      font-weight: 700;
-      margin: 0;
-      color: #212529;
-    }
-    .erp-brand-subtitle {
-      color: #6c757d;
-      margin-top: 4px;
-    }
-    .erp-nav .nav-link {
-      color: #212529;
-      border-radius: 14px;
-      padding: 14px 16px;
-      font-size: 1.05rem;
-      font-weight: 500;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .erp-nav .nav-link:hover {
-      background: #f1f3f5;
-      color: #0d6efd;
-    }
-    .erp-nav .nav-link.active {
-      background: #0d6efd;
-      color: #fff;
-    }
-    .erp-main {
-      flex-grow: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-    .erp-topbar {
-      background: #ffffff;
-      border-bottom: 1px solid #dee2e6;
-      padding: 12px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      position: sticky;
-      top: 0;
-      z-index: 1000;
-    }
-    .erp-topbar-title {
-      font-size: 1.4rem;
-      font-weight: 600;
-      color: #212529;
-    }
-    .erp-topbar-user {
-      color: #6c757d;
-      font-size: 1rem;
-    }
-    .erp-content {
-      padding: 24px;
-      flex-grow: 1;
-    }
-
-    /* ===== MOBILE BOTTOM NAV ===== */
-    .mobile-bottom-nav {
-      display: none;
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: #ffffff;
-      border-top: 1px solid #dee2e6;
-      z-index: 1030;
-      padding: 4px 0 env(safe-area-inset-bottom, 4px);
-      box-shadow: 0 -2px 8px rgba(0,0,0,.08);
-    }
-    .mobile-bottom-nav a {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1px;
-      text-decoration: none;
-      color: #6c757d;
-      font-size: 10px;
-      padding: 4px 2px;
-      border-radius: 8px;
-      transition: color .15s;
-    }
-    .mobile-bottom-nav a .nav-icon {
-      font-size: 20px;
-      line-height: 1;
-    }
-    .mobile-bottom-nav a.active,
-    .mobile-bottom-nav a:hover {
-      color: #0d6efd;
-    }
-    .mobile-bottom-nav .fab-btn {
-      color: #fff;
-      background: #0d6efd;
-      border-radius: 50%;
-      width: 44px;
-      height: 44px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      margin-top: -12px;
-      box-shadow: 0 2px 8px rgba(13,110,253,.4);
-      flex: none;
-      padding: 0;
-      cursor: pointer;
-      text-decoration: none;
-      border: none;
-      font-size: 24px;
-      transition: background .15s;
-    }
-    .mobile-bottom-nav .fab-btn:hover { background: #0a58ca; color: #fff; }
-    .mobile-bottom-nav .fab-btn .nav-icon { font-size: 24px; line-height: 1; }
-
-    /* FAB quick-create menu */
-    .fab-menu-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      z-index: 1025;
-      background: rgba(0,0,0,.35);
-      backdrop-filter: blur(2px);
-    }
-    .fab-menu-overlay.show { display: block; }
-    .fab-menu {
-      position: fixed;
-      bottom: 72px;
-      left: 50%;
-      transform: translateX(-50%) translateY(16px);
-      z-index: 1035;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      align-items: center;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity .18s, transform .18s;
-    }
-    .fab-menu.show {
-      pointer-events: auto;
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-    .fab-menu-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: #fff;
-      border-radius: 30px;
-      padding: 10px 20px 10px 14px;
-      box-shadow: 0 4px 16px rgba(0,0,0,.15);
-      text-decoration: none;
-      color: #1f2937;
-      font-weight: 600;
-      font-size: 14px;
-      white-space: nowrap;
-      min-width: 190px;
-    }
-    .fab-menu-item:hover { background: #f0f4ff; color: #0d6efd; }
-    .fab-menu-item .fmi-icon {
-      width: 36px; height: 36px;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px; flex-shrink: 0;
-    }
-    .fab-menu-label {
-      font-size: 10px;
-      color: #6c757d;
-      text-transform: uppercase;
-      letter-spacing: .5px;
-      font-weight: 600;
-      margin-bottom: 2px;
-    }
-    @media (max-width: 991.98px) {
-      .mobile-bottom-nav { display: flex; }
-      .erp-content { padding: 16px 12px 80px; }
-    }
-
-    /* Print styles */
-    @media print {
-      .no-print {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
-        overflow: hidden !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-
-      /* Hide sidebar */
-      .erp-sidebar {
-        display: none !important;
-        visibility: hidden !important;
-        width: 0 !important;
-        height: 0 !important;
-        overflow: hidden !important;
-      }
-
-      /* Hide topbar completely */
-      .erp-topbar {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
-        overflow: hidden !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        position: absolute !important;
-      }
-
-      .erp-topbar-user,
-      .erp-topbar-title {
-        display: none !important;
-        visibility: hidden !important;
-      }
-
-      /* Reset shell layout */
-      .erp-shell {
-        display: block !important;
-        flex-direction: column !important;
-      }
-
-      .erp-main {
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-      }
-
-      .erp-content {
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-
-      /* Global print resets */
-      body,
-      html {
-        margin: 0 !important;
-        padding: 0 !important;
-        background: white !important;
-        width: 100% !important;
-      }
-
-      @page {
-        margin: 0;
-        padding: 0;
-      }
-    }
-  </style>
-
+  <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+  
+  {% if request.endpoint and (request.endpoint.startswith('billing.') or request.endpoint.startswith('baddebt.')) %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.css">
+  {% endif %}
+  
   {% block extra_css %}{% endblock %}
   <meta name="csrf-token" content="{{ csrf_token() }}">
+  
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       var token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -299,127 +33,98 @@
 <body>
 
 <div class="erp-shell">
-  <div class="erp-sidebar offcanvas-lg offcanvas-start" id="erpSidebar" tabindex="-1">
+  <!-- Dynamic Sidebar -->
+  <aside class="erp-sidebar offcanvas-lg offcanvas-start" id="erpSidebar" tabindex="-1" aria-label="Sidebar navigation">
     <div class="offcanvas-header border-bottom d-lg-none">
       <h6 class="offcanvas-title fw-bold mb-0">{{ company.company_name }}</h6>
       <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#erpSidebar" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body p-0 d-lg-block">
-    <div class="mb-4 d-none d-lg-block">
-      {% if company.logo_filename %}
-        <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
-             alt="{{ company.company_name }}" style="max-height:54px; max-width:200px; margin-bottom:6px;">
-        <br>
-      {% endif %}
-      <h1 class="erp-brand-title">{{ company.company_name }}</h1>
-      <div class="erp-brand-subtitle">{{ company.tagline or 'ERP System' }}</div>
-      <hr>
+      <div class="mb-4 d-none d-lg-block">
+        {% if company.logo_filename %}
+          <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+               alt="{{ company.company_name }}" style="max-height:54px; max-width:200px; margin-bottom:6px;">
+          <br>
+        {% endif %}
+        <div class="fw-bold text-dark" style="font-size: 1.25rem;">{{ company.company_name }}</div>
+        <div class="text-muted small">
+          {% if request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) %}
+            LMS Module
+          {% elif request.endpoint and request.endpoint.startswith('attendance.') %}
+            Attendance Module
+          {% elif request.endpoint and request.endpoint.startswith('leads.') %}
+            Leads Module
+          {% elif request.endpoint and request.endpoint.startswith('billing.') %}
+            Billing Module
+          {% elif request.endpoint and request.endpoint.startswith('baddebt.') %}
+            Bad Debt Management
+          {% else %}
+            {{ company.tagline or 'ERP System' }}
+          {% endif %}
+        </div>
+        <hr>
+      </div>
+
+      <nav class="nav flex-column erp-nav">
+        {% if request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) %}
+          {% include 'includes/sidebar_lms.html' %}
+        {% elif request.endpoint and request.endpoint.startswith('attendance.') %}
+          {% include 'includes/sidebar_attendance.html' %}
+        {% elif request.endpoint and request.endpoint.startswith('leads.') %}
+          {% include 'includes/sidebar_leads.html' %}
+        {% elif request.endpoint and request.endpoint.startswith('billing.') %}
+          {% include 'includes/sidebar_billing.html' %}
+        {% elif request.endpoint and request.endpoint.startswith('baddebt.') %}
+          {% include 'includes/sidebar_baddebt.html' %}
+        {% else %}
+          {% include 'includes/sidebar_main.html' %}
+        {% endif %}
+      </nav>
     </div>
-
-    <nav class="nav flex-column erp-nav">
-      <a class="nav-link {% if request.endpoint == 'core.dashboard' %}active{% endif %}"
-         href="{{ url_for('core.dashboard') }}">
-        🏠 Dashboard
-      </a>
-
-      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('leads.') %}active{% endif %}"
-         href="{{ url_for('leads.dashboard') }}">
-        👥 Leads Module
-      </a>
-
-      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('billing.') %}active{% endif %}"
-         href="{% if session.get('role') == 'admin' %}{{ url_for('billing.dashboard') }}{% else %}{{ url_for('billing.menu') }}{% endif %}">
-        💰 Billing Module
-      </a>
-
-      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('attendance.') %}active{% endif %}"
-         href="{{ url_for('attendance.dashboard') }}">
-        📋 Attendance Module
-      </a>
-
-      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('assets.') %}active{% endif %}"
-         href="{{ url_for('assets.list_assets') }}">
-        📦 Assets
-      </a>
-
-      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('lms_admin.') %}active{% endif %}"
-         href="{{ url_for('lms_admin.dashboard') }}">
-        📚 LMS Module
-      </a>
-
-      <a class="nav-link" href="{{ url_for('lms_admin.launch_demo') }}"
-         style="color:#ffc107;font-weight:600;"
-         title="Open student portal in read-only demo mode">
-        🎓 Student Demo View
-      </a>
-
-      {% if session.get('role') == 'admin' %}
-      <hr>
-        <a class="nav-link {% if request.endpoint in ['core.users', 'core.user_new', 'core.user_edit'] %}active{% endif %}"
-        href="{{ url_for('core.users') }}">
-        👤 Users
-        </a>
-
-        <a class="nav-link {% if request.endpoint in ['core.branches', 'core.branch_new', 'core.branch_edit'] %}active{% endif %}"
-        href="{{ url_for('core.branches') }}">
-        🏢 Branches
-        </a>
-
-        <a class="nav-link {% if request.endpoint == 'core.company_profile' %}active{% endif %}"
-        href="{{ url_for('core.company_profile') }}">
-        🏷️ Company Profile
-        </a>
-
-        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}"
-        href="{{ url_for('reports.dashboard') }}">
-        📊 Reports
-        </a>
-
-        <a class="nav-link {% if request.endpoint == 'reports.daily_report' %}active{% endif %}"
-        href="{{ url_for('reports.daily_report') }}">
-        📋 Daily Report
-        </a>
-
-        <a class="nav-link {% if request.endpoint == 'reports.import_page' %}active{% endif %}"
-        href="{{ url_for('reports.import_page') }}">
-        📥 Import Data
-        </a>
-
-        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('import_export.') %}active{% endif %}"
-        href="{{ url_for('import_export.import_export_dashboard') }}">
-        📤 Export Data
-        </a>
-      {% endif %}
-
-      <hr>
-
-      <a class="nav-link text-danger"
-         href="{{ url_for('core.logout') }}">
-        🚪 Logout
-      </a>
-    </nav>
-    </div>
-  </div>
+  </aside>
+  
+  <div class="sidebar-backdrop" id="erpSidebarBackdrop" hidden></div>
 
   <main class="erp-main">
+    <!-- Topbar -->
     <div class="erp-topbar no-print">
-      <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#erpSidebar" aria-controls="erpSidebar" aria-label="Menu">☰</button>
-        <div class="erp-topbar-title">{% block page_title %}{{ company.company_short_name }}{% endblock %}</div>
+      <div class="d-flex align-items-center gap-2 min-w-0">
+        <button class="sidebar-toggle d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#erpSidebar" aria-controls="erpSidebar" aria-label="Menu">☰</button>
+        <div class="erp-topbar-title">
+          {% block page_title %}
+            {% if request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) %}
+              {{ company.company_short_name }} - LMS
+            {% elif request.endpoint and request.endpoint.startswith('attendance.') %}
+              {{ company.company_short_name }} – Attendance
+            {% elif request.endpoint and request.endpoint.startswith('leads.') %}
+              {{ company.company_short_name }} - Leads
+            {% elif request.endpoint and request.endpoint.startswith('billing.') %}
+              {{ company.company_short_name }} - Billing
+            {% elif request.endpoint and request.endpoint.startswith('baddebt.') %}
+              Bad Debt Management
+            {% else %}
+              {{ company.company_short_name }}
+            {% endif %}
+          {% endblock %}
+        </div>
       </div>
-      <div class="erp-topbar-user d-none d-sm-block">
-        Logged in: <strong>{{ session.get('username', 'Guest') }}</strong>
-        {% if session.get('role') %}
-          <span class="d-none d-md-inline">({{ session.get('role') }})</span>
-        {% endif %}
+      <div class="d-flex align-items-center gap-2 flex-shrink-0">
+        <div class="erp-topbar-user d-none d-sm-block">
+          Logged in: <strong>{{ session.get('username') or session.get('user_name') or 'User' }}</strong>
+          {% if session.get('role') %}
+            <span class="d-none d-md-inline">({{ session.get('role') }})</span>
+          {% endif %}
+        </div>
+        <a href="{{ url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary top-home-btn" title="Back to Main Dashboard">🏠 Home</a>
       </div>
     </div>
 
+    <!-- Content -->
     <div class="erp-content">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
-            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
               {{ message }}
               <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
@@ -432,70 +137,97 @@
   </main>
 </div>
 
+<!-- Dynamic Mobile Bottom Navigation -->
+{% if request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) %}
+  {% include 'includes/mobile_nav_lms.html' %}
+{% elif request.endpoint and request.endpoint.startswith('attendance.') %}
+  {% include 'includes/mobile_nav_attendance.html' %}
+{% elif request.endpoint and request.endpoint.startswith('leads.') %}
+  {% include 'includes/mobile_nav_leads.html' %}
+{% elif request.endpoint and request.endpoint.startswith('billing.') %}
+  {% include 'includes/mobile_nav_billing.html' %}
+{% elif request.endpoint and request.endpoint.startswith('baddebt.') %}
+  {% include 'includes/mobile_nav_baddebt.html' %}
+{% else %}
+  {% include 'includes/mobile_nav_main.html' %}
+{% endif %}
+
+<!-- Dynamic FAB Menu Overlays -->
+{% if request.endpoint and request.endpoint.startswith('attendance.') %}
+  {% include 'includes/fab_menu_attendance.html' %}
+{% elif request.endpoint and request.endpoint.startswith('billing.') %}
+  {% include 'includes/fab_menu_billing.html' %}
+{% elif request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) %}
+  {% include 'includes/fab_menu_lms.html' %}
+{% elif not request.endpoint or (not request.endpoint.startswith('leads.') and not request.endpoint.startswith('baddebt.')) %}
+  {% include 'includes/fab_menu_main.html' %}
+{% endif %}
+
 <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+{% if request.endpoint and (request.endpoint.startswith('billing.') or request.endpoint.startswith('baddebt.')) %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
+{% endif %}
 
-<!-- FAB overlay + pop-up menu -->
-<div class="fab-menu-overlay" id="coreFabOverlay"></div>
-<div class="fab-menu" id="coreFabMenu">
-  <div class="fab-menu-label">Quick Create</div>
-  <a href="{{ url_for('leads.lead_create') }}" class="fab-menu-item">
-    <span class="fmi-icon" style="background:#dcfce7;">➕</span>
-    Add Lead
-  </a>
-  <a href="{{ url_for('billing.student_new') }}" class="fab-menu-item">
-    <span class="fmi-icon" style="background:#dbeafe;">🎓</span>
-    Add Student
-  </a>
-  <a href="{{ url_for('billing.invoice_new') }}" class="fab-menu-item">
-    <span class="fmi-icon" style="background:#fef3c7;">🧾</span>
-    New Invoice
-  </a>
-</div>
-
-<!-- Mobile Bottom Navigation -->
-<nav class="mobile-bottom-nav no-print" aria-label="Mobile navigation">
-  {% if request.endpoint == 'core.dashboard' %}
-  <a href="{{ url_for('lms_admin.dashboard') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('lms_admin.') else '' }}">
-    <span class="nav-icon">📚</span>
-    <span>LMS</span>
-  </a>
-  {% else %}
-  <a href="{{ url_for('core.dashboard') }}" class="{{ 'active' if request.endpoint == 'core.dashboard' else '' }}">
-    <span class="nav-icon">🏠</span>
-    <span>Home</span>
-  </a>
-  {% endif %}
-  <a href="{{ url_for('leads.dashboard') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('leads.') else '' }}">
-    <span class="nav-icon">👥</span>
-    <span>Leads</span>
-  </a>
-  <a href="#" class="fab-btn" id="coreFabToggle" title="Quick Create" role="button" aria-label="Quick create menu" aria-expanded="false">
-    <span class="nav-icon" id="coreFabIcon">+</span>
-  </a>
-  <a href="{% if session.get('role') == 'admin' %}{{ url_for('billing.dashboard') }}{% else %}{{ url_for('billing.menu') }}{% endif %}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('billing.') else '' }}">
-    <span class="nav-icon">💰</span>
-    <span>Billing</span>
-  </a>
-  <a href="{{ url_for('attendance.dashboard') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('attendance.') else '' }}">
-    <span class="nav-icon">📋</span>
-    <span>Attendance</span>
-  </a>
-</nav>
-
+<!-- Mobile Toggles Integration Script -->
 <script>
   (function() {
-    var toggle  = document.getElementById('coreFabToggle');
-    var menu    = document.getElementById('coreFabMenu');
-    var overlay = document.getElementById('coreFabOverlay');
-    var icon    = document.getElementById('coreFabIcon');
-    if (!toggle) return;
-    function openMenu()  { menu.classList.add('show'); overlay.classList.add('show'); icon.textContent = '\u00d7'; toggle.setAttribute('aria-expanded','true'); }
-    function closeMenu() { menu.classList.remove('show'); overlay.classList.remove('show'); icon.textContent = '+'; toggle.setAttribute('aria-expanded','false'); }
-    toggle.addEventListener('click', function(e) { e.preventDefault(); menu.classList.contains('show') ? closeMenu() : openMenu(); });
-    overlay.addEventListener('click', closeMenu);
-    menu.querySelectorAll('.fab-menu-item').forEach(function(el) { el.addEventListener('click', closeMenu); });
+    // 1. Sidebar Toggle Logic
+    var toggleBtn = document.getElementById('erpSidebarToggle');
+    var sidebar = document.getElementById('erpSidebar');
+    var backdrop = document.getElementById('erpSidebarBackdrop');
+    
+    if (toggleBtn && sidebar && backdrop) {
+      function openSidebar() {
+        sidebar.classList.add('show');
+        backdrop.classList.add('show');
+        backdrop.hidden = false;
+        document.body.classList.add('lms-nav-open');
+      }
+      function closeSidebar() {
+        sidebar.classList.remove('show');
+        backdrop.classList.remove('show');
+        backdrop.hidden = true;
+        document.body.classList.remove('lms-nav-open');
+      }
+      toggleBtn.addEventListener('click', openSidebar);
+      backdrop.addEventListener('click', closeSidebar);
+      var closeBtn = sidebar.querySelector('.btn-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', closeSidebar);
+      }
+    }
+    
+    // 2. FAB Menu Toggle Logic (Shared IDs across sub-templates)
+    var fabToggle = document.getElementById('fabToggle');
+    var fabMenu = document.getElementById('fabMenu');
+    var fabOverlay = document.getElementById('fabOverlay');
+    var fabIcon = document.getElementById('fabIcon');
+    
+    if (fabToggle && fabMenu && fabOverlay) {
+      function openFab() {
+        fabMenu.classList.add('show');
+        fabOverlay.classList.add('show');
+        if (fabIcon) fabIcon.textContent = '✕';
+        fabToggle.setAttribute('aria-expanded', 'true');
+      }
+      function closeFab() {
+        fabMenu.classList.remove('show');
+        fabOverlay.classList.remove('show');
+        if (fabIcon) fabIcon.textContent = '+';
+        fabToggle.setAttribute('aria-expanded', 'false');
+      }
+      fabToggle.addEventListener('click', function(e) {
+        e.preventDefault();
+        fabMenu.classList.contains('show') ? closeFab() : openFab();
+      });
+      fabOverlay.addEventListener('click', closeFab);
+      fabMenu.querySelectorAll('.fab-menu-item').forEach(function(el) {
+        el.addEventListener('click', closeFab);
+      });
+    }
   })();
 </script>
+
 {% block extra_js %}{% endblock %}
 </body>
 </html>

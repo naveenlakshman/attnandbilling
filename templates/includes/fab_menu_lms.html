@@ -1,0 +1,18 @@
+<div class="fab-menu-overlay" id="fabOverlay"></div>
+<div class="fab-menu" id="fabMenu">
+  <div class="fab-menu-label">LMS Quick Actions</div>
+  {% if session.get('role') == 'admin' %}
+  <a href="{{ url_for('lms_admin.program_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dbeafe;">+</span>
+    Add Program
+  </a>
+  {% endif %}
+  <a href="{{ url_for('lms_admin.master_chapter_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dbeafe;">+</span>
+    New Master Chapter
+  </a>
+  <button type="button" class="fab-menu-item disabled" disabled title="Open a master topic first to add an assignment">
+    <span class="fmi-icon" style="background:#f3f4f6;">#</span>
+    Add Assignment
+  </button>
+</div>

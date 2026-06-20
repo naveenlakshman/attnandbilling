@@ -1,0 +1,78 @@
+      <a class="nav-link {% if request.endpoint == 'core.dashboard' %}active{% endif %}"
+         href="{{ url_for('core.dashboard') }}">
+        🏠 Dashboard
+      </a>
+
+      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('leads.') %}active{% endif %}"
+         href="{{ url_for('leads.dashboard') }}">
+        👥 Leads Module
+      </a>
+
+      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('billing.') %}active{% endif %}"
+         href="{% if session.get('role') == 'admin' %}{{ url_for('billing.dashboard') }}{% else %}{{ url_for('billing.menu') }}{% endif %}">
+        💰 Billing Module
+      </a>
+
+      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('attendance.') %}active{% endif %}"
+         href="{{ url_for('attendance.dashboard') }}">
+        📋 Attendance Module
+      </a>
+
+      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('assets.') %}active{% endif %}"
+         href="{{ url_for('assets.list_assets') }}">
+        📦 Assets
+      </a>
+
+      <a class="nav-link {% if request.endpoint and request.endpoint.startswith('lms_admin.') %}active{% endif %}"
+         href="{{ url_for('lms_admin.dashboard') }}">
+        📚 LMS Module
+      </a>
+
+      <a class="nav-link" href="{{ url_for('lms_admin.launch_demo') }}"
+         style="color:#ffc107;font-weight:600;"
+         title="Open student portal in read-only demo mode">
+        🎓 Student Demo View
+      </a>
+
+      {% if session.get('role') == 'admin' %}
+      <hr>
+        <a class="nav-link {% if request.endpoint in ['core.users', 'core.user_new', 'core.user_edit'] %}active{% endif %}"
+        href="{{ url_for('core.users') }}">
+        👤 Users
+        </a>
+
+        <a class="nav-link {% if request.endpoint in ['core.branches', 'core.branch_new', 'core.branch_edit'] %}active{% endif %}"
+        href="{{ url_for('core.branches') }}">
+        🏢 Branches
+        </a>
+
+        <a class="nav-link {% if request.endpoint == 'core.company_profile' %}active{% endif %}"
+        href="{{ url_for('core.company_profile') }}">
+        🏷️ Company Profile
+        </a>
+
+        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}"
+        href="{{ url_for('reports.dashboard') }}">
+        📊 Reports
+        </a>
+
+        <a class="nav-link {% if request.endpoint == 'reports.daily_report' %}active{% endif %}"
+        href="{{ url_for('reports.daily_report') }}">
+        📋 Daily Report
+        </a>
+
+        <a class="nav-link {% if request.endpoint == 'reports.import_page' %}active{% endif %}"
+        href="{{ url_for('reports.import_page') }}">
+        📥 Import Data
+        </a>
+
+        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('import_export.') %}active{% endif %}"
+        href="{{ url_for('import_export.import_export_dashboard') }}">
+        📤 Export Data
+        </a>
+      {% endif %}
+
+      <hr>
+      <a class="nav-link text-danger" href="{{ url_for('core.logout') }}">
+        🚪 Logout
+      </a>

@@ -1,0 +1,58 @@
+      <a class="nav-link {{ 'active' if request.endpoint == 'core.dashboard' else '' }}"
+         href="{{ url_for('core.dashboard') }}">
+        🏠 Main Menu
+      </a>
+
+      {% if session.get('role') == 'admin' %}
+      <a class="nav-link {{ 'active' if request.endpoint == 'billing.dashboard' else '' }}"
+         href="{{ url_for('billing.dashboard') }}">
+        💰 Billing Dashboard
+      </a>
+      {% endif %}
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'billing.students' else '' }}"
+         href="{{ url_for('billing.students') }}">
+        🎓 Students
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'billing.courses' else '' }}"
+         href="{{ url_for('billing.courses') }}">
+        📘 Courses
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'billing.invoices' else '' }}"
+         href="{{ url_for('billing.invoices') }}">
+        🧾 Invoices
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'billing.receipts' else '' }}"
+         href="{{ url_for('billing.receipts') }}">
+        💵 Receipts
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'billing.receivables' else '' }}"
+         href="{{ url_for('billing.receivables') }}">
+        📊 Receivables
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'billing.expenses' else '' }}"
+         href="{{ url_for('billing.expenses') }}">
+        💸 Expenses
+      </a>
+
+      <a class="nav-link {{ 'active' if request.endpoint == 'billing.activity_logs' else '' }}"
+         href="{{ url_for('billing.activity_logs') }}">
+        📋 Activity Logs
+      </a>
+
+      {% if session.get('role') == 'admin' %}
+      <a class="nav-link {{ 'active' if request.endpoint == 'baddebt.dashboard' else '' }}"
+         href="{{ url_for('baddebt.dashboard') }}">
+        ⚠️ Bad Debt Write-offs
+      </a>
+      {% endif %}
+
+      <hr>
+      <a class="nav-link text-danger" href="{{ url_for('core.logout') }}">
+        🚪 Logout
+      </a>

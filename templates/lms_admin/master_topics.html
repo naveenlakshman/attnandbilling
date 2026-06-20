@@ -1,4 +1,4 @@
-{% extends "lms_admin/base.html" %}
+{% extends "base.html" %}
 
 {% block title %}{% if is_program_context|default(false) %}Topics - {{ chapter.title }} - {{ program.program_name }}{% else %}Master Topics - {{ chapter.title }}{% endif %}{% endblock %}
 {% block page_title %}{% if is_program_context|default(false) %}Program Topics{% else %}Master Topics{% endif %}{% endblock %}

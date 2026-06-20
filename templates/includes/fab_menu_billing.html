@@ -1,0 +1,16 @@
+<div class="fab-menu-overlay" id="fabOverlay"></div>
+<div class="fab-menu" id="fabMenu">
+  <div class="fab-menu-label">Quick Create</div>
+  <a href="{{ url_for('billing.student_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dbeafe;">🎓</span>
+    New Student
+  </a>
+  <a href="{{ url_for('billing.invoice_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#dcfce7;">🧾</span>
+    New Invoice
+  </a>
+  <a href="{{ url_for('billing.expense_new') }}" class="fab-menu-item">
+    <span class="fmi-icon" style="background:#fef9c3;">💸</span>
+    Add Expense
+  </a>
+</div>

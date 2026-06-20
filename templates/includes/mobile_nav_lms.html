@@ -1,0 +1,43 @@
+{% set lms_program_endpoints = [
+  'lms_admin.list_programs', 'lms_admin.program_new', 'lms_admin.program_edit', 'lms_admin.program_view',
+  'lms_admin.list_chapters', 'lms_admin.list_program_chapter_topics',
+  'lms_admin.list_master_chapters', 'lms_admin.master_chapter_new', 'lms_admin.master_chapter_edit',
+  'lms_admin.list_master_topics', 'lms_admin.master_topic_new', 'lms_admin.master_topic_edit',
+  'lms_admin.list_master_topic_contents', 'lms_admin.master_content_new', 'lms_admin.content_edit',
+  'lms_admin.content_view', 'lms_admin.list_program_resources', 'lms_admin.add_program_resource',
+  'lms_admin.edit_program_resource'
+] %}
+{% set lms_assignment_endpoints = [
+  'lms_admin.assignments_alias', 'lms_admin.all_assignments', 'lms_admin.manage_assignments',
+  'lms_admin.edit_assignment', 'lms_admin.view_submissions', 'lms_admin.preview_submission',
+  'exams.view_questions', 'exams.manage_questions', 'exams.add_question',
+  'exams.edit_question', 'exams.update_question', 'exams.delete_question'
+] %}
+{% set lms_progress_endpoints = [
+  'lms_admin.progress_dashboard', 'lms_admin.view_batch_progress', 'lms_admin.view_student_progress'
+] %}
+{% set lms_program_active = request.endpoint in lms_program_endpoints %}
+{% set lms_assignment_active = request.endpoint in lms_assignment_endpoints %}
+{% set lms_progress_active = request.endpoint in lms_progress_endpoints %}
+
+<nav class="mobile-bottom-nav" aria-label="LMS mobile navigation">
+  <a href="{{ url_for('lms_admin.dashboard') }}" class="{{ 'active' if request.endpoint == 'lms_admin.dashboard' else '' }}">
+    <span class="nav-icon">📊</span>
+    <span>Dashboard</span>
+  </a>
+  <a href="{{ url_for('lms_admin.list_programs') }}" class="{{ 'active' if lms_program_active else '' }}">
+    <span class="nav-icon">📚</span>
+    <span>Programs</span>
+  </a>
+  <a href="#" class="fab-btn" id="fabToggle" title="LMS quick actions" role="button" aria-label="LMS quick actions menu" aria-expanded="false">
+    <span class="nav-icon" id="fabIcon">+</span>
+  </a>
+  <a href="{{ url_for('lms_admin.progress_dashboard') }}" class="{{ 'active' if lms_progress_active else '' }}">
+    <span class="nav-icon">📈</span>
+    <span>Progress</span>
+  </a>
+  <a href="{{ url_for('lms_admin.assignments_alias') }}" class="{{ 'active' if lms_assignment_active else '' }}">
+    <span class="nav-icon">📋</span>
+    <span>Assignments</span>
+  </a>
+</nav>

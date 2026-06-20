@@ -1,0 +1,15 @@
+      <a class="nav-link {% if request.endpoint == 'baddebt.dashboard' %}active{% endif %}" 
+         href="{{ url_for('baddebt.dashboard') }}">
+        📊 Write-offs
+      </a>
+      <a class="nav-link {% if request.endpoint == 'baddebt.create' %}active{% endif %}" 
+         href="{{ url_for('baddebt.create') }}">
+        ➕ New Write-off
+      </a>
+      <hr class="my-2">
+      <a class="nav-link" href="{{ url_for('billing.dashboard') }}">
+        ← Back to Billing
+      </a>
+      <a class="nav-link text-danger" href="{{ url_for('core.logout') }}">
+        🚪 Logout
+      </a>

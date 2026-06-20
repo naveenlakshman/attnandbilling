@@ -1,0 +1,21 @@
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+  <a href="{{ url_for('leads.dashboard') }}" class="{{ 'active' if request.endpoint == 'leads.dashboard' else '' }}">
+    <span class="nav-icon">📊</span>
+    <span>Dashboard</span>
+  </a>
+  <a href="{{ url_for('leads.leads_list') }}" class="{{ 'active' if request.endpoint == 'leads.leads_list' else '' }}">
+    <span class="nav-icon">👥</span>
+    <span>Leads</span>
+  </a>
+  <a href="{{ url_for('leads.lead_create') }}" class="add-btn" title="Add Lead">
+    <span class="nav-icon">+</span>
+  </a>
+  <a href="{{ url_for('leads.followups_today') }}" class="{{ 'active' if request.endpoint == 'leads.followups_today' else '' }}">
+    <span class="nav-icon">📞</span>
+    <span>Follow-ups</span>
+  </a>
+  <a href="{{ url_for('leads.pipeline') }}" class="{{ 'active' if request.endpoint == 'leads.pipeline' else '' }}">
+    <span class="nav-icon">🧩</span>
+    <span>Pipeline</span>
+  </a>
+</nav>
