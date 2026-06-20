@@ -462,7 +462,7 @@
           {% for item in timeline_items %}
           <div class="timeline-item">
             <div class="ti-when">
-              {{ item.created_at | format_datetime }}
+              {{ item.created_at | format_ist_datetime }}
               {% if item.actor %}
                 — {{ item.actor }}
               {% endif %}
@@ -471,7 +471,7 @@
             <div class="ti-title">{{ item.title }}</div>
             {% if item.note %}<div class="ti-note">{{ item.note }}</div>{% endif %}
             {% if item.next_followup_date %}
-              <div class="ti-next">Next: {{ item.next_followup_date | format_datetime }}</div>
+              <div class="ti-next">Next: {{ item.next_followup_date | format_ist_datetime }}</div>
             {% endif %}
           </div>
           {% endfor %}

@@ -769,6 +769,7 @@ def lead_detail(lead_id):
         LEFT JOIN users u ON al.user_id = u.id
         WHERE al.module_name = 'leads'
           AND al.record_id = ?
+          AND COALESCE(al.action_type, '') NOT IN ('followup_added', 'followup_completed')
         ORDER BY al.created_at DESC
         LIMIT 100
     """, (lead_id,))
@@ -1589,6 +1590,16 @@ def followups_today():
         LEFT JOIN users u ON l.assigned_to_id = u.id
         WHERE substr(f.created_at, 1, 10) = ?
           AND l.is_deleted = 0
+          AND NOT EXISTS (
+              SELECT 1
+              FROM followups f2
+              WHERE f2.lead_id = f.lead_id
+                AND substr(f2.created_at, 1, 10) = substr(f.created_at, 1, 10)
+                AND (
+                    f2.created_at > f.created_at
+                    OR (f2.created_at = f.created_at AND f2.id > f.id)
+                )
+          )
     """
     completed_params = [today]
 

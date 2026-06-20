@@ -18,7 +18,7 @@ from modules.exams.routes import exams_bp
 from modules.students import students_bp
 from modules.website import website_bp
 from modules.core.utils import login_required
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 def format_datetime(value):
     """Jinja2 filter to format ISO datetime to user-friendly format"""
@@ -49,6 +49,45 @@ def to_ist_time(value):
         return ist.strftime("%I:%M %p")  # e.g. 12:23 PM
     except (ValueError, AttributeError):
         return str(value)[11:16]
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def format_ist_datetime(value):
+    """Jinja2 filter: convert stored UTC-like datetime to IST dd-mm-yyyy hh:mm AM/PM."""
+    if not value:
+        return ""
+
+    raw = str(value).strip()
+    parsed = None
+
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d",
+        ):
+            try:
+                parsed = datetime.strptime(raw, fmt)
+                break
+            except ValueError:
+                continue
+
+    if not parsed:
+        return raw
+
+    if parsed.tzinfo:
+        parsed = parsed.astimezone(IST)
+    elif len(raw) > 10:
+        parsed = parsed + timedelta(hours=5, minutes=30)
+
+    if len(raw) <= 10:
+        return parsed.strftime("%d-%m-%Y")
+
+    return parsed.strftime("%d-%m-%Y %I:%M %p")
 
 def create_app():
     app = Flask(__name__)
@@ -115,6 +154,7 @@ def create_app():
     # Register Jinja2 filters
     app.jinja_env.filters['format_datetime'] = format_datetime
     app.jinja_env.filters['to_ist_time'] = to_ist_time
+    app.jinja_env.filters['format_ist_datetime'] = format_ist_datetime
 
     import json as _json
     def _from_json_len(val):
