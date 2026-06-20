@@ -194,7 +194,7 @@
           {% set stage_key = stage_text|lower|replace(' ', '-') %}
           {% set temperature = l.temperature or 'Cold' %}
           {% set temp_key = temperature|lower %}
-          {% set due_date = l.next_followup_date if selected_tab != 'completed' else l.followup_created_at %}
+          {% set due_date = l.next_followup_date if selected_tab != 'completed' else l.followup_created_at_display %}
           {% set note_text = (l.note if selected_tab == 'completed' else l.last_note) or '-' %}
           {% set due_status = 'due-normal' %}
           {% if selected_tab != 'completed' %}
@@ -315,7 +315,7 @@
         {% endif %}
       </div>
       <div class="mt-2 text-muted" style="font-size:13px;">{{ lead_phone or '-' }}</div>
-      <div class="mt-1 text-muted" style="font-size:12px;">Due: {{ l.next_followup_date if selected_tab != 'completed' else l.followup_created_at }}</div>
+      <div class="mt-1 text-muted" style="font-size:12px;">{{ 'Done at' if selected_tab == 'completed' else 'Due' }}: {{ l.next_followup_date if selected_tab != 'completed' else l.followup_created_at_display }}</div>
       <div class="mt-1" style="font-size:12px; color:#475569;">Last note: {{ note_text }}</div>
       <div class="mt-2 d-flex gap-1 flex-wrap">
         {% if lead_phone %}

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from flask import Blueprint, render_template, session, flash, redirect, url_for, request, jsonify
 from db import get_conn, log_activity
 from modules.core.utils import login_required
@@ -7,6 +7,42 @@ from modules.leads import services as lead_services
 from modules.leads.helpers import get_lead_or_404_with_access
 
 leads_bp = Blueprint("leads", __name__)
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _format_ist_datetime(value):
+    if not value:
+        return ""
+
+    raw = str(value).strip()
+    parse_candidates = (
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S.%f",
+    )
+
+    parsed = None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        for fmt in parse_candidates:
+            try:
+                parsed = datetime.strptime(raw, fmt)
+                break
+            except ValueError:
+                continue
+
+    if not parsed:
+        return raw
+
+    if parsed.tzinfo:
+        parsed = parsed.astimezone(IST)
+    else:
+        parsed = parsed + timedelta(hours=5, minutes=30)
+
+    return parsed.strftime("%d-%m-%Y %I:%M %p")
 
 GENDER_OPTIONS = ["Male", "Female", "Other"]
 
@@ -1574,6 +1610,7 @@ def followups_today():
         item["temperature"] = lead_services.get_lead_temperature(
             item.get("lead_score"), item.get("followup_status"), item.get("stage")
         )
+        item["followup_created_at_display"] = _format_ist_datetime(item.get("followup_created_at"))
         completed_items.append(item)
 
     # Admin dropdown users
