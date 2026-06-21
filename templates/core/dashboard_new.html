@@ -8,8 +8,9 @@
 <!-- Header ─────────────────────────────────────────────── -->
 <header class="dashboard-header d-flex justify-content-between align-items-center flex-wrap gap-3">
   <div>
-    <h1 class="greeting-title">Good {{ 'Morning' if today[11:13]|default('09') < '12' else ('Afternoon' if today[11:13]|default('14') < '17' else 'Evening') }}, {{ session.get('full_name').split()[0] }}!</h1>
-    <p class="greeting-sub mb-0">{{ today }} &mdash; Here is your business at a glance.</p>
+    <h1 class="greeting-title">Good {{ 'Morning' if today[11:13]|default('09') < '12' else ('Afternoon' if
+        today[11:13]|default('14') < '17' else 'Evening' ) }}, {{ session.get('full_name').split()[0] }}!</h1>
+        <p class="greeting-sub mb-0">{{ today }} &mdash; Here is your business at a glance.</p>
   </div>
   <a href="{{ url_for('core.dashboard_classic') }}" class="dashboard-switch">
     <i class="bi bi-arrow-left-right"></i> Classic Dashboard
@@ -26,7 +27,8 @@
         {{ pending_leave_count }} Pending Leave Request{{ 's' if pending_leave_count != 1 else '' }}
       </h2>
       <p class="alert-notice-sub mb-0">
-        Student{{ 's' if pending_leave_count != 1 else '' }} {{ 'have' if pending_leave_count != 1 else 'has' }} submitted leave {{ 'requests' if pending_leave_count != 1 else 'request' }} awaiting your review.
+        Student{{ 's' if pending_leave_count != 1 else '' }} {{ 'have' if pending_leave_count != 1 else 'has' }}
+        submitted leave {{ 'requests' if pending_leave_count != 1 else 'request' }} awaiting your review.
       </p>
     </div>
   </div>
@@ -49,9 +51,12 @@
         <div class="kpi-label">💰 Revenue</div>
         <div class="kpi-value text-revenue">₹{{ "{:,.0f}".format(revenue_this_month) }}</div>
         <div class="kpi-subtext">
-          Net Profit: <span class="fw-bold {% if net_profit_this_month >= 0 %}text-success{% else %}text-danger{% endif %}">₹{{ "{:,.0f}".format(net_profit_this_month) }}</span>
+          Net Profit: <span
+            class="fw-bold {% if net_profit_this_month >= 0 %}text-success{% else %}text-danger{% endif %}">₹{{
+            "{:,.0f}".format(net_profit_this_month) }}</span>
         </div>
-        <a href="{{ url_for('billing.receipts') }}" class="btn btn-sm btn-outline-primary kpi-action-btn w-100 text-center">View Receipts</a>
+        <a href="{{ url_for('billing.receipts') }}"
+          class="btn btn-sm btn-outline-primary kpi-action-btn w-100 text-center">View Receipts</a>
       </div>
     </div>
   </div>
@@ -65,7 +70,8 @@
         <div class="kpi-subtext">
           Active Students (<span class="text-success fw-bold">+{{ new_students_this_month }} new</span>)
         </div>
-        <a href="{{ url_for('billing.students') }}" class="btn btn-sm btn-outline-primary kpi-action-btn w-100 text-center">Manage Students</a>
+        <a href="{{ url_for('billing.students') }}"
+          class="btn btn-sm btn-outline-primary kpi-action-btn w-100 text-center">Manage Students</a>
       </div>
     </div>
   </div>
@@ -79,7 +85,8 @@
         <div class="kpi-subtext">
           Active Leads (<span class="text-success fw-bold">{{ conversion_rate }}% win</span>)
         </div>
-        <a href="{{ url_for('leads.dashboard') }}" class="btn btn-sm btn-outline-primary kpi-action-btn w-100 text-center">Go to Admissions</a>
+        <a href="{{ url_for('leads.dashboard') }}"
+          class="btn btn-sm btn-outline-primary kpi-action-btn w-100 text-center">Go to Admissions</a>
       </div>
     </div>
   </div>
@@ -93,7 +100,8 @@
         <div class="kpi-subtext">
           Overdue: <span class="fw-bold text-danger">₹{{ "{:,.0f}".format(total_past_due) }}</span>
         </div>
-        <a href="{{ url_for('billing.receivables') }}" class="btn btn-sm btn-outline-danger kpi-action-btn w-100 text-center">View Receivables</a>
+        <a href="{{ url_for('billing.receivables') }}"
+          class="btn btn-sm btn-outline-danger kpi-action-btn w-100 text-center">View Receivables</a>
       </div>
     </div>
   </div>
@@ -104,19 +112,20 @@
      SECONDARY METRICS (Attendance & Pipeline)
      ════════════════════════════════════════════════════════ -->
 <div class="row g-3 mb-4">
-  
+
   <!-- Attendance Summary Widget -->
   <div class="col-12 col-lg-7">
     <div class="card p-3 border-light h-100">
-      <h3 class="h6 text-uppercase fw-bold text-muted mb-3"><i class="bi bi-calendar-check text-primary"></i> Today's Attendance</h3>
+      <h3 class="h6 text-uppercase fw-bold text-muted mb-3"><i class="bi bi-calendar-check text-primary"></i> Today's
+        Attendance</h3>
       <div class="row align-items-center">
         <div class="col-sm-4 text-center border-end">
           {% if attendance_rate is not none %}
-            <div class="kpi-value text-success mb-1">{{ attendance_rate }}%</div>
-            <p class="text-muted small mb-0">{{ att_present + att_late }} of {{ att_total }} marked</p>
+          <div class="kpi-value text-success mb-1">{{ attendance_rate }}%</div>
+          <p class="text-muted small mb-0">{{ att_present + att_late }} of {{ att_total }} marked</p>
           {% else %}
-            <div class="kpi-value text-muted mb-1">—</div>
-            <p class="text-muted small mb-0">Not Marked Yet</p>
+          <div class="kpi-value text-muted mb-1">—</div>
+          <p class="text-muted small mb-0">Not Marked Yet</p>
           {% endif %}
         </div>
         <div class="col-sm-8">
@@ -139,7 +148,8 @@
             </div>
           </div>
           <div class="d-flex justify-content-end gap-2 mt-2">
-            <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-sm btn-outline-primary">Mark Attendance</a>
+            <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-sm btn-outline-primary">Mark
+              Attendance</a>
             <a href="{{ url_for('attendance.dashboard') }}" class="btn btn-sm btn-outline-secondary">Analytics</a>
           </div>
         </div>
@@ -150,25 +160,26 @@
   <!-- Admissions Pipeline Stages Widget -->
   <div class="col-12 col-lg-5">
     <div class="card p-3 border-light h-100">
-      <h3 class="h6 text-uppercase fw-bold text-muted mb-3"><i class="bi bi-funnel text-primary"></i> Admissions Pipeline</h3>
+      <h3 class="h6 text-uppercase fw-bold text-muted mb-3"><i class="bi bi-funnel text-primary"></i> Admissions
+        Pipeline</h3>
       <div class="pipeline-badges-container mb-3">
         {% set stage_colors = {
-          'New Lead': 'bg-secondary text-secondary-custom',
-          'Contacted': 'bg-primary-light text-primary-custom',
-          'Interested': 'bg-success-light text-success-custom',
-          'Counseling Done': 'bg-warning-light text-warning-custom',
-          'Follow-up': 'bg-warning-light text-warning-custom',
-          'Converted': 'bg-success-light text-success-custom',
-          'Lost': 'bg-danger-light text-danger-custom'
+        'New Lead': 'bg-secondary text-secondary-custom',
+        'Contacted': 'bg-primary-light text-primary-custom',
+        'Interested': 'bg-success-light text-success-custom',
+        'Counseling Done': 'bg-warning-light text-warning-custom',
+        'Follow-up': 'bg-warning-light text-warning-custom',
+        'Converted': 'bg-success-light text-success-custom',
+        'Lost': 'bg-danger-light text-danger-custom'
         } %}
         {% if leads_by_stage %}
-          {% for row in leads_by_stage %}
-            <span class="stage-pill {{ stage_colors.get(row.stage, 'bg-light text-secondary') }}">
-              {{ row.stage or 'Unknown' }}: <strong>{{ row.cnt }}</strong>
-            </span>
-          {% endfor %}
+        {% for row in leads_by_stage %}
+        <span class="stage-pill {{ stage_colors.get(row.stage, 'bg-light text-secondary') }}">
+          {{ row.stage or 'Unknown' }}: <strong>{{ row.cnt }}</strong>
+        </span>
+        {% endfor %}
         {% else %}
-          <small class="text-muted">No active leads in pipeline</small>
+        <small class="text-muted">No active leads in pipeline</small>
         {% endif %}
       </div>
       <div class="mt-auto text-end">
@@ -183,11 +194,11 @@
      ATTENTION CENTER & QUICK ACTIONS
      ════════════════════════════════════════════════════════ -->
 <div class="row g-4">
-  
+
   <!-- Left Side: Attention Center -->
   <div class="col-12 col-lg-8">
     <h2 class="dashboard-sec-title">Attention Center</h2>
-    
+
     <!-- Overdue Payments Card -->
     {% if past_dues or todays_dues %}
     <div class="action-card">
@@ -196,7 +207,7 @@
           <span>⚠️ Overdue Payments</span>
           <span class="action-badge-danger">{{ past_dues|length }} past due</span>
           {% if todays_dues %}
-            <span class="action-badge-warning">{{ todays_dues|length }} today</span>
+          <span class="action-badge-warning">{{ todays_dues|length }} today</span>
           {% endif %}
         </div>
         <div class="d-flex align-items-center gap-2">
@@ -219,23 +230,27 @@
             <tbody>
               {% for item in past_dues %}
               <tr class="bg-payment-overdue">
-                <td><span class="table-student-code">{{ item.student_code }}</span> <span class="table-student-name">{{ item.student_name }}</span></td>
+                <td><span class="table-student-code">{{ item.student_code }}</span> <span class="table-student-name">{{
+                    item.student_name }}</span></td>
                 <td>{{ item.student_phone or '—' }}</td>
                 <td class="text-danger table-date-highlight">{{ item.due_date }}</td>
                 <td class="text-danger table-amount-highlight">₹{{ "{:,.0f}".format(item.balance_due or 0) }}</td>
                 <td>
-                  <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}" class="btn btn-sm btn-primary table-action-btn">Collect</a>
+                  <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
+                    class="btn btn-sm btn-primary table-action-btn">Collect</a>
                 </td>
               </tr>
               {% endfor %}
               {% for item in todays_dues %}
               <tr class="bg-payment-today">
-                <td><span class="table-student-code">{{ item.student_code }}</span> <span class="table-student-name">{{ item.student_name }}</span></td>
+                <td><span class="table-student-code">{{ item.student_code }}</span> <span class="table-student-name">{{
+                    item.student_name }}</span></td>
                 <td>{{ item.student_phone or '—' }}</td>
                 <td class="text-warning table-date-highlight">{{ item.due_date }} (Today)</td>
                 <td class="text-warning table-amount-highlight">₹{{ "{:,.0f}".format(item.balance_due or 0) }}</td>
                 <td>
-                  <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}" class="btn btn-sm btn-primary table-action-btn">Collect</a>
+                  <a href="{{ url_for('billing.receipt_new', invoice_id=item.invoice_id) }}"
+                    class="btn btn-sm btn-primary table-action-btn">Collect</a>
                 </td>
               </tr>
               {% endfor %}
@@ -257,7 +272,7 @@
           <span>📞 Lead Followups</span>
           <span class="action-badge-danger">{{ past_due_leads|length }} overdue</span>
           {% if today_due_leads %}
-            <span class="action-badge-warning">{{ today_due_leads|length }} today</span>
+          <span class="action-badge-warning">{{ today_due_leads|length }} today</span>
           {% endif %}
         </div>
         <i class="bi bi-chevron-right action-toggle-arrow" id="arrow-overdueLeads"></i>
@@ -282,13 +297,15 @@
                 <td>{{ lead.phone or '—' }}</td>
                 <td class="text-danger table-date-highlight">{{ lead.next_followup_date }}</td>
                 <td>
-                  <span class="score-badge {% if (lead.lead_score or 0) >= 60 %}high{% elif (lead.lead_score or 0) >= 40 %}medium{% else %}low{% endif %}">
+                  <span
+                    class="score-badge {% if (lead.lead_score or 0) >= 60 %}high{% elif (lead.lead_score or 0) >= 40 %}medium{% else %}low{% endif %}">
                     {{ lead.lead_score or 0 }}
                   </span>
                 </td>
                 <td>{{ lead.stage or '—' }}</td>
                 <td>
-                  <a href="{{ url_for('leads.lead_detail', lead_id=lead.id) }}" class="btn btn-sm btn-outline-primary table-action-btn">Followup</a>
+                  <a href="{{ url_for('leads.lead_detail', lead_id=lead.id) }}"
+                    class="btn btn-sm btn-outline-primary table-action-btn">Followup</a>
                 </td>
               </tr>
               {% endfor %}
@@ -298,13 +315,15 @@
                 <td>{{ lead.phone or '—' }}</td>
                 <td class="text-warning table-date-highlight">{{ lead.next_followup_date }} (Today)</td>
                 <td>
-                  <span class="score-badge {% if (lead.lead_score or 0) >= 60 %}high{% elif (lead.lead_score or 0) >= 40 %}medium{% else %}low{% endif %}">
+                  <span
+                    class="score-badge {% if (lead.lead_score or 0) >= 60 %}high{% elif (lead.lead_score or 0) >= 40 %}medium{% else %}low{% endif %}">
                     {{ lead.lead_score or 0 }}
                   </span>
                 </td>
                 <td>{{ lead.stage or '—' }}</td>
                 <td>
-                  <a href="{{ url_for('leads.lead_detail', lead_id=lead.id) }}" class="btn btn-sm btn-outline-primary table-action-btn">Followup</a>
+                  <a href="{{ url_for('leads.lead_detail', lead_id=lead.id) }}"
+                    class="btn btn-sm btn-outline-primary table-action-btn">Followup</a>
                 </td>
               </tr>
               {% endfor %}
@@ -317,7 +336,7 @@
       </div>
     </div>
     {% endif %}
-    
+
     {% if not past_dues and not todays_dues and not past_due_leads and not today_due_leads %}
     <div class="card p-4 text-center border-light">
       <span class="fs-1 mb-2">🎉</span>
@@ -328,49 +347,33 @@
 
   </div>
 
-  <!-- Right Side: Quick Actions & Recent Activity -->
+  <!-- Right Side: Quick Actions -->
   <div class="col-12 col-lg-4">
-    
+
     <!-- Quick Actions Grid -->
     <h2 class="dashboard-sec-title">Quick Actions</h2>
     <div class="card p-3 border-light mb-4">
       <div class="quick-action-grid">
-        <a href="{{ url_for('leads.lead_create') }}" class="btn btn-outline-primary quick-action-btn"><i class="bi bi-funnel"></i> Add Lead</a>
-        <a href="{{ url_for('billing.student_new') }}" class="btn btn-outline-primary quick-action-btn"><i class="bi bi-person-plus"></i> Add Student</a>
-        <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-primary quick-action-btn"><i class="bi bi-calendar-check"></i> Mark Attend</a>
-        <a href="{{ url_for('billing.invoice_new') }}" class="btn btn-outline-primary quick-action-btn"><i class="bi bi-file-earmark-text"></i> Invoice</a>
-        <a href="{{ url_for('billing.receipt_new') }}" class="btn btn-outline-primary quick-action-btn"><i class="bi bi-cash-stack"></i> Receipt</a>
-        <a href="{{ url_for('billing.receivables') }}" class="btn btn-outline-primary quick-action-btn"><i class="bi bi-wallet2"></i> Receivables</a>
-        <a href="{{ url_for('billing.expenses') }}" class="btn btn-outline-primary quick-action-btn"><i class="bi bi-box-arrow-right"></i> Expenses</a>
-        <a href="{{ url_for('reports.daily_report') }}" class="btn btn-outline-primary quick-action-btn"><i class="bi bi-graph-up-arrow"></i> Daily Report</a>
+        <a href="{{ url_for('leads.lead_create') }}" class="btn btn-outline-primary quick-action-btn"><i
+            class="bi bi-funnel"></i> Add Lead</a>
+        <a href="{{ url_for('billing.student_new') }}" class="btn btn-outline-primary quick-action-btn"><i
+            class="bi bi-person-plus"></i> Add Student</a>
+        <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-outline-primary quick-action-btn"><i
+            class="bi bi-calendar-check"></i> Mark Attend</a>
+        <a href="{{ url_for('billing.invoice_new') }}" class="btn btn-outline-primary quick-action-btn"><i
+            class="bi bi-file-earmark-text"></i> Invoice</a>
+        <a href="{{ url_for('billing.receipt_new') }}" class="btn btn-outline-primary quick-action-btn"><i
+            class="bi bi-cash-stack"></i> Receipt</a>
+        <a href="{{ url_for('billing.receivables') }}" class="btn btn-outline-primary quick-action-btn"><i
+            class="bi bi-wallet2"></i> Receivables</a>
+        <a href="{{ url_for('billing.expenses') }}" class="btn btn-outline-primary quick-action-btn"><i
+            class="bi bi-box-arrow-right"></i> Expenses</a>
+        <a href="{{ url_for('reports.daily_report') }}" class="btn btn-outline-primary quick-action-btn"><i
+            class="bi bi-graph-up-arrow"></i> Daily Report</a>
       </div>
     </div>
 
-    <!-- Recent Activity Timeline -->
-    <h2 class="dashboard-sec-title">Recent Activity</h2>
-    <div class="card p-3 border-light">
-      <div class="timeline-container">
-        {% if recent_activity %}
-          {% for act in recent_activity %}
-            <div class="timeline-item">
-              <span class="timeline-marker module-{{ act.module_name or 'system' }}"></span>
-              <div class="timeline-content">
-                <div class="timeline-meta">
-                  <span class="timeline-module module-{{ act.module_name or 'system' }}">
-                    {{ act.module_name|title if act.module_name else 'System' }}
-                  </span>
-                  <span class="timeline-time">{{ act.created_at[:16] if act.created_at else '' }}</span>
-                </div>
-                <p class="mb-0 text-dark">{{ act.description or act.action_type }}</p>
-                <small class="timeline-author">by {{ act.user_name or 'System' }}</small>
-              </div>
-            </div>
-          {% endfor %}
-        {% else %}
-          <p class="text-muted small text-center mb-0 py-3">No recent activities logged.</p>
-        {% endif %}
-      </div>
-    </div>
+
 
   </div>
 
@@ -378,18 +381,18 @@
 
 <!-- JavaScript Logic ────────────────────────────────────── -->
 <script>
-function toggleSection(id, headerEl) {
-  const el = document.getElementById(id);
-  const arrow = document.getElementById('arrow-' + id);
-  const visible = el.style.display !== 'none';
-  el.style.display = visible ? 'none' : 'block';
-  if (arrow) {
-    if (visible) {
-      arrow.classList.remove('open');
-    } else {
-      arrow.classList.add('open');
+  function toggleSection(id, headerEl) {
+    const el = document.getElementById(id);
+    const arrow = document.getElementById('arrow-' + id);
+    const visible = el.style.display !== 'none';
+    el.style.display = visible ? 'none' : 'block';
+    if (arrow) {
+      if (visible) {
+        arrow.classList.remove('open');
+      } else {
+        arrow.classList.add('open');
+      }
     }
   }
-}
 </script>
 {% endblock %}
