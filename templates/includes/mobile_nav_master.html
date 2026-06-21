@@ -1,22 +1,75 @@
 <nav class="mobile-bottom-nav no-print" aria-label="Mobile navigation">
-  <a href="{{ url_for('core.dashboard') }}" class="{{ 'active' if request.endpoint == 'core.dashboard' else '' }}">
-    <span class="nav-icon">DB</span>
-    <span>Home</span>
-  </a>
-  <a href="{{ url_for('leads.dashboard') }}" class="{{ 'active' if request.endpoint and (request.endpoint.startswith('leads.') or request.endpoint.startswith('reports.')) else '' }}">
-    <span class="nav-icon">LD</span>
+  <!-- Leads Tab -->
+  <div class="mobile-nav-item {{ 'active' if request.endpoint and (request.endpoint.startswith('leads.') or request.endpoint.startswith('reports.')) else '' }}" onclick="toggleMobileSubmenu(event, this)">
+    <span class="nav-icon">👥</span>
     <span>Leads</span>
-  </a>
-  <a href="{% if session.get('role') == 'admin' %}{{ url_for('billing.dashboard') }}{% else %}{{ url_for('billing.menu') }}{% endif %}" class="{{ 'active' if request.endpoint and (request.endpoint.startswith('billing.') or request.endpoint.startswith('baddebt.')) else '' }}">
-    <span class="nav-icon">BL</span>
+    <div class="nav-submenu">
+      <a href="{{ url_for('leads.lead_create') }}">➕ New Lead</a>
+      <a href="{{ url_for('leads.followups_today') }}">📞 Followups</a>
+      <a href="{{ url_for('leads.dashboard') }}">🎯 Dashboard</a>
+    </div>
+  </div>
+
+  <!-- Billing Tab -->
+  <div class="mobile-nav-item {{ 'active' if request.endpoint and (request.endpoint.startswith('billing.') or request.endpoint.startswith('baddebt.')) else '' }}" onclick="toggleMobileSubmenu(event, this)">
+    <span class="nav-icon">💰</span>
     <span>Billing</span>
-  </a>
-  <a href="{{ url_for('attendance.dashboard') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('attendance.') else '' }}">
-    <span class="nav-icon">AT</span>
+    <div class="nav-submenu">
+      <a href="{{ url_for('billing.student_new') }}">🎓 + Student</a>
+      <a href="{{ url_for('billing.receipt_new') }}">💵 + Receipt</a>
+      <a href="{{ url_for('billing.invoice_new') }}">📄 + Invoice</a>
+      <a href="{% if session.get('role') == 'admin' %}{{ url_for('billing.dashboard') }}{% else %}{{ url_for('billing.menu') }}{% endif %}">💰 Dashboard</a>
+    </div>
+  </div>
+
+  <!-- Attendance Tab -->
+  <div class="mobile-nav-item {{ 'active' if request.endpoint and request.endpoint.startswith('attendance.') else '' }}" onclick="toggleMobileSubmenu(event, this)">
+    <span class="nav-icon">📋</span>
     <span>Attend</span>
-  </a>
-  <a href="{{ url_for('lms_admin.dashboard') }}" class="{{ 'active' if request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) else '' }}">
-    <span class="nav-icon">LM</span>
+    <div class="nav-submenu">
+      <a href="{{ url_for('attendance.list_batches') }}">✅ Mark Attend</a>
+      <a href="{{ url_for('attendance.leave_requests') }}">🔔 Leaves</a>
+      <a href="{{ url_for('attendance.dashboard') }}">📋 Dashboard</a>
+    </div>
+  </div>
+
+  <!-- LMS Tab -->
+  <div class="mobile-nav-item {{ 'active' if request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) else '' }}" onclick="toggleMobileSubmenu(event, this)">
+    <span class="nav-icon">📚</span>
     <span>LMS</span>
-  </a>
+    <div class="nav-submenu">
+      <a href="{{ url_for('lms_admin.list_programs') }}">📖 Programs</a>
+      <a href="{{ url_for('exams.final_exam_applications') }}">🎓 Final Exams</a>
+      <a href="{{ url_for('lms_admin.dashboard') }}">📚 Dashboard</a>
+    </div>
+  </div>
 </nav>
+
+<script>
+function toggleMobileSubmenu(event, element) {
+  event.stopPropagation();
+  const submenu = element.querySelector('.nav-submenu');
+  if (!submenu) return;
+  const isAlreadyOpen = submenu.classList.contains('show');
+  
+  // Close all other menus first
+  document.querySelectorAll('.nav-submenu').forEach(m => {
+    m.classList.remove('show');
+  });
+  
+  if (!isAlreadyOpen) {
+    submenu.classList.add('show');
+    
+    // Add close listener
+    const closeListener = (e) => {
+      if (!element.contains(e.target)) {
+        submenu.classList.remove('show');
+        document.removeEventListener('click', closeListener);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener('click', closeListener);
+    }, 50);
+  }
+}
+</script>
