@@ -16,8 +16,9 @@
     <span>Billing</span>
     <div class="nav-submenu">
       <a href="{{ url_for('billing.student_new') }}">🎓 + Student</a>
-      <a href="{{ url_for('billing.receipt_new') }}">💵 + Receipt</a>
+      <a href="{{ url_for('billing.receipts') }}">💵 + Receipts</a>
       <a href="{{ url_for('billing.invoice_new') }}">📄 + Invoice</a>
+      <a href="{{ url_for('billing.receivables') }}">🧾 Receivables</a>
       <a href="{% if session.get('role') == 'admin' %}{{ url_for('billing.dashboard') }}{% else %}{{ url_for('billing.menu') }}{% endif %}">💰 Dashboard</a>
     </div>
   </div>

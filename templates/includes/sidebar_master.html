@@ -151,7 +151,7 @@
           <a class="nav-link {{ 'active' if ep == 'billing.menu' else '' }}" href="{{ url_for('billing.menu') }}">Finance Menu</a>
         {% endif %}
         <a class="nav-link {{ 'active' if ep in ['billing.invoices', 'billing.invoice_new', 'billing.invoice_view', 'billing.invoice_edit'] else '' }}" href="{{ url_for('billing.invoices') }}">Invoices</a>
-        <a class="nav-link {{ 'active' if ep in ['billing.receipts', 'billing.receipt_new', 'billing.receipt_view', 'billing.receipt_edit'] else '' }}" href="{{ url_for('billing.receipts') }}">Payments</a>
+        <a class="nav-link {{ 'active' if ep in ['billing.receipts', 'billing.receipt_new', 'billing.receipt_view', 'billing.receipt_edit'] else '' }}" href="{{ url_for('billing.receipts') }}">Receipts</a>
         <a class="nav-link {{ 'active' if ep == 'billing.receivables' else '' }}" href="{{ url_for('billing.receivables') }}">
           Installments
           <span class="badge rounded-pill bg-danger ms-auto sidebar-badge" id="badge-billing-receivables" style="display: none;">0</span>
