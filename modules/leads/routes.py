@@ -2546,9 +2546,17 @@ def ai_assist(lead_id):
         elif action == "next_action":
             result = ai_helper.suggest_next_action(lead_dict, followups_list)
         elif action == "whatsapp":
-            result = ai_helper.draft_message_template(lead_dict, method="WhatsApp")
+            result = ai_helper.draft_message_template(
+                lead_dict,
+                followups=followups_list,
+                method="WhatsApp"
+            )
         elif action == "email":
-            result = ai_helper.draft_message_template(lead_dict, method="Email")
+            result = ai_helper.draft_message_template(
+                lead_dict,
+                followups=followups_list,
+                method="Email"
+            )
         else:
             return jsonify({"error": "Unknown action."}), 400
     except ValueError as e:
