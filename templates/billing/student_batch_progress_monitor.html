@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+{% block title %}Student Batch Progress Monitor{% endblock %}
+
+{% block content %}
+<div class="sbpm-page">
+  <div class="sbpm-header">
+    <div>
+      <div class="sbpm-eyebrow">Students</div>
+      <h1 class="sbpm-title">Student Batch Progress Monitor</h1>
+      <p class="sbpm-subtitle">Batch-wise student visibility with trainer, course, and LMS progress signals.</p>
+    </div>
+    <div class="sbpm-view-toggle" role="group" aria-label="View mode">
+      <a class="btn btn-sm {{ 'btn-primary' if filters.view == 'cards' else 'btn-outline-primary' }}" href="{{ card_view_url }}">Card View</a>
+      <a class="btn btn-sm {{ 'btn-primary' if filters.view == 'table' else 'btn-outline-primary' }}" href="{{ table_view_url }}">Table View</a>
+    </div>
+  </div>
+
+  <section class="sbpm-filter-panel">
+    <form method="get" class="sbpm-filter-grid">
+      <input type="hidden" name="view" value="{{ filters.view }}">
+
+      <div class="sbpm-filter-field sbpm-filter-search">
+        <label for="q">Search</label>
+        <input id="q" name="q" class="form-control" value="{{ filters.q }}" placeholder="Name, mobile, or student ID">
+      </div>
+
+      <div class="sbpm-filter-field">
+        <label for="course_id">Course</label>
+        <select id="course_id" name="course_id" class="form-select">
+          <option value="">All Courses</option>
+          {% for course in courses %}
+          <option value="{{ course.id }}" {% if filters.course_id == course.id|string %}selected{% endif %}>{{ course.course_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="sbpm-filter-field">
+        <label for="batch_id">Batch Time</label>
+        <select id="batch_id" name="batch_id" class="form-select">
+          <option value="">All Batches</option>
+          {% for batch in batches %}
+          <option value="{{ batch.id }}" {% if filters.batch_id == batch.id|string %}selected{% endif %}>
+            {{ batch.batch_name }}{% if batch.start_time or batch.end_time %} - {{ batch.start_time or '' }}{% if batch.end_time %} to {{ batch.end_time }}{% endif %}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="sbpm-filter-field">
+        <label for="branch_id">Branch</label>
+        <select id="branch_id" name="branch_id" class="form-select">
+          <option value="">All Branches</option>
+          {% for branch in branches %}
+          <option value="{{ branch.id }}" {% if filters.branch_id == branch.id|string %}selected{% endif %}>{{ branch.branch_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="sbpm-filter-field">
+        <label for="trainer_id">Trainer</label>
+        <select id="trainer_id" name="trainer_id" class="form-select">
+          <option value="">All Trainers</option>
+          {% for trainer in trainers %}
+          <option value="{{ trainer.id }}" {% if filters.trainer_id == trainer.id|string %}selected{% endif %}>{{ trainer.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="sbpm-filter-field">
+        <label for="progress">LMS Progress</label>
+        <select id="progress" name="progress" class="form-select">
+          <option value="">All Students</option>
+          <option value="not_started" {% if filters.progress == 'not_started' %}selected{% endif %}>Not Started</option>
+          <option value="below_25" {% if filters.progress == 'below_25' %}selected{% endif %}>Below 25%</option>
+          <option value="25_50" {% if filters.progress == '25_50' %}selected{% endif %}>25% to 50%</option>
+          <option value="50_75" {% if filters.progress == '50_75' %}selected{% endif %}>50% to 75%</option>
+          <option value="above_75" {% if filters.progress == 'above_75' %}selected{% endif %}>Above 75%</option>
+          <option value="completed" {% if filters.progress == 'completed' %}selected{% endif %}>Completed</option>
+        </select>
+      </div>
+
+      <div class="sbpm-filter-field">
+        <label for="student_status">Student Status</label>
+        <select id="student_status" name="student_status" class="form-select">
+          <option value="">All Status</option>
+          <option value="active" {% if filters.student_status == 'active' %}selected{% endif %}>Active</option>
+          <option value="completed" {% if filters.student_status == 'completed' %}selected{% endif %}>Completed</option>
+          <option value="dropped" {% if filters.student_status == 'dropped' %}selected{% endif %}>Dropped</option>
+        </select>
+      </div>
+
+      <div class="sbpm-filter-actions">
+        <button class="btn btn-primary" type="submit">Apply Filters</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('billing.student_batch_progress_monitor') }}">Clear</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="sbpm-kpi-grid" aria-label="Progress summary">
+    <div class="sbpm-kpi">
+      <span class="sbpm-kpi-label">Students</span>
+      <strong>{{ unique_student_count }}</strong>
+    </div>
+    <div class="sbpm-kpi">
+      <span class="sbpm-kpi-label">Average Progress</span>
+      <strong>{{ avg_progress }}%</strong>
+    </div>
+    <div class="sbpm-kpi">
+      <span class="sbpm-kpi-label">Need Support</span>
+      <strong>{{ support_needed_count }}</strong>
+    </div>
+    <div class="sbpm-kpi">
+      <span class="sbpm-kpi-label">Completed</span>
+      <strong>{{ completed_count }}</strong>
+    </div>
+  </section>
+
+  {% if rows %}
+    {% if filters.view == 'table' %}
+    <section class="sbpm-table-card">
+      <div class="table-responsive">
+        <table class="table sbpm-table align-middle">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Course</th>
+              <th>Batch</th>
+              <th>Branch</th>
+              <th>Trainer</th>
+              <th>LMS Progress</th>
+              <th>Last Activity</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr>
+              <td>
+                <div class="sbpm-table-student">
+                  <div class="sbpm-avatar {% if row.photo_filename %}has-photo{% endif %}">
+                    {% if row.photo_filename %}
+                    <img src="{{ url_for('static', filename='images/student_photos/' ~ row.photo_filename) }}" alt="" class="sbpm-photo">
+                    {% endif %}
+                    <span class="sbpm-avatar-fallback">{{ row.initials }}</span>
+                  </div>
+                  <div>
+                    <a class="sbpm-student-link" href="{{ url_for('billing.student_profile', student_id=row.student_id) }}">{{ row.full_name }}</a>
+                    <div class="sbpm-muted">{{ row.student_code }} | {{ row.phone or '-' }}</div>
+                  </div>
+                </div>
+              </td>
+              <td>{{ row.course_name }}<div class="sbpm-muted">{{ row.program_name }}</div></td>
+              <td>{{ row.batch_name }}<div class="sbpm-muted">{{ row.batch_time }}</div></td>
+              <td>{{ row.branch_name }}</td>
+              <td>{{ row.trainer_name }}</td>
+              <td>
+                <div class="sbpm-progress-row">
+                  <span>{{ row.progress_pct }}%</span>
+                  <div class="sbpm-progress-track">
+                    <div class="sbpm-progress-fill progress-{{ row.progress_class }}" data-progress="{{ row.progress_pct }}"></div>
+                  </div>
+                </div>
+                <div class="sbpm-muted">{{ row.completed_topics }}/{{ row.total_topics }} lessons</div>
+              </td>
+              <td>{{ row.last_activity }}</td>
+              <td>
+                <span class="sbpm-status-pill student-{{ row.student_status }}">{{ row.student_status|capitalize }}</span>
+                <span class="sbpm-progress-pill progress-{{ row.progress_class }}">{{ row.progress_label }}</span>
+              </td>
+              <td>
+                <div class="sbpm-action-row">
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('billing.student_profile', student_id=row.student_id) }}">Profile</a>
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.view_student_progress', student_id=row.student_id, program_id=row.program_id) if row.program_id else url_for('lms_admin.view_student_progress', student_id=row.student_id) }}">LMS</a>
+                  <button class="btn btn-sm btn-outline-warning sbpm-followup-trigger"
+                          type="button"
+                          data-student-name="{{ row.full_name }}"
+                          data-followup-url="{{ url_for('attendance.add_followup', student_id=row.student_id) }}">Follow-up</button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% else %}
+    <section class="sbpm-card-grid">
+      {% for row in rows %}
+      <article class="sbpm-student-card progress-border-{{ row.progress_class }}">
+        <div class="sbpm-card-top">
+          <div class="sbpm-card-identity">
+            <h2 class="sbpm-card-name">{{ row.full_name }}</h2>
+            <div class="sbpm-card-phone">{{ row.phone or '-' }}</div>
+            <div class="sbpm-card-id">
+              <span class="sbpm-muted">{{ row.student_code }}</span>
+              <span class="sbpm-status-pill student-{{ row.student_status }}">{{ row.student_status|capitalize }}</span>
+            </div>
+          </div>
+          <div class="sbpm-avatar sbpm-card-avatar {% if row.photo_filename %}has-photo{% endif %}">
+            {% if row.photo_filename %}
+            <img src="{{ url_for('static', filename='images/student_photos/' ~ row.photo_filename) }}" alt="" class="sbpm-photo">
+            {% endif %}
+            <span class="sbpm-avatar-fallback">{{ row.initials }}</span>
+          </div>
+        </div>
+
+        <div class="sbpm-card-meta">
+          <div>
+            <span>Course</span>
+            <strong>{{ row.course_name }}</strong>
+          </div>
+          <div>
+            <span>Batch Time</span>
+            <strong>{{ row.batch_time }}</strong>
+          </div>
+          <div>
+            <span>Branch</span>
+            <strong>{{ row.branch_name }}</strong>
+          </div>
+          <div>
+            <span>Trainer</span>
+            <strong>{{ row.trainer_name }}</strong>
+          </div>
+        </div>
+
+        <div class="sbpm-lms-box">
+          <div class="sbpm-lms-head">
+            <span>LMS Progress</span>
+            <strong>{{ row.progress_pct }}%</strong>
+          </div>
+          <div class="sbpm-progress-track">
+            <div class="sbpm-progress-fill progress-{{ row.progress_class }}" data-progress="{{ row.progress_pct }}"></div>
+          </div>
+          <div class="sbpm-lms-foot">
+            <span>{{ row.completed_topics }}/{{ row.total_topics }} lessons</span>
+            <span>{{ row.progress_label }}</span>
+          </div>
+        </div>
+
+        <div class="sbpm-card-last">
+          <span>Last LMS Activity</span>
+          <strong>{{ row.last_activity }}</strong>
+        </div>
+
+        <div class="sbpm-card-actions">
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('billing.student_profile', student_id=row.student_id) }}">View Profile</a>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.view_student_progress', student_id=row.student_id, program_id=row.program_id) if row.program_id else url_for('lms_admin.view_student_progress', student_id=row.student_id) }}">View LMS Progress</a>
+          <button class="btn btn-sm btn-outline-warning sbpm-followup-trigger"
+                  type="button"
+                  data-student-name="{{ row.full_name }}"
+                  data-followup-url="{{ url_for('attendance.add_followup', student_id=row.student_id) }}">Mark Follow-up</button>
+        </div>
+      </article>
+      {% endfor %}
+    </section>
+    {% endif %}
+  {% else %}
+  <section class="sbpm-empty-state">
+    <div class="sbpm-empty-icon">0</div>
+    <h2>No students found for the selected filters.</h2>
+    <p>Try clearing filters or selecting another branch, batch, trainer, or progress range.</p>
+  </section>
+  {% endif %}
+</div>
+
+<div class="modal fade" id="sbpmFollowupModal" tabindex="-1" aria-labelledby="sbpmFollowupTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content sbpm-modal">
+      <div class="modal-header">
+        <h5 class="modal-title" id="sbpmFollowupTitle">Mark Follow-up</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="sbpmFollowupForm">
+        <div class="modal-body">
+          <div class="sbpm-modal-student" id="sbpmFollowupStudent"></div>
+          <div class="mb-3">
+            <label class="form-label" for="sbpmFollowupDate">Follow-up Date</label>
+            <input class="form-control" type="date" id="sbpmFollowupDate" name="followup_date" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="sbpmFollowupStatus">Status</label>
+            <select class="form-select" id="sbpmFollowupStatus" name="followup_status" required>
+              <option value="pending">Pending</option>
+              <option value="contacted">Contacted</option>
+              <option value="resolved">Resolved</option>
+              <option value="no_response">No Response</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="sbpmFollowupRemarks">Remarks</label>
+            <textarea class="form-control" id="sbpmFollowupRemarks" name="remarks" rows="3" placeholder="Enter support note or next action"></textarea>
+          </div>
+          <div class="alert sbpm-followup-alert" id="sbpmFollowupAlert" role="alert"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="sbpmFollowupSubmit">Save Follow-up</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  document.querySelectorAll('.sbpm-progress-fill').forEach(function(el) {
+    var pct = parseFloat(el.getAttribute('data-progress') || '0');
+    if (Number.isNaN(pct)) pct = 0;
+    pct = Math.max(0, Math.min(100, pct));
+    el.style.width = pct + '%';
+  });
+
+  document.querySelectorAll('.sbpm-avatar.has-photo .sbpm-photo').forEach(function(img) {
+    function showFallback() {
+      var avatar = img.closest('.sbpm-avatar');
+      if (avatar) avatar.classList.add('photo-error');
+    }
+
+    img.addEventListener('error', showFallback);
+
+    if (img.complete && img.naturalWidth === 0) {
+      showFallback();
+    }
+  });
+
+  var modalEl = document.getElementById('sbpmFollowupModal');
+  var form = document.getElementById('sbpmFollowupForm');
+  var studentLabel = document.getElementById('sbpmFollowupStudent');
+  var dateInput = document.getElementById('sbpmFollowupDate');
+  var alertBox = document.getElementById('sbpmFollowupAlert');
+  var submitBtn = document.getElementById('sbpmFollowupSubmit');
+  var currentUrl = '';
+  var modal = modalEl && window.bootstrap ? new bootstrap.Modal(modalEl) : null;
+
+  function todayIso() {
+    var now = new Date();
+    var offset = now.getTimezoneOffset();
+    var local = new Date(now.getTime() - offset * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  function setAlert(kind, text) {
+    alertBox.className = 'alert sbpm-followup-alert alert-' + kind;
+    alertBox.textContent = text;
+    alertBox.classList.add('show');
+  }
+
+  document.querySelectorAll('.sbpm-followup-trigger').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      currentUrl = btn.getAttribute('data-followup-url') || '';
+      studentLabel.textContent = btn.getAttribute('data-student-name') || 'Student';
+      form.reset();
+      dateInput.value = todayIso();
+      alertBox.classList.remove('show');
+      if (modal) modal.show();
+    });
+  });
+
+  if (form) {
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      if (!currentUrl) return;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving...';
+
+      var formData = new FormData(form);
+      var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+      var headers = {};
+      if (tokenMeta) headers['X-CSRFToken'] = tokenMeta.getAttribute('content');
+
+      fetch(currentUrl, {
+        method: 'POST',
+        headers: headers,
+        body: formData
+      })
+      .then(function(response) {
+        return response.json().then(function(data) {
+          return { ok: response.ok, data: data };
+        });
+      })
+      .then(function(result) {
+        if (result.ok) {
+          setAlert('success', result.data.success || 'Follow-up saved successfully.');
+          setTimeout(function() {
+            if (modal) modal.hide();
+          }, 700);
+        } else {
+          setAlert('danger', result.data.error || 'Unable to save follow-up.');
+        }
+      })
+      .catch(function() {
+        setAlert('danger', 'Network error. Please try again.');
+      })
+      .finally(function() {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save Follow-up';
+      });
+    });
+  }
+})();
+</script>
+{% endblock %}

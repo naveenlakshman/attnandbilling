@@ -1267,6 +1267,403 @@ def students():
         student_invoiced_courses_map=student_invoiced_courses_map
     )
 
+
+@billing_bp.route("/students/batch-progress")
+@login_required
+def student_batch_progress_monitor():
+    """Visual batch-wise student monitor with LMS progress signals."""
+    conn = get_conn()
+    cur = conn.cursor()
+
+    current_user_id = session.get("user_id")
+    session_role = (session.get("role") or "").strip().lower()
+
+    cur.execute(
+        "SELECT id, role, branch_id, can_view_all_branches FROM users WHERE id = ?",
+        (current_user_id,)
+    )
+    current_user = cur.fetchone()
+
+    role = (current_user["role"] if current_user else session_role) or session_role
+    user_branch_id = current_user["branch_id"] if current_user else session.get("branch_id")
+    can_view_all = int((current_user["can_view_all_branches"] if current_user else session.get("can_view_all_branches", 0)) or 0)
+    is_admin = role == "admin"
+
+    cur.execute(
+        "SELECT COUNT(*) AS cnt FROM batches WHERE trainer_id = ? AND status = 'active'",
+        (current_user_id,)
+    )
+    trainer_batch_count = cur.fetchone()["cnt"] or 0
+    trainer_scoped = (not is_admin) and trainer_batch_count > 0 and not can_view_all
+
+    filters = {
+        "course_id": request.args.get("course_id", "").strip(),
+        "batch_id": request.args.get("batch_id", "").strip(),
+        "branch_id": request.args.get("branch_id", "").strip(),
+        "trainer_id": request.args.get("trainer_id", "").strip(),
+        "progress": request.args.get("progress", "").strip(),
+        "student_status": request.args.get("student_status", "").strip(),
+        "q": request.args.get("q", "").strip(),
+        "view": request.args.get("view", "cards").strip() or "cards",
+    }
+    if filters["view"] not in {"cards", "table"}:
+        filters["view"] = "cards"
+
+    if (not is_admin) and (not can_view_all) and user_branch_id:
+        filters["branch_id"] = str(user_branch_id)
+    if trainer_scoped:
+        filters["trainer_id"] = str(current_user_id)
+
+    branch_dropdown_sql = "SELECT id, branch_name FROM branches WHERE is_active = 1"
+    branch_dropdown_params = []
+    if (not is_admin) and (not can_view_all) and user_branch_id:
+        branch_dropdown_sql += " AND id = ?"
+        branch_dropdown_params.append(user_branch_id)
+    branch_dropdown_sql += " ORDER BY branch_name"
+    branches = cur.execute(branch_dropdown_sql, branch_dropdown_params).fetchall()
+
+    courses = cur.execute("""
+        SELECT id, course_name
+        FROM courses
+        WHERE is_active = 1
+        ORDER BY course_name
+    """).fetchall()
+
+    trainer_dropdown_sql = """
+        SELECT DISTINCT u.id, u.full_name
+        FROM users u
+        JOIN batches b ON b.trainer_id = u.id
+        WHERE u.is_active = 1 AND b.status = 'active'
+    """
+    trainer_dropdown_params = []
+    if trainer_scoped:
+        trainer_dropdown_sql += " AND u.id = ?"
+        trainer_dropdown_params.append(current_user_id)
+    elif (not is_admin) and (not can_view_all) and user_branch_id:
+        trainer_dropdown_sql += " AND b.branch_id = ?"
+        trainer_dropdown_params.append(user_branch_id)
+    trainer_dropdown_sql += " ORDER BY u.full_name"
+    trainers = cur.execute(trainer_dropdown_sql, trainer_dropdown_params).fetchall()
+
+    batch_dropdown_sql = """
+        SELECT b.id, b.batch_name, b.start_time, b.end_time, c.course_name, br.branch_name
+        FROM batches b
+        LEFT JOIN courses c ON c.id = b.course_id
+        LEFT JOIN branches br ON br.id = b.branch_id
+        WHERE b.status = 'active'
+    """
+    batch_dropdown_params = []
+    if filters["branch_id"].isdigit():
+        batch_dropdown_sql += " AND b.branch_id = ?"
+        batch_dropdown_params.append(int(filters["branch_id"]))
+    elif (not is_admin) and (not can_view_all) and user_branch_id:
+        batch_dropdown_sql += " AND b.branch_id = ?"
+        batch_dropdown_params.append(user_branch_id)
+    if trainer_scoped:
+        batch_dropdown_sql += " AND b.trainer_id = ?"
+        batch_dropdown_params.append(current_user_id)
+    batch_dropdown_sql += " ORDER BY b.start_time, b.batch_name"
+    batches = cur.execute(batch_dropdown_sql, batch_dropdown_params).fetchall()
+
+    master_check = """EXISTS (
+        SELECT 1
+        FROM lms_program_chapters pcx
+        JOIN lms_master_chapters mcx ON mcx.id = pcx.master_chapter_id
+        JOIN lms_master_topics mtx ON mtx.master_chapter_id = mcx.id
+        WHERE pcx.program_id = lp.id
+          AND pcx.is_visible = 1
+          AND mcx.status = 'active'
+          AND mtx.status = 'active'
+    )"""
+
+    where_clauses = ["sb.status = 'active'"]
+    params = []
+
+    if filters["course_id"].isdigit():
+        where_clauses.append("c.id = ?")
+        params.append(int(filters["course_id"]))
+
+    if filters["batch_id"].isdigit():
+        where_clauses.append("b.id = ?")
+        params.append(int(filters["batch_id"]))
+
+    if filters["branch_id"].isdigit():
+        where_clauses.append("(b.branch_id = ? OR s.branch_id = ?)")
+        params.extend([int(filters["branch_id"]), int(filters["branch_id"])])
+
+    if filters["trainer_id"].isdigit() and (is_admin or can_view_all or trainer_scoped):
+        where_clauses.append("b.trainer_id = ?")
+        params.append(int(filters["trainer_id"]))
+
+    if filters["student_status"] in {"active", "completed", "dropped"}:
+        where_clauses.append("s.status = ?")
+        params.append(filters["student_status"])
+
+    if filters["q"]:
+        where_clauses.append("(s.full_name LIKE ? OR s.phone LIKE ? OR s.student_code LIKE ?)")
+        search_term = f"%{filters['q']}%"
+        params.extend([search_term, search_term, search_term])
+
+    if trainer_scoped and not filters["trainer_id"].isdigit():
+        where_clauses.append("b.trainer_id = ?")
+        params.append(current_user_id)
+    elif (not is_admin) and (not can_view_all) and user_branch_id and not filters["branch_id"].isdigit():
+        where_clauses.append("(b.branch_id = ? OR s.branch_id = ?)")
+        params.extend([user_branch_id, user_branch_id])
+
+    where_sql = " AND ".join(where_clauses)
+
+    sql = f"""
+        WITH batch_programs AS (
+            SELECT b.id AS batch_id, lp.id AS program_id
+            FROM batches b
+            JOIN lms_programs lp ON lp.course_id = b.course_id
+            WHERE lp.is_active = 1 AND lp.is_deleted = 0
+            UNION
+            SELECT bpa.batch_id, bpa.program_id
+            FROM lms_batch_program_access bpa
+            JOIN lms_programs lp ON lp.id = bpa.program_id
+            WHERE bpa.is_active = 1
+              AND lp.is_active = 1
+              AND lp.is_deleted = 0
+              AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
+            UNION
+            SELECT b.id AS batch_id, cpm.program_id
+            FROM batches b
+            JOIN lms_course_program_map cpm ON cpm.course_id = b.course_id
+            JOIN lms_programs lp ON lp.id = cpm.program_id
+            WHERE lp.is_active = 1 AND lp.is_deleted = 0
+        )
+        SELECT
+            s.id AS student_id,
+            s.student_code,
+            s.full_name,
+            s.phone,
+            s.status AS student_status,
+            s.photo_filename,
+            b.id AS batch_id,
+            b.batch_name,
+            b.start_time,
+            b.end_time,
+            c.id AS course_id,
+            COALESCE(c.course_name, lp.program_name, 'Course not mapped') AS course_name,
+            br.branch_name,
+            u.id AS trainer_id,
+            COALESCE(u.full_name, 'Unassigned') AS trainer_name,
+            lp.id AS program_id,
+            lp.program_name,
+            CASE WHEN lp.id IS NULL THEN 0 WHEN {master_check} THEN (
+                SELECT COUNT(*)
+                FROM lms_master_topics mt
+                JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                WHERE pc.program_id = lp.id
+                  AND pc.is_visible = 1
+                  AND mc.status = 'active'
+                  AND mt.status = 'active'
+            ) ELSE (
+                SELECT COUNT(*)
+                FROM lms_topics lt
+                JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                WHERE lc.program_id = lp.id
+                  AND lt.is_active = 1
+            ) END AS total_topics,
+            CASE WHEN lp.id IS NULL THEN 0 WHEN {master_check} THEN (
+                SELECT COUNT(*)
+                FROM lms_master_topic_progress mtp
+                JOIN lms_master_topics mt ON mt.id = mtp.master_topic_id
+                JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                WHERE mtp.student_id = s.id
+                  AND mtp.program_id = lp.id
+                  AND mtp.is_completed = 1
+                  AND pc.program_id = lp.id
+                  AND pc.is_visible = 1
+                  AND mc.status = 'active'
+                  AND mt.status = 'active'
+            ) ELSE (
+                SELECT COUNT(*)
+                FROM lms_topic_progress tp
+                JOIN lms_topics lt ON tp.topic_id = lt.id
+                JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                WHERE tp.student_id = s.id
+                  AND lc.program_id = lp.id
+                  AND tp.is_completed = 1
+            ) END AS completed_topics,
+            CASE WHEN lp.id IS NULL THEN NULL ELSE (
+                SELECT MAX(last_act) FROM (
+                    SELECT MAX(tp.completed_at) AS last_act
+                    FROM lms_topic_progress tp
+                    JOIN lms_topics lt ON tp.topic_id = lt.id
+                    JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                    WHERE tp.student_id = s.id
+                      AND lc.program_id = lp.id
+                      AND tp.is_completed = 1
+                    UNION ALL
+                    SELECT MAX(mtp.completed_at) AS last_act
+                    FROM lms_master_topic_progress mtp
+                    WHERE mtp.student_id = s.id
+                      AND mtp.program_id = lp.id
+                      AND mtp.is_completed = 1
+                )
+            ) END AS last_activity
+        FROM student_batches sb
+        JOIN students s ON s.id = sb.student_id
+        JOIN batches b ON b.id = sb.batch_id
+        LEFT JOIN courses c ON c.id = b.course_id
+        LEFT JOIN branches br ON br.id = b.branch_id
+        LEFT JOIN users u ON u.id = b.trainer_id
+        LEFT JOIN batch_programs bp ON bp.batch_id = b.id
+        LEFT JOIN lms_programs lp ON lp.id = bp.program_id
+        WHERE {where_sql}
+        ORDER BY b.start_time, b.batch_name, s.full_name, lp.program_name
+    """
+    rows = cur.execute(sql, params).fetchall()
+    conn.close()
+
+    def _batch_time(row):
+        start_time = row["start_time"] or ""
+        end_time = row["end_time"] or ""
+        if start_time and end_time:
+            return f"{start_time} - {end_time}"
+        return start_time or end_time or "Time not set"
+
+    def _initials(name):
+        pieces = [p for p in (name or "").split() if p]
+        if not pieces:
+            return "ST"
+        return "".join(p[0].upper() for p in pieces[:2])
+
+    def _progress_class(pct, total, done):
+        if total <= 0 or done <= 0:
+            return "not-started"
+        if pct >= 75:
+            return "high"
+        if pct >= 50:
+            return "mid"
+        if pct >= 25:
+            return "low"
+        return "critical"
+
+    def _progress_label(pct, total, done):
+        if total <= 0 or done <= 0:
+            return "Not Started"
+        if pct >= 100:
+            return "Completed"
+        if pct >= 75:
+            return "Above 75%"
+        if pct >= 50:
+            return "50% to 75%"
+        if pct >= 25:
+            return "25% to 50%"
+        return "Below 25%"
+
+    def _existing_photo_filename(filename):
+        photo_filename = (filename or "").strip()
+        if not photo_filename:
+            return None
+
+        safe_filename = os.path.basename(photo_filename)
+        photo_path = os.path.join(
+            current_app.root_path,
+            "static",
+            "images",
+            "student_photos",
+            safe_filename
+        )
+        return safe_filename if os.path.isfile(photo_path) else None
+
+    monitor_rows = []
+    for row in rows:
+        total = int(row["total_topics"] or 0)
+        done = int(row["completed_topics"] or 0)
+        pct = round((done / total) * 100, 1) if total > 0 else 0.0
+        photo_filename = _existing_photo_filename(row["photo_filename"])
+        item = {
+            "student_id": row["student_id"],
+            "student_code": row["student_code"],
+            "full_name": row["full_name"],
+            "phone": row["phone"],
+            "student_status": row["student_status"],
+            "photo_filename": photo_filename,
+            "initials": _initials(row["full_name"]),
+            "batch_id": row["batch_id"],
+            "batch_name": row["batch_name"],
+            "batch_time": _batch_time(row),
+            "course_name": row["course_name"],
+            "branch_name": row["branch_name"] or "Unassigned",
+            "trainer_name": row["trainer_name"] or "Unassigned",
+            "program_id": row["program_id"],
+            "program_name": row["program_name"] or "LMS not mapped",
+            "total_topics": total,
+            "completed_topics": done,
+            "progress_pct": pct,
+            "progress_class": _progress_class(pct, total, done),
+            "progress_label": _progress_label(pct, total, done),
+            "last_activity": _format_display_datetime(row["last_activity"]) if row["last_activity"] else "Not Started",
+        }
+        monitor_rows.append(item)
+
+    progress_filter = filters["progress"]
+    if progress_filter:
+        def _matches_progress(item):
+            pct = item["progress_pct"]
+            total = item["total_topics"]
+            done = item["completed_topics"]
+            if progress_filter == "not_started":
+                return total <= 0 or done <= 0
+            if progress_filter == "below_25":
+                return done > 0 and pct < 25
+            if progress_filter == "25_50":
+                return 25 <= pct < 50
+            if progress_filter == "50_75":
+                return 50 <= pct < 75
+            if progress_filter == "above_75":
+                return 75 <= pct < 100
+            if progress_filter == "completed":
+                return pct >= 100
+            return True
+        monitor_rows = [item for item in monitor_rows if _matches_progress(item)]
+
+    unique_student_count = len({item["student_id"] for item in monitor_rows})
+    avg_progress = round(
+        sum(item["progress_pct"] for item in monitor_rows) / len(monitor_rows),
+        1
+    ) if monitor_rows else 0
+    not_started_count = sum(1 for item in monitor_rows if item["completed_topics"] <= 0)
+    support_needed_count = sum(1 for item in monitor_rows if item["progress_pct"] < 25)
+    completed_count = sum(1 for item in monitor_rows if item["progress_pct"] >= 100)
+
+    base_url_args = {
+        "course_id": filters["course_id"],
+        "batch_id": filters["batch_id"],
+        "branch_id": filters["branch_id"],
+        "trainer_id": filters["trainer_id"],
+        "progress": filters["progress"],
+        "student_status": filters["student_status"],
+        "q": filters["q"],
+    }
+
+    return render_template(
+        "billing/student_batch_progress_monitor.html",
+        rows=monitor_rows,
+        filters=filters,
+        branches=branches,
+        courses=courses,
+        batches=batches,
+        trainers=trainers,
+        unique_student_count=unique_student_count,
+        avg_progress=avg_progress,
+        not_started_count=not_started_count,
+        support_needed_count=support_needed_count,
+        completed_count=completed_count,
+        card_view_url=url_for("billing.student_batch_progress_monitor", **base_url_args, view="cards"),
+        table_view_url=url_for("billing.student_batch_progress_monitor", **base_url_args, view="table"),
+        can_mark_followup=True,
+        trainer_scoped=trainer_scoped,
+        role=role,
+    )
+
 @billing_bp.route("/student/check-duplicate", methods=["POST"])
 @login_required
 def student_check_duplicate():

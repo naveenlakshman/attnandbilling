@@ -70,6 +70,7 @@
          data-bs-parent="#erpSidebarAccordion">
       <div class="erp-module-menu">
         <a class="nav-link {{ 'active' if ep in ['billing.students', 'billing.student_profile', 'billing.student_edit'] else '' }}" href="{{ url_for('billing.students') }}">Student List</a>
+        <a class="nav-link {{ 'active' if ep == 'billing.student_batch_progress_monitor' else '' }}" href="{{ url_for('billing.student_batch_progress_monitor') }}">Batch Progress Monitor</a>
         <a class="nav-link {{ 'active' if ep == 'billing.student_new' else '' }}" href="{{ url_for('billing.student_new') }}">Register Student</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.dashboard' else '' }}" href="{{ url_for('attendance.dashboard') }}">Attendance Dashboard</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.mark_attendance' else '' }}" href="{{ url_for('attendance.mark_attendance') }}">Mark Attendance</a>
