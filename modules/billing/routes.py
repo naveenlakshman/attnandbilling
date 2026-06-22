@@ -1290,7 +1290,7 @@ def student_batch_progress_monitor():
     is_admin = role == "admin"
 
     cur.execute(
-        "SELECT COUNT(*) AS cnt FROM batches WHERE trainer_id = ? AND status = 'active'",
+        "SELECT COUNT(*) AS cnt FROM batches WHERE trainer_id = ? AND status IN ('active', 'completed')",
         (current_user_id,)
     )
     trainer_batch_count = cur.fetchone()["cnt"] or 0
@@ -1333,7 +1333,7 @@ def student_batch_progress_monitor():
         SELECT DISTINCT u.id, u.full_name
         FROM users u
         JOIN batches b ON b.trainer_id = u.id
-        WHERE u.is_active = 1 AND b.status = 'active'
+        WHERE u.is_active = 1 AND b.status IN ('active', 'completed')
     """
     trainer_dropdown_params = []
     if trainer_scoped:
@@ -1350,7 +1350,7 @@ def student_batch_progress_monitor():
         FROM batches b
         LEFT JOIN courses c ON c.id = b.course_id
         LEFT JOIN branches br ON br.id = b.branch_id
-        WHERE b.status = 'active'
+        WHERE b.status IN ('active', 'completed')
     """
     batch_dropdown_params = []
     if filters["branch_id"].isdigit():
@@ -1376,7 +1376,7 @@ def student_batch_progress_monitor():
           AND mtx.status = 'active'
     )"""
 
-    where_clauses = ["sb.status = 'active'"]
+    where_clauses = ["sb.status IN ('active', 'completed')", "b.status IN ('active', 'completed')"]
     params = []
 
     if filters["course_id"].isdigit():
@@ -1516,9 +1516,54 @@ def student_batch_progress_monitor():
         LEFT JOIN batch_programs bp ON bp.batch_id = b.id
         LEFT JOIN lms_programs lp ON lp.id = bp.program_id
         WHERE {where_sql}
-        ORDER BY b.start_time, b.batch_name, s.full_name, lp.program_name
+        ORDER BY
+            CASE WHEN sb.status = 'active' AND b.status = 'active' THEN 0
+                 WHEN sb.status = 'active' THEN 1
+                 ELSE 2
+            END,
+            COALESCE(sb.updated_at, sb.joined_on, b.start_date, b.created_at) DESC,
+            b.start_time,
+            b.batch_name,
+            s.full_name,
+            lp.program_name
     """
     rows = cur.execute(sql, params).fetchall()
+
+    student_trainer_map = {}
+    student_ids = sorted({row["student_id"] for row in rows})
+    if student_ids:
+        placeholders = ",".join("?" for _ in student_ids)
+        trainer_rows = cur.execute(f"""
+            SELECT
+                sb.student_id,
+                COALESCE(NULLIF(TRIM(u.full_name), ''), NULLIF(TRIM(u.username), ''), 'Unassigned') AS trainer_name
+            FROM student_batches sb
+            JOIN batches b ON b.id = sb.batch_id
+            LEFT JOIN users u ON u.id = b.trainer_id
+            WHERE sb.student_id IN ({placeholders})
+              AND sb.status IN ('active', 'completed')
+              AND b.status IN ('active', 'completed')
+            ORDER BY
+                sb.student_id,
+                CASE WHEN sb.status = 'active' AND b.status = 'active' THEN 0
+                     WHEN sb.status = 'active' THEN 1
+                     ELSE 2
+                END,
+                COALESCE(sb.updated_at, sb.joined_on, b.start_date, b.created_at) DESC,
+                b.id DESC
+        """, student_ids).fetchall()
+
+        trainer_names_by_student = {}
+        for trainer_row in trainer_rows:
+            sid = trainer_row["student_id"]
+            trainer_name = trainer_row["trainer_name"] or "Unassigned"
+            trainer_names_by_student.setdefault(sid, [])
+            if trainer_name not in trainer_names_by_student[sid]:
+                trainer_names_by_student[sid].append(trainer_name)
+
+        for sid, names in trainer_names_by_student.items():
+            student_trainer_map[sid] = " / ".join(names) if len(names) > 1 else names[0]
+
     conn.close()
 
     def _batch_time(row):
@@ -1573,12 +1618,71 @@ def student_batch_progress_monitor():
         )
         return safe_filename if os.path.isfile(photo_path) else None
 
-    monitor_rows = []
+    grouped_rows = {}
     for row in rows:
-        total = int(row["total_topics"] or 0)
-        done = int(row["completed_topics"] or 0)
+        group_key = row["student_id"]
+        if group_key not in grouped_rows:
+            grouped_rows[group_key] = {
+                "row": row,
+                "course_names": [],
+                "batch_names": [],
+                "batch_times": [],
+                "branch_names": [],
+                "seen_batches": set(),
+                "program_ids": [],
+                "program_names": [],
+                "seen_programs": set(),
+                "total_topics": 0,
+                "completed_topics": 0,
+                "last_activity": None,
+            }
+
+        group = grouped_rows[group_key]
+
+        batch_key = row["batch_id"]
+        if batch_key not in group["seen_batches"]:
+            group["seen_batches"].add(batch_key)
+            if row["course_name"] and row["course_name"] not in group["course_names"]:
+                group["course_names"].append(row["course_name"])
+            if row["batch_name"] and row["batch_name"] not in group["batch_names"]:
+                group["batch_names"].append(row["batch_name"])
+            batch_time = _batch_time(row)
+            if batch_time and batch_time not in group["batch_times"]:
+                group["batch_times"].append(batch_time)
+            if row["branch_name"] and row["branch_name"] not in group["branch_names"]:
+                group["branch_names"].append(row["branch_name"])
+
+        program_key = row["program_id"] if row["program_id"] is not None else "no_program"
+        if program_key not in group["seen_programs"]:
+            group["seen_programs"].add(program_key)
+            group["total_topics"] += int(row["total_topics"] or 0)
+            group["completed_topics"] += int(row["completed_topics"] or 0)
+            if row["program_id"] is not None:
+                group["program_ids"].append(row["program_id"])
+            if row["program_name"] and row["program_name"] not in group["program_names"]:
+                group["program_names"].append(row["program_name"])
+
+        last_activity = row["last_activity"]
+        if last_activity and (
+            not group["last_activity"] or str(last_activity) > str(group["last_activity"])
+        ):
+            group["last_activity"] = last_activity
+
+    monitor_rows = []
+    for group in grouped_rows.values():
+        row = group["row"]
+        total = group["total_topics"]
+        done = group["completed_topics"]
         pct = round((done / total) * 100, 1) if total > 0 else 0.0
         photo_filename = _existing_photo_filename(row["photo_filename"])
+        program_ids = group["program_ids"]
+        program_names = group["program_names"]
+        program_id = program_ids[0] if len(program_ids) == 1 else None
+        program_name = " / ".join(program_names) if program_names else "LMS not mapped"
+        course_name = " / ".join(group["course_names"]) if group["course_names"] else row["course_name"]
+        batch_name = " / ".join(group["batch_names"]) if group["batch_names"] else row["batch_name"]
+        batch_time = " / ".join(group["batch_times"]) if group["batch_times"] else _batch_time(row)
+        branch_name = " / ".join(group["branch_names"]) if group["branch_names"] else "Unassigned"
         item = {
             "student_id": row["student_id"],
             "student_code": row["student_code"],
@@ -1588,19 +1692,19 @@ def student_batch_progress_monitor():
             "photo_filename": photo_filename,
             "initials": _initials(row["full_name"]),
             "batch_id": row["batch_id"],
-            "batch_name": row["batch_name"],
-            "batch_time": _batch_time(row),
-            "course_name": row["course_name"],
-            "branch_name": row["branch_name"] or "Unassigned",
-            "trainer_name": row["trainer_name"] or "Unassigned",
-            "program_id": row["program_id"],
-            "program_name": row["program_name"] or "LMS not mapped",
+            "batch_name": batch_name,
+            "batch_time": batch_time,
+            "course_name": course_name,
+            "branch_name": branch_name,
+            "trainer_name": student_trainer_map.get(row["student_id"]) or row["trainer_name"] or "Unassigned",
+            "program_id": program_id,
+            "program_name": program_name,
             "total_topics": total,
             "completed_topics": done,
             "progress_pct": pct,
             "progress_class": _progress_class(pct, total, done),
             "progress_label": _progress_label(pct, total, done),
-            "last_activity": _format_display_datetime(row["last_activity"]) if row["last_activity"] else "Not Started",
+            "last_activity": _format_display_datetime(group["last_activity"]) if group["last_activity"] else "Not Started",
         }
         monitor_rows.append(item)
 
