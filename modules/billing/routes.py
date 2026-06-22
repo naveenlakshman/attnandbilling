@@ -1395,10 +1395,6 @@ def student_batch_progress_monitor():
         where_clauses.append("b.trainer_id = ?")
         params.append(int(filters["trainer_id"]))
 
-    if filters["student_status"] in {"active", "completed", "dropped"}:
-        where_clauses.append("s.status = ?")
-        params.append(filters["student_status"])
-
     if filters["q"]:
         where_clauses.append("(s.full_name LIKE ? OR s.phone LIKE ? OR s.student_code LIKE ?)")
         search_term = f"%{filters['q']}%"
@@ -1441,8 +1437,10 @@ def student_batch_progress_monitor():
             s.phone,
             s.status AS student_status,
             s.photo_filename,
+            sb.status AS student_batch_status,
             b.id AS batch_id,
             b.batch_name,
+            b.status AS batch_status,
             b.start_time,
             b.end_time,
             c.id AS course_id,
@@ -1603,6 +1601,16 @@ def student_batch_progress_monitor():
             return "25% to 50%"
         return "Below 25%"
 
+    def _monitor_status(group, fallback_status):
+        fallback = (fallback_status or "active").strip().lower()
+        if fallback == "dropped":
+            return "dropped"
+        if group["has_active_batch"]:
+            return "active"
+        if group["has_completed_batch"]:
+            return "completed"
+        return fallback or "active"
+
     def _existing_photo_filename(filename):
         photo_filename = (filename or "").strip()
         if not photo_filename:
@@ -1635,6 +1643,8 @@ def student_batch_progress_monitor():
                 "total_topics": 0,
                 "completed_topics": 0,
                 "last_activity": None,
+                "has_active_batch": False,
+                "has_completed_batch": False,
             }
 
         group = grouped_rows[group_key]
@@ -1642,6 +1652,12 @@ def student_batch_progress_monitor():
         batch_key = row["batch_id"]
         if batch_key not in group["seen_batches"]:
             group["seen_batches"].add(batch_key)
+            student_batch_status = (row["student_batch_status"] or "").strip().lower()
+            batch_status = (row["batch_status"] or "").strip().lower()
+            if student_batch_status == "active" and batch_status == "active":
+                group["has_active_batch"] = True
+            if student_batch_status == "completed" or batch_status == "completed":
+                group["has_completed_batch"] = True
             if row["course_name"] and row["course_name"] not in group["course_names"]:
                 group["course_names"].append(row["course_name"])
             if row["batch_name"] and row["batch_name"] not in group["batch_names"]:
@@ -1683,12 +1699,13 @@ def student_batch_progress_monitor():
         batch_name = " / ".join(group["batch_names"]) if group["batch_names"] else row["batch_name"]
         batch_time = " / ".join(group["batch_times"]) if group["batch_times"] else _batch_time(row)
         branch_name = " / ".join(group["branch_names"]) if group["branch_names"] else "Unassigned"
+        monitor_status = _monitor_status(group, row["student_status"])
         item = {
             "student_id": row["student_id"],
             "student_code": row["student_code"],
             "full_name": row["full_name"],
             "phone": row["phone"],
-            "student_status": row["student_status"],
+            "student_status": monitor_status,
             "photo_filename": photo_filename,
             "initials": _initials(row["full_name"]),
             "batch_id": row["batch_id"],
@@ -1728,6 +1745,13 @@ def student_batch_progress_monitor():
                 return pct >= 100
             return True
         monitor_rows = [item for item in monitor_rows if _matches_progress(item)]
+
+    status_filter = filters["student_status"]
+    if status_filter in {"active", "completed", "dropped"}:
+        monitor_rows = [
+            item for item in monitor_rows
+            if (item["student_status"] or "").strip().lower() == status_filter
+        ]
 
     unique_student_count = len({item["student_id"] for item in monitor_rows})
     avg_progress = round(
