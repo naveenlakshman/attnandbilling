@@ -18,8 +18,8 @@
     <span class="nav-text">Dashboard</span>
   </a>
 
-  <!-- Admissions Section -->
-  <div class="erp-module" data-module="admissions">
+  <!-- Leads Section -->
+  <div class="erp-module" data-module="Leads">
     <button class="erp-module-toggle {{ 'active' if admissions_active else '' }}"
             type="button"
             data-bs-toggle="collapse"
@@ -28,7 +28,7 @@
             aria-controls="sidebarAdmissions">
       <span>
         <span class="erp-nav-mark"><i class="bi bi-person-plus-fill"></i></span>
-        <span class="nav-text">Admissions</span>
+        <span class="nav-text">Leads</span>
       </span>
       <span class="badge rounded-pill bg-danger ms-2 sidebar-badge-toggle" id="badge-leads-toggle" style="display: none;">0</span>
       <span class="erp-module-chevron"><i class="bi bi-chevron-right"></i></span>
@@ -37,7 +37,7 @@
          class="accordion-collapse collapse {{ 'show' if admissions_active else '' }}"
          data-bs-parent="#erpSidebarAccordion">
       <div class="erp-module-menu">
-        <a class="nav-link {{ 'active' if ep == 'leads.dashboard' else '' }}" href="{{ url_for('leads.dashboard') }}">Admissions Dashboard</a>
+        <a class="nav-link {{ 'active' if ep == 'leads.dashboard' else '' }}" href="{{ url_for('leads.dashboard') }}">Leads Dashboard</a>
         <a class="nav-link {{ 'active' if ep in ['leads.leads_list', 'leads.lead_detail', 'leads.lead_edit'] and request.args.get('status_filter') != 'converted' else '' }}" href="{{ url_for('leads.leads_list') }}">Leads</a>
         <a class="nav-link {{ 'active' if ep == 'leads.lead_create' else '' }}" href="{{ url_for('leads.lead_create') }}">Add Lead</a>
         <a class="nav-link {{ 'active' if ep in ['leads.followups_today', 'leads.followups_quick_complete'] else '' }}" href="{{ url_for('leads.followups_today') }}">
@@ -45,7 +45,7 @@
           <span class="badge rounded-pill bg-danger ms-auto sidebar-badge" id="badge-leads-followups" style="display: none;">0</span>
         </a>
         <a class="nav-link {{ 'active' if ep == 'leads.pipeline' else '' }}" href="{{ url_for('leads.pipeline') }}">Pipeline</a>
-        <a class="nav-link {{ 'active' if ep == 'leads.leads_list' and request.args.get('status_filter') == 'converted' else '' }}" href="{{ url_for('leads.leads_list', status_filter='converted') }}">Admissions Won</a>
+        <a class="nav-link {{ 'active' if ep == 'leads.leads_list' and request.args.get('status_filter') == 'converted' else '' }}" href="{{ url_for('leads.leads_list', status_filter='converted') }}">Leads Won</a>
       </div>
     </div>
   </div>
