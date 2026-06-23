@@ -14,6 +14,101 @@ import os
 import base64
 
 
+IST_OFFSET = timedelta(hours=5, minutes=30)
+
+
+def _ist_now():
+    return datetime.utcnow() + IST_OFFSET
+
+
+def _parse_time_minutes(value):
+    raw_value = (value or "").strip()
+    if not raw_value:
+        return None
+
+    for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
+        try:
+            parsed = datetime.strptime(raw_value.upper(), fmt)
+            return parsed.hour * 60 + parsed.minute
+        except ValueError:
+            continue
+    return None
+
+
+def _format_time_label(minutes):
+    if minutes is None:
+        return "-"
+    minutes = int(minutes) % (24 * 60)
+    return datetime(2000, 1, 1, minutes // 60, minutes % 60).strftime("%I:%M %p")
+
+
+def _format_time_range(start_time, end_time):
+    start_minutes = _parse_time_minutes(start_time)
+    end_minutes = _parse_time_minutes(end_time)
+    if start_minutes is not None and end_minutes is not None:
+        return f"{_format_time_label(start_minutes)} - {_format_time_label(end_minutes)}"
+    return (start_time or end_time or "Time not set")
+
+
+def _initials_from_name(name):
+    pieces = [piece for piece in (name or "").split() if piece]
+    if not pieces:
+        return "ST"
+    return "".join(piece[0].upper() for piece in pieces[:2])
+
+
+def _existing_student_photo(filename):
+    photo_filename = (filename or "").strip()
+    if not photo_filename:
+        return None
+
+    safe_filename = os.path.basename(photo_filename)
+    photo_path = os.path.join(
+        current_app.root_path,
+        "static",
+        "images",
+        "student_photos",
+        safe_filename
+    )
+    return safe_filename if os.path.isfile(photo_path) else None
+
+
+def _occupancy_status(student_count, computer_count):
+    if computer_count <= 0:
+        return {
+            "key": "over",
+            "label": "Over Capacity",
+            "message": "Computer capacity not configured",
+            "percentage": 0,
+        }
+
+    percentage = round((student_count / computer_count) * 100, 1)
+    if percentage <= 50:
+        key = "free"
+        label = "Free"
+    elif percentage <= 75:
+        key = "normal"
+        label = "Normal"
+    elif percentage <= 100:
+        key = "busy"
+        label = "Busy"
+    else:
+        key = "over"
+        label = "Over Capacity"
+
+    if student_count > computer_count:
+        message = f"Over by {student_count - computer_count} students"
+    else:
+        message = f"{computer_count - student_count} seats free"
+
+    return {
+        "key": key,
+        "label": label,
+        "message": message,
+        "percentage": percentage,
+    }
+
+
 def _parse_display_datetime(value):
     if not value:
         return None, False
@@ -1787,10 +1882,395 @@ def student_batch_progress_monitor():
         completed_count=completed_count,
         card_view_url=url_for("billing.student_batch_progress_monitor", **base_url_args, view="cards"),
         table_view_url=url_for("billing.student_batch_progress_monitor", **base_url_args, view="table"),
+        live_batches_url=url_for("attendance.dashboard", branch_id=filters["branch_id"] or None, trainer_id=filters["trainer_id"] or None),
+        day_overview_url=url_for("billing.institute_day_overview", date=_ist_now().strftime("%Y-%m-%d"), branch_id=filters["branch_id"], trainer_id=filters["trainer_id"], course_id=filters["course_id"], batch_status="", occupancy_status=""),
         can_mark_followup=True,
         trainer_scoped=trainer_scoped,
         role=role,
     )
+
+
+def _build_institute_day_overview(cur, filters, user, role):
+    selected_date = datetime.strptime(filters["date"], "%Y-%m-%d").date()
+    now_dt = _ist_now()
+    today = now_dt.date()
+    now_minutes = now_dt.hour * 60 + now_dt.minute
+    is_today = selected_date == today
+
+    is_admin = (role or "").strip().lower() == "admin"
+    can_view_all = int((user["can_view_all_branches"] if user else 0) or 0)
+    user_branch_id = user["branch_id"] if user else None
+
+    branch_sql = """
+        SELECT id, branch_name, no_of_computers, opening_time, closing_time
+        FROM branches
+        WHERE is_active = 1
+    """
+    branch_params = []
+    if (not is_admin) and (not can_view_all) and user_branch_id:
+        branch_sql += " AND id = ?"
+        branch_params.append(user_branch_id)
+    branch_sql += " ORDER BY branch_name"
+    branches = cur.execute(branch_sql, branch_params).fetchall()
+
+    courses = cur.execute("""
+        SELECT id, course_name
+        FROM courses
+        WHERE is_active = 1
+        ORDER BY course_name
+    """).fetchall()
+
+    trainer_sql = """
+        SELECT DISTINCT u.id, COALESCE(NULLIF(TRIM(u.full_name), ''), u.username) AS full_name
+        FROM users u
+        JOIN batches b ON b.trainer_id = u.id
+        WHERE u.is_active = 1
+          AND b.status = 'active'
+    """
+    trainer_params = []
+    if (not is_admin) and (not can_view_all) and user_branch_id:
+        trainer_sql += " AND b.branch_id = ?"
+        trainer_params.append(user_branch_id)
+    trainer_sql += " ORDER BY full_name"
+    trainers = cur.execute(trainer_sql, trainer_params).fetchall()
+
+    selected_branch_id = filters["branch_id"]
+    accessible_branch_ids = [branch["id"] for branch in branches]
+    if selected_branch_id.isdigit():
+        requested_branch_id = int(selected_branch_id)
+        if requested_branch_id in accessible_branch_ids:
+            selected_branch_ids = [requested_branch_id]
+        else:
+            selected_branch_ids = []
+    else:
+        selected_branch_ids = accessible_branch_ids
+
+    branch_by_id = {
+        branch["id"]: {
+            "id": branch["id"],
+            "branch_name": branch["branch_name"],
+            "no_of_computers": int(branch["no_of_computers"] or 0),
+            "opening_time": branch["opening_time"],
+            "closing_time": branch["closing_time"],
+        }
+        for branch in branches
+        if branch["id"] in selected_branch_ids
+    }
+
+    opening_candidates = [
+        _parse_time_minutes(branch["opening_time"])
+        for branch in branch_by_id.values()
+        if _parse_time_minutes(branch["opening_time"]) is not None
+    ]
+    closing_candidates = [
+        _parse_time_minutes(branch["closing_time"])
+        for branch in branch_by_id.values()
+        if _parse_time_minutes(branch["closing_time"]) is not None
+    ]
+    office_open = min(opening_candidates) if opening_candidates else 9 * 60
+    office_close = max(closing_candidates) if closing_candidates else 21 * 60
+    if office_close <= office_open:
+        office_close = office_open + (12 * 60)
+
+    batch_where = [
+        "b.status = 'active'",
+        "(b.start_date IS NULL OR date(b.start_date) <= date(?))",
+        "(b.end_date IS NULL OR date(b.end_date) >= date(?))",
+    ]
+    batch_params = [filters["date"], filters["date"]]
+
+    if selected_branch_ids:
+        placeholders = ",".join("?" for _ in selected_branch_ids)
+        batch_where.append(f"b.branch_id IN ({placeholders})")
+        batch_params.extend(selected_branch_ids)
+    else:
+        batch_where.append("1 = 0")
+
+    if filters["trainer_id"].isdigit():
+        batch_where.append("b.trainer_id = ?")
+        batch_params.append(int(filters["trainer_id"]))
+
+    if filters["course_id"].isdigit():
+        batch_where.append("b.course_id = ?")
+        batch_params.append(int(filters["course_id"]))
+
+    batch_rows = cur.execute(f"""
+        SELECT
+            b.id,
+            b.batch_name,
+            b.branch_id,
+            b.course_id,
+            b.start_date,
+            b.end_date,
+            b.start_time,
+            b.end_time,
+            COALESCE(c.course_name, 'Course not mapped') AS course_name,
+            COALESCE(br.branch_name, 'Branch not mapped') AS branch_name,
+            COALESCE(NULLIF(TRIM(u.full_name), ''), u.username, 'Unassigned') AS trainer_name,
+            COALESCE(br.no_of_computers, 0) AS no_of_computers
+        FROM batches b
+        LEFT JOIN courses c ON c.id = b.course_id
+        LEFT JOIN branches br ON br.id = b.branch_id
+        LEFT JOIN users u ON u.id = b.trainer_id
+        WHERE {" AND ".join(batch_where)}
+        ORDER BY b.start_time, b.end_time, b.batch_name
+    """, batch_params).fetchall()
+
+    batch_ids = [row["id"] for row in batch_rows]
+    students_by_batch = {batch_id: [] for batch_id in batch_ids}
+    unique_student_ids = set()
+
+    if batch_ids:
+        placeholders = ",".join("?" for _ in batch_ids)
+        student_rows = cur.execute(f"""
+            SELECT
+                sb.batch_id,
+                s.id AS student_id,
+                s.student_code,
+                s.full_name,
+                s.phone,
+                s.photo_filename,
+                COALESCE(c.course_name, 'Course not mapped') AS course_name,
+                b.start_time,
+                b.end_time,
+                COALESCE(ar.status, 'not_marked') AS attendance_status
+            FROM student_batches sb
+            JOIN students s ON s.id = sb.student_id
+            JOIN batches b ON b.id = sb.batch_id
+            LEFT JOIN courses c ON c.id = b.course_id
+            LEFT JOIN attendance_records ar
+              ON ar.student_id = s.id
+             AND ar.batch_id = sb.batch_id
+             AND ar.attendance_date = ?
+            WHERE sb.status = 'active'
+              AND sb.batch_id IN ({placeholders})
+            ORDER BY s.full_name
+        """, [filters["date"], *batch_ids]).fetchall()
+
+        seen_batch_students = set()
+        for row in student_rows:
+            key = (row["batch_id"], row["student_id"])
+            if key in seen_batch_students:
+                continue
+            seen_batch_students.add(key)
+            unique_student_ids.add(row["student_id"])
+            students_by_batch.setdefault(row["batch_id"], []).append({
+                "student_id": row["student_id"],
+                "student_code": row["student_code"],
+                "full_name": row["full_name"],
+                "phone": row["phone"],
+                "photo_filename": _existing_student_photo(row["photo_filename"]),
+                "initials": _initials_from_name(row["full_name"]),
+                "course_name": row["course_name"],
+                "batch_time": _format_time_range(row["start_time"], row["end_time"]),
+                "attendance_status": row["attendance_status"] or "not_marked",
+            })
+
+    def day_status(start_minutes, end_minutes):
+        if selected_date < today:
+            return "completed"
+        if selected_date > today:
+            return "upcoming"
+        if start_minutes is None or end_minutes is None:
+            return "upcoming"
+        if now_minutes < start_minutes:
+            return "upcoming"
+        if now_minutes > end_minutes:
+            return "completed"
+        return "live"
+
+    batch_cards = []
+    for row in batch_rows:
+        start_minutes = _parse_time_minutes(row["start_time"])
+        end_minutes = _parse_time_minutes(row["end_time"])
+        student_list = students_by_batch.get(row["id"], [])
+        computer_count = int(row["no_of_computers"] or 0)
+        occupancy = _occupancy_status(len(student_list), computer_count)
+        status_key = day_status(start_minutes, end_minutes)
+
+        batch_cards.append({
+            "id": row["id"],
+            "batch_name": row["batch_name"],
+            "batch_time": _format_time_range(row["start_time"], row["end_time"]),
+            "start_minutes": start_minutes,
+            "end_minutes": end_minutes,
+            "trainer_name": row["trainer_name"],
+            "course_name": row["course_name"],
+            "branch_id": row["branch_id"],
+            "branch_name": row["branch_name"],
+            "student_count": len(student_list),
+            "computer_count": computer_count,
+            "occupancy_pct": occupancy["percentage"],
+            "occupancy_key": occupancy["key"],
+            "occupancy_label": occupancy["label"],
+            "status_key": status_key,
+            "status_label": status_key.capitalize(),
+            "students_preview": student_list[:5],
+            "more_count": max(0, len(student_list) - 5),
+        })
+
+    if filters["batch_status"] in {"live", "completed", "upcoming"}:
+        batch_cards = [
+            batch for batch in batch_cards
+            if batch["status_key"] == filters["batch_status"]
+        ]
+
+    if filters["occupancy_status"] in {"free", "normal", "busy", "over"}:
+        batch_cards = [
+            batch for batch in batch_cards
+            if batch["occupancy_key"] == filters["occupancy_status"]
+        ]
+
+    visible_batch_ids = {batch["id"] for batch in batch_cards}
+    visible_students_by_batch = {
+        str(batch_id): students
+        for batch_id, students in students_by_batch.items()
+        if batch_id in visible_batch_ids
+    }
+    visible_unique_student_ids = {
+        student["student_id"]
+        for batch_id, students in students_by_batch.items()
+        if batch_id in visible_batch_ids
+        for student in students
+    }
+
+    slot_minutes = list(range(office_open, office_close + 1, 60))
+    if not slot_minutes or slot_minutes[-1] != office_close:
+        slot_minutes.append(office_close)
+
+    total_computers = sum(branch["no_of_computers"] for branch in branch_by_id.values())
+    chart_students = []
+    for slot in slot_minutes:
+        slot_students = set()
+        for batch in batch_cards:
+            if batch["start_minutes"] is None or batch["end_minutes"] is None:
+                continue
+            if batch["start_minutes"] <= slot < batch["end_minutes"]:
+                for student in students_by_batch.get(batch["id"], []):
+                    slot_students.add(student["student_id"])
+        chart_students.append(len(slot_students))
+
+    average_students = round(sum(chart_students) / len(chart_students), 1) if chart_students else 0
+    average_occupancy = round((average_students / total_computers) * 100, 1) if total_computers > 0 else 0
+    peak_count = max(chart_students) if chart_students else 0
+    low_count = min(chart_students) if chart_students else 0
+    peak_index = chart_students.index(peak_count) if chart_students else 0
+    low_index = chart_students.index(low_count) if chart_students else 0
+
+    branch_summaries = []
+    for branch_id, branch in branch_by_id.items():
+        branch_students_now = set()
+        for batch in batch_cards:
+            if batch["branch_id"] != branch_id:
+                continue
+            if not is_today:
+                continue
+            if batch["start_minutes"] is None or batch["end_minutes"] is None:
+                continue
+            if batch["start_minutes"] <= now_minutes <= batch["end_minutes"]:
+                for student in students_by_batch.get(batch["id"], []):
+                    branch_students_now.add(student["student_id"])
+
+        occupancy = _occupancy_status(len(branch_students_now), branch["no_of_computers"])
+        branch_summaries.append({
+            "id": branch_id,
+            "branch_name": branch["branch_name"],
+            "students_now": len(branch_students_now),
+            "computer_count": branch["no_of_computers"],
+            "occupancy_pct": occupancy["percentage"],
+            "status_key": occupancy["key"],
+            "status_label": occupancy["label"],
+            "message": occupancy["message"],
+        })
+
+    branch_summaries.sort(key=lambda item: item["occupancy_pct"], reverse=True)
+
+    return {
+        "filters": filters,
+        "branches": branches,
+        "courses": courses,
+        "trainers": trainers,
+        "is_today": is_today,
+        "selected_date_label": selected_date.strftime("%d %b %Y"),
+        "office_hours": f"{_format_time_label(office_open)} - {_format_time_label(office_close)}",
+        "summary": {
+            "total_batches": len(batch_cards),
+            "total_students": len(visible_unique_student_ids),
+            "total_computers": total_computers,
+            "average_occupancy": average_occupancy,
+            "peak_time": _format_time_label(slot_minutes[peak_index]) if slot_minutes else "-",
+            "peak_count": peak_count,
+            "low_time": _format_time_label(slot_minutes[low_index]) if slot_minutes else "-",
+            "low_count": low_count,
+        },
+        "chart_data": {
+            "labels": [_format_time_label(slot) for slot in slot_minutes],
+            "students": chart_students,
+            "capacity": [total_computers for _ in slot_minutes],
+            "peakIndex": peak_index,
+            "lowIndex": low_index,
+        },
+        "branch_summaries": branch_summaries,
+        "batch_cards": batch_cards,
+        "students_by_batch": visible_students_by_batch,
+    }
+
+
+@billing_bp.route("/students/batch-progress/day-overview")
+@login_required
+def institute_day_overview():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    current_user_id = session.get("user_id")
+    session_role = (session.get("role") or "").strip().lower()
+    cur.execute(
+        "SELECT id, role, branch_id, can_view_all_branches FROM users WHERE id = ?",
+        (current_user_id,)
+    )
+    user = cur.fetchone()
+    role = (user["role"] if user else session_role) or session_role
+
+    today = _ist_now().strftime("%Y-%m-%d")
+    selected_date = request.args.get("date", today).strip() or today
+    try:
+        datetime.strptime(selected_date, "%Y-%m-%d")
+    except ValueError:
+        selected_date = today
+
+    filters = {
+        "date": selected_date,
+        "branch_id": request.args.get("branch_id", "").strip(),
+        "trainer_id": request.args.get("trainer_id", "").strip(),
+        "course_id": request.args.get("course_id", "").strip(),
+        "batch_status": request.args.get("batch_status", "").strip(),
+        "occupancy_status": request.args.get("occupancy_status", "").strip(),
+    }
+
+    try:
+        overview = _build_institute_day_overview(cur, filters, user, role)
+    finally:
+        conn.close()
+
+    base_url_args = {
+        "course_id": "",
+        "batch_id": "",
+        "branch_id": filters["branch_id"],
+        "trainer_id": filters["trainer_id"],
+        "progress": "",
+        "student_status": "",
+        "q": "",
+    }
+
+    return render_template(
+        "billing/institute_day_overview.html",
+        **overview,
+        card_view_url=url_for("billing.student_batch_progress_monitor", **base_url_args, view="cards"),
+        table_view_url=url_for("billing.student_batch_progress_monitor", **base_url_args, view="table"),
+        live_batches_url=url_for("attendance.dashboard", branch_id=filters["branch_id"] or None, trainer_id=filters["trainer_id"] or None),
+        day_overview_url=url_for("billing.institute_day_overview", **filters),
+    )
+
 
 @billing_bp.route("/student/check-duplicate", methods=["POST"])
 @login_required

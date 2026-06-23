@@ -1,0 +1,412 @@
+﻿{% extends "base.html" %}
+{% block title %}Institute Day Overview{% endblock %}
+
+{% block content %}
+<div class="iduo-page">
+  <div class="sbpm-header">
+    <div>
+      <div class="sbpm-eyebrow">Students</div>
+      <h1 class="sbpm-title">Institute Day Overview{% if is_today %} <span class="iduo-live-pill">Live</span>{% endif %}</h1>
+      <p class="sbpm-subtitle">Complete institute view from office opening to closing.</p>
+    </div>
+    <div class="sbpm-view-toggle" role="group" aria-label="View mode">
+      <a class="btn btn-sm btn-outline-primary" href="{{ card_view_url }}">Card View</a>
+      <a class="btn btn-sm btn-outline-primary" href="{{ table_view_url }}">Table View</a>
+      <a class="btn btn-sm btn-outline-primary" href="{{ live_batches_url }}">Live Batches</a>
+      <a class="btn btn-sm btn-primary" href="{{ day_overview_url }}">Day Overview</a>
+    </div>
+  </div>
+
+  <section class="sbpm-filter-panel">
+    <form method="get" class="iduo-filter-grid">
+      <div class="sbpm-filter-field">
+        <label for="date">Date</label>
+        <input id="date" name="date" type="date" class="form-control" value="{{ filters.date }}">
+      </div>
+      <div class="sbpm-filter-field">
+        <label for="branch_id">Branch</label>
+        <select id="branch_id" name="branch_id" class="form-select">
+          <option value="">All Branches</option>
+          {% for branch in branches %}
+          <option value="{{ branch.id }}" {% if filters.branch_id == branch.id|string %}selected{% endif %}>{{ branch.branch_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="sbpm-filter-field">
+        <label for="trainer_id">Trainer</label>
+        <select id="trainer_id" name="trainer_id" class="form-select">
+          <option value="">All Trainers</option>
+          {% for trainer in trainers %}
+          <option value="{{ trainer.id }}" {% if filters.trainer_id == trainer.id|string %}selected{% endif %}>{{ trainer.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="sbpm-filter-field">
+        <label for="course_id">Course</label>
+        <select id="course_id" name="course_id" class="form-select">
+          <option value="">All Courses</option>
+          {% for course in courses %}
+          <option value="{{ course.id }}" {% if filters.course_id == course.id|string %}selected{% endif %}>{{ course.course_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="sbpm-filter-field">
+        <label for="batch_status">Batch Status</label>
+        <select id="batch_status" name="batch_status" class="form-select">
+          <option value="">All</option>
+          <option value="live" {% if filters.batch_status == 'live' %}selected{% endif %}>Live</option>
+          <option value="completed" {% if filters.batch_status == 'completed' %}selected{% endif %}>Completed</option>
+          <option value="upcoming" {% if filters.batch_status == 'upcoming' %}selected{% endif %}>Upcoming</option>
+        </select>
+      </div>
+      <div class="sbpm-filter-field">
+        <label for="occupancy_status">Occupancy</label>
+        <select id="occupancy_status" name="occupancy_status" class="form-select">
+          <option value="">All</option>
+          <option value="free" {% if filters.occupancy_status == 'free' %}selected{% endif %}>Free</option>
+          <option value="normal" {% if filters.occupancy_status == 'normal' %}selected{% endif %}>Normal</option>
+          <option value="busy" {% if filters.occupancy_status == 'busy' %}selected{% endif %}>Busy</option>
+          <option value="over" {% if filters.occupancy_status == 'over' %}selected{% endif %}>Over Capacity</option>
+        </select>
+      </div>
+      <div class="sbpm-filter-actions">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('billing.institute_day_overview') }}">Clear</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="iduo-summary-grid" aria-label="Institute day summary">
+    <div class="iduo-summary-card">
+      <span>Office Hours</span>
+      <strong>{{ office_hours }}</strong>
+    </div>
+    <div class="iduo-summary-card">
+      <span>Total Batches Today</span>
+      <strong>{{ summary.total_batches }}</strong>
+    </div>
+    <div class="iduo-summary-card">
+      <span>Total Students Expected</span>
+      <strong>{{ summary.total_students }}</strong>
+    </div>
+    <div class="iduo-summary-card">
+      <span>Total Computers</span>
+      <strong>{{ summary.total_computers }}</strong>
+    </div>
+    <div class="iduo-summary-card accent">
+      <span>Average Occupancy</span>
+      <strong>{{ summary.average_occupancy }}%</strong>
+    </div>
+  </section>
+
+  <section class="iduo-dashboard-grid">
+    <div class="iduo-panel iduo-chart-panel">
+      <div class="iduo-panel-head">
+        <div>
+          <h2>Day Occupancy Timeline</h2>
+          <p>Peak: {{ summary.peak_time }} ({{ summary.peak_count }}) - Low: {{ summary.low_time }} ({{ summary.low_count }})</p>
+        </div>
+        <span class="iduo-panel-badge">{{ selected_date_label }}</span>
+      </div>
+      <div class="iduo-chart-wrap">
+        <canvas id="iduoOccupancyChart" aria-label="Day occupancy timeline chart"></canvas>
+      </div>
+      <div class="iduo-chart-legend">
+        <span><i class="iduo-legend-dot students"></i> Students expected</span>
+        <span><i class="iduo-legend-dot capacity"></i> Computer capacity</span>
+        <span><i class="iduo-legend-dot over"></i> Over capacity</span>
+      </div>
+    </div>
+
+    <div class="iduo-panel">
+      <div class="iduo-panel-head">
+        <div>
+          <h2>Branch Live Summary</h2>
+          <p>Current occupancy by branch.</p>
+        </div>
+      </div>
+      <div class="iduo-branch-list">
+        {% for branch in branch_summaries %}
+        <article class="iduo-branch-card status-{{ branch.status_key }}">
+          <div class="iduo-branch-top">
+            <h3>{{ branch.branch_name }}</h3>
+            <span class="iduo-status-pill status-{{ branch.status_key }}">{{ branch.status_label }}</span>
+          </div>
+          <div class="iduo-branch-stats">
+            <div><span>Students Now</span><strong>{{ branch.students_now }}</strong></div>
+            <div><span>Computers</span><strong>{{ branch.computer_count }}</strong></div>
+            <div><span>Occupancy</span><strong>{{ branch.occupancy_pct }}%</strong></div>
+          </div>
+          <div class="iduo-capacity-track">
+            <div class="iduo-capacity-fill status-{{ branch.status_key }}" data-progress="{{ branch.occupancy_pct }}"></div>
+          </div>
+          <p>{{ branch.message }}</p>
+        </article>
+        {% else %}
+        <div class="iduo-empty-mini">No branch capacity data found.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="iduo-panel">
+    <div class="iduo-panel-head">
+      <div>
+        <h2>Batches Timeline & Students in Institute</h2>
+        <p>Click any batch to view the full student list and attendance status.</p>
+      </div>
+      {% if is_today %}
+      <span class="iduo-refresh-note">Data auto refreshes every 30 seconds</span>
+      {% endif %}
+    </div>
+
+    {% if batch_cards %}
+    <div class="iduo-batch-grid">
+      {% for batch in batch_cards %}
+      <button type="button"
+              class="iduo-batch-card status-{{ batch.status_key }} occupancy-{{ batch.occupancy_key }}"
+              data-batch-id="{{ batch.id }}"
+              data-batch-title="{{ batch.batch_name }}"
+              data-bs-toggle="modal"
+              data-bs-target="#iduoStudentsModal">
+        <div class="iduo-batch-head">
+          <span class="iduo-status-pill status-{{ batch.status_key }}">{{ batch.status_label }}</span>
+          <strong>{{ batch.batch_time }}</strong>
+        </div>
+        <h3>{{ batch.batch_name }}</h3>
+        <p>{{ batch.course_name }}</p>
+        <div class="iduo-trainer-line">{{ batch.trainer_name }} - {{ batch.branch_name }}</div>
+        <div class="iduo-batch-stats">
+          <div><span>Students</span><strong>{{ batch.student_count }}</strong></div>
+          <div><span>Computers</span><strong>{{ batch.computer_count }}</strong></div>
+          <div><span>Occupancy</span><strong>{{ batch.occupancy_pct }}%</strong></div>
+        </div>
+        <div class="iduo-photo-stack">
+          {% for student in batch.students_preview %}
+          <span class="iduo-mini-avatar {% if student.photo_filename %}has-photo{% endif %}">
+            {% if student.photo_filename %}
+            <img src="{{ url_for('static', filename='images/student_photos/' ~ student.photo_filename) }}" alt="">
+            {% endif %}
+            <span>{{ student.initials }}</span>
+          </span>
+          {% endfor %}
+          {% if batch.more_count %}
+          <span class="iduo-more-count">+{{ batch.more_count }} more</span>
+          {% endif %}
+        </div>
+      </button>
+      {% endfor %}
+    </div>
+    {% else %}
+    <section class="sbpm-empty-state">
+      <div class="sbpm-empty-icon">0</div>
+      <h2>No batches found for the selected filters.</h2>
+      <p>Try another date, branch, trainer, course, or occupancy status.</p>
+    </section>
+    {% endif %}
+  </section>
+</div>
+
+<div class="modal fade" id="iduoStudentsModal" tabindex="-1" aria-labelledby="iduoStudentsModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content iduo-modal">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="iduoStudentsModalTitle">Batch Students</h5>
+          <div class="iduo-modal-subtitle" id="iduoStudentsModalCount"></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="iduo-student-grid" id="iduoStudentGrid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="iduo-chart-data">{{ chart_data|tojson }}</script>
+<script type="application/json" id="iduo-students-data">{{ students_by_batch|tojson }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function() {
+    var chartEl = document.getElementById('iduoOccupancyChart');
+    var chartDataEl = document.getElementById('iduo-chart-data');
+    var studentsDataEl = document.getElementById('iduo-students-data');
+    var chartData = chartDataEl ? JSON.parse(chartDataEl.textContent || '{}') : {};
+    var studentsByBatch = studentsDataEl ? JSON.parse(studentsDataEl.textContent || '{}') : {};
+
+    document.querySelectorAll('.iduo-capacity-fill').forEach(function(fill) {
+      var value = Math.min(parseFloat(fill.dataset.progress || '0'), 140);
+      fill.style.width = value + '%';
+    });
+
+    function drawChart() {
+      if (!chartEl || !chartData.labels || !chartData.labels.length) return;
+      var ctx = chartEl.getContext('2d');
+      var rect = chartEl.parentElement.getBoundingClientRect();
+      var dpr = window.devicePixelRatio || 1;
+      var width = Math.max(rect.width, 320);
+      var height = 330;
+      chartEl.width = width * dpr;
+      chartEl.height = height * dpr;
+      chartEl.style.width = width + 'px';
+      chartEl.style.height = height + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      var labels = chartData.labels;
+      var students = chartData.students || [];
+      var capacity = chartData.capacity || [];
+      var maxValue = Math.max(10, Math.max.apply(null, students.concat(capacity)) || 10);
+      var pad = { top: 24, right: 20, bottom: 52, left: 42 };
+      var plotW = width - pad.left - pad.right;
+      var plotH = height - pad.top - pad.bottom;
+      var step = labels.length > 1 ? plotW / (labels.length - 1) : plotW;
+
+      function xAt(index) { return pad.left + index * step; }
+      function yAt(value) { return pad.top + plotH - (value / maxValue) * plotH; }
+
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1;
+      ctx.font = '12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.fillStyle = '#64748b';
+      for (var i = 0; i <= 4; i++) {
+        var y = pad.top + (plotH / 4) * i;
+        var val = Math.round(maxValue - (maxValue / 4) * i);
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(width - pad.right, y);
+        ctx.stroke();
+        ctx.fillText(String(val), 8, y + 4);
+      }
+
+      ctx.strokeStyle = '#93c5fd';
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      capacity.forEach(function(value, index) {
+        var x = xAt(index);
+        var y = yAt(value);
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      var gradient = ctx.createLinearGradient(0, pad.top, 0, height - pad.bottom);
+      gradient.addColorStop(0, 'rgba(13, 110, 253, 0.32)');
+      gradient.addColorStop(1, 'rgba(13, 110, 253, 0.04)');
+
+      ctx.beginPath();
+      students.forEach(function(value, index) {
+        var x = xAt(index);
+        var y = yAt(value);
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.lineTo(xAt(students.length - 1), pad.top + plotH);
+      ctx.lineTo(xAt(0), pad.top + plotH);
+      ctx.closePath();
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      ctx.strokeStyle = '#0d6efd';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      students.forEach(function(value, index) {
+        var x = xAt(index);
+        var y = yAt(value);
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      students.forEach(function(value, index) {
+        var x = xAt(index);
+        var y = yAt(value);
+        var over = value > (capacity[index] || 0);
+        ctx.fillStyle = over ? '#ef4444' : '#0d6efd';
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillText(String(value), x - 7, y - 10);
+      });
+
+      labels.forEach(function(label, index) {
+        var x = xAt(index);
+        ctx.save();
+        ctx.translate(x, height - 28);
+        ctx.rotate(labels.length > 8 ? -0.45 : 0);
+        ctx.fillStyle = '#64748b';
+        ctx.fillText(label, labels.length > 8 ? -28 : -18, 0);
+        ctx.restore();
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function studentCard(student) {
+      var photo = student.photo_filename
+        ? '<img src="/static/images/student_photos/' + encodeURIComponent(student.photo_filename) + '" alt="">'
+        : '';
+      var statusLabel = (student.attendance_status || 'not_marked').replace('_', ' ');
+      return [
+        '<article class="iduo-student-card">',
+          '<div class="iduo-student-avatar ' + (student.photo_filename ? 'has-photo' : '') + '">',
+            photo,
+            '<span>' + escapeHtml(student.initials) + '</span>',
+          '</div>',
+          '<div class="iduo-student-body">',
+            '<h3>' + escapeHtml(student.full_name) + '</h3>',
+            '<p>' + escapeHtml(student.student_code) + ' - ' + escapeHtml(student.phone || '-') + '</p>',
+            '<div>' + escapeHtml(student.course_name) + '</div>',
+            '<small>' + escapeHtml(student.batch_time) + '</small>',
+          '</div>',
+          '<span class="iduo-attendance-pill attendance-' + escapeHtml(student.attendance_status || 'not_marked') + '">' + escapeHtml(statusLabel) + '</span>',
+        '</article>'
+      ].join('');
+    }
+
+    document.querySelectorAll('.iduo-batch-card').forEach(function(card) {
+      card.addEventListener('click', function() {
+        var batchId = card.dataset.batchId;
+        var title = card.dataset.batchTitle || 'Batch Students';
+        var students = studentsByBatch[batchId] || [];
+        document.getElementById('iduoStudentsModalTitle').textContent = title;
+        document.getElementById('iduoStudentsModalCount').textContent = students.length + ' student(s)';
+        document.getElementById('iduoStudentGrid').innerHTML = students.length
+          ? students.map(studentCard).join('')
+          : '<div class="iduo-empty-mini">No active students found in this batch.</div>';
+        document.querySelectorAll('#iduoStudentGrid .iduo-student-avatar.has-photo img').forEach(function(img) {
+          img.addEventListener('error', function() {
+            img.parentElement.classList.add('photo-error');
+          });
+        });
+      });
+    });
+
+    document.querySelectorAll('.iduo-mini-avatar.has-photo img').forEach(function(img) {
+      img.addEventListener('error', function() {
+        img.parentElement.classList.add('photo-error');
+      });
+    });
+
+    drawChart();
+    window.addEventListener('resize', drawChart);
+
+    {% if is_today %}
+    setTimeout(function() {
+      window.location.reload();
+    }, 30000);
+    {% endif %}
+  })();
+</script>
+{% endblock %}

@@ -327,6 +327,396 @@ body {
   background: #dcfce7;
   color: #166534;
 }
+
+/* ===== INSTITUTE DAY OVERVIEW ===== */
+.iduo-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.iduo-live-pill,
+.iduo-panel-badge,
+.iduo-refresh-note,
+.iduo-status-pill,
+.iduo-attendance-pill {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 6px 10px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.iduo-live-pill {
+  background: #dcfce7;
+  color: #166534;
+  font-size: 0.62rem;
+  vertical-align: middle;
+}
+.iduo-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(130px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.iduo-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.iduo-summary-card,
+.iduo-panel,
+.iduo-branch-card,
+.iduo-batch-card,
+.iduo-student-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+.iduo-summary-card {
+  min-width: 0;
+  padding: 16px;
+}
+.iduo-summary-card span,
+.iduo-branch-stats span,
+.iduo-batch-stats span {
+  color: #64748b;
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.iduo-summary-card strong {
+  color: #0f172a;
+  display: block;
+  font-size: 1.35rem;
+  margin-top: 6px;
+}
+.iduo-summary-card.accent {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+.iduo-summary-card.accent strong {
+  color: #ea580c;
+}
+.iduo-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(330px, 0.95fr);
+  gap: 16px;
+}
+.iduo-panel {
+  min-width: 0;
+  padding: 16px;
+}
+.iduo-panel-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.iduo-panel-head h2 {
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 900;
+  margin: 0;
+}
+.iduo-panel-head p,
+.iduo-modal-subtitle {
+  color: #64748b;
+  font-size: 0.82rem;
+  margin: 4px 0 0;
+}
+.iduo-panel-badge,
+.iduo-refresh-note {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.iduo-chart-wrap {
+  min-height: 330px;
+  overflow: hidden;
+  width: 100%;
+}
+.iduo-chart-wrap canvas {
+  display: block;
+  max-width: 100%;
+}
+.iduo-chart-legend {
+  color: #64748b;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  gap: 14px;
+  margin-top: 8px;
+}
+.iduo-chart-legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+.iduo-legend-dot {
+  border-radius: 999px;
+  display: inline-flex;
+  height: 8px;
+  width: 18px;
+}
+.iduo-legend-dot.students {
+  background: #0d6efd;
+}
+.iduo-legend-dot.capacity {
+  background: #93c5fd;
+}
+.iduo-legend-dot.over {
+  background: #ef4444;
+}
+.iduo-branch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.iduo-branch-card {
+  border-left: 5px solid #22c55e;
+  padding: 14px;
+}
+.iduo-branch-card.status-normal {
+  border-left-color: #3b82f6;
+}
+.iduo-branch-card.status-busy {
+  border-left-color: #f97316;
+}
+.iduo-branch-card.status-over {
+  border-left-color: #ef4444;
+}
+.iduo-branch-top,
+.iduo-batch-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+.iduo-branch-top h3,
+.iduo-batch-card h3,
+.iduo-student-body h3 {
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 900;
+  margin: 0;
+}
+.iduo-branch-stats,
+.iduo-batch-stats {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 12px;
+}
+.iduo-branch-stats strong,
+.iduo-batch-stats strong {
+  color: #0f172a;
+  display: block;
+  font-size: 1.1rem;
+  margin-top: 4px;
+}
+.iduo-capacity-track {
+  background: #e2e8f0;
+  border-radius: 999px;
+  height: 8px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+.iduo-capacity-fill {
+  border-radius: inherit;
+  height: 100%;
+  max-width: 100%;
+  width: 0;
+}
+.iduo-capacity-fill.status-free,
+.iduo-status-pill.status-free {
+  background: #dcfce7;
+  color: #166534;
+}
+.iduo-capacity-fill.status-normal,
+.iduo-status-pill.status-normal {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.iduo-capacity-fill.status-busy,
+.iduo-status-pill.status-busy {
+  background: #ffedd5;
+  color: #9a3412;
+}
+.iduo-capacity-fill.status-over,
+.iduo-status-pill.status-over {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.iduo-branch-card p {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin: 8px 0 0;
+}
+.iduo-batch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+  gap: 12px;
+}
+.iduo-batch-card {
+  border-left: 4px solid #94a3b8;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  text-align: left;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.iduo-batch-card:hover,
+.iduo-batch-card:focus {
+  box-shadow: 0 12px 32px rgba(13, 110, 253, 0.16);
+  outline: none;
+  transform: translateY(-1px);
+}
+.iduo-batch-card.status-live {
+  border-left-color: #22c55e;
+}
+.iduo-batch-card.status-completed {
+  border-left-color: #64748b;
+}
+.iduo-batch-card.status-upcoming {
+  border-left-color: #0d6efd;
+}
+.iduo-status-pill.status-live {
+  background: #dcfce7;
+  color: #166534;
+}
+.iduo-status-pill.status-completed {
+  background: #e2e8f0;
+  color: #475569;
+}
+.iduo-status-pill.status-upcoming {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.iduo-batch-head strong,
+.iduo-trainer-line,
+.iduo-batch-card p {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+.iduo-batch-card p {
+  margin: 0;
+}
+.iduo-photo-stack {
+  align-items: center;
+  display: flex;
+  min-height: 38px;
+}
+.iduo-mini-avatar,
+.iduo-student-avatar {
+  align-items: center;
+  background: #eef2ff;
+  border: 1px solid #dbe4ff;
+  border-radius: 999px;
+  color: #4338ca;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-weight: 900;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+.iduo-mini-avatar {
+  height: 38px;
+  margin-right: -8px;
+  width: 38px;
+}
+.iduo-mini-avatar img,
+.iduo-student-avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+.iduo-mini-avatar.has-photo span,
+.iduo-student-avatar.has-photo span {
+  display: none;
+}
+.iduo-mini-avatar.photo-error img,
+.iduo-student-avatar.photo-error img {
+  display: none;
+}
+.iduo-mini-avatar.photo-error span,
+.iduo-student-avatar.photo-error span {
+  display: inline-flex;
+}
+.iduo-more-count {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  margin-left: 12px;
+}
+.iduo-modal .modal-header {
+  background: #f8fafc;
+}
+.iduo-student-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.iduo-student-card {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  padding: 12px;
+}
+.iduo-student-avatar {
+  border-radius: 16px;
+  height: 58px;
+  width: 58px;
+}
+.iduo-student-body {
+  min-width: 0;
+}
+.iduo-student-body p,
+.iduo-student-body div,
+.iduo-student-body small {
+  color: #64748b;
+  display: block;
+  font-size: 0.82rem;
+  margin: 2px 0;
+  overflow-wrap: anywhere;
+}
+.iduo-attendance-pill.attendance-present {
+  background: #dcfce7;
+  color: #166534;
+}
+.iduo-attendance-pill.attendance-absent {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.iduo-attendance-pill.attendance-late {
+  background: #ffedd5;
+  color: #9a3412;
+}
+.iduo-attendance-pill.attendance-leave {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+.iduo-attendance-pill.attendance-not_marked {
+  background: #e2e8f0;
+  color: #475569;
+}
+.iduo-empty-mini {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  color: #64748b;
+  font-weight: 700;
+  padding: 16px;
+  text-align: center;
+}
 .sbpm-card-actions {
   flex-wrap: wrap;
   gap: 8px;
@@ -431,6 +821,15 @@ body {
   .sbpm-filter-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+  .iduo-filter-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .iduo-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .iduo-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 767.98px) {
@@ -445,8 +844,15 @@ body {
   }
   .sbpm-filter-grid,
   .sbpm-kpi-grid,
-  .sbpm-card-grid {
+  .sbpm-card-grid,
+  .iduo-filter-grid,
+  .iduo-summary-grid,
+  .iduo-batch-grid,
+  .iduo-student-grid {
     grid-template-columns: 1fr;
+  }
+  .iduo-panel-head {
+    flex-direction: column;
   }
   .sbpm-filter-search {
     grid-column: auto;
@@ -461,6 +867,14 @@ body {
     flex-basis: 86px;
     height: 86px;
     width: 86px;
+  }
+  .iduo-student-card {
+    align-items: flex-start;
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+  .iduo-student-card .iduo-attendance-pill {
+    grid-column: 1 / -1;
+    justify-content: center;
   }
 }
 

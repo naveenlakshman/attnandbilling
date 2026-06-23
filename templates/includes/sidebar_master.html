@@ -3,7 +3,7 @@
 
 {# Reorganized Active States checking #}
 {% set admissions_active = ep.startswith('leads.') and ep != 'leads.reports' %}
-{% set students_active = ep.startswith('attendance.') or ep.startswith('billing.students') or ep.startswith('billing.student_') %}
+{% set students_active = ep.startswith('attendance.') or ep.startswith('billing.students') or ep.startswith('billing.student_') or ep == 'billing.institute_day_overview' %}
 {% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') %}
 {% set finance_active = (ep.startswith('billing.') and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
 {% set reports_active = ep.startswith('reports.') or ep == 'leads.reports' or ep in ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
@@ -70,7 +70,7 @@
          data-bs-parent="#erpSidebarAccordion">
       <div class="erp-module-menu">
         <a class="nav-link {{ 'active' if ep in ['billing.students', 'billing.student_profile', 'billing.student_edit'] else '' }}" href="{{ url_for('billing.students') }}">Student List</a>
-        <a class="nav-link {{ 'active' if ep == 'billing.student_batch_progress_monitor' else '' }}" href="{{ url_for('billing.student_batch_progress_monitor') }}">Batch Progress Monitor</a>
+        <a class="nav-link {{ 'active' if ep in ['billing.student_batch_progress_monitor', 'billing.institute_day_overview'] else '' }}" href="{{ url_for('billing.student_batch_progress_monitor') }}">Batch Progress Monitor</a>
         <a class="nav-link {{ 'active' if ep == 'billing.student_new' else '' }}" href="{{ url_for('billing.student_new') }}">Register Student</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.dashboard' else '' }}" href="{{ url_for('attendance.dashboard') }}">Attendance Dashboard</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.mark_attendance' else '' }}" href="{{ url_for('attendance.mark_attendance') }}">Mark Attendance</a>
