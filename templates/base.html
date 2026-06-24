@@ -215,6 +215,25 @@
       });
     }
 
+    document.querySelectorAll('.erp-module-toggle').forEach(function(moduleToggle) {
+      moduleToggle.addEventListener('click', function(event) {
+        if (!document.documentElement.classList.contains('sidebar-collapsed')) {
+          return;
+        }
+        if (window.innerWidth < 992) {
+          return;
+        }
+        var module = moduleToggle.closest('.erp-module');
+        var firstLink = module ? module.querySelector('.erp-module-menu .nav-link[href]') : null;
+        if (!firstLink) {
+          return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.location.href = firstLink.href;
+      }, true);
+    });
+
     // 4. Dynamic Sidebar Badge Updates
     function loadSidebarBadges() {
       fetch('/api/sidebar-badges')
