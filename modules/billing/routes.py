@@ -3204,6 +3204,212 @@ def student_add_to_batch(student_id):
     conn.close()
     return jsonify({"success": True, "batch_name": batch["batch_name"]})
 
+
+def _student_lms_progress_rows(cur, student_id):
+    """Return per-program LMS progress summaries for the student profile."""
+    cur.execute("""
+        SELECT DISTINCT
+            lp.id AS program_id,
+            lp.course_id,
+            lp.program_name,
+            COALESCE(c.course_name, lp.program_name) AS course_name,
+            COALESCE(NULLIF(lp.updated_at, ''), lp.created_at, '') AS version_sort,
+            CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM lms_student_program_access spa
+                    WHERE spa.student_id = ?
+                      AND spa.program_id = lp.id
+                      AND spa.is_active = 1
+                      AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+                ) THEN 3
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM lms_batch_program_access bpa
+                    JOIN student_batches sb ON sb.batch_id = bpa.batch_id
+                    WHERE sb.student_id = ?
+                      AND bpa.program_id = lp.id
+                      AND bpa.is_active = 1
+                      AND sb.status = 'active'
+                      AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
+                ) THEN 2
+                ELSE 1
+            END AS access_priority
+        FROM lms_programs lp
+        LEFT JOIN courses c ON c.id = lp.course_id
+        WHERE lp.is_active = 1
+          AND COALESCE(lp.is_deleted, 0) = 0
+          AND (
+              EXISTS (
+                  SELECT 1
+                  FROM lms_student_program_access spa
+                  WHERE spa.student_id = ?
+                    AND spa.program_id = lp.id
+                    AND spa.is_active = 1
+                    AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM lms_batch_program_access bpa
+                  JOIN student_batches sb ON sb.batch_id = bpa.batch_id
+                  WHERE sb.student_id = ?
+                    AND bpa.program_id = lp.id
+                    AND bpa.is_active = 1
+                    AND sb.status = 'active'
+                    AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM invoices inv
+                  JOIN invoice_items ii ON ii.invoice_id = inv.id
+                  WHERE inv.student_id = ?
+                    AND ii.course_id = lp.course_id
+                    AND lp.course_id IS NOT NULL
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM invoices inv
+                  JOIN invoice_items ii ON ii.invoice_id = inv.id
+                  JOIN lms_course_program_map cpm
+                    ON cpm.course_id = ii.course_id
+                   AND cpm.program_id = lp.id
+                  WHERE inv.student_id = ?
+              )
+          )
+        ORDER BY course_name, lp.program_name
+    """, (student_id, student_id, student_id, student_id, student_id, student_id))
+    programs = cur.fetchall()
+
+    progress_rows = []
+    for program in programs:
+        program_id = program["program_id"]
+        cur.execute("""
+            SELECT COUNT(*) AS total_topics
+            FROM lms_program_chapters pc
+            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+            JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+            WHERE pc.program_id = ?
+              AND pc.is_visible = 1
+              AND mc.status = 'active'
+              AND mt.status = 'active'
+        """, (program_id,))
+        master_total = int((cur.fetchone() or {"total_topics": 0})["total_topics"] or 0)
+
+        if master_total > 0:
+            total_topics = master_total
+            cur.execute("""
+                SELECT COUNT(*) AS completed_topics
+                FROM lms_master_topic_progress mtp
+                JOIN lms_master_topics mt ON mt.id = mtp.master_topic_id
+                JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                WHERE mtp.student_id = ?
+                  AND mtp.program_id = ?
+                  AND mtp.is_completed = 1
+                  AND pc.program_id = ?
+                  AND pc.is_visible = 1
+                  AND mc.status = 'active'
+                  AND mt.status = 'active'
+            """, (student_id, program_id, program_id))
+            completed_topics = int((cur.fetchone() or {"completed_topics": 0})["completed_topics"] or 0)
+        else:
+            cur.execute("""
+                SELECT COUNT(*) AS total_topics
+                FROM lms_topics lt
+                JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                WHERE lc.program_id = ?
+                  AND lc.is_active = 1
+                  AND lt.is_active = 1
+            """, (program_id,))
+            total_topics = int((cur.fetchone() or {"total_topics": 0})["total_topics"] or 0)
+
+            cur.execute("""
+                SELECT COUNT(*) AS completed_topics
+                FROM lms_topic_progress tp
+                JOIN lms_topics lt ON lt.id = tp.topic_id
+                JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                WHERE tp.student_id = ?
+                  AND lc.program_id = ?
+                  AND tp.is_completed = 1
+                  AND lt.is_active = 1
+            """, (student_id, program_id))
+            completed_topics = int((cur.fetchone() or {"completed_topics": 0})["completed_topics"] or 0)
+
+        cur.execute("""
+            SELECT MAX(last_activity) AS last_activity
+            FROM (
+                SELECT MAX(tp.completed_at) AS last_activity
+                FROM lms_topic_progress tp
+                JOIN lms_topics lt ON lt.id = tp.topic_id
+                JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                WHERE tp.student_id = ?
+                  AND lc.program_id = ?
+                  AND tp.is_completed = 1
+                UNION ALL
+                SELECT MAX(mtp.completed_at) AS last_activity
+                FROM lms_master_topic_progress mtp
+                WHERE mtp.student_id = ?
+                  AND mtp.program_id = ?
+                  AND mtp.is_completed = 1
+            )
+        """, (student_id, program_id, student_id, program_id))
+        last_activity = (cur.fetchone() or {"last_activity": None})["last_activity"]
+
+        progress_pct = round((completed_topics / total_topics) * 100, 1) if total_topics else 0
+        if total_topics == 0 or completed_topics == 0:
+            progress_status = "Not Started"
+            progress_class = "not-started"
+        elif progress_pct >= 100:
+            progress_status = "Completed"
+            progress_class = "completed"
+        else:
+            progress_status = "In Progress"
+            progress_class = "in-progress"
+
+        progress_rows.append({
+            "program_id": program_id,
+            "course_id": program["course_id"],
+            "program_name": program["program_name"],
+            "course_name": program["course_name"],
+            "total_topics": total_topics,
+            "completed_topics": completed_topics,
+            "progress_pct": progress_pct,
+            "progress_status": progress_status,
+            "progress_class": progress_class,
+            "last_activity": last_activity,
+            "access_priority": int(program["access_priority"] or 1),
+            "version_sort": program["version_sort"] or "",
+        })
+
+    selected_by_course = {}
+    for row in progress_rows:
+        key = f"course:{row['course_id']}" if row["course_id"] else f"program:{row['program_id']}"
+        current = selected_by_course.get(key)
+        row_score = (
+            row["access_priority"],
+            1 if row["completed_topics"] > 0 else 0,
+            row["progress_pct"],
+            row["version_sort"],
+            row["program_id"],
+        )
+        current_score = None
+        if current:
+            current_score = (
+                current["access_priority"],
+                1 if current["completed_topics"] > 0 else 0,
+                current["progress_pct"],
+                current["version_sort"],
+                current["program_id"],
+            )
+        if current is None or row_score > current_score:
+            selected_by_course[key] = row
+
+    return sorted(
+        selected_by_course.values(),
+        key=lambda row: (row["course_name"] or "", row["program_name"] or "")
+    )
+
+
 @billing_bp.route("/student/<int:student_id>")
 @login_required
 def student_profile(student_id):
@@ -3481,6 +3687,8 @@ def student_profile(student_id):
     if current_course is None and student_invoiced_courses:
         current_course = student_invoiced_courses[0]
 
+    lms_progress_rows = _student_lms_progress_rows(cur, student_id)
+
     student_batch_courses = []
     for b in student_batches:
         course_name = (b['course_name'] or '').strip()
@@ -3516,6 +3724,7 @@ def student_profile(student_id):
         installment_summary=installment_summary,
         attendance_summary=attendance_summary,
         attendance_percentage=attendance_percentage,
+        lms_progress_rows=lms_progress_rows,
         recent_activity=recent_activity,
         origin_lead=origin_lead,
         format_datetime=_format_display_datetime,

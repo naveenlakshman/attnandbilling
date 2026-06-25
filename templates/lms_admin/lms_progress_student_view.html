@@ -109,8 +109,8 @@
                                 </span>
                                 <small class="text-muted">
                                     {% if program.access_start_date %}
-                                    Start: {{ program.access_start_date|slice(0, 10)|join('') }}
-                                    {% if program.access_end_date %} | End: {{ program.access_end_date|slice(0, 10)|join('') }}{% endif %}
+                                Start: {{ program.access_start_date[:10] }}
+                                {% if program.access_end_date %} | End: {{ program.access_end_date[:10] }}{% endif %}
                                     {% else %}
                                     Enrollment-based access
                                     {% endif %}

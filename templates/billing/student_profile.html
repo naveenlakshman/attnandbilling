@@ -27,9 +27,6 @@
       </div>
 
       <div class="profile-action-stack no-print">
-        <div>
-          <a class="btn btn-outline-secondary" href="{{ url_for('billing.students') }}">← Back to Students</a>
-        </div>
         <div class="profile-action-bar">
           <a class="btn btn-primary" href="{{ url_for('billing.student_edit', student_id=student.id) }}">✎ Edit</a>
           <a class="btn btn-success" href="{{ url_for('billing.invoice_new', student_id=student.id) }}">🧾 Invoice</a>
@@ -225,14 +222,42 @@
         </div>
       </section>
 
-      <section class="profile-quickbar no-print">
-        <a class="btn btn-primary" href="{{ url_for('billing.student_edit', student_id=student.id) }}">Edit</a>
-        <a class="btn btn-success" href="{{ url_for('billing.invoice_new', student_id=student.id) }}">Invoice</a>
-        <a class="btn btn-info text-white" href="{{ url_for('attendance.student_attendance_history', student_id=student.id) }}">Attendance</a>
-        {% if student.phone %}
-        <a class="btn btn-outline-success" href="https://wa.me/91{{ phone_digits }}" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+      <section class="profile-section profile-lms-progress-section">
+        <div class="profile-section-header">
+          <div>
+            <div class="profile-section-title">LMS Progress by Course</div>
+            <div class="profile-section-subtitle">Separate learning progress for each course/program assigned to this student.</div>
+          </div>
+          <div class="profile-section-badge">{{ lms_progress_rows | length }} programs</div>
+        </div>
+
+        {% if lms_progress_rows %}
+        <div class="profile-lms-grid">
+          {% for row in lms_progress_rows %}
+          <article class="profile-lms-card profile-lms-{{ row.progress_class }}">
+            <div class="profile-lms-card-head">
+              <div>
+                <div class="profile-lms-course">{{ row.course_name }}</div>
+                <div class="profile-lms-program">{{ row.program_name }}</div>
+              </div>
+              <span class="profile-lms-status">{{ row.progress_status }}</span>
+            </div>
+            <div class="profile-lms-progress-line">
+              <div>
+                <strong>{{ row.progress_pct }}%</strong>
+                <span>{{ row.completed_topics }}/{{ row.total_topics }} lessons</span>
+              </div>
+              <a class="profile-inline-link" href="{{ url_for('lms_admin.view_student_progress', student_id=student.id, program_id=row.program_id) }}">View Details</a>
+            </div>
+            <progress class="profile-lms-progress" value="{{ row.progress_pct }}" max="100">{{ row.progress_pct }}%</progress>
+            <div class="profile-lms-last">
+              Last LMS Activity: {{ row.last_activity | format_ist_datetime if row.last_activity else 'Not Started' }}
+            </div>
+          </article>
+          {% endfor %}
+        </div>
         {% else %}
-        <span class="btn btn-outline-secondary disabled">WhatsApp</span>
+        <div class="empty-state">No LMS programs are mapped for this student yet.</div>
         {% endif %}
       </section>
 
