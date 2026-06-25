@@ -649,6 +649,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             course_id INTEGER,
             program_name TEXT NOT NULL,
+            program_reference_name TEXT,
             slug TEXT NOT NULL UNIQUE,
             description TEXT,
             thumbnail_path TEXT,
@@ -665,6 +666,13 @@ def init_db():
     # Migration: add is_deleted to lms_programs if it doesn't exist yet
     cur.execute("PRAGMA table_info(lms_programs)")
     _lp_cols = {row[1] for row in cur.fetchall()}
+    if 'program_reference_name' not in _lp_cols:
+        cur.execute("ALTER TABLE lms_programs ADD COLUMN program_reference_name TEXT")
+        cur.execute("""
+            UPDATE lms_programs
+            SET program_reference_name = program_name
+            WHERE program_reference_name IS NULL OR TRIM(program_reference_name) = ''
+        """)
     if 'is_deleted' not in _lp_cols:
         cur.execute("ALTER TABLE lms_programs ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
 

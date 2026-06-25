@@ -118,6 +118,18 @@
     color: #212529;
   }
 
+  .program-reference-name {
+    color: #0f766e;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+
+  .program-reference-name span {
+    color: #64748b;
+    font-weight: 600;
+  }
+
   .course-badge {
     display: inline-block;
     background: #e7f3ff;
@@ -554,7 +566,7 @@
       </thead>
       <tbody>
         {% for program in programs %}
-        <tr class="program-row" data-active="{{ 1 if program.is_active else 0 }}" data-published="{{ 1 if program.is_published else 0 }}" data-search="{{ (program.program_name ~ ' ' ~ (program.description or '') ~ ' ' ~ (program.course_name or ''))|lower }}">
+        <tr class="program-row" data-active="{{ 1 if program.is_active else 0 }}" data-published="{{ 1 if program.is_published else 0 }}" data-search="{{ (program.program_name ~ ' ' ~ (program.program_reference_name or '') ~ ' ' ~ (program.description or '') ~ ' ' ~ (program.course_name or ''))|lower }}">
           <td class="program-mobile-hidden" style="text-align: center; font-weight: 500;">{{ loop.index }}</td>
           <td class="program-title-cell">
             <a class="program-title-link" href="{{ url_for('lms_admin.program_view', program_id=program.id) }}">
@@ -576,6 +588,9 @@
                 {% endif %}
                 <div>
                   <div class="program-name">{{ program.program_name }}</div>
+                  {% if program.program_reference_name %}
+                  <div class="program-reference-name"><span>Ref:</span> {{ program.program_reference_name }}</div>
+                  {% endif %}
                   {% if program.description %}
                   <div class="description-preview" title="{{ program.description }}">{{ program.description }}</div>
                   {% endif %}
@@ -720,6 +735,9 @@
           <td style="text-align:center; font-weight:500;">{{ loop.index }}</td>
           <td>
             <div class="program-name" style="color:#6c757d;">{{ program.program_name }}</div>
+            {% if program.program_reference_name %}
+            <div class="program-reference-name"><span>Ref:</span> {{ program.program_reference_name }}</div>
+            {% endif %}
             {% if program.description %}
             <div class="description-preview" title="{{ program.description }}">{{ program.description }}</div>
             {% endif %}

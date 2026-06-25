@@ -300,6 +300,19 @@
           <div class="form-text">The main name of your learning program.</div>
         </div>
 
+        <!-- Program Reference Name -->
+        <div class="form-group">
+          <label>Program Reference Name</label>
+          <input
+            type="text"
+            name="program_reference_name"
+            id="programReferenceName"
+            value="{{ program.program_reference_name if program and program.program_reference_name else (program.program_name if program else '') }}"
+            placeholder="e.g., Advanced Excel"
+          >
+          <div class="form-text">Stable internal name used to group old and new cloned versions of the same program. Leave blank to use Program Name.</div>
+        </div>
+
         <!-- Course Selection -->
         <div class="form-group">
           <label>Linked Course</label>

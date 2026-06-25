@@ -39,6 +39,18 @@
     color: white;
   }
 
+  .program-reference-name {
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: 999px;
+    color: #ffffff;
+    display: inline-flex;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0 0 16px;
+    padding: 7px 12px;
+  }
+
   .program-meta {
     display: flex;
     gap: 24px;
@@ -582,6 +594,11 @@
 <div class="program-header">
   <div class="program-header-content">
     <h1 class="program-title">{{ summary.program.program_name }}</h1>
+    {% if summary.program.program_reference_name %}
+    <div class="program-reference-name">
+      Internal Reference: {{ summary.program.program_reference_name }}
+    </div>
+    {% endif %}
     
     <div class="program-meta">
       {% if summary.program.course_name %}

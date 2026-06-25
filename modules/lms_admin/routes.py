@@ -462,12 +462,13 @@ def _ensure_master_bridge_topic(cur, master_topic_id, master_topic_title):
         cur.execute(
             """
                 INSERT INTO lms_programs (
-                    course_id, program_name, slug, description, thumbnail_path,
+                    course_id, program_name, program_reference_name, slug, description, thumbnail_path,
                     is_published, is_active, created_by, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 None,
+                _MASTER_BRIDGE_PROGRAM_NAME,
                 _MASTER_BRIDGE_PROGRAM_NAME,
                 _MASTER_BRIDGE_PROGRAM_SLUG,
                 'System-only bridge program for reusable master-topic content compatibility.',
@@ -788,6 +789,7 @@ def list_programs():
             SELECT 
                 lp.id,
                 lp.program_name,
+                lp.program_reference_name,
                 lp.slug,
                 lp.description,
                 lp.is_published,
@@ -1987,6 +1989,7 @@ def program_new():
         
         if request.method == 'POST':
             program_name = request.form.get('program_name', '').strip()
+            program_reference_name = request.form.get('program_reference_name', '').strip()
             course_id = request.form.get('course_id', '')
             slug = request.form.get('slug', '').strip()
             description = request.form.get('description', '').strip()
@@ -1997,6 +2000,8 @@ def program_new():
             if not program_name:
                 flash('Program name is required.', 'danger')
                 return redirect(url_for('lms_admin.program_new'))
+            if not program_reference_name:
+                program_reference_name = program_name
             
             # Generate slug if not provided or if program name changed
             if not slug or slug == '':
@@ -2020,6 +2025,7 @@ def program_new():
                 INSERT INTO lms_programs (
                     course_id,
                     program_name,
+                    program_reference_name,
                     slug,
                     description,
                     thumbnail_path,
@@ -2032,6 +2038,7 @@ def program_new():
             """, (
                 course_id,
                 program_name,
+                program_reference_name,
                 slug,
                 description,
                 thumbnail_path,
@@ -2091,6 +2098,7 @@ def program_edit(program_id):
         
         if request.method == 'POST':
             program_name = request.form.get('program_name', '').strip()
+            program_reference_name = request.form.get('program_reference_name', '').strip()
             course_id = request.form.get('course_id', '')
             slug = request.form.get('slug', '').strip()
             description = request.form.get('description', '').strip()
@@ -2101,6 +2109,8 @@ def program_edit(program_id):
             if not program_name:
                 flash('Program name is required.', 'danger')
                 return redirect(url_for('lms_admin.program_edit', program_id=program_id))
+            if not program_reference_name:
+                program_reference_name = program_name
             
             # Generate slug if not provided
             if not slug or slug == '':
@@ -2124,6 +2134,7 @@ def program_edit(program_id):
                 UPDATE lms_programs
                 SET course_id = ?,
                     program_name = ?,
+                    program_reference_name = ?,
                     slug = ?,
                     description = ?,
                     thumbnail_path = ?,
@@ -2133,6 +2144,7 @@ def program_edit(program_id):
             """, (
                 course_id,
                 program_name,
+                program_reference_name,
                 slug,
                 description,
                 thumbnail_path,
@@ -2186,6 +2198,7 @@ def program_clone(program_id):
             
         # Generate cloned name and slug
         cloned_name = f"{src_program['program_name']} (Copy)"
+        cloned_reference_name = src_program['program_reference_name'] or src_program['program_name']
         cloned_slug = f"{src_program['slug']}-copy"
         
         # Check slug uniqueness and append random parts if necessary
@@ -2198,12 +2211,13 @@ def program_clone(program_id):
         # 2. Insert new program
         cur.execute("""
             INSERT INTO lms_programs (
-                course_id, program_name, slug, description, thumbnail_path, 
+                course_id, program_name, program_reference_name, slug, description, thumbnail_path, 
                 is_published, is_active, is_deleted, created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             src_program['course_id'],
             cloned_name,
+            cloned_reference_name,
             cloned_slug,
             src_program['description'],
             src_program['thumbnail_path'],
@@ -2274,6 +2288,7 @@ def program_view(program_id):
             SELECT 
                 lp.id,
                 lp.program_name,
+                lp.program_reference_name,
                 lp.slug,
                 lp.description,
                 lp.thumbnail_path,
@@ -6370,7 +6385,8 @@ def list_course_mappings():
                 m.display_order,
                 m.created_at,
                 c.course_name,
-                lp.program_name
+                lp.program_name,
+                lp.program_reference_name
             FROM lms_course_program_map m
             JOIN courses c ON m.course_id = c.id
             JOIN lms_programs lp ON m.program_id = lp.id
@@ -6391,6 +6407,7 @@ def list_course_mappings():
                 'map_id': r['id'],
                 'program_id': r['program_id'],
                 'program_name': r['program_name'],
+                'program_reference_name': r['program_reference_name'],
                 'display_order': r['display_order'],
                 'created_at': r['created_at']
             })
@@ -6404,7 +6421,7 @@ def list_course_mappings():
 
         # All published LMS programs (for the Add Mapping form)
         cur.execute("""
-            SELECT id, program_name FROM lms_programs WHERE is_active = 1
+            SELECT id, program_name, program_reference_name FROM lms_programs WHERE is_active = 1
             ORDER BY program_name
         """)
         all_programs = cur.fetchall()

@@ -63,7 +63,14 @@
         font-size: 0.9rem;
     }
     .program-row:last-child { border-bottom: none; }
-    .program-name { color: #333; }
+    .program-name { color: #333; font-weight: 600; }
+    .program-version-name {
+        color: #6c757d;
+        display: block;
+        font-size: 0.78rem;
+        margin-left: 2.15rem;
+        margin-top: 0.15rem;
+    }
     .program-tag {
         background: #e8f5e9;
         color: #2e7d32;
@@ -233,7 +240,10 @@
                     <div class="program-row">
                         <div>
                             <span class="program-tag">LMS</span>
-                            <span class="program-name">{{ prog.program_name }}</span>
+                            <span class="program-name">{{ prog.program_reference_name or prog.program_name }}</span>
+                            {% if prog.program_reference_name and prog.program_reference_name != prog.program_name %}
+                            <span class="program-version-name">{{ prog.program_name }}</span>
+                            {% endif %}
                         </div>
                         {% if session.get('role') == 'admin' %}
                         <form method="POST"
@@ -284,7 +294,12 @@
                         {% for prog in all_programs %}
                         <label class="checkbox-item">
                             <input type="checkbox" name="program_ids" value="{{ prog.id }}">
-                            {{ prog.program_name }}
+                            <span>
+                                {{ prog.program_reference_name or prog.program_name }}
+                                {% if prog.program_reference_name and prog.program_reference_name != prog.program_name %}
+                                <span class="program-version-name">{{ prog.program_name }}</span>
+                                {% endif %}
+                            </span>
                         </label>
                         {% endfor %}
                     </div>
