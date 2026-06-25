@@ -781,8 +781,31 @@ def dashboard():
         company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
 
         if _is_demo():
-            # Demo mode: show ALL active programs (no enrollment check)
+            # Demo mode: show one published program per course/reference so cloned drafts
+            # do not crowd the student preview used for lead demos.
             programs = conn.execute("""
+                WITH ranked_demo_programs AS (
+                    SELECT
+                        lp.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY COALESCE(
+                                'course:' || lp.course_id,
+                                'course:' || (
+                                    SELECT MIN(cpm_group.course_id)
+                                    FROM lms_course_program_map cpm_group
+                                    WHERE cpm_group.program_id = lp.id
+                                ),
+                                'ref:' || lower(trim(COALESCE(NULLIF(lp.program_reference_name, ''), lp.program_name)))
+                            )
+                            ORDER BY
+                                datetime(COALESCE(NULLIF(lp.updated_at, ''), lp.created_at)) DESC,
+                                lp.id DESC
+                        ) AS demo_rank
+                    FROM lms_programs lp
+                    WHERE lp.is_active = 1
+                      AND COALESCE(lp.is_deleted, 0) = 0
+                      AND lp.is_published = 1
+                )
                 SELECT DISTINCT
                     lp.id, lp.program_name, lp.description,
                     CASE
@@ -842,9 +865,9 @@ def dashboard():
                      WHERE lc5.program_id = lp.id AND lc5.is_active = 1 AND lt4.is_active = 1
                      ORDER BY lc5.chapter_order, lt4.topic_order LIMIT 1) AS first_topic_id,
                     NULL AS map_order
-                FROM lms_programs lp
-                WHERE lp.is_active = 1
-                ORDER BY lp.program_name
+                FROM ranked_demo_programs lp
+                WHERE lp.demo_rank = 1
+                ORDER BY COALESCE(lp.program_reference_name, lp.program_name), lp.program_name
             """).fetchall()
         else:
             # Normal mode: only programs the student is enrolled in
