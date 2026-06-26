@@ -365,7 +365,9 @@
       <div class="lc-body">
         <div class="lc-name">{{ l.name }}</div>
         <div class="lc-phone">{{ l.phone or '—' }}{% if l.interested_courses %} · <span style="color:#0d6efd;">{{ l.interested_courses }}</span>{% endif %}</div>
-        <div style="font-size:10px; color:#9ca3af; margin-top:1px;">Last: {{ l.last_contact_date or '—' }} | Next: {{ l.next_followup_date or '—' }}</div>
+        <div style="font-size:10px; color:#9ca3af; margin-top:1px;">
+          Created: {{ l.created_at | format_ist_datetime if l.created_at else '—' }} | Last: {{ l.last_contact_date | format_ist_datetime if l.last_contact_date else '—' }}
+        </div>
         <div class="d-flex flex-wrap gap-1 mt-1">
           <span class="lc-stage stage-{{ stage_lower }}">{{ l.stage }}</span>
           <span class="badge {% if l.temperature == 'Hot' %}bg-danger{% elif l.temperature == 'Warm' %}bg-warning text-dark{% elif l.temperature == 'Cold' %}bg-primary{% elif l.temperature == 'Converted' %}bg-success{% else %}bg-secondary{% endif %}">{{ l.temperature }}</span>
@@ -409,8 +411,8 @@
             <th class="sortable" data-sort-key="stage">Stage</th>
             <th class="sortable" data-sort-key="temperature">Temperature</th>
             <th class="sortable" data-sort-key="score">Score</th>
-            <th class="sortable" data-sort-key="last_contact">Last Contact</th>
-            <th class="sortable" data-sort-key="next_followup">Next Follow-up</th>
+            <th class="sortable" data-sort-key="created_at">Lead Created</th>
+            <th class="sortable" data-sort-key="last_contact">Last Contacted On</th>
             <th class="sortable" data-sort-key="owner">Owner</th>
             <th>Actions</th>
           </tr>
@@ -451,11 +453,11 @@
                 {{ l.lead_score }}
               </span>
             </td>
-            <td data-sort-key="last_contact" data-sort-value="{{ l.last_contact_date or '' }}">
-              <small class="text-muted">{{ l.last_contact_date or '—' }}</small>
+            <td data-sort-key="created_at" data-sort-value="{{ l.created_at or '' }}">
+              <small class="text-muted">{{ l.created_at | format_ist_datetime if l.created_at else '—' }}</small>
             </td>
-            <td data-sort-key="next_followup" data-sort-value="{{ l.next_followup_date or '' }}">
-              <small class="text-muted">{{ l.next_followup_date or '—' }}</small>
+            <td data-sort-key="last_contact" data-sort-value="{{ l.last_contact_date or '' }}">
+              <small class="text-muted">{{ l.last_contact_date | format_ist_datetime if l.last_contact_date else '—' }}</small>
             </td>
             <td data-sort-key="owner" data-sort-value="{{ l.owner_name or l.owner_username or '' }}" style="white-space:nowrap;">
               {% set oname = l.owner_name or l.owner_username or 'Unassigned' %}
