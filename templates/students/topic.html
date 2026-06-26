@@ -6,8 +6,6 @@
   <nav class="lesson-breadcrumb" aria-label="breadcrumb">
     <a class="lesson-breadcrumb-home" href="{{ url_for('students.dashboard') }}">My Programs</a>
     <span class="lesson-breadcrumb-separator lesson-breadcrumb-desktop">&rsaquo;</span>
-    <a class="lesson-breadcrumb-desktop" href="{{ url_for('students.program_view', program_id=topic.program_id) }}">{{ topic.program_name }}</a>
-    <span class="lesson-breadcrumb-separator lesson-breadcrumb-desktop">&rsaquo;</span>
     <span class="lesson-breadcrumb-chapter">{{ topic.chapter_title }}</span>
     <span class="lesson-breadcrumb-separator">&rsaquo;</span>
     <span class="lesson-breadcrumb-topic">{{ topic.topic_title }}</span>
@@ -289,10 +287,6 @@
     padding: 16px 16px 10px;
     border-bottom: 1px solid #f0f0f0;
     position: sticky; top: 0; background: #fff; z-index: 10;
-  }
-  .sidebar-program-name {
-    font-size: 13px; font-weight: 700; color: #1a1a2e;
-    margin-bottom: 8px; line-height: 1.3;
   }
   .progress-bar-wrap { background: #e9ecef; border-radius: 4px; height: 6px; margin-bottom: 5px; }
   .progress-bar-fill { background: #198754; height: 6px; border-radius: 4px; transition: width 0.3s; }
@@ -828,7 +822,6 @@
     <div class="lms-content-inner">
       <div class="lms-breadcrumb">
         <a href="{{ url_for('students.dashboard') }}">My Programs</a> ›
-        <a href="{{ url_for('students.program_view', program_id=topic.program_id) }}">{{ topic.program_name }}</a> ›
         {{ topic.chapter_title }} › {{ topic.topic_title }}
       </div>
 
@@ -1029,7 +1022,6 @@
               class="topics-drawer-close"
               onclick="closeTopicsPanel()"
               aria-label="Close topics">&times;</button>
-      <div class="sidebar-program-name">{{ topic.program_name }}</div>
       <div class="progress-bar-wrap">
         <div class="progress-bar-fill" id="progressFill"
              style="width: {% if total_topics > 0 %}{{ (completed_topics / total_topics * 100)|int }}{% else %}0{% endif %}%">
