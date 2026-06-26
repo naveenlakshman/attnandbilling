@@ -215,8 +215,9 @@
   /* Compact lesson header */
   .lesson-header {
     display: flex;
-    align-items: center;
-    gap: 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
     min-width: 0;
   }
   .lesson-header h1 {
@@ -226,6 +227,9 @@
     color: #212529;
     line-height: 1.25;
     white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .lesson-breadcrumb {
     display: block;
@@ -430,9 +434,6 @@
 
 
   @media (max-width: 1100px) {
-    .lesson-header {
-      gap: 10px;
-    }
     .lesson-header h1 {
       font-size: 18px;
     }
