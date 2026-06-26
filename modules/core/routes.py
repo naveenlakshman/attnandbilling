@@ -181,18 +181,35 @@ def dashboard():
 
     # ── Today's attendance ──────────────────────────────────────
     cur.execute("""
-        SELECT status, COUNT(*) AS cnt
-        FROM attendance_records
-        WHERE attendance_date = ?
-        GROUP BY status
-    """, [today])
+        SELECT ar.status, COUNT(*) AS cnt
+        FROM attendance_records ar
+        JOIN batches b ON ar.batch_id = b.id
+        WHERE ar.attendance_date = ?
+          AND b.status = 'active'
+          AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
+          AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
+        GROUP BY ar.status
+    """, [today, today, today])
     att_rows = cur.fetchall()
     att_summary = {r["status"]: r["cnt"] for r in att_rows}
     att_present = att_summary.get("present", 0)
     att_late = att_summary.get("late", 0)
     att_absent = att_summary.get("absent", 0)
+    att_leave = att_summary.get("leave", 0)
     att_total = att_present + att_late + att_absent
     attendance_rate = round(((att_present + att_late) / att_total * 100), 1) if att_total else None
+    att_marked = att_present + att_late + att_absent + att_leave
+
+    cur.execute("""
+        SELECT COUNT(*) AS cnt
+        FROM student_batches sb
+        JOIN batches b ON sb.batch_id = b.id
+        WHERE b.status = 'active'
+          AND sb.status = 'active'
+          AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
+          AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
+    """, [today, today])
+    total_students_today = cur.fetchone()["cnt"]
 
     # ── Active batches ──────────────────────────────────────────
     cur.execute("SELECT COUNT(*) AS cnt FROM batches WHERE status = 'active'")
@@ -264,6 +281,9 @@ def dashboard():
         att_present=att_present,
         att_late=att_late,
         att_absent=att_absent,
+        att_leave=att_leave,
+        att_marked=att_marked,
+        total_students_today=total_students_today,
         att_total=att_total,
         active_batches=active_batches,
         # Leads followup
@@ -301,25 +321,47 @@ def _staff_dashboard():
     """, [user_id])
     my_batches = cur.fetchall()
 
-    # ── Today's attendance (my batches) ────────────────────────
-    batch_ids = [b["id"] for b in my_batches]
-    if batch_ids:
-        placeholders = ",".join("?" * len(batch_ids))
+    # ── Today's attendance (my batches active today) ───────────
+    cur.execute("""
+        SELECT b.id
+        FROM batches b
+        WHERE b.trainer_id = ? AND b.status = 'active'
+          AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
+          AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
+    """, [user_id, today, today])
+    today_batch_ids = [r["id"] for r in cur.fetchall()]
+
+    if today_batch_ids:
+        placeholders = ",".join("?" * len(today_batch_ids))
         cur.execute(f"""
             SELECT status, COUNT(*) AS cnt
             FROM attendance_records
             WHERE attendance_date = ? AND batch_id IN ({placeholders})
             GROUP BY status
-        """, [today] + batch_ids)
+        """, [today] + today_batch_ids)
         att_rows = cur.fetchall()
     else:
         att_rows = []
+
     att_summary = {r["status"]: r["cnt"] for r in att_rows}
     att_present = att_summary.get("present", 0)
     att_late = att_summary.get("late", 0)
     att_absent = att_summary.get("absent", 0)
+    att_leave = att_summary.get("leave", 0)
     att_total = att_present + att_late + att_absent
     attendance_rate = round(((att_present + att_late) / att_total * 100), 1) if att_total else None
+    att_marked = att_present + att_late + att_absent + att_leave
+
+    if today_batch_ids:
+        placeholders = ",".join("?" * len(today_batch_ids))
+        cur.execute(f"""
+            SELECT COUNT(*) AS cnt
+            FROM student_batches sb
+            WHERE sb.batch_id IN ({placeholders}) AND sb.status = 'active'
+        """, today_batch_ids)
+        total_students_today = cur.fetchone()["cnt"]
+    else:
+        total_students_today = 0
 
     # ── My assigned leads — followup overdue ───────────────────
     cur.execute("""
@@ -432,6 +474,9 @@ def _staff_dashboard():
         att_present=att_present,
         att_late=att_late,
         att_absent=att_absent,
+        att_leave=att_leave,
+        att_marked=att_marked,
+        total_students_today=total_students_today,
         att_total=att_total,
         attendance_rate=attendance_rate,
         my_past_due_leads=my_past_due_leads,

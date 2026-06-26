@@ -118,9 +118,9 @@
         Attendance</h3>
       <div class="row align-items-center">
         <div class="col-sm-4 text-center border-end">
-          {% if attendance_rate is not none %}
-          <div class="kpi-value text-success mb-1">{{ attendance_rate }}%</div>
-          <p class="text-muted small mb-0">{{ att_present + att_late }} of {{ att_total }} marked</p>
+          {% if total_students_today > 0 and att_marked > 0 %}
+          <div class="kpi-value text-success mb-1">{% if attendance_rate is not none %}{{ attendance_rate }}%{% else %}—{% endif %}</div>
+          <p class="text-muted small mb-0">{{ att_marked }} of {{ total_students_today }} marked</p>
           {% else %}
           <div class="kpi-value text-muted mb-1">—</div>
           <p class="text-muted small mb-0">Not Marked Yet</p>
@@ -139,6 +139,10 @@
             <div class="stats-card-box">
               <div class="stats-card-value text-danger">{{ att_absent }}</div>
               <small class="text-muted">Absent</small>
+            </div>
+            <div class="stats-card-box">
+              <div class="stats-card-value text-info">{{ att_leave }}</div>
+              <small class="text-muted">Leave</small>
             </div>
             <div class="stats-card-box">
               <div class="stats-card-value text-secondary">{{ active_batches }}</div>

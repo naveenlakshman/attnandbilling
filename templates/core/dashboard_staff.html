@@ -105,34 +105,40 @@
      ════════════════════════════════════════════════════════ -->
 <p class="section-title">Today's Attendance — My Batches</p>
 <div class="row g-3 mb-3">
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md">
     <div class="kpi-card card text-center py-3" style="border-top: 4px solid #198754; background:#f0fff5;">
-      {% if attendance_rate is not none %}
-        <div class="kpi-value text-success">{{ attendance_rate }}%</div>
+      {% if total_students_today > 0 and att_marked > 0 %}
+        <div class="kpi-value text-success">{% if attendance_rate is not none %}{{ attendance_rate }}%{% else %}—{% endif %}</div>
         <div class="kpi-label">Attendance Rate</div>
-        <div class="kpi-sub text-muted">{{ att_present + att_late }} / {{ att_total }} marked</div>
+        <div class="kpi-sub text-muted">{{ att_marked }} / {{ total_students_today }} marked</div>
       {% else %}
         <div class="kpi-value text-muted">—</div>
         <div class="kpi-label">Not Marked Yet</div>
       {% endif %}
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md">
     <div class="kpi-card card text-center py-3" style="border-top: 4px solid #198754;">
       <div class="kpi-value text-success">{{ att_present }}</div>
       <div class="kpi-label">Present</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md">
     <div class="kpi-card card text-center py-3" style="border-top: 4px solid #ffc107;">
       <div class="kpi-value" style="color:#e09000;">{{ att_late }}</div>
       <div class="kpi-label">Late</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md">
     <div class="kpi-card card text-center py-3" style="border-top: 4px solid #dc3545; background:#fff5f5;">
       <div class="kpi-value text-danger">{{ att_absent }}</div>
       <div class="kpi-label">Absent</div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="kpi-card card text-center py-3" style="border-top: 4px solid #0dcaf0; background:#f0faff;">
+      <div class="kpi-value text-info">{{ att_leave }}</div>
+      <div class="kpi-label">Leave</div>
     </div>
   </div>
 </div>
