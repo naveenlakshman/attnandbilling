@@ -142,7 +142,7 @@
                 <div class="sbpm-table-student">
                   <div class="sbpm-avatar {% if row.photo_filename %}has-photo{% endif %}">
                     {% if row.photo_filename %}
-                    <img src="{{ url_for('static', filename='images/student_photos/' ~ row.photo_filename) }}" alt="" class="sbpm-photo">
+                    <img src="{{ url_for('static', filename='images/student_photos/' ~ row.photo_filename) }}" alt="" class="sbpm-photo" loading="lazy">
                     {% endif %}
                     <span class="sbpm-avatar-fallback">{{ row.initials }}</span>
                   </div>
@@ -201,7 +201,7 @@
           </div>
           <div class="sbpm-avatar sbpm-card-avatar {% if row.photo_filename %}has-photo{% endif %}">
             {% if row.photo_filename %}
-            <img src="{{ url_for('static', filename='images/student_photos/' ~ row.photo_filename) }}" alt="" class="sbpm-photo">
+            <img src="{{ url_for('static', filename='images/student_photos/' ~ row.photo_filename) }}" alt="" class="sbpm-photo" loading="lazy">
             {% endif %}
             <span class="sbpm-avatar-fallback">{{ row.initials }}</span>
           </div>
