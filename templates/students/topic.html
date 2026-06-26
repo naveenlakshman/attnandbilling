@@ -281,7 +281,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js" referrerpolicy="origin"></script>
+{% if lesson_content and lesson_content.content_mode == 'pdf' %}
 <script src="{{ url_for('static', filename='js/pdfjs/pdf.min.js') }}"></script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -289,11 +289,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 var PDF_BASE_SCALE = 1.5;
 var DPR = window.devicePixelRatio || 1;
-
-(function initProgressFill() {
-  var fill = document.getElementById('progressFill');
-  if (fill) fill.style.width = (fill.dataset.progressPct || '0') + '%';
-})();
 
 /* Render all PDFs now that pdfjsLib is loaded */
 document.querySelectorAll('[data-pdf-url]').forEach(function(viewer) {
@@ -322,6 +317,21 @@ document.querySelectorAll('[data-pdf-url]').forEach(function(viewer) {
     if (loadingEl) loadingEl.textContent = 'Failed to load PDF.';
   });
 });
+</script>
+{% endif %}
+
+<script>
+(function initProgressFill() {
+  var fill = document.getElementById('progressFill');
+  if (fill) fill.style.width = (fill.dataset.progressPct || '0') + '%';
+})();
+
+/* Enable native lazy loading for images inside rich text content */
+document.querySelectorAll('.lms-rich-content img').forEach(function(img) {
+  if (!img.hasAttribute('loading')) {
+    img.setAttribute('loading', 'lazy');
+  }
+});
 
 /* IP protection */
 document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
@@ -329,8 +339,18 @@ document.addEventListener('keydown', function(e){
   if((e.ctrlKey||e.metaKey) && (e.key==='s'||e.key==='p'||e.key==='u')) e.preventDefault();
 });
 
-/* Watch / Read / Notes tab switcher */
+/* Watch / Read / Notes tab switcher wrapper for lazy-loading TinyMCE */
 function switchTab(tab) {
+  if (tab === 'notes') {
+    ensureTinyMCE(function() {
+      switchTabActual(tab);
+    });
+  } else {
+    switchTabActual(tab);
+  }
+}
+
+function switchTabActual(tab) {
   ['watch', 'read', 'notes', 'assignments'].forEach(function(t) {
     var pane = document.getElementById('pane' + t.charAt(0).toUpperCase() + t.slice(1));
     var btn  = document.getElementById('tab'  + t.charAt(0).toUpperCase() + t.slice(1));
@@ -367,27 +387,61 @@ function _debounceAutoSave() {
   }, 2000);
 }
 
-tinymce.init({
-  selector: '#notesEditor',
-  license_key: 'gpl',
-  menubar: false,
-  plugins: 'lists',
-  toolbar: 'undo redo | bold italic underline | bullist numlist',
-  placeholder: 'Start writing your notes here…',
-  min_height: 300,
-  branding: false,
-  content_style: 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.7; }',
-  setup: function(editor) {
-    editor.on('input keyup Change', function() {
-      if (_activeContentId) _debounceAutoSave();
-    });
-    editor.on('init', function() {
-      var savedTab = localStorage.getItem('lms_tab_' + window.location.pathname);
-      if (savedTab === 'notes') switchTab('notes');
-      else if (savedTab === 'assignments') switchTab('assignments');
-    });
+var _tinymceInitialized = false;
+var _tinymceLoading = false;
+function ensureTinyMCE(callback) {
+  if (window.tinymce && _tinymceInitialized) {
+    if (callback) callback();
+    return;
   }
-});
+  if (_tinymceLoading) {
+    var checkInterval = setInterval(function() {
+      if (window.tinymce && _tinymceInitialized) {
+        clearInterval(checkInterval);
+        if (callback) callback();
+      }
+    }, 50);
+    return;
+  }
+  _tinymceLoading = true;
+  var script = document.createElement('script');
+  script.src = "https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js";
+  script.referrerPolicy = "origin";
+  script.onload = function() {
+    tinymce.init({
+      selector: '#notesEditor',
+      license_key: 'gpl',
+      menubar: false,
+      plugins: 'lists',
+      toolbar: 'undo redo | bold italic underline | bullist numlist',
+      placeholder: 'Start writing your notes here…',
+      min_height: 300,
+      branding: false,
+      content_style: 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.7; }',
+      setup: function(editor) {
+        editor.on('input keyup Change', function() {
+          if (_activeContentId) _debounceAutoSave();
+        });
+        editor.on('init', function() {
+          _tinymceInitialized = true;
+          _tinymceLoading = false;
+          if (callback) callback();
+        });
+      }
+    });
+  };
+  document.body.appendChild(script);
+}
+
+// Restore saved tab states on load
+(function() {
+  var savedTab = localStorage.getItem('lms_tab_' + window.location.pathname);
+  if (savedTab === 'notes') {
+    switchTab('notes');
+  } else if (savedTab === 'assignments') {
+    switchTab('assignments');
+  }
+})();
 
 function _getContentId(tabName) {
   if (!_paneNotes) return null;
