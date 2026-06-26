@@ -206,7 +206,11 @@
           {% endif %}
           <tr class="followup-row" data-search="{{ (lead_name + ' ' + lead_phone)|lower }}">
             <td class="col-lead">
-              <span class="fw-semibold" style="font-size:13px;">{{ lead_name }}</span>
+              <span class="fw-semibold" style="font-size:13px; cursor: pointer;"
+                    data-bs-toggle="collapse" data-bs-target="#details-{{ lead_id }}"
+                    aria-expanded="false" aria-controls="details-{{ lead_id }}">
+                {{ lead_name }} <small class="text-muted" style="font-size: 8px;">▼</small>
+              </span>
               <div class="lead-sub-badges">
                 {% if l.parent_discussion_status == 'Pending' %}
                   <span class="sub-badge sub-parent">Parent Pend.</span>
@@ -221,7 +225,7 @@
               </div>
             </td>
             <td class="col-phone text-muted">{{ lead_phone or '-' }}</td>
-            <td class="col-course" title="{{ l.course_interested or '' }}">{{ l.course_interested or '-' }}</td>
+            <td class="col-course" title="{{ l.course_interested or l.interested_courses or '' }}">{{ l.course_interested or l.interested_courses or '-' }}</td>
             <td class="col-stage"><span class="stage-badge stage-{{ stage_key }}">{{ stage_text }}</span></td>
             <td class="col-temp"><span class="temp-badge temp-{{ temp_key }}">{{ temperature }}</span></td>
             {% if is_admin %}
@@ -241,6 +245,10 @@
                   <a class="fu-btn" href="tel:{{ lead_phone }}" title="Call">&#128222;</a>
                   <a class="fu-btn" target="_blank" href="https://wa.me/91{{ lead_phone }}" title="WhatsApp">&#128172;</a>
                 {% endif %}
+                <button type="button" class="fu-btn" style="color: #495057;"
+                        data-bs-toggle="collapse" data-bs-target="#details-{{ lead_id }}"
+                        aria-expanded="false" aria-controls="details-{{ lead_id }}"
+                        title="Toggle Quick Details">▼</button>
                 {% if selected_tab != 'completed' %}
                   <button type="button" class="fu-btn fu-complete"
                           data-mode="complete" data-lead-id="{{ lead_id }}"
@@ -256,6 +264,48 @@
                           title="Reschedule">&#128197;</button>
                 {% endif %}
                 <a class="fu-btn fu-open" href="{{ url_for('leads.lead_detail', lead_id=lead_id) }}" title="Open">&#128065;</a>
+              </div>
+            </td>
+          </tr>
+          <tr class="followup-row-details details-row" style="background-color: #f8fafc;">
+            <td colspan="{{ 9 if is_admin else 8 }}" style="padding: 0; border: none;">
+              <div class="collapse" id="details-{{ lead_id }}">
+                <div class="p-3 bg-light border-bottom text-dark" style="font-size: 13px;">
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <h6 class="fw-bold mb-2 text-primary" style="font-size: 13px;">Academic & Career Background</h6>
+                      <ul class="list-unstyled mb-0">
+                        <li><strong>Education:</strong> {{ l.education_status or '-' }}</li>
+                        <li><strong>Stream:</strong> {{ l.stream or '-' }}</li>
+                        <li><strong>Institute:</strong> {{ l.institute_name or '-' }}</li>
+                        <li><strong>Career Goal:</strong> {{ l.career_goal or '-' }}</li>
+                      </ul>
+                    </div>
+                    <div class="col-md-4">
+                      <h6 class="fw-bold mb-2 text-primary" style="font-size: 13px;">Counseling Context</h6>
+                      <ul class="list-unstyled mb-0">
+                        <li><strong>Email:</strong> {{ l.email or '-' }}</li>
+                        <li><strong>WhatsApp:</strong> {{ l.whatsapp or '-' }}</li>
+                        <li><strong>Lead Source:</strong> {{ l.lead_source or '-' }}</li>
+                        <li><strong>Location:</strong> {{ l.lead_location or '-' }}</li>
+                      </ul>
+                    </div>
+                    <div class="col-md-4">
+                      <h6 class="fw-bold mb-2 text-primary" style="font-size: 13px;">Timeline & Settings</h6>
+                      <ul class="list-unstyled mb-0">
+                        <li><strong>Timeframe:</strong> {{ l.start_timeframe or '-' }}</li>
+                        <li><strong>Decision Maker:</strong> {{ l.decision_maker or '-' }}</li>
+                        <li><strong>Lead Score:</strong> {{ l.lead_score or '0' }}</li>
+                      </ul>
+                    </div>
+                    {% if l.notes %}
+                    <div class="col-12 border-top pt-2 mt-2">
+                      <strong>Original Notes:</strong>
+                      <p class="mb-0 text-muted" style="white-space: pre-wrap; font-size:12px;">{{ l.notes }}</p>
+                    </div>
+                    {% endif %}
+                  </div>
+                </div>
               </div>
             </td>
           </tr>
@@ -292,13 +342,22 @@
     <div class="mobile-card {{ card_state }} followup-card-item" data-search="{{ (lead_name + ' ' + lead_phone)|lower }}">
       <div class="d-flex justify-content-between align-items-start gap-2">
         <div>
-          <div class="fw-semibold">{{ lead_name }}</div>
-          <div class="text-muted small">{{ l.course_interested or '-' }}</div>
+          <div class="fw-semibold" style="cursor: pointer;"
+               data-bs-toggle="collapse" data-bs-target="#details-mob-{{ lead_id }}"
+               aria-expanded="false" aria-controls="details-mob-{{ lead_id }}">
+             {{ lead_name }} <small class="text-muted" style="font-size: 8px;">▼</small>
+          </div>
+          <div class="text-muted small">{{ l.course_interested or l.interested_courses or '-' }}</div>
           {% if is_admin %}
             <div class="text-muted" style="font-size:12px;">{{ l.owner_name or l.owner_username or 'Unassigned' }}</div>
           {% endif %}
         </div>
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.lead_detail', lead_id=lead_id) }}">Open</a>
+        <div class="d-flex gap-1">
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('leads.lead_detail', lead_id=lead_id) }}">Open</a>
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  data-bs-toggle="collapse" data-bs-target="#details-mob-{{ lead_id }}"
+                  aria-expanded="false" aria-controls="details-mob-{{ lead_id }}">Info</button>
+        </div>
       </div>
       <div class="mt-2 d-flex gap-2 flex-wrap">
         <span class="stage-badge stage-{{ stage_key }}">{{ stage_text }}</span>
@@ -340,6 +399,26 @@
             Reschedule
           </button>
         {% endif %}
+      </div>
+      <div class="collapse mt-2 pt-2 border-top text-dark" id="details-mob-{{ lead_id }}" style="font-size:12.5px;">
+        <div class="row g-2">
+          <div class="col-6"><strong>Edu:</strong> {{ l.education_status or '-' }}</div>
+          <div class="col-6"><strong>Stream:</strong> {{ l.stream or '-' }}</div>
+          <div class="col-12"><strong>Institute:</strong> {{ l.institute_name or '-' }}</div>
+          <div class="col-12"><strong>Goal:</strong> {{ l.career_goal or '-' }}</div>
+          <div class="col-12"><strong>Email:</strong> {{ l.email or '-' }}</div>
+          <div class="col-6"><strong>WhatsApp:</strong> {{ l.whatsapp or '-' }}</div>
+          <div class="col-6"><strong>Source:</strong> {{ l.lead_source or '-' }}</div>
+          <div class="col-6"><strong>Location:</strong> {{ l.lead_location or '-' }}</div>
+          <div class="col-6"><strong>Timeframe:</strong> {{ l.start_timeframe or '-' }}</div>
+          <div class="col-6"><strong>Decision Maker:</strong> {{ l.decision_maker or '-' }}</div>
+          <div class="col-6"><strong>Score:</strong> {{ l.lead_score or '0' }}</div>
+          {% if l.notes %}
+          <div class="col-12 border-top pt-1 mt-1">
+            <strong>Notes:</strong> <span class="text-muted" style="white-space: pre-wrap;">{{ l.notes }}</span>
+          </div>
+          {% endif %}
+        </div>
       </div>
     </div>
   {% endfor %}
@@ -423,6 +502,13 @@
         var val = row.getAttribute('data-search') || '';
         var visible = (!q || val.indexOf(q) !== -1);
         row.classList.toggle('followup-hidden', !visible);
+        
+        // Hide details row if present
+        var next = row.nextElementSibling;
+        if (next && next.classList.contains('followup-row-details')) {
+          next.classList.toggle('followup-hidden', !visible);
+        }
+        
         if (visible) rowVisible++;
       });
       var noDesktop = document.getElementById('noResultsDesktop');
