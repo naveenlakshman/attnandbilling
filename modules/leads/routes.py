@@ -155,6 +155,51 @@ def parse_date(value):
     return value  # HTML date input already gives YYYY-MM-DD
 
 
+def _today_ist_date_str():
+    return datetime.now(IST).date().isoformat()
+
+
+def _date_part(value):
+    if not value:
+        return None
+    raw = str(value).strip()
+    parsed = None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%d",
+        ):
+            try:
+                parsed = datetime.strptime(raw, fmt)
+                break
+            except ValueError:
+                continue
+
+    if not parsed:
+        return raw[:10]
+    if parsed.tzinfo:
+        parsed = parsed.astimezone(IST)
+    elif len(raw) > 10:
+        parsed = parsed + timedelta(hours=5, minutes=30)
+    return parsed.date().isoformat()
+
+
+def _validate_last_contact_date(last_contact_date, min_date=None):
+    today_str = _today_ist_date_str()
+    if not last_contact_date:
+        return "Last Contact Date is required."
+    if min_date and last_contact_date < min_date:
+        return f"Last Contact Date cannot be before the lead created date ({min_date})."
+    if last_contact_date > today_str:
+        return "Last Contact Date cannot be in the future."
+    return None
+
+
 def _to_int_or_none(value):
     text = str(value).strip() if value is not None else ""
     return int(text) if text.isdigit() else None
@@ -542,6 +587,7 @@ def lead_create():
 
         last_contact_date = parse_date(request.form.get("last_contact_date"))
         next_followup_date = parse_date(request.form.get("next_followup_date"))
+        today_ist_str = _today_ist_date_str()
 
         lead_score = lead_services.compute_lead_score({
             "lead_source": lead_source,
@@ -567,6 +613,9 @@ def lead_create():
             _phone_error = "WhatsApp number is required and must be a valid 10-digit Indian mobile number."
         elif len(_wa_digits) != 10 or _wa_digits[0] not in '6789':
             _phone_error = "WhatsApp must be a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)."
+        _date_error = _validate_last_contact_date(last_contact_date, today_ist_str)
+        if not _phone_error and _date_error:
+            _phone_error = _date_error
         if _phone_error:
             _conn2 = get_conn()
             _cur2 = _conn2.cursor()
@@ -591,6 +640,8 @@ def lead_create():
                 branches=_load_active_branches(),
                 can_select_branch=can_select_branch,
                 session_branch_id=session_branch_id,
+                last_contact_min_date=today_ist_str,
+                last_contact_max_date=today_ist_str,
             )
 
         conn = get_conn()
@@ -697,6 +748,8 @@ def lead_create():
         branches=_load_active_branches(),
         can_select_branch=can_select_branch,
         session_branch_id=session_branch_id,
+        last_contact_min_date=_today_ist_date_str(),
+        last_contact_max_date=_today_ist_date_str(),
     )
 @leads_bp.route("/<int:lead_id>")
 @login_required
@@ -1206,6 +1259,8 @@ def lead_edit(lead_id):
 
         last_contact_date = parse_date(request.form.get("last_contact_date"))
         next_followup_date = parse_date(request.form.get("next_followup_date"))
+        lead_created_date = _date_part(lead.get("created_at")) or _today_ist_date_str()
+        today_ist_str = _today_ist_date_str()
 
         lead_score = lead_services.compute_lead_score({
             "lead_source": lead_source,
@@ -1229,6 +1284,9 @@ def lead_edit(lead_id):
             _phone_error_edit = "WhatsApp number is required and must be a valid 10-digit Indian mobile number."
         elif len(_wa_digits_edit) != 10 or _wa_digits_edit[0] not in '6789':
             _phone_error_edit = "WhatsApp must be a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)."
+        _date_error_edit = _validate_last_contact_date(last_contact_date, lead_created_date)
+        if not _phone_error_edit and _date_error_edit:
+            _phone_error_edit = _date_error_edit
         if _phone_error_edit:
             _conn3 = get_conn()
             _cur3 = _conn3.cursor()
@@ -1254,6 +1312,8 @@ def lead_edit(lead_id):
                 branches=_load_active_branches(),
                 can_select_branch=can_select_branch,
                 session_branch_id=session_branch_id,
+                last_contact_min_date=lead_created_date,
+                last_contact_max_date=today_ist_str,
             )
 
         now = datetime.now().isoformat(timespec="seconds")
@@ -1372,6 +1432,8 @@ def lead_edit(lead_id):
         branches=_load_active_branches(),
         can_select_branch=can_select_branch,
         session_branch_id=session_branch_id,
+        last_contact_min_date=_date_part(lead.get("created_at")) or _today_ist_date_str(),
+        last_contact_max_date=_today_ist_date_str(),
     )
 
 @leads_bp.route("/<int:lead_id>/stage", methods=["POST"])

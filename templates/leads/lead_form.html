@@ -229,7 +229,8 @@
 
     <div class="col-md-4">
       <label class="form-label">Last Contact Date *</label>
-      <input class="form-control" type="date" name="last_contact_date" value="{{ lead.last_contact_date if lead and lead.last_contact_date else '' }}" required>
+      <input class="form-control" type="date" name="last_contact_date" value="{{ lead.last_contact_date if lead and lead.last_contact_date else '' }}" min="{{ last_contact_min_date }}" max="{{ last_contact_max_date }}" required>
+      <div class="form-text">Must be between lead created date and today.</div>
     </div>
 
     <div class="col-md-4">
