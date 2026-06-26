@@ -296,6 +296,8 @@
                         <li><strong>Timeframe:</strong> {{ l.start_timeframe or '-' }}</li>
                         <li><strong>Decision Maker:</strong> {{ l.decision_maker or '-' }}</li>
                         <li><strong>Lead Score:</strong> {{ l.lead_score or '0' }}</li>
+                        <li><strong>Created Date:</strong> {{ l.created_at[:10] if l.created_at else '-' }}</li>
+                        <li><strong>Last Contacted:</strong> {{ l.last_contact_date or '-' }}</li>
                       </ul>
                     </div>
                     {% if l.notes %}
@@ -413,6 +415,8 @@
           <div class="col-6"><strong>Timeframe:</strong> {{ l.start_timeframe or '-' }}</div>
           <div class="col-6"><strong>Decision Maker:</strong> {{ l.decision_maker or '-' }}</div>
           <div class="col-6"><strong>Score:</strong> {{ l.lead_score or '0' }}</div>
+          <div class="col-6"><strong>Created:</strong> {{ l.created_at[:10] if l.created_at else '-' }}</div>
+          <div class="col-6"><strong>Last Contact:</strong> {{ l.last_contact_date or '-' }}</div>
           {% if l.notes %}
           <div class="col-12 border-top pt-1 mt-1">
             <strong>Notes:</strong> <span class="text-muted" style="white-space: pre-wrap;">{{ l.notes }}</span>

@@ -1657,6 +1657,8 @@ def followups_today():
             l.stage,
             l.lead_score,
             l.next_followup_date,
+            l.last_contact_date,
+            l.created_at,
             u.full_name AS owner_name,
             u.username AS owner_username
         FROM followups f
