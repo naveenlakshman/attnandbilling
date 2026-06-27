@@ -320,6 +320,7 @@ def _staff_dashboard():
         ORDER BY b.batch_name ASC
     """, [user_id])
     my_batches = cur.fetchall()
+    batch_ids = [row["id"] for row in my_batches]
 
     # ── Today's attendance (my batches active today) ───────────
     cur.execute("""
