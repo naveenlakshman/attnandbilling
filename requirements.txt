@@ -54,3 +54,6 @@ webencodings==0.5.1
 Werkzeug==2.3.0
 wrapt==2.1.2
 WTForms==3.2.1
+pillow==12.2.0
+qrcode==8.2
+
