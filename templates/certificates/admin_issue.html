@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Issue Certificate — LMS Admin{% endblock %}
+
+{% block page_title %}Issue Certificate Manually{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 mb-4 p-4">
+      <h5 class="fw-bold mb-3">Eligibility Search</h5>
+      <form method="GET" class="row g-3">
+        <div class="col-12">
+          <label class="form-label small fw-semibold">Select Student</label>
+          <select name="student_id" class="form-select" id="studentSelect" required>
+            <option value="">-- Select Student --</option>
+            {% for s in students %}
+              <option value="{{ s.id }}" {% if selected_student_id == s.id %}selected{% endif %}>
+                {{ s.full_name }} ({{ s.student_code }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label small fw-semibold">Select LMS Program</label>
+          <select name="program_id" class="form-select" id="programSelect" required>
+            <option value="">-- Select Program --</option>
+            {% for p in programs %}
+              <option value="{{ p.id }}" {% if selected_program_id == p.id %}selected{% endif %}>
+                {{ p.program_name }} [Course: {{ p.course_name }}]
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12">
+          <button type="submit" class="btn btn-dark w-100">Check Eligibility</button>
+        </div>
+      </form>
+    </div>
+
+    {% if selected_student_id and selected_program_id and eligibility %}
+      <div class="card shadow-sm border-0 p-4">
+        <h5 class="fw-bold mb-3">Certificate Details</h5>
+        
+        <form method="POST">
+          <input type="hidden" name="student_id" value="{{ selected_student_id }}">
+          <input type="hidden" name="program_id" value="{{ selected_program_id }}">
+          
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Completion Date</label>
+            <input type="date" name="completion_date" class="form-control" 
+                   value="{{ eligibility.details.completion_date or '' }}" required>
+            <div class="form-text small text-muted">Defaults to student final exam submission date.</div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Grade / Score</label>
+            <input type="text" name="grade" class="form-control" 
+                   placeholder="e.g. A+ (Distinction) (Leave blank to calculate from score)" 
+                   value="{% if eligibility.details.exam_score > 0 %}{% endif %}">
+            <div class="form-text small text-muted">Exam score achieved: <strong>{{ eligibility.details.exam_score }}%</strong></div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Audit Notes</label>
+            <textarea name="notes" class="form-control" rows="2" placeholder="e.g. Manually verified project completion..."></textarea>
+          </div>
+
+          {% if not eligibility.is_eligible %}
+            <div class="alert alert-warning py-2 mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="force_issue" value="1" id="forceCheck" required>
+                <label class="form-check-label small fw-bold text-danger" for="forceCheck">
+                  ⚠️ Force issuance despite unmet eligibility criteria
+                </label>
+              </div>
+            </div>
+          {% endif %}
+
+          <button type="submit" class="btn btn-success w-100 btn-lg">Issue Certificate Now</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Eligibility Status Panel -->
+  <div class="col-lg-6">
+    {% if selected_student_id and selected_program_id and eligibility %}
+      <div class="card shadow-sm border-0 p-4 {% if eligibility.is_eligible %}border-success{% else %}border-warning{% endif %}">
+        <h5 class="fw-bold mb-3">Eligibility Report</h5>
+        
+        <div class="mb-3">
+          {% if eligibility.is_eligible %}
+            <div class="alert alert-success d-flex align-items-center py-2 gap-2 mb-0">
+              <span class="fs-4">✓</span>
+              <div>
+                <strong class="d-block small">Student Eligible</strong>
+                <span class="small opacity-75">All academic and financial criteria have been met.</span>
+              </div>
+            </div>
+          {% else %}
+            <div class="alert alert-warning d-flex align-items-center py-2 gap-2 mb-0">
+              <span class="fs-4">⚠️</span>
+              <div>
+                <strong class="d-block small">Eligibility Blocks Detected</strong>
+                <span class="small opacity-75">Criteria not met. Review checklist below.</span>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+
+        <ul class="list-group list-group-flush mb-4 small">
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>Passed Final Exam (Score: {{ eligibility.details.exam_score }}% / Min: {{ eligibility.details.exam_threshold }}%)</span>
+            {% if eligibility.reasons.has_passed_exam %}
+              <span class="badge bg-success">Passed</span>
+            {% else %}
+              <span class="badge bg-danger">Failed / Missing</span>
+            {% endif %}
+          </li>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>Syllabus Progress (Completed: {{ eligibility.details.syllabus.completed }} / Total: {{ eligibility.details.syllabus.total }})</span>
+            {% if eligibility.reasons.syllabus_completed %}
+              <span class="badge bg-success">100%</span>
+            {% else %}
+              <span class="badge bg-danger">Incomplete</span>
+            {% endif %}
+          </li>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>Assignments Progress (Submitted: {{ eligibility.details.assignments.submitted }} / Total: {{ eligibility.details.assignments.total }})</span>
+            {% if eligibility.reasons.assignments_completed %}
+              <span class="badge bg-success">100%</span>
+            {% else %}
+              <span class="badge bg-danger">Incomplete</span>
+            {% endif %}
+          </li>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>Financial Balance (Balance: {{ eligibility.details.dues.balance or 0.00 }})</span>
+            {% if eligibility.reasons.no_dues %}
+              <span class="badge bg-success">Paid</span>
+            {% else %}
+              <span class="badge bg-danger">Outstanding Fees</span>
+            {% endif %}
+          </li>
+        </ul>
+
+        <div class="bg-light p-3 rounded">
+          <h6 class="fw-bold small mb-2 text-muted text-uppercase">Academic Info Summary</h6>
+          <table class="table table-borderless table-sm small mb-0">
+            <tr>
+              <th class="w-40 p-0 text-muted">Course Code</th>
+              <td class="p-0">{{ eligibility.details.course_id }}</td>
+            </tr>
+            <tr>
+              <th class="p-0 text-muted">Course Title</th>
+              <td class="p-0 fw-semibold">{{ eligibility.details.course_name }}</td>
+            </tr>
+            <tr>
+              <th class="p-0 text-muted">Duration</th>
+              <td class="p-0">{{ eligibility.details.course_duration }}</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    {% else %}
+      <div class="alert alert-secondary text-center py-5">
+        <h5 class="text-muted fw-bold">No Student Checked</h5>
+        <p class="small text-muted mb-0">Select a student and a program from the left form to inspect eligibility.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

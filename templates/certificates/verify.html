@@ -1,0 +1,108 @@
+{% extends "login_base.html" %}
+
+{% block title %}Verify Certificate — Global IT Education{% endblock %}
+
+{% block content %}
+<div class="card login-card shadow-sm p-4" style="max-width: 500px; width: 100%;">
+  <div class="text-center mb-4">
+    <h3 class="fw-bold text-primary mb-1">Global IT Education</h3>
+    <p class="text-muted small">Public Certificate Verification Portal</p>
+    <hr>
+  </div>
+
+  {% if cert %}
+    <!-- Result Card -->
+    {% if cert.status == 'Active' %}
+      <div class="alert alert-success text-center mb-4 py-3">
+        <h4 class="alert-heading fw-bold mb-1">✓ Verified Active</h4>
+        <span class="small">This certificate is authentic and officially issued.</span>
+      </div>
+    {% elif cert.status == 'Revoked' %}
+      <div class="alert alert-danger text-center mb-4 py-3">
+        <h4 class="alert-heading fw-bold mb-1">✕ REVOKED</h4>
+        <span class="small">This certificate has been revoked by the institution.</span>
+      </div>
+    {% elif cert.status == 'Re-issued' %}
+      <div class="alert alert-warning text-center mb-4 py-3">
+        <h4 class="alert-heading fw-bold mb-1">⚠️ RE-ISSUED</h4>
+        <span class="small">This certificate has been replaced with a newer version.</span>
+      </div>
+    {% endif %}
+
+    <div class="table-responsive">
+      <table class="table table-bordered table-striped table-sm small mb-0">
+        <tbody>
+          <tr>
+            <th class="w-40 text-muted">Certificate No</th>
+            <td class="fw-bold">{{ cert.certificate_number }}</td>
+          </tr>
+          <tr>
+            <th class="text-muted">Student Name</th>
+            <td>{{ cert.student_name }}</td>
+          </tr>
+          <tr>
+            <th class="text-muted">Course Name</th>
+            <td class="fw-semibold text-primary">{{ cert.course_name }}</td>
+          </tr>
+          <tr>
+            <th class="text-muted">Grade</th>
+            <td>{{ cert.grade }}</td>
+          </tr>
+          <tr>
+            <th class="text-muted">Completion Date</th>
+            <td>{{ cert.completion_date }}</td>
+          </tr>
+          <tr>
+            <th class="text-muted">Issue Date</th>
+            <td>{{ cert.issue_date }}</td>
+          </tr>
+          <tr>
+            <th class="text-muted">Branch</th>
+            <td>{{ cert.branch }}</td>
+          </tr>
+          <tr>
+            <th class="text-muted">Institution</th>
+            <td>{{ cert.institution_name }}</td>
+          </tr>
+          <tr>
+            <th class="text-muted">Status</th>
+            <td>
+              {% if cert.status == 'Active' %}
+                <span class="badge bg-success">Active</span>
+              {% elif cert.status == 'Revoked' %}
+                <span class="badge bg-danger">Revoked</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">Re-issued</span>
+              {% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  {% else %}
+    <!-- Invalid or Initial Search View -->
+    {% if cert_no %}
+      <div class="alert alert-danger text-center mb-4">
+        <h5 class="fw-bold mb-1">✕ Verification Failed</h5>
+        <span class="small">No certificate found matching: <strong>{{ cert_no }}</strong></span>
+      </div>
+    {% endif %}
+
+    <p class="text-muted text-center small mb-4">Enter a certificate number below to verify its status and authenticity.</p>
+    
+    <form onsubmit="event.preventDefault(); window.location.href='/verify-certificate/' + document.getElementById('certNumberInput').value.trim();">
+      <div class="mb-3">
+        <label for="certNumberInput" class="form-label small fw-semibold">Certificate Number</label>
+        <input type="text" class="form-control form-control-lg text-center" id="certNumberInput" 
+               placeholder="e.g. GIT-CERT-2026-000001" required value="{{ cert_no or '' }}">
+      </div>
+      <button type="submit" class="btn btn-primary w-100 btn-lg">Verify Certificate</button>
+    </form>
+  {% endif %}
+  
+  <div class="text-center mt-4">
+    <a href="/" class="small text-decoration-none">← Back to Login</a>
+  </div>
+</div>
+{% endblock %}

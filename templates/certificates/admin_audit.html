@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Certificate Audit Trail — LMS Admin{% endblock %}
+
+{% block page_title %}Certificate Audit History{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-4 mb-4">
+    <div class="card shadow-sm border-0 p-4 bg-light">
+      <h5 class="fw-bold mb-3">Certificate Details</h5>
+      <table class="table table-sm table-borderless small mb-0">
+        <tr>
+          <th class="w-40 text-muted">Certificate Number</th>
+          <td class="fw-bold text-primary">{{ cert.certificate_number }}</td>
+        </tr>
+        <tr>
+          <th class="text-muted">Student Name</th>
+          <td>{{ cert.snapshot_student_name }}</td>
+        </tr>
+        <tr>
+          <th class="text-muted">Course Name</th>
+          <td>{{ cert.snapshot_course_name }}</td>
+        </tr>
+        <tr>
+          <th class="text-muted">Grade</th>
+          <td><span class="badge bg-secondary">{{ cert.snapshot_grade }}</span></td>
+        </tr>
+        <tr>
+          <th class="text-muted">Issue Date</th>
+          <td>{{ cert.issue_date }}</td>
+        </tr>
+        <tr>
+          <th class="text-muted">Completion Date</th>
+          <td>{{ cert.snapshot_completion_date }}</td>
+        </tr>
+        <tr>
+          <th class="text-muted">Status</th>
+          <td>
+            {% if cert.status == 'Active' %}
+              <span class="badge bg-success">Active</span>
+            {% elif cert.status == 'Revoked' %}
+              <span class="badge bg-danger">Revoked</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">Re-issued</span>
+            {% endif %}
+          </td>
+        </tr>
+      </table>
+      <div class="mt-4">
+        <a href="{{ url_for('certificates.admin_list') }}" class="btn btn-sm btn-outline-secondary w-100">← Back to Certificate List</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card shadow-sm border-0 p-4">
+      <h5 class="fw-bold mb-4">Action History Logs</h5>
+      <div class="table-responsive">
+        <table class="table table-hover table-striped small align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>Timestamp</th>
+              <th>Action</th>
+              <th>Status Transition</th>
+              <th>Performed By</th>
+              <th>Reason / Details</th>
+              <th>IP & Browser</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if logs %}
+              {% for log in logs %}
+                <tr>
+                  <td class="text-nowrap">{{ log.created_at }}</td>
+                  <td>
+                    <span class="badge bg-primary">{{ log.action }}</span>
+                  </td>
+                  <td>
+                    {% if log.previous_status or log.new_status %}
+                      <span class="text-muted small">{{ log.previous_status or 'None' }}</span> 
+                      <span class="mx-1">→</span>
+                      <span class="fw-semibold text-dark">{{ log.new_status or 'None' }}</span>
+                    {% else %}
+                      <span class="text-muted">-</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ log.user_name or 'Public (Guest)' }}</td>
+                  <td style="max-width: 200px; word-break: break-word;">{{ log.reason or log.details or '-' }}</td>
+                  <td>
+                    <div class="text-muted" style="font-size: 10px;" title="{{ log.user_agent }}">
+                      <strong>IP:</strong> {{ log.ip_address or 'Unknown' }}<br>
+                      <strong>UA:</strong> {{ log.user_agent[:40] }}{% if log.user_agent|length > 40 %}...{% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="6" class="text-center py-4 text-muted">No audit history recorded yet.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

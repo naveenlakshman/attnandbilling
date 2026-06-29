@@ -46,9 +46,14 @@
   </form>
 
   <hr class="my-4">
-  <p class="text-center text-muted" style="font-size:13px;">
+  <p class="text-center text-muted mb-3" style="font-size:13px;">
     Staff? <a href="{{ url_for('core.login') }}">Admin login here</a>
   </p>
+  <div class="text-center">
+    <a href="{{ url_for('certificates.verify_certificate') }}" class="small text-decoration-none">
+      🔍 Verify Student Certificate
+    </a>
+  </div>
 </div>
 
 <script>

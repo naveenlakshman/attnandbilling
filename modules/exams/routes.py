@@ -1463,6 +1463,23 @@ def submit_final_exam():
                 ),
             )
             conn.commit()
+
+            # Trigger certificate auto-issuance if settings allow and student is eligible
+            try:
+                from modules.certificates.services import EligibilityService, CertificateService
+                settings = EligibilityService.get_settings(cur)
+                if settings.get("auto_generate_certificates", 1) == 1 and score_percent >= settings.get("default_pass_percentage", 50.0):
+                    CertificateService.issue_certificate(
+                        conn, session["student_id"], course_id,
+                        performed_by=None,
+                        ip_address="Auto-Exam Submit",
+                        user_agent="System Auto-Generation Flow"
+                    )
+                    conn.commit()
+            except Exception as ex:
+                # Log warning but do not block student submission flow
+                print(f"Warning: Certificate auto-issuance skipped: {ex}")
+                conn.rollback()
     finally:
         conn.close()
 

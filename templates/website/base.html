@@ -194,6 +194,8 @@
       <div class="d-none d-sm-flex align-items-center gap-2">
         <a href="{{ url_for('website.home') }}#courses" class="nav-link">Courses</a>
         <a href="{{ url_for('website.home') }}#enquire" class="nav-link">Contact</a>
+        <a href="{{ url_for('certificates.verify_certificate') }}" class="btn btn-outline-info btn-sm px-3"
+           target="_blank" rel="noopener">Verify Certificate</a>
         <a href="{{ url_for('students.login') }}" class="btn btn-outline-secondary btn-sm px-3"
            target="_blank" rel="noopener">Student Login</a>
         <a href="{{ url_for('core.login') }}" class="btn btn-outline-primary btn-sm px-3"
@@ -212,6 +214,8 @@
     <div class="nav-collapse d-sm-none" id="mobileNav">
       <a href="{{ url_for('website.home') }}#courses" class="nav-link">📚 Courses</a>
       <a href="{{ url_for('website.home') }}#enquire" class="nav-link">✉️ Contact</a>
+      <a href="{{ url_for('certificates.verify_certificate') }}" class="btn btn-outline-info btn-sm mb-1"
+         target="_blank" rel="noopener">🎓 Verify Certificate</a>
       <a href="{{ url_for('students.login') }}" class="btn btn-outline-secondary btn-sm"
          target="_blank" rel="noopener">🎓 Student Login</a>
       <a href="{{ url_for('core.login') }}" class="btn btn-outline-primary btn-sm"

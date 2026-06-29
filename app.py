@@ -112,6 +112,8 @@ def create_app():
     app.register_blueprint(lms_admin_bp)
     app.register_blueprint(exams_bp)
     app.register_blueprint(students_bp)
+    from modules.certificates.routes import certificates_bp
+    app.register_blueprint(certificates_bp)
 
     # File serving route for uploaded content
     @app.route('/uploads/content/<path:filename>')

@@ -1682,5 +1682,183 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_asn_sub_assignment ON lms_assignment_submissions(assignment_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_asn_sub_student    ON lms_assignment_submissions(student_id)")
 
+    # ---------- CERTIFICATION MODULE TABLES ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS certificate_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_name TEXT NOT NULL,
+            template_code TEXT NOT NULL DEFAULT 'CERT',
+            background_filename TEXT NOT NULL DEFAULT 'default.png',
+            version INTEGER NOT NULL DEFAULT 1,
+            effective_from TEXT NOT NULL,
+            effective_to TEXT,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            institution_id INTEGER,
+            branch_id INTEGER,
+            authorized_signature_name TEXT NOT NULL,
+            authorized_signature_designation TEXT NOT NULL,
+            authorized_signature_image TEXT,
+            seal_image TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE(template_name, version),
+            FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS certificate_template_fields (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id INTEGER NOT NULL,
+            field_name TEXT NOT NULL,
+            left_position TEXT NOT NULL,
+            top_position TEXT,
+            width TEXT,
+            height TEXT,
+            font_family TEXT NOT NULL DEFAULT 'Arial',
+            font_size TEXT NOT NULL DEFAULT '14px',
+            font_weight TEXT NOT NULL DEFAULT 'normal',
+            font_color TEXT NOT NULL DEFAULT '#000000',
+            text_align TEXT NOT NULL DEFAULT 'left',
+            rotation INTEGER NOT NULL DEFAULT 0,
+            is_visible INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (template_id) REFERENCES certificate_templates(id) ON DELETE CASCADE,
+            UNIQUE(template_id, field_name)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS certificate_settings (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            prefix TEXT NOT NULL DEFAULT 'GIT',
+            default_template_id INTEGER,
+            default_pass_percentage REAL NOT NULL DEFAULT 50.0,
+            qr_verification_url_pattern TEXT NOT NULL DEFAULT '{root}verify-certificate/{cert_no}',
+            auto_generate_certificates INTEGER NOT NULL DEFAULT 1,
+            allow_manual_issue INTEGER NOT NULL DEFAULT 1,
+            allow_reissue INTEGER NOT NULL DEFAULT 1,
+            show_student_photo INTEGER NOT NULL DEFAULT 1,
+            show_grade INTEGER NOT NULL DEFAULT 1,
+            enable_certificate_verification INTEGER NOT NULL DEFAULT 1,
+            year_format TEXT NOT NULL DEFAULT 'YYYY',
+            sequence_length INTEGER NOT NULL DEFAULT 6,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (default_template_id) REFERENCES certificate_templates(id) ON DELETE SET NULL
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS certificate_sequences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_code TEXT NOT NULL,
+            year INTEGER NOT NULL,
+            current_sequence INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            UNIQUE(template_code, year)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS certificates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            certificate_number TEXT NOT NULL UNIQUE,
+            student_id INTEGER NOT NULL,
+            course_id INTEGER NOT NULL,
+            program_id INTEGER,
+            template_id INTEGER NOT NULL,
+            snapshot_student_name TEXT NOT NULL,
+            snapshot_student_reg TEXT NOT NULL,
+            snapshot_course_name TEXT NOT NULL,
+            snapshot_course_duration TEXT NOT NULL,
+            snapshot_grade TEXT NOT NULL DEFAULT 'Pass',
+            snapshot_completion_date TEXT NOT NULL,
+            issue_date TEXT NOT NULL,
+            score REAL,
+            status TEXT NOT NULL DEFAULT 'Active' CHECK(status IN ('Active', 'Revoked', 'Re-issued')),
+            notes TEXT,
+            created_by INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+            FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+            FOREIGN KEY (program_id) REFERENCES lms_programs(id) ON DELETE SET NULL,
+            FOREIGN KEY (template_id) REFERENCES certificate_templates(id),
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_certificates_student ON certificates(student_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_certificates_course ON certificates(course_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_certificates_number ON certificates(certificate_number)")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS certificate_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            certificate_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            previous_status TEXT,
+            new_status TEXT,
+            reason TEXT,
+            performed_by INTEGER,
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (certificate_id) REFERENCES certificates(id) ON DELETE CASCADE,
+            FOREIGN KEY (performed_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+    """)
+
+    # Course migration column
+    add_column_if_not_exists(cur, "courses", "certificate_template_id", "INTEGER")
+
+    # Seed Default Template if not exists
+    cur.execute("SELECT id FROM certificate_templates WHERE template_name = 'Default Template' AND version = 1")
+    template_row = cur.fetchone()
+    if not template_row:
+        cur.execute("""
+            INSERT INTO certificate_templates (
+                template_name, template_code, background_filename, version, effective_from, is_default, is_active,
+                authorized_signature_name, authorized_signature_designation, created_at
+            ) VALUES ('Default Template', 'CERT', 'default.png', 1, ?, 1, 1, 'Director', 'Global IT Education', ?)
+        """, (now[:10], now))
+        template_id = cur.lastrowid
+        
+        # Seed fields for Default Template
+        default_fields = [
+            ('student_photo', '780px', '140px', '120px', '150px', 'Arial', '14px', 'normal', '#000000', 'left', 1),
+            ('certificate_number', '100px', '60px', None, None, 'Courier New', '14px', 'bold', '#1e293b', 'left', 1),
+            ('issue_date', '150px', '620px', None, None, 'Arial', '14px', 'normal', '#1e293b', 'left', 1),
+            ('student_name', '50%', '320px', '80%', None, 'Georgia', '32px', 'bold', '#1e3b8b', 'center', 1),
+            ('student_reg', '50%', '375px', '80%', None, 'Arial', '14px', 'normal', '#475569', 'center', 1),
+            ('course_name', '50%', '450px', '80%', None, 'Arial', '28px', 'bold', '#b45309', 'center', 1),
+            ('course_duration', '50%', '500px', '80%', None, 'Arial', '16px', 'normal', '#475569', 'center', 1),
+            ('grade', '50%', '535px', '80%', None, 'Arial', '18px', 'bold', '#1e293b', 'center', 1),
+            ('completion_date', '50%', '570px', '80%', None, 'Arial', '14px', 'normal', '#475569', 'center', 1),
+            ('qr_code', '780px', '550px', '100px', '100px', 'Arial', '14px', 'normal', '#000000', 'left', 1)
+        ]
+        for field in default_fields:
+            cur.execute("""
+                INSERT INTO certificate_template_fields (
+                    template_id, field_name, left_position, top_position, width, height,
+                    font_family, font_size, font_weight, font_color, text_align, is_visible, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (template_id, field[0], field[1], field[2], field[3], field[4], field[5], field[6], field[7], field[8], field[9], field[10], now))
+    else:
+        template_id = template_row["id"]
+
+    # Seed Default Settings if not exists
+    cur.execute("SELECT id FROM certificate_settings WHERE id = 1")
+    if not cur.fetchone():
+        cur.execute("""
+            INSERT INTO certificate_settings (
+                id, prefix, default_template_id, default_pass_percentage, qr_verification_url_pattern,
+                auto_generate_certificates, allow_manual_issue, allow_reissue, show_student_photo,
+                show_grade, enable_certificate_verification, year_format, sequence_length, created_at
+            ) VALUES (1, 'GIT', ?, 50.0, '{root}verify-certificate/{cert_no}', 1, 1, 1, 1, 1, 1, 'YYYY', 6, ?)
+        """, (template_id, now))
+
     conn.commit()
     conn.close()

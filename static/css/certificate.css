@@ -1,0 +1,163 @@
+/* ==========================================================================
+   Global IT Education - Certificate Styling System
+   ========================================================================== */
+
+.cert-envelope {
+    padding: 20px;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Base wrapper with perfect A4 Landscape Aspect Ratio (1000 : 707) */
+.cert-container {
+    width: 1000px;
+    height: 707px;
+    position: relative;
+    background-color: #ffffff;
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0 auto;
+    font-family: 'Arial', sans-serif;
+    color: #1e293b;
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* Image Overlays */
+.cert-student-photo {
+    border: 3px solid #1e3b8b;
+    border-radius: 4px;
+    background-color: #f1f5f9;
+    object-fit: cover;
+}
+
+.cert-qr-code {
+    border: 1px solid #e2e8f0;
+    background-color: #ffffff;
+    padding: 4px;
+}
+
+.cert-signature {
+    max-height: 50px;
+    object-fit: contain;
+}
+
+.cert-seal {
+    max-height: 80px;
+    object-fit: contain;
+}
+
+/* Verified overlay seal */
+.cert-verified-stamp {
+    position: absolute;
+    top: 40px;
+    right: 40px;
+    width: 110px;
+    height: 110px;
+    border: 4px dashed #16a34a;
+    border-radius: 50%;
+    color: #16a34a;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    font-size: 11px;
+    text-transform: uppercase;
+    transform: rotate(15deg);
+    background-color: rgba(22, 163, 74, 0.05);
+    z-index: 100;
+    pointer-events: none;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.cert-revoked-stamp {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 450px;
+    border: 8px double #dc2626;
+    color: #dc2626;
+    padding: 12px;
+    font-weight: 900;
+    font-size: 32px;
+    text-transform: uppercase;
+    transform: translate(-50%, -50%) rotate(-25deg);
+    background-color: rgba(220, 38, 38, 0.08);
+    text-align: center;
+    z-index: 200;
+    pointer-events: none;
+    font-family: 'Arial', sans-serif;
+    letter-spacing: 4px;
+    box-shadow: 0 0 20px rgba(220, 38, 38, 0.15);
+}
+
+/* Standalone view settings (used inside standard render routes) */
+.standalone-body {
+    background: #e2e8f0;
+    margin: 0;
+    padding: 20px 0;
+}
+
+/* ==========================================================================
+   Print media queries mapping exactly to A4 Landscape
+   ========================================================================== */
+@media print {
+    @page {
+        size: A4 landscape;
+        margin: 0 !important;
+    }
+    
+    html, body {
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 297mm !important;
+        height: 210mm !important;
+    }
+    
+    .no-print, 
+    .btn, 
+    .topbar, 
+    .sidebar, 
+    .topbar-actions, 
+    header, 
+    footer,
+    #demo-banner,
+    .alert {
+        display: none !important;
+    }
+    
+    .cert-envelope {
+        padding: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+    }
+    
+    .cert-container {
+        width: 297mm !important;
+        height: 210mm !important;
+        border: none !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        page-break-inside: avoid;
+        page-break-after: avoid;
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+}

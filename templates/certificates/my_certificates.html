@@ -1,0 +1,73 @@
+{% extends "students/base.html" %}
+
+{% block title %}My Certificates — Student Portal{% endblock %}
+
+{% block page_title %}My Certified Courses{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    
+    {% if certs %}
+      <div class="row g-4">
+        {% for cert in certs %}
+          <div class="col-md-6 col-lg-4">
+            <div class="card h-100 border-0 shadow-sm overflow-hidden" style="border-radius: 12px;">
+              <!-- Mini layout preview of the certificate background -->
+              <div style="background-image: url('{{ url_for('static', filename='images/certificate_templates/' ~ cert.background_filename) }}'); 
+                          background-size: cover; background-position: center; height: 160px; position: relative;">
+                <div class="position-absolute bottom-0 end-0 m-2 bg-dark text-white bg-opacity-75 rounded px-2 py-1 small fw-bold">
+                  {{ cert.certificate_number }}
+                </div>
+              </div>
+              
+              <div class="card-body d-flex flex-column p-4">
+                <h5 class="card-title fw-bold text-primary mb-1">{{ cert.course_name }}</h5>
+                <p class="text-muted small mb-3">Completed in {{ cert.snapshot_completion_date }}</p>
+                
+                <div class="d-flex justify-content-between align-items-center mb-4 small bg-light p-2 rounded">
+                  <div>
+                    <span class="text-muted d-block">Grade</span>
+                    <strong class="text-dark">{{ cert.snapshot_grade }}</strong>
+                  </div>
+                  <div class="text-end">
+                    <span class="text-muted d-block">Status</span>
+                    {% if cert.status == 'Active' %}
+                      <span class="badge bg-success">Active</span>
+                    {% elif cert.status == 'Revoked' %}
+                      <span class="badge bg-danger">Revoked</span>
+                    {% else %}
+                      <span class="badge bg-warning text-dark">Reissued</span>
+                    {% endif %}
+                  </div>
+                </div>
+                
+                <div class="mt-auto d-flex gap-2">
+                  <a href="{{ url_for('certificates.student_certificate_view', cert_id=cert.id) }}" 
+                     class="btn btn-primary btn-sm flex-grow-1" target="_blank">
+                    <i class="bi bi-eye-fill"></i> View / Download
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card border-0 shadow-sm py-5 text-center" style="border-radius: 12px;">
+        <div class="card-body py-5">
+          <div class="mb-4" style="font-size: 4rem;">🎓</div>
+          <h4 class="fw-bold text-dark mb-2">No Certificates Available Yet</h4>
+          <p class="text-muted mx-auto" style="max-width: 450px; font-size: 14px;">
+            Certificates are automatically generated once you complete all program chapters, submit all assignment tasks, maintain good attendance, pass your final exams, and settle your invoices.
+          </p>
+          <div class="mt-4">
+            <a href="{{ url_for('students.dashboard') }}" class="btn btn-outline-primary btn-sm">Go to My LMS Programs</a>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

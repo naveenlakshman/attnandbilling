@@ -222,6 +222,10 @@
      class="{% if request.endpoint == 'exams.final_exam_apply' %}active{% endif %}">
     <span class="nav-icon">EX</span><span class="nav-label">Final Exam</span>
   </a>
+  <a href="{{ url_for('certificates.student_certificates_list') }}"
+     class="{% if request.endpoint == 'certificates.student_certificates_list' or request.endpoint == 'certificates.student_certificate_view' %}active{% endif %}">
+    <span class="nav-icon">🎓</span><span class="nav-label">My Certificates</span>
+  </a>
 
   <hr style="border-color:rgba(255,255,255,0.1); margin: 12px 0;">
   <a href="{{ url_for('students.logout') }}" class="logout-link">

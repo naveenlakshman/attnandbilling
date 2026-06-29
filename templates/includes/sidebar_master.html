@@ -4,7 +4,7 @@
 {# Reorganized Active States checking #}
 {% set admissions_active = ep.startswith('leads.') and ep != 'leads.reports' %}
 {% set students_active = ep.startswith('attendance.') or ep.startswith('billing.students') or ep.startswith('billing.student_') or ep == 'billing.institute_day_overview' %}
-{% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') %}
+{% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') or ep.startswith('certificates.') %}
 {% set finance_active = (ep.startswith('billing.') and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
 {% set reports_active = ep.startswith('reports.') or ep == 'leads.reports' or ep in ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
 {% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.')) %}
@@ -115,6 +115,9 @@
         <a class="nav-link {{ 'active' if ep in ['exams.final_exam_applications', 'exams.approve_final_exam_application', 'exams.reject_final_exam_application'] else '' }}" href="{{ url_for('exams.final_exam_applications') }}">
           Final Exam Applications
           <span class="badge rounded-pill bg-danger ms-auto sidebar-badge" id="badge-lms-exams" style="display: none;">0</span>
+        </a>
+        <a class="nav-link {{ 'active' if ep.startswith('certificates.') else '' }}" href="{{ url_for('certificates.admin_list') }}">
+          Certificates
         </a>
         <a class="nav-link {{ 'active' if ep == 'lms_admin.progress_dashboard' else '' }}" href="{{ url_for('lms_admin.progress_dashboard') }}">Student Progress</a>
         {% if is_admin %}
