@@ -199,36 +199,38 @@ def student_certificates_list():
 # ---------------------------------------------------------------------------
 @certificates_bp.route("/student/certificates/view/<int:cert_id>", methods=["GET"])
 def student_certificate_view(cert_id):
-    redirect_required, response = _student_required()
-    if redirect_required:
-        return response
-
-    student_id = session["student_id"]
     conn = get_conn()
     try:
         cert = conn.execute("SELECT student_id, certificate_number FROM certificates WHERE id = ?", (cert_id,)).fetchone()
         if not cert:
             abort(404)
 
-        if cert["student_id"] != student_id:
+        # Enforce security context: must be admin OR the student mapped to the cert
+        is_admin = session.get("user_id") is not None and session.get("role") in ("admin", "staff")
+        is_student = session.get("student_id") == cert["student_id"]
+
+        if not is_admin and not is_student:
+            if "student_id" not in session and "user_id" not in session:
+                return redirect(url_for("students.login"))
             abort(403)
 
         # Log viewing action
         ip, ua = _get_client_info()
         log_certificate_action(
             conn, cert_id, "Viewed",
-            performed_by=None,
+            performed_by=session.get("user_id"),
             ip_address=ip,
             user_agent=ua
         )
         conn.commit()
 
-        # Renders the download envelope template (which contains standard header/footer controls
-        # and embeds the clean A4 render endpoint in an iframe or directly)
+        # Renders the download envelope template (which contains standard header/footer controls)
         base_url = request.url_root
         data = get_certificate_render_data(conn.cursor(), cert_id, base_url)
         settings = EligibilityService.get_settings(conn.cursor())
         company = conn.execute("SELECT * FROM company_profile WHERE id = 1").fetchone()
+
+        layout = "base.html" if is_admin else "students/base.html"
 
         return render_template(
             "certificates/view.html",
@@ -240,7 +242,8 @@ def student_certificate_view(cert_id):
             overlay_styles=data["overlay_styles"],
             settings=settings,
             company=company,
-            standalone=False
+            standalone=False,
+            layout=layout
         )
     finally:
         conn.close()
@@ -529,7 +532,6 @@ def admin_templates():
             if action == "create_template":
                 name = request.form.get("template_name", "").strip()
                 code = request.form.get("template_code", "").strip().upper()
-                bg_file = request.form.get("background_filename", "default.png").strip()
                 sig_name = request.form.get("authorized_signature_name", "").strip()
                 sig_desig = request.form.get("authorized_signature_designation", "").strip()
                 
@@ -537,7 +539,16 @@ def admin_templates():
                     flash("All template fields are required.", "danger")
                     return redirect(url_for("certificates.admin_templates"))
 
-                # Get version count
+                # Handle background image file upload
+                bg_filename = "default.png"
+                bg_file = request.files.get("background_image")
+                if bg_file and bg_file.filename:
+                    import os
+                    from werkzeug.utils import secure_filename
+                    bg_filename = secure_filename(bg_file.filename)
+                    bg_file.save(os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates', bg_filename))
+
+                orientation = request.form.get("orientation", "Landscape").strip()
                 version_row = cur.execute("SELECT COALESCE(MAX(version), 0) + 1 AS next_ver FROM certificate_templates WHERE template_name = ?", (name,)).fetchone()
                 version = version_row["next_ver"]
 
@@ -545,10 +556,10 @@ def admin_templates():
                     """
                     INSERT INTO certificate_templates (
                         template_name, template_code, background_filename, version, effective_from, is_default, is_active,
-                        authorized_signature_name, authorized_signature_designation, created_at
-                    ) VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?, datetime('now'))
+                        authorized_signature_name, authorized_signature_designation, orientation, created_at
+                    ) VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?, ?, datetime('now'))
                     """,
-                    (name, code, bg_file, version, datetime.date.today().isoformat(), sig_name, sig_desig)
+                    (name, code, bg_filename, version, datetime.date.today().isoformat(), sig_name, sig_desig, orientation)
                 )
                 template_id = cur.lastrowid
                 
@@ -570,12 +581,65 @@ def admin_templates():
                         """
                         INSERT INTO certificate_template_fields (
                             template_id, field_name, left_position, top_position, width, height, font_family, font_size, font_weight, font_color, text_align, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (template_id, f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], datetime.datetime.now().isoformat())
                     )
                 conn.commit()
                 flash("Template created successfully.", "success")
+
+            elif action == "edit_template":
+                template_id = request.form.get("template_id", type=int)
+                name = request.form.get("template_name", "").strip()
+                code = request.form.get("template_code", "").strip().upper()
+                sig_name = request.form.get("authorized_signature_name", "").strip()
+                sig_desig = request.form.get("authorized_signature_designation", "").strip()
+                
+                # Check template
+                template = cur.execute("SELECT * FROM certificate_templates WHERE id = ?", (template_id,)).fetchone()
+                if not template:
+                    flash("Template not found.", "danger")
+                    return redirect(url_for("certificates.admin_templates"))
+                    
+                bg_filename = template["background_filename"]
+                bg_file = request.files.get("background_image")
+                if bg_file and bg_file.filename:
+                    import os
+                    from werkzeug.utils import secure_filename
+                    bg_filename = secure_filename(bg_file.filename)
+                    bg_file.save(os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates', bg_filename))
+                    
+                sig_filename = template["authorized_signature_image"]
+                sig_file = request.files.get("signature_image")
+                if sig_file and sig_file.filename:
+                    import os
+                    from werkzeug.utils import secure_filename
+                    sig_filename = secure_filename(sig_file.filename)
+                    sig_file.save(os.path.join(current_app.root_path, 'static', 'images', 'signatures', sig_filename))
+                    
+                seal_filename = template["seal_image"]
+                seal_file = request.files.get("seal_image")
+                if seal_file and seal_file.filename:
+                    import os
+                    from werkzeug.utils import secure_filename
+                    seal_filename = secure_filename(seal_file.filename)
+                    seal_file.save(os.path.join(current_app.root_path, 'static', 'images', 'seals', seal_filename))
+                    
+                orientation = request.form.get("orientation", "Landscape").strip()
+
+                cur.execute(
+                    """
+                    UPDATE certificate_templates
+                    SET template_name = ?, template_code = ?, background_filename = ?,
+                        authorized_signature_name = ?, authorized_signature_designation = ?,
+                        authorized_signature_image = ?, seal_image = ?, orientation = ?, updated_at = datetime('now')
+                    WHERE id = ?
+                    """,
+                    (name, code, bg_filename, sig_name, sig_desig, sig_filename, seal_filename, orientation, template_id)
+                )
+                conn.commit()
+                flash("Template details updated successfully.", "success")
+                return redirect(url_for("certificates.admin_templates", selected_id=template_id))
 
             elif action == "update_coordinates":
                 template_id = request.form.get("template_id", type=int)
@@ -613,10 +677,12 @@ def admin_templates():
             selected_template_id = templates[0]["id"]
             
         selected_fields = []
+        sel_template = None
         if selected_template_id:
             selected_fields = cur.execute("SELECT * FROM certificate_template_fields WHERE template_id = ?", (selected_template_id,)).fetchall()
+            sel_template = cur.execute("SELECT * FROM certificate_templates WHERE id = ?", (selected_template_id,)).fetchone()
 
-        return render_template("certificates/admin_templates.html", templates=templates, selected_id=selected_template_id, fields=selected_fields)
+        return render_template("certificates/admin_templates.html", templates=templates, selected_id=selected_template_id, fields=selected_fields, sel_template=sel_template)
     finally:
         conn.close()
 
@@ -642,5 +708,39 @@ def admin_audit(cert_id):
             (cert_id,)
         ).fetchall()
         return render_template("certificates/admin_audit.html", cert=cert, logs=logs)
+    finally:
+        conn.close()
+
+# ---------------------------------------------------------------------------
+# API - Drag and Drop Coordinates Auto-saving
+# ---------------------------------------------------------------------------
+@certificates_bp.route("/lms_admin/certificates/templates/api/save-coordinates", methods=["POST"])
+@lms_content_manager_required
+def api_save_coordinates():
+    data = request.json
+    template_id = data.get("template_id")
+    field_name = data.get("field_name")
+    left_pos = data.get("left_position")
+    top_pos = data.get("top_position")
+    
+    if not template_id or not field_name:
+        return jsonify({"success": False, "error": "Missing parameters"}), 400
+        
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE certificate_template_fields
+            SET left_position = ?, top_position = ?, updated_at = datetime('now')
+            WHERE template_id = ? AND field_name = ?
+            """,
+            (left_pos, top_pos, template_id, field_name)
+        )
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         conn.close()

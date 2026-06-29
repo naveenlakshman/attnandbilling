@@ -8,146 +8,247 @@
 <div class="row">
   
   <!-- Left Column: Templates List & Creation -->
-  <div class="col-lg-4 mb-4">
-    <div class="card shadow-sm border-0 p-3 mb-4">
-      <h5 class="fw-bold mb-3">Templates List</h5>
+  <div class="col-lg-3 mb-4">
+    <div class="card shadow-sm border-0 p-3 mb-3">
+      <h5 class="fw-bold mb-2">Templates List</h5>
+      <button class="btn btn-outline-primary btn-xs w-100 mb-3" data-bs-toggle="modal" data-bs-target="#createTemplateModal">
+        + Create New Template
+      </button>
       <div class="list-group list-group-flush">
         {% for t in templates %}
           <a href="{{ url_for('certificates.admin_templates', selected_id=t.id) }}" 
-             class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if selected_id == t.id %}active{% endif %}">
+             class="list-group-item list-group-item-action p-2 d-flex justify-content-between align-items-center {% if selected_id == t.id %}active{% endif %}">
             <div>
-              <div class="fw-semibold">{{ t.template_name }}</div>
-              <small class="{% if selected_id == t.id %}text-white-50{% else %}text-muted{% endif %}">Code: {{ t.template_code }} | Ver: {{ t.version }}</small>
+              <div class="fw-semibold small">{{ t.template_name }}</div>
+              <small class="{% if selected_id == t.id %}text-white-50{% else %}text-muted{% endif %}" style="font-size: 11px;">
+                Code: {{ t.template_code }} | Ver: {{ t.version }}
+              </small>
             </div>
-            <span class="badge bg-secondary rounded-pill">V: {{ t.version }}</span>
+            <span class="badge bg-secondary rounded-pill small">v{{ t.version }}</span>
           </a>
         {% endfor %}
       </div>
     </div>
 
-    <!-- Create Template Form -->
-    <div class="card shadow-sm border-0 p-3">
-      <h5 class="fw-bold mb-3">Create New Template</h5>
-      <form method="POST">
-        <input type="hidden" name="action_type" value="create_template">
+    <!-- Edit Template Details Card -->
+    {% if sel_template %}
+    <div class="card shadow-sm border-0 p-3 mb-4">
+      <h5 class="fw-bold mb-3">Edit Template Settings</h5>
+      <form method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="action_type" value="edit_template">
+        <input type="hidden" name="template_id" value="{{ sel_template.id }}">
+        
         <div class="mb-2">
-          <label class="form-label small mb-1">Template Name</label>
-          <input type="text" name="template_name" class="form-control form-control-sm" placeholder="e.g. Advanced Excel Template" required>
+          <label class="form-label small mb-1 fw-semibold text-muted">Template Name</label>
+          <input type="text" name="template_name" class="form-control form-control-sm" value="{{ sel_template.template_name }}" required>
         </div>
         <div class="mb-2">
-          <label class="form-label small mb-1">Prefix Code</label>
-          <input type="text" name="template_code" class="form-control form-control-sm" placeholder="e.g. EXCEL" required>
+          <label class="form-label small mb-1 fw-semibold text-muted">Prefix Code</label>
+          <input type="text" name="template_code" class="form-control form-control-sm" value="{{ sel_template.template_code }}" required>
         </div>
         <div class="mb-2">
-          <label class="form-label small mb-1">Background Image PNG</label>
-          <input type="text" name="background_filename" class="form-control form-control-sm" value="default.png" required>
-          <div class="form-text small text-muted">Stored in images/certificate_templates/</div>
+          <label class="form-label small mb-1 fw-semibold text-muted">Layout Orientation</label>
+          <select name="orientation" class="form-select form-select-sm">
+            <option value="Landscape" {% if sel_template.orientation == 'Landscape' %}selected{% endif %}>Landscape (1000x707)</option>
+            <option value="Portrait" {% if sel_template.orientation == 'Portrait' %}selected{% endif %}>Portrait (707x1000)</option>
+          </select>
         </div>
         <div class="mb-2">
-          <label class="form-label small mb-1">Signatory Name</label>
-          <input type="text" name="authorized_signature_name" class="form-control form-control-sm" value="Director" required>
+          <label class="form-label small mb-1 fw-semibold text-muted">Background Image File (PNG)</label>
+          <input type="file" name="background_image" class="form-control form-control-sm" accept=".png">
+          <div class="form-text small text-muted" style="font-size:10px; word-break: break-all;">Current: <strong>{{ sel_template.background_filename }}</strong></div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small mb-1 fw-semibold text-muted">Authorized Signatory</label>
+          <input type="text" name="authorized_signature_name" class="form-control form-control-sm" value="{{ sel_template.authorized_signature_name }}" required>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small mb-1 fw-semibold text-muted">Signatory Designation</label>
+          <input type="text" name="authorized_signature_designation" class="form-control form-control-sm" value="{{ sel_template.authorized_signature_designation }}" required>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small mb-1 fw-semibold text-muted">Signature Image (PNG)</label>
+          <input type="file" name="signature_image" class="form-control form-control-sm" accept=".png">
+          {% if sel_template.authorized_signature_image %}
+            <div class="form-text small text-muted" style="font-size:10px; word-break: break-all;">Current: <strong>{{ sel_template.authorized_signature_image }}</strong></div>
+          {% endif %}
         </div>
         <div class="mb-3">
-          <label class="form-label small mb-1">Signatory Designation</label>
-          <input type="text" name="authorized_signature_designation" class="form-control form-control-sm" value="Global IT Education" required>
+          <label class="form-label small mb-1 fw-semibold text-muted">Official Seal Image (PNG)</label>
+          <input type="file" name="seal_image" class="form-control form-control-sm" accept=".png">
+          {% if sel_template.seal_image %}
+            <div class="form-text small text-muted" style="font-size:10px; word-break: break-all;">Current: <strong>{{ sel_template.seal_image }}</strong></div>
+          {% endif %}
         </div>
-        <button type="submit" class="btn btn-primary btn-sm w-100">Create Template</button>
+        <button type="submit" class="btn btn-success btn-sm w-100">Save Template Settings</button>
       </form>
     </div>
+    {% endif %}
   </div>
 
-  <!-- Right Column: Coordinates and Overlay configuration -->
-  <div class="col-lg-8">
+  <!-- Right Column: Interactive Designer Canvas & Coordinates Settings Tabs -->
+  <div class="col-lg-9">
     {% if selected_id %}
       <div class="card shadow-sm border-0 p-4">
-        <h5 class="fw-bold mb-4">Edit Position Coordinates</h5>
-        <p class="text-muted small">
-          Positions are absolute coordinates mapped relative to a <strong>1000px width by 707px height</strong> container.
-          Use <code>px</code> or <code>%</code> units (e.g. <code>50%</code>, <code>240px</code>).
+        <h5 class="fw-bold mb-1">Configure Template Layout: {{ sel_template.template_name }}</h5>
+        <p class="text-muted small mb-4">
+          Positions are absolute coordinates mapped relative to a <strong>{% if sel_template.orientation == 'Portrait' %}707px width by 1000px height{% else %}1000px width by 707px height{% endif %}</strong> container.
         </p>
 
-        <div class="accordion" id="coordsAccordion">
-          {% for f in fields %}
-            <div class="accordion-item">
-              <h2 class="accordion-header" id="heading-{{ f.id }}">
-                <button class="accordion-button collapsed py-2 fw-semibold small" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ f.id }}">
-                  Field: <span class="text-primary ms-1">{{ f.field_name }}</span>
-                  <span class="ms-auto me-3 badge {% if f.is_visible %}bg-success{% else %}bg-secondary{% endif %}">
-                    {% if f.is_visible %}Visible{% else %}Hidden{% endif %}
-                  </span>
-                </button>
-              </h2>
-              <div id="collapse-{{ f.id }}" class="accordion-collapse collapse" data-bs-parent="#coordsAccordion">
-                <div class="accordion-body bg-light">
-                  <form method="POST" class="row g-2">
-                    <input type="hidden" name="action_type" value="update_coordinates">
-                    <input type="hidden" name="template_id" value="{{ selected_id }}">
-                    <input type="hidden" name="field_name" value="{{ f.field_name }}">
+        <!-- Bootstrap Navigation Tabs -->
+        <ul class="nav nav-tabs mb-4" id="designerTab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold small" id="canvas-tab" data-bs-toggle="tab" data-bs-target="#canvasPanel" type="button" role="tab">
+              🎨 Visual Drag & Drop Designer
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold small" id="form-tab" data-bs-toggle="tab" data-bs-target="#formPanel" type="button" role="tab">
+              📝 Form Settings Coordinator
+            </button>
+          </li>
+        </ul>
 
-                    <div class="col-md-3 col-6">
-                      <label class="form-label small mb-1">Left Position</label>
-                      <input type="text" name="left_position" class="form-control form-control-sm" value="{{ f.left_position }}" placeholder="e.g. 50% or 120px" required>
-                    </div>
-                    <div class="col-md-3 col-6">
-                      <label class="form-label small mb-1">Top Position</label>
-                      <input type="text" name="top_position" class="form-control form-control-sm" value="{{ f.top_position or '' }}" placeholder="e.g. 240px">
-                    </div>
-                    <div class="col-md-3 col-6">
-                      <label class="form-label small mb-1">Width</label>
-                      <input type="text" name="width" class="form-control form-control-sm" value="{{ f.width or '' }}" placeholder="e.g. 100px or 80%">
-                    </div>
-                    <div class="col-md-3 col-6">
-                      <label class="form-label small mb-1">Height</label>
-                      <input type="text" name="height" class="form-control form-control-sm" value="{{ f.height or '' }}" placeholder="e.g. 150px">
-                    </div>
-
-                    <div class="col-md-3 col-6">
-                      <label class="form-label small mb-1">Font Family</label>
-                      <input type="text" name="font_family" class="form-control form-control-sm" value="{{ f.font_family }}" required>
-                    </div>
-                    <div class="col-md-3 col-6">
-                      <label class="form-label small mb-1">Font Size</label>
-                      <input type="text" name="font_size" class="form-control form-control-sm" value="{{ f.font_size }}" placeholder="e.g. 14px" required>
-                    </div>
-                    <div class="col-md-3 col-6">
-                      <label class="form-label small mb-1">Font Weight</label>
-                      <select name="font_weight" class="form-select form-select-sm">
-                        <option value="normal" {% if f.font_weight == 'normal' %}selected{% endif %}>Normal</option>
-                        <option value="bold" {% if f.font_weight == 'bold' %}selected{% endif %}>Bold</option>
-                        <option value="500" {% if f.font_weight == '500' %}selected{% endif %}>Medium (500)</option>
-                      </select>
-                    </div>
-                    <div class="col-md-3 col-6">
-                      <label class="form-label small mb-1">Color (Hex)</label>
-                      <input type="color" name="font_color" class="form-control form-control-sm form-control-color w-100" value="{{ f.font_color }}" required>
-                    </div>
-
-                    <div class="col-md-4 col-6">
-                      <label class="form-label small mb-1">Alignment</label>
-                      <select name="text_align" class="form-select form-select-sm">
-                        <option value="left" {% if f.text_align == 'left' %}selected{% endif %}>Left</option>
-                        <option value="center" {% if f.text_align == 'center' %}selected{% endif %}>Center</option>
-                        <option value="right" {% if f.text_align == 'right' %}selected{% endif %}>Right</option>
-                      </select>
-                    </div>
-                    <div class="col-md-3 col-6">
-                      <label class="form-label small mb-1">Rotation (deg)</label>
-                      <input type="number" name="rotation" class="form-control form-control-sm" value="{{ f.rotation }}" required>
-                    </div>
-                    <div class="col-md-3 col-12 d-flex align-items-center mt-3">
-                      <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="is_visible" value="1" id="vis-{{ f.id }}" {% if f.is_visible %}checked{% endif %}>
-                        <label class="form-check-label small" for="vis-{{ f.id }}">Show Overlay</label>
+        <div class="tab-content" id="designerTabContent">
+          
+          <!-- Visual Designer Panel -->
+          <div class="tab-pane fade show active" id="canvasPanel" role="tabpanel">
+            <p class="small text-muted mb-3">
+              💡 <strong>Instruction:</strong> Drag and drop any highlighted dashed fields below to reposition them. Coordinates auto-save in the database dynamically on drop.
+            </p>
+            
+            <div style="overflow-x: auto; width: 100%; border: 2px solid #cbd5e1; border-radius: 8px;" class="p-2 mb-3 bg-dark">
+              <div id="designerCanvas" 
+                   style="position: relative; {% if sel_template.orientation == 'Portrait' %}width: 707px; height: 1000px;{% else %}width: 1000px; height: 707px;{% endif %} background-image: url('{{ url_for('static', filename='images/certificate_templates/' ~ sel_template.background_filename) }}'); background-size: 100% 100%; background-repeat: no-repeat; margin: 0 auto; user-select: none; background-color:#fff;">
+                
+                {% for f in fields %}
+                  {% if f.is_visible == 1 %}
+                    {% if f.field_name == 'student_photo' %}
+                      <div class="draggable-field" data-field-name="student_photo"
+                           style="position: absolute; left: {{ f.left_position }}; top: {{ f.top_position or '140px' }}; width: {{ f.width or '120px' }}; height: {{ f.height or '150px' }}; border: 2px dashed #6366f1; background-color: rgba(99, 102, 241, 0.15); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: #4f46e5; cursor: move; z-index: 10; border-radius:4px;">
+                        [ Student Photo ]
                       </div>
-                    </div>
-                    <div class="col-md-2 col-12 d-flex align-items-end mt-2">
-                      <button type="submit" class="btn btn-sm btn-dark w-100">Save</button>
-                    </div>
-                  </form>
-                </div>
+                    {% elif f.field_name == 'qr_code' %}
+                      <div class="draggable-field" data-field-name="qr_code"
+                           style="position: absolute; left: {{ f.left_position }}; top: {{ f.top_position or '550px' }}; width: {{ f.width or '100px' }}; height: {{ f.height or '100px' }}; border: 2px dashed #6366f1; background-color: rgba(99, 102, 241, 0.15); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: #4f46e5; cursor: move; z-index: 10; border-radius:4px;">
+                        [ Verification QR ]
+                      </div>
+                    {% else %}
+                      <div class="draggable-field" data-field-name="{{ f.field_name }}"
+                           style="position: absolute; left: {{ f.left_position }}; top: {{ f.top_position or '50px' }}; font-family: {{ f.font_family or 'Arial' }}; font-size: {{ f.font_size or '14px' }}; font-weight: {{ f.font_weight or 'normal' }}; color: {{ f.font_color or '#000000' }}; text-align: {{ f.text_align or 'left' }}; {% if f.text_align == 'center' %}transform: translate(-50%, 0);{% endif %} cursor: move; border: 1.5px dashed #6366f1; background-color: rgba(99, 102, 241, 0.08); padding: 2px 6px; z-index: 10; white-space: nowrap; border-radius:3px;">
+                        {% if f.field_name == 'student_name' %}
+                          ANUSHKA R
+                        {% elif f.field_name == 'certificate_number' %}
+                          GIT-CERT-2026-000001
+                        {% elif f.field_name == 'student_reg' %}
+                          Reg No: 1516239
+                        {% elif f.field_name == 'course_name' %}
+                          CCOM - CERTIFICATE COURSE IN OFFICE MANAGEMENT
+                        {% elif f.field_name == 'course_duration' %}
+                          Course Duration: 3 Months
+                        {% elif f.field_name == 'grade' %}
+                          Grade: A+ (Distinction)
+                        {% elif f.field_name == 'completion_date' %}
+                          completed in June 2026
+                        {% elif f.field_name == 'issue_date' %}
+                          Issued on: 2026-06-29
+                        {% else %}
+                          {{ f.field_name | upper }}
+                        {% endif %}
+                      </div>
+                    {% endif %}
+                  {% endif %}
+                {% endfor %}
               </div>
             </div>
-          {% endfor %}
+          </div>
+
+          <!-- Form Coordinator Panel -->
+          <div class="tab-pane fade" id="formPanel" role="tabpanel">
+            <div class="accordion" id="coordsAccordion">
+              {% for f in fields %}
+                <div class="accordion-item">
+                  <h2 class="accordion-header" id="heading-{{ f.id }}">
+                    <button class="accordion-button collapsed py-2 fw-semibold small" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ f.id }}">
+                      Field: <span class="text-primary ms-1">{{ f.field_name }}</span>
+                      <span class="ms-auto me-3 badge {% if f.is_visible %}bg-success{% else %}bg-secondary{% endif %}">
+                        {% if f.is_visible %}Visible{% else %}Hidden{% endif %}
+                      </span>
+                    </button>
+                  </h2>
+                  <div id="collapse-{{ f.id }}" class="accordion-collapse collapse" data-bs-parent="#coordsAccordion">
+                    <div class="accordion-body bg-light">
+                      <form method="POST" class="row g-2" data-field-name="{{ f.field_name }}">
+                        <input type="hidden" name="action_type" value="update_coordinates">
+                        <input type="hidden" name="template_id" value="{{ selected_id }}">
+                        <input type="hidden" name="field_name" value="{{ f.field_name }}">
+
+                        <div class="col-md-3 col-6">
+                          <label class="form-label small mb-1">Left Position</label>
+                          <input type="text" name="left_position" class="form-control form-control-sm" value="{{ f.left_position }}" placeholder="e.g. 50% or 120px" required>
+                        </div>
+                        <div class="col-md-3 col-6">
+                          <label class="form-label small mb-1">Top Position</label>
+                          <input type="text" name="top_position" class="form-control form-control-sm" value="{{ f.top_position or '' }}" placeholder="e.g. 240px">
+                        </div>
+                        <div class="col-md-3 col-6">
+                          <label class="form-label small mb-1">Width</label>
+                          <input type="text" name="width" class="form-control form-control-sm" value="{{ f.width or '' }}" placeholder="e.g. 100px or 80%">
+                        </div>
+                        <div class="col-md-3 col-6">
+                          <label class="form-label small mb-1">Height</label>
+                          <input type="text" name="height" class="form-control form-control-sm" value="{{ f.height or '' }}" placeholder="e.g. 150px">
+                        </div>
+
+                        <div class="col-md-3 col-6">
+                          <label class="form-label small mb-1">Font Family</label>
+                          <input type="text" name="font_family" class="form-control form-control-sm" value="{{ f.font_family }}" required>
+                        </div>
+                        <div class="col-md-3 col-6">
+                          <label class="form-label small mb-1">Font Size</label>
+                          <input type="text" name="font_size" class="form-control form-control-sm" value="{{ f.font_size }}" placeholder="e.g. 14px" required>
+                        </div>
+                        <div class="col-md-3 col-6">
+                          <label class="form-label small mb-1">Font Weight</label>
+                          <select name="font_weight" class="form-select form-select-sm">
+                            <option value="normal" {% if f.font_weight == 'normal' %}selected{% endif %}>Normal</option>
+                            <option value="bold" {% if f.font_weight == 'bold' %}selected{% endif %}>Bold</option>
+                            <option value="500" {% if f.font_weight == '500' %}selected{% endif %}>Medium (500)</option>
+                          </select>
+                        </div>
+                        <div class="col-md-3 col-6">
+                          <label class="form-label small mb-1">Color (Hex)</label>
+                          <input type="color" name="font_color" class="form-control form-control-sm form-control-color w-100" value="{{ f.font_color }}" required>
+                        </div>
+
+                        <div class="col-md-4 col-6">
+                          <label class="form-label small mb-1">Alignment</label>
+                          <select name="text_align" class="form-select form-select-sm">
+                            <option value="left" {% if f.text_align == 'left' %}selected{% endif %}>Left</option>
+                            <option value="center" {% if f.text_align == 'center' %}selected{% endif %}>Center</option>
+                            <option value="right" {% if f.text_align == 'right' %}selected{% endif %}>Right</option>
+                          </select>
+                        </div>
+                        <div class="col-md-3 col-6">
+                          <label class="form-label small mb-1">Rotation (deg)</label>
+                          <input type="number" name="rotation" class="form-control form-control-sm" value="{{ f.rotation }}" required>
+                        </div>
+                        <div class="col-md-3 col-12 d-flex align-items-center mt-3">
+                          <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="is_visible" value="1" id="vis-{{ f.id }}" {% if f.is_visible %}checked{% endif %}>
+                            <label class="form-check-label small" for="vis-{{ f.id }}">Show Overlay</label>
+                          </div>
+                        </div>
+                        <div class="col-md-2 col-12 d-flex align-items-end mt-2">
+                          <button type="submit" class="btn btn-sm btn-dark w-100">Save</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
         </div>
       </div>
     {% else %}
@@ -158,4 +259,186 @@
     {% endif %}
   </div>
 </div>
+
+<!-- Create Template Modal -->
+<div class="modal fade" id="createTemplateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="POST" enctype="multipart/form-data">
+      <input type="hidden" name="action_type" value="create_template">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold">Create New Template</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Template Name</label>
+            <input type="text" name="template_name" class="form-control form-control-sm" placeholder="e.g. Advanced Excel Template" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Prefix Code</label>
+            <input type="text" name="template_code" class="form-control form-control-sm" placeholder="e.g. EXCEL" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Layout Orientation</label>
+            <select name="orientation" class="form-select form-select-sm">
+              <option value="Landscape">Landscape (1000x707)</option>
+              <option value="Portrait">Portrait (707x1000)</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Background Image File (PNG)</label>
+            <input type="file" name="background_image" class="form-control form-control-sm" accept=".png">
+            <div class="form-text small text-muted" style="font-size:10px;">If empty, defaults to <strong>default.png</strong>.</div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Signatory Name</label>
+            <input type="text" name="authorized_signature_name" class="form-control form-control-sm" value="Director" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small mb-1">Signatory Designation</label>
+            <input type="text" name="authorized_signature_designation" class="form-control form-control-sm" value="Global IT Education" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Create Template</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const container = document.getElementById('designerCanvas');
+  if (!container) return;
+
+  let activeEl = null;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  // Track drag start via mouse listeners
+  container.addEventListener('mousedown', function(e) {
+    const handle = e.target.closest('.draggable-field');
+    if (!handle) return;
+    activeEl = handle;
+    
+    // Calculate click offsets relative to target element's top-left
+    const rect = activeEl.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    
+    activeEl.style.zIndex = 1000;
+    activeEl.style.borderColor = '#10b981'; // highlight green on drag
+    e.preventDefault();
+  });
+
+  // Track drag move
+  document.addEventListener('mousemove', function(e) {
+    if (!activeEl) return;
+    
+    const containerRect = container.getBoundingClientRect();
+    
+    // Calculate new left and top relative to parent container
+    let x = e.clientX - containerRect.left - offsetX;
+    let y = e.clientY - containerRect.top - offsetY;
+    
+    // Constrain boundaries
+    x = Math.max(0, Math.min(x, container.offsetWidth - activeEl.offsetWidth));
+    y = Math.max(0, Math.min(y, container.offsetHeight - activeEl.offsetHeight));
+    
+    // Auto-adjust left positioning offset for centered fields
+    const align = window.getComputedStyle(activeEl).textAlign;
+    if (align === 'center') {
+      const midX = x + (activeEl.offsetWidth / 2);
+      activeEl.style.left = midX + 'px';
+    } else {
+      activeEl.style.left = x + 'px';
+    }
+    
+    activeEl.style.top = y + 'px';
+  });
+
+  // Track drag end
+  document.addEventListener('mouseup', function(e) {
+    if (!activeEl) return;
+    
+    activeEl.style.zIndex = '';
+    activeEl.style.borderColor = '#6366f1'; // restore border color
+    
+    const leftVal = activeEl.style.left;
+    const topVal = activeEl.style.top;
+    const fieldName = activeEl.dataset.fieldName;
+    const templateId = "{{ selected_id }}";
+
+    // Auto-update values in coordinates forms
+    const form = document.querySelector(`form[data-field-name="${fieldName}"]`);
+    if (form) {
+      form.querySelector('input[name="left_position"]').value = leftVal;
+      form.querySelector('input[name="top_position"]').value = topVal;
+    }
+    
+    // Save coordinates to backend
+    saveFieldPosition(templateId, fieldName, leftVal, topVal);
+    
+    activeEl = null;
+  });
+
+  function saveFieldPosition(templateId, fieldName, leftPos, topPos) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || "";
+    
+    fetch('/lms_admin/certificates/templates/api/save-coordinates', {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken
+      },
+      body: JSON.stringify({
+        template_id: parseInt(templateId),
+        field_name: fieldName,
+        left_position: leftPos,
+        top_position: topPos
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        showToast(`Saved coordinates: left: ${leftPos}, top: ${topPos}`);
+      } else {
+        showToast("Error updating coordinates!", true);
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      showToast("Network connection error!", true);
+    });
+  }
+
+  function showToast(msg, isError = false) {
+    let toast = document.getElementById('designerToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'designerToast';
+      toast.style.position = 'fixed';
+      toast.style.bottom = '25px';
+      toast.style.right = '25px';
+      toast.style.padding = '10px 20px';
+      toast.style.borderRadius = '8px';
+      toast.style.color = '#fff';
+      toast.style.fontWeight = 'bold';
+      toast.style.fontSize = '13px';
+      toast.style.zIndex = 10000;
+      toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+      document.body.appendChild(toast);
+    }
+    toast.style.backgroundColor = isError ? '#ef4444' : '#10b981';
+    toast.innerText = msg;
+    toast.style.display = 'block';
+    setTimeout(() => {
+      toast.style.display = 'none';
+    }, 2000);
+  }
+});
+</script>
 {% endblock %}

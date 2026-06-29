@@ -15,6 +15,11 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+  @media print {
+    @page {
+      size: {% if template.orientation == 'Portrait' %}A4 portrait{% else %}A4 landscape{% endif %};
+      margin: 0;
+    }
   }
 </style>
 {% endblock %}
@@ -43,7 +48,8 @@
 {% endif %}
 
 <div class="cert-envelope">
-  <div class="cert-container" id="certContainer" style="background-image: url('{{ url_for('static', filename='images/certificate_templates/' ~ template.background_filename) }}');">
+  <div class="cert-container" id="certContainer" 
+       style="background-image: url('{{ url_for('static', filename='images/certificate_templates/' ~ template.background_filename) }}'); {% if template.orientation == 'Portrait' %}width: 707px; height: 1000px;{% endif %}">
     
     <!-- Dynamic Text Overlays Mapped from Database Coordinates -->
     {% if overlay_styles.get('certificate_number') %}
@@ -164,7 +170,7 @@
       filename:     "Certificate_{{ cert.certificate_number }}.pdf",
       image:        { type: 'jpeg', quality: 1.0 },
       html2canvas:  { scale: 2.5, useCORS: true, logging: false },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: '{% if template.orientation == "Portrait" %}portrait{% else %}landscape{% endif %}' }
     };
     
     html2pdf().set(opt).from(element).save();

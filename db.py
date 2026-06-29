@@ -1813,6 +1813,7 @@ def init_db():
 
     # Course migration column
     add_column_if_not_exists(cur, "courses", "certificate_template_id", "INTEGER")
+    add_column_if_not_exists(cur, "certificate_templates", "orientation", "TEXT DEFAULT 'Landscape'")
 
     # Seed Default Template if not exists
     cur.execute("SELECT id FROM certificate_templates WHERE template_name = 'Default Template' AND version = 1")

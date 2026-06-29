@@ -81,8 +81,17 @@ def get_certificate_render_data(cur, cert_id, base_url):
             if f["font_size"]: style_parts.append(f"font-size: {f['font_size']};")
             if f["font_weight"]: style_parts.append(f"font-weight: {f['font_weight']};")
             if f["font_color"]: style_parts.append(f"color: {f['font_color']};")
-            if f["text_align"]: style_parts.append(f"text-align: {f['text_align']};")
-            if f["rotation"]: style_parts.append(f"transform: rotate({f['rotation']}deg);")
+            if f["text_align"]: 
+                style_parts.append(f"text-align: {f['text_align']};")
+            
+            # Apply layout center offset translation
+            if f["text_align"] == "center":
+                if f["rotation"]:
+                    style_parts.append(f"transform: translate(-50%, 0) rotate({f['rotation']}deg);")
+                else:
+                    style_parts.append("transform: translate(-50%, 0);")
+            elif f["rotation"]:
+                style_parts.append(f"transform: rotate({f['rotation']}deg);")
         else:
             style_parts.append("display: none;")
             
