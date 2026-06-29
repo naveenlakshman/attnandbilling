@@ -722,6 +722,9 @@ def api_save_coordinates():
     field_name = data.get("field_name")
     left_pos = data.get("left_position")
     top_pos = data.get("top_position")
+    width = data.get("width")
+    height = data.get("height")
+    font_size = data.get("font_size")
     
     if not template_id or not field_name:
         return jsonify({"success": False, "error": "Missing parameters"}), 400
@@ -729,14 +732,33 @@ def api_save_coordinates():
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute(
-            """
-            UPDATE certificate_template_fields
-            SET left_position = ?, top_position = ?, updated_at = datetime('now')
-            WHERE template_id = ? AND field_name = ?
-            """,
-            (left_pos, top_pos, template_id, field_name)
-        )
+        
+        # Build dynamic fields updates
+        update_parts = []
+        params = []
+        if left_pos is not None:
+            update_parts.append("left_position = ?")
+            params.append(left_pos)
+        if top_pos is not None:
+            update_parts.append("top_position = ?")
+            params.append(top_pos)
+        if width is not None:
+            update_parts.append("width = ?")
+            params.append(width)
+        if height is not None:
+            update_parts.append("height = ?")
+            params.append(height)
+        if font_size is not None:
+            update_parts.append("font_size = ?")
+            params.append(font_size)
+            
+        if not update_parts:
+            return jsonify({"success": True, "info": "No fields to update"})
+            
+        sql = f"UPDATE certificate_template_fields SET {', '.join(update_parts)}, updated_at = datetime('now') WHERE template_id = ? AND field_name = ?"
+        params.extend([template_id, field_name])
+        
+        cur.execute(sql, params)
         conn.commit()
         return jsonify({"success": True})
     except Exception as e:

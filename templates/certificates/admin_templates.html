@@ -113,9 +113,35 @@
           
           <!-- Visual Designer Panel -->
           <div class="tab-pane fade show active" id="canvasPanel" role="tabpanel">
-            <p class="small text-muted mb-3">
-              💡 <strong>Instruction:</strong> Drag and drop any highlighted dashed fields below to reposition them. Coordinates auto-save in the database dynamically on drop.
+            <p class="small text-muted mb-2">
+              💡 <strong>Instruction:</strong> Click a field to select it and show sizing tools. Drag and drop to move. Coordinates auto-save.
             </p>
+            
+            <!-- Sleek Design Suite Properties Toolbar -->
+            <div id="designerToolbar" class="d-flex align-items-center gap-3 p-2 bg-dark text-white rounded mb-2 shadow-sm" style="display: none !important; border: 1px solid #475569;">
+              <span class="small fw-bold">Active: <span id="toolbarFieldName" class="text-info">student_name</span></span>
+              
+              <div class="d-flex align-items-center gap-1 border-start border-secondary ps-3">
+                <span class="small text-muted me-1" style="font-size:11px;">Font:</span>
+                <button type="button" class="btn btn-xs btn-outline-light py-0 px-2 font-control" data-dir="-1" style="font-size:10px; font-weight:bold;">-</button>
+                <span id="toolbarFontSize" class="small fw-semibold mx-1" style="font-size:11px;">14px</span>
+                <button type="button" class="btn btn-xs btn-outline-light py-0 px-2 font-control" data-dir="1" style="font-size:10px; font-weight:bold;">+</button>
+              </div>
+              
+              <div class="d-flex align-items-center gap-1 border-start border-secondary ps-3">
+                <span class="small text-muted me-1" style="font-size:11px;">Width:</span>
+                <button type="button" class="btn btn-xs btn-outline-light py-0 px-2 width-control" data-dir="-10" style="font-size:10px; font-weight:bold;">-</button>
+                <span id="toolbarWidth" class="small fw-semibold mx-1" style="font-size:11px;">auto</span>
+                <button type="button" class="btn btn-xs btn-outline-light py-0 px-2 width-control" data-dir="10" style="font-size:10px; font-weight:bold;">+</button>
+              </div>
+              
+              <div class="d-flex align-items-center gap-1 border-start border-secondary ps-3">
+                <span class="small text-muted me-1" style="font-size:11px;">Height:</span>
+                <button type="button" class="btn btn-xs btn-outline-light py-0 px-2 height-control" data-dir="-10" style="font-size:10px; font-weight:bold;">-</button>
+                <span id="toolbarHeight" class="small fw-semibold mx-1" style="font-size:11px;">auto</span>
+                <button type="button" class="btn btn-xs btn-outline-light py-0 px-2 height-control" data-dir="10" style="font-size:10px; font-weight:bold;">+</button>
+              </div>
+            </div>
             
             <div style="overflow-x: auto; width: 100%; border: 2px solid #cbd5e1; border-radius: 8px;" class="p-2 mb-3 bg-dark">
               <div id="designerCanvas" 
@@ -135,7 +161,7 @@
                       </div>
                     {% else %}
                       <div class="draggable-field" data-field-name="{{ f.field_name }}"
-                           style="position: absolute; left: {{ f.left_position }}; top: {{ f.top_position or '50px' }}; font-family: {{ f.font_family or 'Arial' }}; font-size: {{ f.font_size or '14px' }}; font-weight: {{ f.font_weight or 'normal' }}; color: {{ f.font_color or '#000000' }}; text-align: {{ f.text_align or 'left' }}; {% if f.text_align == 'center' %}transform: translate(-50%, 0);{% endif %} cursor: move; border: 1.5px dashed #6366f1; background-color: rgba(99, 102, 241, 0.08); padding: 2px 6px; z-index: 10; white-space: nowrap; border-radius:3px;">
+                           style="position: absolute; left: {{ f.left_position }}; top: {{ f.top_position or '50px' }}; width: {{ f.width or 'auto' }}; height: {{ f.height or 'auto' }}; font-family: {{ f.font_family or 'Arial' }}; font-size: {{ f.font_size or '14px' }}; font-weight: {{ f.font_weight or 'normal' }}; color: {{ f.font_color or '#000000' }}; text-align: {{ f.text_align or 'left' }}; {% if f.text_align == 'center' %}transform: translate(-50%, 0);{% endif %} cursor: move; border: 1.5px dashed #6366f1; background-color: rgba(99, 102, 241, 0.08); padding: 2px 6px; z-index: 10; white-space: nowrap; border-radius:3px;">
                         {% if f.field_name == 'student_name' %}
                           ANUSHKA R
                         {% elif f.field_name == 'certificate_number' %}
@@ -315,8 +341,111 @@ document.addEventListener('DOMContentLoaded', function() {
   if (!container) return;
 
   let activeEl = null;
+  let selectedEl = null;
   let offsetX = 0;
   let offsetY = 0;
+
+  // Track field click for property selection toolbar
+  container.addEventListener('click', function(e) {
+    const field = e.target.closest('.draggable-field');
+    if (!field) return;
+    
+    // Clear previous selection outlines
+    document.querySelectorAll('.draggable-field').forEach(el => {
+      el.style.boxShadow = '';
+      el.style.borderColor = '#6366f1';
+    });
+    
+    selectedEl = field;
+    selectedEl.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.5)';
+    selectedEl.style.borderColor = '#10b981';
+    
+    // Show property toolbar
+    const toolbar = document.getElementById('designerToolbar');
+    toolbar.style.display = 'flex';
+    toolbar.style.setProperty('display', 'flex', 'important');
+    
+    document.getElementById('toolbarFieldName').innerText = selectedEl.dataset.fieldName;
+    
+    // Update toolbar controls with selected values
+    const fontSize = window.getComputedStyle(selectedEl).fontSize;
+    const width = selectedEl.style.width || 'auto';
+    const height = selectedEl.style.height || 'auto';
+    
+    document.getElementById('toolbarFontSize').innerText = fontSize;
+    document.getElementById('toolbarWidth').innerText = width;
+    document.getElementById('toolbarHeight').innerText = height;
+  });
+
+  // Clear selections when clicking outside canvas or toolbar
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('#designerCanvas') || e.target.closest('#designerToolbar')) {
+      return;
+    }
+    selectedEl = null;
+    const toolbar = document.getElementById('designerToolbar');
+    if (toolbar) {
+      toolbar.style.setProperty('display', 'none', 'important');
+    }
+    document.querySelectorAll('.draggable-field').forEach(el => {
+      el.style.boxShadow = '';
+      el.style.borderColor = '#6366f1';
+    });
+  });
+
+  // Track property adjustment toolbar clicks
+  document.getElementById('designerToolbar').addEventListener('click', function(e) {
+    if (!selectedEl) return;
+    
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    
+    const dir = parseInt(btn.dataset.dir);
+    const templateId = "{{ selected_id }}";
+    const fieldName = selectedEl.dataset.fieldName;
+    
+    let payload = {
+      template_id: parseInt(templateId),
+      field_name: fieldName
+    };
+    
+    if (btn.classList.contains('font-control')) {
+      let currentSize = parseInt(window.getComputedStyle(selectedEl).fontSize) || 14;
+      let newSize = currentSize + dir;
+      selectedEl.style.fontSize = newSize + 'px';
+      document.getElementById('toolbarFontSize').innerText = newSize + 'px';
+      payload.font_size = newSize + 'px';
+      
+      // Update form coordinator input
+      const form = document.querySelector(`form[data-field-name="${fieldName}"]`);
+      if (form) form.querySelector('input[name="font_size"]').value = newSize + 'px';
+    }
+    else if (btn.classList.contains('width-control')) {
+      let currentWidth = selectedEl.offsetWidth;
+      let newWidth = currentWidth + dir;
+      selectedEl.style.width = newWidth + 'px';
+      document.getElementById('toolbarWidth').innerText = newWidth + 'px';
+      payload.width = newWidth + 'px';
+      
+      // Update form coordinator input
+      const form = document.querySelector(`form[data-field-name="${fieldName}"]`);
+      if (form) form.querySelector('input[name="width"]').value = newWidth + 'px';
+    }
+    else if (btn.classList.contains('height-control')) {
+      let currentHeight = selectedEl.offsetHeight;
+      let newHeight = currentHeight + dir;
+      selectedEl.style.height = newHeight + 'px';
+      document.getElementById('toolbarHeight').innerText = newHeight + 'px';
+      payload.height = newHeight + 'px';
+      
+      // Update form coordinator input
+      const form = document.querySelector(`form[data-field-name="${fieldName}"]`);
+      if (form) form.querySelector('input[name="height"]').value = newHeight + 'px';
+    }
+    
+    // Save settings via dynamic POST endpoint
+    saveFieldPosition(templateId, fieldName, null, null, payload.width, payload.height, payload.font_size);
+  });
 
   // Track drag start via mouse listeners
   container.addEventListener('mousedown', function(e) {
@@ -385,28 +514,33 @@ document.addEventListener('DOMContentLoaded', function() {
     activeEl = null;
   });
 
-  function saveFieldPosition(templateId, fieldName, leftPos, topPos) {
+  function saveFieldPosition(templateId, fieldName, leftPos, topPos, width, height, fontSize) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || "";
     
+    let payload = {
+      template_id: parseInt(templateId),
+      field_name: fieldName
+    };
+    if (leftPos !== undefined && leftPos !== null) payload.left_position = leftPos;
+    if (topPos !== undefined && topPos !== null) payload.top_position = topPos;
+    if (width !== undefined && width !== null) payload.width = width;
+    if (height !== undefined && height !== null) payload.height = height;
+    if (fontSize !== undefined && fontSize !== null) payload.font_size = fontSize;
+
     fetch('/lms_admin/certificates/templates/api/save-coordinates', {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-CSRFToken": csrfToken
       },
-      body: JSON.stringify({
-        template_id: parseInt(templateId),
-        field_name: fieldName,
-        left_position: leftPos,
-        top_position: topPos
-      })
+      body: JSON.stringify(payload)
     })
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        showToast(`Saved coordinates: left: ${leftPos}, top: ${topPos}`);
+        showToast("Field layout properties saved successfully.");
       } else {
-        showToast("Error updating coordinates!", true);
+        showToast("Error updating template properties!", true);
       }
     })
     .catch(err => {
