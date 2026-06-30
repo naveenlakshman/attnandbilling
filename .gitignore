@@ -226,3 +226,4 @@ __marimo__/
 static/lms/images/inline/*.png
 scratch/refactor_extends.py
 scratch/test_layout_integration.py
+static/images/certificate_templates/certificate_preview.webp
