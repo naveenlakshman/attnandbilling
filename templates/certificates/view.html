@@ -196,7 +196,11 @@
         scrollX: 0,
         scrollY: 0
       },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: '{% if template.orientation == "Portrait" %}portrait{% else %}landscape{% endif %}' }
+      jsPDF:        { 
+        unit: 'px', 
+        format: {% if template.orientation == "Portrait" %}[707, 1000]{% else %}[1000, 707]{% endif %}, 
+        orientation: '{% if template.orientation == "Portrait" %}portrait{% else %}landscape{% endif %}' 
+      }
     };
     
     html2pdf().set(opt).from(element).save().then(() => {
