@@ -73,6 +73,7 @@ def get_certificate_render_data(cur, cert_id, base_url):
         style_parts = []
         if f["is_visible"]:
             style_parts.append("position: absolute;")
+            style_parts.append("z-index: 2;")
             if f["left_position"]: style_parts.append(f"left: {f['left_position']};")
             if f["top_position"]: style_parts.append(f"top: {f['top_position']};")
             if f["width"]: style_parts.append(f"width: {f['width']};")

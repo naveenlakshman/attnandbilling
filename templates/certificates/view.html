@@ -49,7 +49,12 @@
 
 <div class="cert-envelope">
   <div class="cert-container" id="certContainer" 
-       style="background-image: url('{{ url_for('static', filename='images/certificate_templates/' ~ template.background_filename) }}'); {% if template.orientation == 'Portrait' %}width: 707px; height: 1000px;{% endif %}">
+       style="position: relative; {% if template.orientation == 'Portrait' %}width: 707px; height: 1000px;{% else %}width: 1000px; height: 707px;{% endif %}">
+    
+    <!-- High-Resolution Lossless Background Image Tag -->
+    <img src="{{ url_for('static', filename='images/certificate_templates/' ~ template.background_filename) }}" 
+         style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none;" 
+         alt="Certificate Background">
     
     <!-- Dynamic Text Overlays Mapped from Database Coordinates -->
     {% if overlay_styles.get('certificate_number') %}
@@ -135,14 +140,14 @@
     <!-- Signature Overlay (If Configured) -->
     {% if template.authorized_signature_image %}
     <img src="{{ url_for('static', filename='images/signatures/' ~ template.authorized_signature_image) }}" 
-         style="position: absolute; bottom: 80px; right: 280px;" 
+         style="position: absolute; bottom: 80px; right: 280px; z-index: 5;" 
          class="cert-signature" alt="Authorized Signature">
     {% endif %}
 
     <!-- Seal Overlay (If Configured) -->
     {% if template.seal_image %}
     <img src="{{ url_for('static', filename='images/seals/' ~ template.seal_image) }}" 
-         style="position: absolute; bottom: 65px; left: 280px;" 
+         style="position: absolute; bottom: 65px; left: 280px; z-index: 5;" 
          class="cert-seal" alt="Official Seal">
     {% endif %}
 
