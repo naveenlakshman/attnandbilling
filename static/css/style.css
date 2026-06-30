@@ -2088,7 +2088,9 @@ body {
   .quick-action-btn i {
     font-size: 1.15rem;
   }
+}
 
+@media (max-width: 991.98px) {
   /* Mobile Nav Contextual Submenus */
   .mobile-bottom-nav a,
   .mobile-bottom-nav button,
@@ -2176,8 +2178,6 @@ body {
     color: #0d6efd !important;
   }
 }
-
-
 
 
 /* ===== STUDENT PROFILE PAGE ===== */
