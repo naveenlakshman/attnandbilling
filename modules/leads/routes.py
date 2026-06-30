@@ -616,6 +616,18 @@ def lead_create():
         _date_error = _validate_last_contact_date(last_contact_date, today_ist_str)
         if not _phone_error and _date_error:
             _phone_error = _date_error
+        
+        if not _phone_error:
+            _conn_dup = get_conn()
+            _cur_dup = _conn_dup.cursor()
+            _dup_lead = _cur_dup.execute(
+                "SELECT id FROM leads WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND phone = ? AND COALESCE(is_deleted, 0) = 0",
+                (name, phone)
+            ).fetchone()
+            _conn_dup.close()
+            if _dup_lead:
+                _phone_error = "A lead with the same name and phone number already exists."
+
         if _phone_error:
             _conn2 = get_conn()
             _cur2 = _conn2.cursor()
@@ -1287,6 +1299,18 @@ def lead_edit(lead_id):
         _date_error_edit = _validate_last_contact_date(last_contact_date, lead_created_date)
         if not _phone_error_edit and _date_error_edit:
             _phone_error_edit = _date_error_edit
+            
+        if not _phone_error_edit:
+            _conn_dup = get_conn()
+            _cur_dup = _conn_dup.cursor()
+            _dup_lead = _cur_dup.execute(
+                "SELECT id FROM leads WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND phone = ? AND id != ? AND COALESCE(is_deleted, 0) = 0",
+                (name, phone, lead_id)
+            ).fetchone()
+            _conn_dup.close()
+            if _dup_lead:
+                _phone_error_edit = "A lead with the same name and phone number already exists."
+
         if _phone_error_edit:
             _conn3 = get_conn()
             _cur3 = _conn3.cursor()
