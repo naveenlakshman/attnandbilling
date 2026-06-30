@@ -183,15 +183,25 @@
     logActivity("Downloaded");
     
     const element = document.getElementById('certContainer');
+    element.classList.add('cert-pdf-export');
+    
     const opt = {
       margin:       0,
       filename:     "Certificate_{{ cert.certificate_number }}.pdf",
       image:        { type: 'jpeg', quality: 1.0 },
-      html2canvas:  { scale: 2.5, useCORS: true, logging: false },
+      html2canvas:  { 
+        scale: 4, 
+        useCORS: true, 
+        logging: false,
+        scrollX: 0,
+        scrollY: 0
+      },
       jsPDF:        { unit: 'mm', format: 'a4', orientation: '{% if template.orientation == "Portrait" %}portrait{% else %}landscape{% endif %}' }
     };
     
-    html2pdf().set(opt).from(element).save();
+    html2pdf().set(opt).from(element).save().then(() => {
+      element.classList.remove('cert-pdf-export');
+    });
   }
 
   // Print tracking via afterprint events

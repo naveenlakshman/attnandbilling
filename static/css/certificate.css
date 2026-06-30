@@ -34,6 +34,13 @@
     print-color-adjust: exact;
 }
 
+.cert-container.cert-pdf-export {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+    margin: 0 !important;
+}
+
 /* Image Overlays */
 .cert-student-photo {
     border: 3px solid #1e3b8b;
