@@ -1815,6 +1815,43 @@ def init_db():
     add_column_if_not_exists(cur, "courses", "certificate_template_id", "INTEGER")
     add_column_if_not_exists(cur, "certificate_templates", "orientation", "TEXT DEFAULT 'Landscape'")
 
+    # Migration: Seed completion_month and completion_year to certificate_template_fields for existing templates
+    try:
+        templates = cur.execute("SELECT id FROM certificate_templates").fetchall()
+        for t in templates:
+            tid = t["id"]
+            # Check if completion_month exists for this template
+            has_month = cur.execute("SELECT 1 FROM certificate_template_fields WHERE template_id = ? AND field_name = 'completion_month'", (tid,)).fetchone()
+            if not has_month:
+                cur.execute("""
+                    INSERT INTO certificate_template_fields (
+                        template_id, field_name, left_position, top_position, width, height,
+                        font_family, font_size, font_weight, font_color, text_align, is_visible, created_at
+                    ) VALUES (?, 'completion_month', '40%', '570px', '120px', None, 'Arial', '14px', 'normal', '#475569', 'center', 1, ?)
+                """, (tid, now))
+            
+            # Check if completion_year exists for this template
+            has_year = cur.execute("SELECT 1 FROM certificate_template_fields WHERE template_id = ? AND field_name = 'completion_year'", (tid,)).fetchone()
+            if not has_year:
+                cur.execute("""
+                    INSERT INTO certificate_template_fields (
+                        template_id, field_name, left_position, top_position, width, height,
+                        font_family, font_size, font_weight, font_color, text_align, is_visible, created_at
+                    ) VALUES (?, 'completion_year', '60%', '570px', '80px', None, 'Arial', '14px', 'normal', '#475569', 'center', 1, ?)
+                """, (tid, now))
+            
+            # Check if branch_name exists for this template
+            has_branch = cur.execute("SELECT 1 FROM certificate_template_fields WHERE template_id = ? AND field_name = 'branch_name'", (tid,)).fetchone()
+            if not has_branch:
+                cur.execute("""
+                    INSERT INTO certificate_template_fields (
+                        template_id, field_name, left_position, top_position, width, height,
+                        font_family, font_size, font_weight, font_color, text_align, is_visible, created_at
+                    ) VALUES (?, 'branch_name', '150px', '650px', None, None, 'Arial', '14px', 'normal', '#1e293b', 'left', 1, ?)
+                """, (tid, now))
+    except Exception as e:
+        print("Error during template fields migration:", e)
+
     # Seed Default Template if not exists
     cur.execute("SELECT id FROM certificate_templates WHERE template_name = 'Default Template' AND version = 1")
     template_row = cur.fetchone()
@@ -1838,6 +1875,9 @@ def init_db():
             ('course_duration', '50%', '500px', '80%', None, 'Arial', '16px', 'normal', '#475569', 'center', 1),
             ('grade', '50%', '535px', '80%', None, 'Arial', '18px', 'bold', '#1e293b', 'center', 1),
             ('completion_date', '50%', '570px', '80%', None, 'Arial', '14px', 'normal', '#475569', 'center', 1),
+            ('completion_month', '40%', '570px', '120px', None, 'Arial', '14px', 'normal', '#475569', 'center', 1),
+            ('completion_year', '60%', '570px', '80%', None, 'Arial', '14px', 'normal', '#475569', 'center', 1),
+            ('branch_name', '150px', '650px', None, None, 'Arial', '14px', 'normal', '#1e293b', 'left', 1),
             ('qr_code', '780px', '550px', '100px', '100px', 'Arial', '14px', 'normal', '#000000', 'left', 1)
         ]
         for field in default_fields:

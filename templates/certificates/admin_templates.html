@@ -167,17 +167,23 @@
                         {% elif f.field_name == 'certificate_number' %}
                           GIT-CERT-2026-000001
                         {% elif f.field_name == 'student_reg' %}
-                          Reg No: 1516239
+                          1516239
                         {% elif f.field_name == 'course_name' %}
                           CCOM - CERTIFICATE COURSE IN OFFICE MANAGEMENT
                         {% elif f.field_name == 'course_duration' %}
-                          Course Duration: 3 Months
+                          3 Months
                         {% elif f.field_name == 'grade' %}
-                          Grade: A+ (Distinction)
+                          A+
                         {% elif f.field_name == 'completion_date' %}
                           completed in June 2026
+                        {% elif f.field_name == 'completion_month' %}
+                          June
+                        {% elif f.field_name == 'completion_year' %}
+                          2026
                         {% elif f.field_name == 'issue_date' %}
-                          Issued on: 2026-06-29
+                          29-Jun-2026
+                        {% elif f.field_name == 'branch_name' %}
+                          Hoskote Branch
                         {% else %}
                           {{ f.field_name | upper }}
                         {% endif %}

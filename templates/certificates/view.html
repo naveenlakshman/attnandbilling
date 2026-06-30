@@ -54,7 +54,7 @@
     <!-- Dynamic Text Overlays Mapped from Database Coordinates -->
     {% if overlay_styles.get('certificate_number') %}
     <div style="{{ overlay_styles['certificate_number'] }}">
-      No: {{ cert.certificate_number }}
+      {{ cert.certificate_number }}
     </div>
     {% endif %}
     
@@ -66,7 +66,7 @@
 
     {% if overlay_styles.get('student_reg') %}
     <div style="{{ overlay_styles['student_reg'] }}">
-      Reg No: {{ cert.snapshot_student_reg }}
+      {{ cert.snapshot_student_reg }}
     </div>
     {% endif %}
 
@@ -78,13 +78,13 @@
 
     {% if overlay_styles.get('course_duration') %}
     <div style="{{ overlay_styles['course_duration'] }}">
-      Course Duration: {{ cert.snapshot_course_duration }}
+      {{ cert.snapshot_course_duration }}
     </div>
     {% endif %}
 
     {% if overlay_styles.get('grade') and settings.get('show_grade') == 1 %}
     <div style="{{ overlay_styles['grade'] }}">
-      Grade: {{ cert.snapshot_grade }}
+      {{ cert.snapshot_grade }}
     </div>
     {% endif %}
 
@@ -94,9 +94,27 @@
     </div>
     {% endif %}
 
+    {% if overlay_styles.get('completion_month') %}
+    <div style="{{ overlay_styles['completion_month'] }}">
+      {{ month }}
+    </div>
+    {% endif %}
+
+    {% if overlay_styles.get('completion_year') %}
+    <div style="{{ overlay_styles['completion_year'] }}">
+      {{ year }}
+    </div>
+    {% endif %}
+
     {% if overlay_styles.get('issue_date') %}
     <div style="{{ overlay_styles['issue_date'] }}">
-      Issued on: {{ cert.issue_date }}
+      {{ cert.formatted_issue_date }}
+    </div>
+    {% endif %}
+
+    {% if overlay_styles.get('branch_name') and cert.branch_name %}
+    <div style="{{ overlay_styles['branch_name'] }}">
+      {{ cert.branch_name }}
     </div>
     {% endif %}
 

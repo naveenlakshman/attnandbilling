@@ -150,10 +150,10 @@ class EligibilityService:
 class CertificateService:
     @staticmethod
     def get_grade_from_score(score):
-        if score >= 90: return "A+ (Distinction)"
-        if score >= 80: return "A (Excellent)"
-        if score >= 70: return "B (First Class)"
-        if score >= 60: return "C (Second Class)"
+        if score >= 90: return "A+"
+        if score >= 80: return "A"
+        if score >= 70: return "B"
+        if score >= 60: return "C"
         if score >= 50: return "Pass"
         return "Fail"
 

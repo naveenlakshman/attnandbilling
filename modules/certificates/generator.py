@@ -97,8 +97,18 @@ def get_certificate_render_data(cur, cert_id, base_url):
             
         overlay_styles[f["field_name"]] = " ".join(style_parts)
 
+    cert_dict = dict(cert)
+    if cert_dict.get("issue_date"):
+        try:
+            dt = datetime.datetime.strptime(cert_dict["issue_date"], "%Y-%m-%d")
+            cert_dict["formatted_issue_date"] = dt.strftime("%d-%b-%Y")
+        except Exception:
+            cert_dict["formatted_issue_date"] = cert_dict["issue_date"]
+    else:
+        cert_dict["formatted_issue_date"] = ""
+
     return {
-        "certificate": dict(cert),
+        "certificate": cert_dict,
         "template": dict(template),
         "completion_month": month,
         "completion_year": year,
