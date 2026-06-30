@@ -1102,6 +1102,9 @@
 
   <!-- Main Form -->
   <form method="post" id="invoiceForm" class="form-wrapper">
+    {% if mode == 'create' and form_token %}
+      <input type="hidden" name="form_token" value="{{ form_token }}">
+    {% endif %}
 
     <!-- Left Column -->
     <div class="form-main">

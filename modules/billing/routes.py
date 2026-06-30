@@ -4607,6 +4607,18 @@ def invoice_new():
     student_full_name = None
     
     if request.method == "POST":
+        # Duplicate Prevention Token Check
+        form_token = request.form.get("form_token")
+        saved_token = session.get("invoice_form_token")
+        
+        # Verify token is valid and matches
+        if not form_token or form_token != saved_token:
+            flash("This invoice has already been created or the request is no longer valid.", "warning")
+            return redirect(url_for("billing.invoices"))
+            
+        # Invalidate the token immediately so subsequent requests fail
+        session.pop("invoice_form_token", None)
+
         conn = None
         try:
             conn = get_conn()
@@ -4982,13 +4994,19 @@ def invoice_new():
 
     prefill_student_id = request.args.get('student_id', '', type=int) or None
 
+    # Generate unique idempotency token for new invoice form
+    import uuid
+    form_token = str(uuid.uuid4())
+    session["invoice_form_token"] = form_token
+
     return render_template(
         "billing/invoice_form_modern.html",
         students=students_dict,
         courses=courses_dict,
         today=today,
         mode="create",
-        prefill_student_id=prefill_student_id
+        prefill_student_id=prefill_student_id,
+        form_token=form_token
     )
 
 @billing_bp.route("/invoice/<int:invoice_id>/edit", methods=["GET", "POST"])
