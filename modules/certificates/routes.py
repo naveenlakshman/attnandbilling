@@ -1,4 +1,5 @@
 import datetime
+# pyrefly: ignore [missing-import]
 from flask import render_template, request, redirect, url_for, session, flash, jsonify, abort, current_app
 from db import get_conn
 from modules.core.utils import lms_content_manager_required
@@ -145,26 +146,24 @@ def student_certificates_list():
         settings = EligibilityService.get_settings(cur)
         
         if settings.get("auto_generate_certificates", 1) == 1:
-            # Query programs accessed by student
-            # We check program accesses in student_program_access and final exam attempts
-            programs = cur.execute(
+            # Query courses for which student has exam attempts
+            invoiced_courses = cur.execute(
                 """
-                SELECT DISTINCT lp.id
-                FROM lms_programs lp
-                WHERE lp.is_active = 1 AND COALESCE(lp.is_deleted, 0) = 0
-                  AND EXISTS (
-                      SELECT 1 FROM lms_final_exam_attempts a
-                      WHERE a.student_id = ? AND a.course_id = lp.id
-                  )
+                SELECT DISTINCT c.id
+                FROM courses c
+                WHERE EXISTS (
+                    SELECT 1 FROM lms_final_exam_attempts a
+                    WHERE a.student_id = ? AND a.course_id = c.id
+                )
                 """,
                 (student_id,)
             ).fetchall()
             
-            for p in programs:
+            for c in invoiced_courses:
                 try:
                     # Attempt transactional issuance (will skip if already exists or not eligible)
                     CertificateService.issue_certificate(
-                        conn, student_id, p["id"],
+                        conn, student_id, c["id"],
                         performed_by=None,
                         ip_address="System Auto",
                         user_agent="System Auto-Generation Flow"
@@ -340,14 +339,14 @@ def admin_issue():
         
         if request.method == "POST":
             student_id = request.form.get("student_id", type=int)
-            program_id = request.form.get("program_id", type=int)
+            course_id = request.form.get("course_id", type=int)
             grade = request.form.get("grade", "").strip() or None
             completion_date = request.form.get("completion_date", "").strip() or None
             notes = request.form.get("notes", "").strip() or None
             force_issue = request.form.get("force_issue") == "1"
             
-            if not student_id or not program_id:
-                flash("Please select both a student and an LMS program.", "danger")
+            if not student_id or not course_id:
+                flash("Please select both a student and an invoiced course.", "danger")
                 return redirect(url_for("certificates.admin_issue"))
 
             try:
@@ -355,7 +354,7 @@ def admin_issue():
                 ip, ua = _get_client_info()
                 
                 cert_no = CertificateService.issue_certificate(
-                    conn, student_id, program_id,
+                    conn, student_id, course_id,
                     grade=grade,
                     completion_date=completion_date,
                     notes=notes,
@@ -370,29 +369,34 @@ def admin_issue():
             except Exception as e:
                 conn.rollback()
                 flash(f"Error issuing certificate: {str(e)}", "danger")
-                return redirect(url_for("certificates.admin_issue", student_id=student_id, program_id=program_id))
+                return redirect(url_for("certificates.admin_issue", student_id=student_id, course_id=course_id))
+
+        selected_student_id = request.args.get("student_id", type=int)
+        selected_course_id = request.args.get("course_id", type=int)
 
         # Handle GET request: list students eligible or search
         # We fetch active students enrolled in batches
         students = cur.execute("SELECT id, student_code, full_name FROM students WHERE status = 'active' ORDER BY full_name").fetchall()
         
-        # Fetch active LMS Programs
-        programs = cur.execute(
-            """
-            SELECT lp.id, lp.program_name, c.course_name
-            FROM lms_programs lp
-            JOIN courses c ON c.id = lp.course_id
-            WHERE lp.is_active = 1 AND COALESCE(lp.is_deleted, 0) = 0
-            ORDER BY lp.program_name
-            """
-        ).fetchall()
-
-        selected_student_id = request.args.get("student_id", type=int)
-        selected_program_id = request.args.get("program_id", type=int)
+        # Fetch invoiced courses for the selected student
+        courses_list = []
+        if selected_student_id:
+            courses_list = cur.execute(
+                """
+                SELECT DISTINCT c.id, c.course_name
+                FROM courses c
+                JOIN invoice_items ii ON ii.course_id = c.id
+                JOIN invoices i ON i.id = ii.invoice_id
+                WHERE i.student_id = ?
+                  AND i.status != 'cancelled'
+                ORDER BY c.course_name
+                """,
+                (selected_student_id,)
+            ).fetchall()
         
         eligibility = None
-        if selected_student_id and selected_program_id:
-            is_eligible, reasons, details = EligibilityService.check_eligibility(cur, selected_student_id, selected_program_id)
+        if selected_student_id and selected_course_id:
+            is_eligible, reasons, details = EligibilityService.check_eligibility(cur, selected_student_id, selected_course_id)
             eligibility = {
                 "is_eligible": is_eligible,
                 "reasons": reasons,
@@ -402,9 +406,9 @@ def admin_issue():
         return render_template(
             "certificates/admin_issue.html",
             students=students,
-            programs=programs,
+            courses_list=courses_list,
             selected_student_id=selected_student_id,
-            selected_program_id=selected_program_id,
+            selected_course_id=selected_course_id,
             eligibility=eligibility
         )
     finally:

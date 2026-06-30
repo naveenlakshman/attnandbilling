@@ -22,14 +22,18 @@
           </select>
         </div>
         <div class="col-12">
-          <label class="form-label small fw-semibold">Select LMS Program</label>
-          <select name="program_id" class="form-select" id="programSelect" required>
-            <option value="">-- Select Program --</option>
-            {% for p in programs %}
-              <option value="{{ p.id }}" {% if selected_program_id == p.id %}selected{% endif %}>
-                {{ p.program_name }} [Course: {{ p.course_name }}]
-              </option>
-            {% endfor %}
+          <label class="form-label small fw-semibold">Select Invoiced Course</label>
+          <select name="course_id" class="form-select" id="courseSelect" required>
+            {% if selected_student_id %}
+              <option value="">-- Select Course --</option>
+              {% for c in courses_list %}
+                <option value="{{ c.id }}" {% if selected_course_id == c.id %}selected{% endif %}>
+                  {{ c.course_name }}
+                </option>
+              {% endfor %}
+            {% else %}
+              <option value="">-- Select Student First --</option>
+            {% endif %}
           </select>
         </div>
         <div class="col-12">
@@ -38,13 +42,13 @@
       </form>
     </div>
 
-    {% if selected_student_id and selected_program_id and eligibility %}
+    {% if selected_student_id and selected_course_id and eligibility %}
       <div class="card shadow-sm border-0 p-4">
         <h5 class="fw-bold mb-3">Certificate Details</h5>
         
         <form method="POST">
           <input type="hidden" name="student_id" value="{{ selected_student_id }}">
-          <input type="hidden" name="program_id" value="{{ selected_program_id }}">
+          <input type="hidden" name="course_id" value="{{ selected_course_id }}">
           
           <div class="mb-3">
             <label class="form-label small fw-semibold">Completion Date</label>
@@ -85,7 +89,7 @@
 
   <!-- Eligibility Status Panel -->
   <div class="col-lg-6">
-    {% if selected_student_id and selected_program_id and eligibility %}
+    {% if selected_student_id and selected_course_id and eligibility %}
       <div class="card shadow-sm border-0 p-4 {% if eligibility.is_eligible %}border-success{% else %}border-warning{% endif %}">
         <h5 class="fw-bold mb-3">Eligibility Report</h5>
         
@@ -142,6 +146,14 @@
               <span class="badge bg-danger">Outstanding Fees</span>
             {% endif %}
           </li>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span>Course Billing Status (Invoiced in Active Invoices)</span>
+            {% if eligibility.reasons.is_invoiced %}
+              <span class="badge bg-success">Invoiced</span>
+            {% else %}
+              <span class="badge bg-danger">Not Invoiced</span>
+            {% endif %}
+          </li>
         </ul>
 
         <div class="bg-light p-3 rounded">
@@ -170,4 +182,20 @@
     {% endif %}
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const studentSelect = document.getElementById('studentSelect');
+  if (studentSelect) {
+    studentSelect.addEventListener('change', function() {
+      const studentId = this.value;
+      if (studentId) {
+        window.location.href = `?student_id=${studentId}`;
+      } else {
+        window.location.href = `?`;
+      }
+    });
+  }
+});
+</script>
 {% endblock %}
