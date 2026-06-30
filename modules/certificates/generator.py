@@ -28,6 +28,37 @@ def get_month_year_from_date(date_str):
     except:
         return "", ""
 
+def ensure_template_preview(bg_filename):
+    import os
+    from flask import current_app
+    from PIL import Image
+    
+    dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates')
+    original_path = os.path.join(dest_dir, bg_filename)
+    preview_name = os.path.splitext(bg_filename)[0] + "_preview.webp"
+    preview_path = os.path.join(dest_dir, preview_name)
+    
+    if not os.path.exists(original_path):
+        return bg_filename
+        
+    if os.path.exists(preview_path):
+        return preview_name
+        
+    try:
+        img = Image.open(original_path)
+        resample_mode = getattr(Image, 'Resampling', None)
+        if resample_mode and hasattr(resample_mode, 'LANCZOS'):
+            mode = resample_mode.LANCZOS
+        else:
+            mode = getattr(Image, 'LANCZOS', Image.BICUBIC)
+            
+        img.thumbnail((1200, 1200), mode)
+        img.save(preview_path, "WEBP", quality=80)
+        return preview_name
+    except Exception as e:
+        print("Error creating template preview:", e)
+        return bg_filename
+
 def get_certificate_render_data(cur, cert_id, base_url):
     """
     Combines certificate metadata, active templates, and dynamic position parameters 
@@ -108,9 +139,12 @@ def get_certificate_render_data(cur, cert_id, base_url):
     else:
         cert_dict["formatted_issue_date"] = ""
 
+    template_dict = dict(template)
+    template_dict["preview_filename"] = ensure_template_preview(template_dict["background_filename"])
+
     return {
         "certificate": cert_dict,
-        "template": dict(template),
+        "template": template_dict,
         "completion_month": month,
         "completion_year": year,
         "qr_base64": qr_base64,
