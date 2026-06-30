@@ -1827,7 +1827,7 @@ def init_db():
                     INSERT INTO certificate_template_fields (
                         template_id, field_name, left_position, top_position, width, height,
                         font_family, font_size, font_weight, font_color, text_align, is_visible, created_at
-                    ) VALUES (?, 'completion_month', '40%', '570px', '120px', None, 'Arial', '14px', 'normal', '#475569', 'center', 1, ?)
+                    ) VALUES (?, 'completion_month', '40%', '570px', '120px', NULL, 'Arial', '14px', 'normal', '#475569', 'center', 1, ?)
                 """, (tid, now))
             
             # Check if completion_year exists for this template
@@ -1837,7 +1837,7 @@ def init_db():
                     INSERT INTO certificate_template_fields (
                         template_id, field_name, left_position, top_position, width, height,
                         font_family, font_size, font_weight, font_color, text_align, is_visible, created_at
-                    ) VALUES (?, 'completion_year', '60%', '570px', '80px', None, 'Arial', '14px', 'normal', '#475569', 'center', 1, ?)
+                    ) VALUES (?, 'completion_year', '60%', '570px', '80px', NULL, 'Arial', '14px', 'normal', '#475569', 'center', 1, ?)
                 """, (tid, now))
             
             # Check if branch_name exists for this template
@@ -1847,7 +1847,7 @@ def init_db():
                     INSERT INTO certificate_template_fields (
                         template_id, field_name, left_position, top_position, width, height,
                         font_family, font_size, font_weight, font_color, text_align, is_visible, created_at
-                    ) VALUES (?, 'branch_name', '150px', '650px', None, None, 'Arial', '14px', 'normal', '#1e293b', 'left', 1, ?)
+                    ) VALUES (?, 'branch_name', '150px', '650px', NULL, NULL, 'Arial', '14px', 'normal', '#1e293b', 'left', 1, ?)
                 """, (tid, now))
     except Exception as e:
         print("Error during template fields migration:", e)
