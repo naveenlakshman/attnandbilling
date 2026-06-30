@@ -550,7 +550,9 @@ def admin_templates():
                     import os
                     from werkzeug.utils import secure_filename
                     bg_filename = secure_filename(bg_file.filename)
-                    bg_file.save(os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates', bg_filename))
+                    dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates')
+                    os.makedirs(dest_dir, exist_ok=True)
+                    bg_file.save(os.path.join(dest_dir, bg_filename))
 
                 orientation = request.form.get("orientation", "Landscape").strip()
                 version_row = cur.execute("SELECT COALESCE(MAX(version), 0) + 1 AS next_ver FROM certificate_templates WHERE template_name = ?", (name,)).fetchone()
@@ -611,7 +613,9 @@ def admin_templates():
                     import os
                     from werkzeug.utils import secure_filename
                     bg_filename = secure_filename(bg_file.filename)
-                    bg_file.save(os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates', bg_filename))
+                    dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates')
+                    os.makedirs(dest_dir, exist_ok=True)
+                    bg_file.save(os.path.join(dest_dir, bg_filename))
                     
                 sig_filename = template["authorized_signature_image"]
                 sig_file = request.files.get("signature_image")
@@ -619,7 +623,9 @@ def admin_templates():
                     import os
                     from werkzeug.utils import secure_filename
                     sig_filename = secure_filename(sig_file.filename)
-                    sig_file.save(os.path.join(current_app.root_path, 'static', 'images', 'signatures', sig_filename))
+                    dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'signatures')
+                    os.makedirs(dest_dir, exist_ok=True)
+                    sig_file.save(os.path.join(dest_dir, sig_filename))
                     
                 seal_filename = template["seal_image"]
                 seal_file = request.files.get("seal_image")
@@ -627,7 +633,9 @@ def admin_templates():
                     import os
                     from werkzeug.utils import secure_filename
                     seal_filename = secure_filename(seal_file.filename)
-                    seal_file.save(os.path.join(current_app.root_path, 'static', 'images', 'seals', seal_filename))
+                    dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'seals')
+                    os.makedirs(dest_dir, exist_ok=True)
+                    seal_file.save(os.path.join(dest_dir, seal_filename))
                     
                 orientation = request.form.get("orientation", "Landscape").strip()
 
