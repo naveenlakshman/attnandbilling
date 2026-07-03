@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}
   {% if student %}Edit Student{% else %}Add Student{% endif %} - {{ company.company_short_name }}
@@ -363,6 +363,9 @@
     </div>
     {% endif %}
     <form method="post" id="studentForm">
+      {% if not student and session.get('student_form_token') %}
+      <input type="hidden" name="form_token" value="{{ session.get('student_form_token') }}">
+      {% endif %}
       <input type="hidden" name="force_save" id="force_save" value="{{ '1' if duplicate_warning else '0' }}">
       {% if prefill_lead %}
       <div style="background:#eff6ff; border:1px solid #93c5fd; color:#1e40af; border-radius:7px; padding:12px 16px; margin-bottom:18px; font-size:13px;">

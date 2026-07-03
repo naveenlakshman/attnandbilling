@@ -2372,6 +2372,13 @@ def student_new():
     cur = conn.cursor()
 
     if request.method == "POST":
+        # Duplicate Prevention Token Check
+        form_token = request.form.get("form_token")
+        saved_token = session.get("student_form_token")
+        if not form_token or form_token != saved_token:
+            conn.close()
+            flash("This student has already been registered or the request is no longer valid.", "warning")
+            return redirect(url_for("billing.students"))
         branch_id = request.form.get("branch_id", "").strip()
         full_name = request.form.get("full_name", "").strip()
         phone = request.form.get("phone", "").strip()
@@ -2519,6 +2526,9 @@ def student_new():
                     },
                     form_data=request.form
                 )
+
+        # Invalidate the token immediately so subsequent requests fail
+        session.pop("student_form_token", None)
 
         cur.execute("""
             SELECT student_code
@@ -2728,6 +2738,10 @@ def student_new():
             (int(from_lead_raw),)
         )
         prefill_lead = cur.fetchone()
+
+    # Generate unique idempotency token for new student registration
+    import uuid
+    session["student_form_token"] = str(uuid.uuid4())
 
     conn.close()
 
