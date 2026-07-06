@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Attendance Calendar Settings{% endblock %}
+{% block page_title %}Attendance Calendar Settings{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+  <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap mb-4">
+    <div>
+      <h2 class="fw-bold mb-1">Attendance Calendar Settings</h2>
+      <p class="text-muted mb-0">Control which days count as expected attendance in monthly reports.</p>
+    </div>
+    <a href="{{ url_for('reports.attendance_monthly_report') }}" class="btn btn-outline-primary">
+      View Monthly Report
+    </a>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-bottom">
+          <h5 class="mb-0 fw-bold">Working Days</h5>
+        </div>
+        <div class="card-body">
+          <form method="post">
+            <input type="hidden" name="action" value="save_working_days">
+            <div class="row g-2">
+              {% for value, label in day_options %}
+              <div class="col-sm-6">
+                <label class="form-check border rounded-3 p-3 h-100">
+                  <input class="form-check-input me-2"
+                         type="checkbox"
+                         name="working_days"
+                         value="{{ value }}"
+                         {% if value in settings.working_days %}checked{% endif %}>
+                  <span class="fw-semibold">{{ label }}</span>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="alert alert-info mt-3 mb-3">
+              Monthly expected and not-marked counts are calculated only for selected working days.
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Save Working Days</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom">
+          <h5 class="mb-0 fw-bold">Add Holiday</h5>
+        </div>
+        <div class="card-body">
+          <form method="post" class="row g-3 align-items-end">
+            <input type="hidden" name="action" value="add_holiday">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Date</label>
+              <input type="date" name="holiday_date" class="form-control" required>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label fw-semibold">Holiday Name</label>
+              <input type="text" name="title" class="form-control" placeholder="e.g. Independence Day" required>
+            </div>
+            <div class="col-md-3">
+              <button type="submit" class="btn btn-success w-100">Save Holiday</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+          <h5 class="mb-0 fw-bold">Holiday List</h5>
+          <span class="badge text-bg-light">{{ settings.holidays|length }} holidays</span>
+        </div>
+        <div class="card-body p-0">
+          {% if settings.holidays %}
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Date</th>
+                  <th>Holiday</th>
+                  <th class="text-end">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for holiday in settings.holidays %}
+                <tr>
+                  <td class="fw-semibold">{{ holiday.holiday_date | format_ist_datetime }}</td>
+                  <td>{{ holiday.title }}</td>
+                  <td class="text-end">
+                    <form method="post" class="d-inline" onsubmit="return confirm('Delete this holiday?');">
+                      <input type="hidden" name="action" value="delete_holiday">
+                      <input type="hidden" name="holiday_id" value="{{ holiday.id }}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="text-center text-muted py-5">
+            No holidays configured yet.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,523 @@
+{% extends "base.html" %}
+{% block title %}Monthly Attendance Report - {{ month_label }}{% endblock %}
+{% block page_title %}Monthly Attendance Report{% endblock %}
+
+{% block extra_css %}
+<style>
+  .mr-page { max-width: 1320px; margin: 0 auto; }
+  .mr-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .mr-title { color: #0f172a; font-size: 26px; font-weight: 800; margin: 0; }
+  .mr-subtitle { color: #64748b; font-size: 14px; margin: 4px 0 0; }
+  .mr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .mr-filter-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    margin-bottom: 22px;
+    padding: 18px 20px;
+  }
+  .mr-filter-form { align-items: end; display: flex; flex-wrap: wrap; gap: 14px; }
+  .mr-filter-group { display: flex; flex-direction: column; gap: 5px; min-width: 180px; }
+  .mr-filter-label {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  .mr-summary-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    margin-bottom: 24px;
+  }
+  .mr-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    padding: 18px;
+  }
+  .mr-summary-card { border-top: 4px solid #2563eb; }
+  .mr-summary-card.present { border-top-color: #059669; }
+  .mr-summary-card.absent { border-top-color: #dc2626; }
+  .mr-summary-card.late { border-top-color: #d97706; }
+  .mr-summary-card.leave { border-top-color: #7c3aed; }
+  .mr-summary-card.unmarked { border-top-color: #64748b; }
+  .mr-calendar-badge {
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 9px;
+    text-transform: uppercase;
+  }
+  .mr-calendar-badge.future { background: #e2e8f0; color: #475569; }
+  .mr-calendar-badge.off { background: #fef3c7; color: #92400e; }
+  .mr-calendar-badge.holiday { background: #fee2e2; color: #991b1b; }
+  .mr-card-label {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .mr-card-value { color: #0f172a; font-size: 30px; font-weight: 850; line-height: 1.1; margin-top: 8px; }
+  .mr-card-note { color: #64748b; font-size: 12px; margin-top: 4px; }
+  .mr-section {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .mr-section-header {
+    align-items: center;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    padding: 14px 18px;
+  }
+  .mr-section-title { color: #0f172a; font-size: 16px; font-weight: 800; margin: 0; }
+  .mr-section-body { padding: 0; }
+  .mr-table { margin: 0; }
+  .mr-table th {
+    color: #475569;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .mr-table td { color: #334155; font-size: 13px; vertical-align: middle; }
+  .mr-status {
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 9px;
+    text-transform: uppercase;
+  }
+  .mr-status.present { background: #dcfce7; color: #166534; }
+  .mr-status.absent { background: #fee2e2; color: #991b1b; }
+  .mr-status.late { background: #fef3c7; color: #92400e; }
+  .mr-status.leave { background: #ede9fe; color: #5b21b6; }
+  .mr-rate { min-width: 120px; }
+  .mr-empty {
+    color: #64748b;
+    font-size: 14px;
+    padding: 34px 18px;
+    text-align: center;
+  }
+  .mr-pdf-header { display: none; margin-bottom: 18px; }
+  .mr-pdf-title { color: #0f172a; font-size: 20px; font-weight: 800; }
+  .mr-pdf-meta { color: #475569; font-size: 12px; }
+  @media print {
+    .mr-filter-card, .mr-actions, .erp-sidebar, .erp-topbar, .mobile-bottom-nav, .no-print { display: none !important; }
+    .mr-page { max-width: 100%; }
+    .mr-section, .mr-card { box-shadow: none; }
+    .mr-pdf-header { display: block !important; }
+  }
+  @media (max-width: 767px) {
+    .mr-filter-group { min-width: 100%; }
+    .mr-actions, .mr-actions .btn { width: 100%; }
+    .mr-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mr-card-value { font-size: 24px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mr-page">
+  <div class="mr-toolbar">
+    <div>
+      <h2 class="mr-title">Monthly Attendance Report</h2>
+      <p class="mr-subtitle">{{ month_label }} - {{ selected_branch_name }}</p>
+      <p class="mr-subtitle">
+        Expected is calculated from active batch rosters on configured working days only.
+        Future dates are excluded; this report is calculated through {{ calculation_end_date | format_ist_datetime }}.
+      </p>
+    </div>
+    <div class="mr-actions">
+      {% if session.get('role') == 'admin' %}
+      <a href="{{ url_for('reports.attendance_calendar_settings') }}" class="btn btn-outline-primary btn-sm">Calendar Settings</a>
+      {% endif %}
+      <a href="{{ url_for('reports.attendance_monthly_download', month=report_month, branch_id=selected_branch_id or '') }}"
+         class="btn btn-outline-success btn-sm">&darr; Download CSV</a>
+      <button type="button" id="btnMonthlyPDF" class="btn btn-success btn-sm" onclick="downloadMonthlyPDF()">&darr; Download PDF</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">Print</button>
+    </div>
+  </div>
+
+  <div class="mr-filter-card">
+    <form method="get" class="mr-filter-form" id="mr-form">
+      <div class="mr-filter-group">
+        <label for="mr-month" class="mr-filter-label">Month</label>
+        <input type="month" id="mr-month" name="month" class="form-control" value="{{ report_month }}">
+      </div>
+      {% if can_view_all %}
+      <div class="mr-filter-group">
+        <label for="mr-branch" class="mr-filter-label">Branch</label>
+        <select id="mr-branch" name="branch_id" class="form-select">
+          <option value="">All Branches</option>
+          {% for branch in branches %}
+            <option value="{{ branch.id }}" {% if selected_branch_id == branch.id %}selected{% endif %}>
+              {{ branch.branch_name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% else %}
+      <div class="mr-filter-group">
+        <span class="mr-filter-label">Branch</span>
+        <div class="form-control bg-light">{{ selected_branch_name }}</div>
+      </div>
+      {% endif %}
+      <div class="mr-filter-group">
+        <button type="submit" class="btn btn-primary">Apply</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="monthly-pdf-content">
+    <div class="mr-pdf-header">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="mr-pdf-title">{{ company.company_name }}</div>
+          <div class="mr-pdf-meta">ERP System - Attendance Reports</div>
+        </div>
+        <div class="text-end">
+          <div class="mr-pdf-title">Monthly Attendance Report</div>
+          <div class="mr-pdf-meta">{{ month_label }} - {{ selected_branch_name }}</div>
+          <div class="mr-pdf-meta">{{ start_date | format_ist_datetime }} to {{ end_date | format_ist_datetime }}</div>
+          <div class="mr-pdf-meta">Calculated through: {{ calculation_end_date | format_ist_datetime }}</div>
+        </div>
+      </div>
+      <hr>
+    </div>
+
+    <div class="mr-summary-grid">
+      <div class="mr-card mr-summary-card">
+        <div class="mr-card-label">Expected Records</div>
+        <div class="mr-card-value">{{ totals.expected_records }}</div>
+        <div class="mr-card-note">{{ totals.expected_unique_students }} students, {{ totals.expected_unique_batches }} batches</div>
+      </div>
+      <div class="mr-card mr-summary-card">
+        <div class="mr-card-label">Marked Records</div>
+        <div class="mr-card-value">{{ totals.total_marked }}</div>
+        <div class="mr-card-note">Completion: {{ "%.1f"|format(totals.marking_completion_rate) }}%</div>
+      </div>
+      <div class="mr-card mr-summary-card unmarked">
+        <div class="mr-card-label">Not Marked</div>
+        <div class="mr-card-value">{{ totals.unmarked }}</div>
+        <div class="mr-card-note">Expected attendance rows still missing</div>
+      </div>
+      <div class="mr-card mr-summary-card present">
+        <div class="mr-card-label">Present</div>
+        <div class="mr-card-value">{{ totals.present }}</div>
+        <div class="mr-card-note">Attendance rate: {{ "%.1f"|format(totals.attendance_rate) }}%</div>
+      </div>
+      <div class="mr-card mr-summary-card absent">
+        <div class="mr-card-label">Absent</div>
+        <div class="mr-card-value">{{ totals.absent }}</div>
+        <div class="mr-card-note">Students marked absent</div>
+      </div>
+      <div class="mr-card mr-summary-card late">
+        <div class="mr-card-label">Late</div>
+        <div class="mr-card-value">{{ totals.late }}</div>
+        <div class="mr-card-note">Late but attended</div>
+      </div>
+      <div class="mr-card mr-summary-card leave">
+        <div class="mr-card-label">Leave</div>
+        <div class="mr-card-value">{{ totals.leave }}</div>
+        <div class="mr-card-note">Approved or marked leave</div>
+      </div>
+    </div>
+
+    <div class="mr-section">
+      <div class="mr-section-header">
+        <h3 class="mr-section-title">Daily Breakdown</h3>
+        <span class="badge text-bg-light">{{ start_date | format_ist_datetime }} - {{ end_date | format_ist_datetime }}</span>
+      </div>
+      <div class="mr-section-body">
+        <div class="table-responsive">
+          <table class="table table-hover mr-table">
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Day</th>
+                <th>Calendar</th>
+                <th class="text-center">Expected</th>
+                <th class="text-center">Marked</th>
+                <th class="text-center">Not Marked</th>
+                <th class="text-center">Present</th>
+                <th class="text-center">Absent</th>
+                <th class="text-center">Late</th>
+                <th class="text-center">Leave</th>
+                <th>Attendance Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for day in daily_breakdown %}
+              <tr>
+                <td class="fw-semibold">{{ day.attendance_date | format_ist_datetime }}</td>
+                <td>{{ day.day_name }}</td>
+                <td>
+                  {% if day.calendar_note %}
+                    {% if day.is_future %}
+                      <span class="mr-calendar-badge future">{{ day.calendar_note }}</span>
+                    {% elif day.holiday_title %}
+                      <span class="mr-calendar-badge holiday">{{ day.calendar_note }}</span>
+                    {% else %}
+                      <span class="mr-calendar-badge off">{{ day.calendar_note }}</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-muted small">Working</span>
+                  {% endif %}
+                </td>
+                <td class="text-center fw-semibold">{{ day.expected }}</td>
+                <td class="text-center">{{ day.total_marked }}</td>
+                <td class="text-center {% if day.unmarked > 0 %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                  {{ day.unmarked }}
+                </td>
+                <td class="text-center text-success fw-semibold">{{ day.present }}</td>
+                <td class="text-center text-danger fw-semibold">{{ day.absent }}</td>
+                <td class="text-center text-warning fw-semibold">{{ day.late }}</td>
+                <td class="text-center text-info fw-semibold">{{ day.leave }}</td>
+                <td>
+                  <div class="d-flex align-items-center gap-2 mr-rate">
+                    <div class="progress flex-grow-1">
+                      <div class="progress-bar {% if day.rate >= 75 %}bg-success{% elif day.rate >= 50 %}bg-primary{% elif day.rate >= 25 %}bg-warning{% else %}bg-danger{% endif %}"
+                           role="progressbar"
+                           aria-valuenow="{{ day.rate }}"
+                           aria-valuemin="0"
+                           aria-valuemax="100"
+                           style="width: {{ day.rate }}%"></div>
+                    </div>
+                    <span class="small fw-bold">{{ "%.1f"|format(day.rate) }}%</span>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-xl-5">
+        <div class="mr-section h-100">
+          <div class="mr-section-header">
+            <h3 class="mr-section-title">Branch Summary</h3>
+          </div>
+          <div class="mr-section-body">
+            {% if branch_summary %}
+            <div class="table-responsive">
+              <table class="table table-hover mr-table">
+                <thead class="table-light">
+                  <tr>
+                    <th>Branch</th>
+                    <th class="text-center">Students</th>
+                    <th class="text-center">Expected</th>
+                    <th class="text-center">Marked</th>
+                    <th class="text-center">Not Marked</th>
+                    <th>Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for branch in branch_summary %}
+                  <tr>
+                    <td class="fw-semibold">{{ branch.branch_name or "Unassigned" }}</td>
+                    <td class="text-center">{{ branch.unique_students }}</td>
+                    <td class="text-center">{{ branch.expected }}</td>
+                    <td class="text-center">{{ branch.total_marked }}</td>
+                    <td class="text-center {% if branch.unmarked > 0 %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                      {{ branch.unmarked }}
+                    </td>
+                    <td>
+                      <div class="fw-bold">{{ "%.1f"|format(branch.marking_rate) }}%</div>
+                      <div class="small text-muted">marked</div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <div class="mr-empty">No branch attendance records found for this month.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-xl-7">
+        <div class="mr-section h-100">
+          <div class="mr-section-header">
+            <h3 class="mr-section-title">Batch Summary</h3>
+          </div>
+          <div class="mr-section-body">
+            {% if batch_summary %}
+            <div class="table-responsive">
+              <table class="table table-hover mr-table">
+                <thead class="table-light">
+                  <tr>
+                    <th>Batch</th>
+                    <th>Course</th>
+                    <th>Trainer</th>
+                    <th class="text-center">Students</th>
+                    <th class="text-center">Expected</th>
+                    <th class="text-center">Marked</th>
+                    <th class="text-center">Not Marked</th>
+                    <th>Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for batch in batch_summary %}
+                  <tr>
+                    <td>
+                      <div class="fw-semibold">{{ batch.batch_name or "Deleted Batch" }}</div>
+                      <div class="small text-muted">{{ batch.branch_name or "Unassigned branch" }}</div>
+                    </td>
+                    <td>{{ batch.course_name or "-" }}</td>
+                    <td>{{ batch.trainer_name or "-" }}</td>
+                    <td class="text-center">{{ batch.unique_students }}</td>
+                    <td class="text-center">{{ batch.expected }}</td>
+                    <td class="text-center">{{ batch.total_marked }}</td>
+                    <td class="text-center {% if batch.unmarked > 0 %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                      {{ batch.unmarked }}
+                    </td>
+                    <td>
+                      <div class="fw-bold">{{ "%.1f"|format(batch.marking_rate) }}%</div>
+                      <div class="small text-muted">marked</div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <div class="mr-empty">No batch attendance records found for this month.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mr-section">
+      <div class="mr-section-header">
+        <h3 class="mr-section-title">Student Attendance Summary</h3>
+        <span class="badge text-bg-light">{{ student_summary|length }} rows</span>
+      </div>
+      <div class="mr-section-body">
+        {% if student_summary %}
+        <div class="table-responsive">
+          <table class="table table-hover mr-table">
+            <thead class="table-light">
+              <tr>
+                <th>Student</th>
+                <th>Phone</th>
+                <th>Batch</th>
+                {% if not selected_branch_id %}<th>Branch</th>{% endif %}
+                <th class="text-center">Expected</th>
+                <th class="text-center">Marked</th>
+                <th class="text-center">Not Marked</th>
+                <th class="text-center">Present</th>
+                <th class="text-center">Absent</th>
+                <th class="text-center">Late</th>
+                <th class="text-center">Leave</th>
+                <th>Rate</th>
+                <th>Last Marked</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for student in student_summary %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" class="fw-semibold text-decoration-none">
+                    {{ student.full_name }}
+                  </a>
+                  <div class="small text-muted">{{ student.student_code }}</div>
+                </td>
+                <td>{{ student.phone or "-" }}</td>
+                <td>{{ student.batch_name or "-" }}</td>
+                {% if not selected_branch_id %}<td>{{ student.branch_name or "-" }}</td>{% endif %}
+                <td class="text-center">{{ student.expected }}</td>
+                <td class="text-center">{{ student.total_marked }}</td>
+                <td class="text-center {% if student.unmarked > 0 %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                  {{ student.unmarked }}
+                </td>
+                <td class="text-center text-success fw-semibold">{{ student.present }}</td>
+                <td class="text-center text-danger fw-semibold">{{ student.absent }}</td>
+                <td class="text-center text-warning fw-semibold">{{ student.late }}</td>
+                <td class="text-center text-info fw-semibold">{{ student.leave }}</td>
+                <td class="fw-bold">{{ "%.1f"|format(student.rate) }}%</td>
+                <td>{{ student.last_marked | format_ist_datetime }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="mr-empty">No attendance records found for the selected month and branch.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/html2pdf.bundle.min.js') }}"></script>
+<script>
+document.getElementById('mr-month').addEventListener('change', function() {
+  document.getElementById('mr-form').submit();
+});
+{% if can_view_all %}
+document.getElementById('mr-branch').addEventListener('change', function() {
+  document.getElementById('mr-form').submit();
+});
+{% endif %}
+
+function downloadMonthlyPDF() {
+  const btn = document.getElementById('btnMonthlyPDF');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = 'Generating...';
+  btn.disabled = true;
+
+  const pdfHeader = document.querySelector('.mr-pdf-header');
+  pdfHeader.style.display = 'block';
+
+  const element = document.getElementById('monthly-pdf-content');
+  const previousMaxWidth = element.style.maxWidth;
+  element.style.maxWidth = '1060px';
+
+  html2pdf()
+    .set({
+      margin: 6,
+      filename: 'Monthly_Attendance_Report_{{ report_month }}.pdf',
+      image: { type: 'jpeg', quality: 0.97 },
+      html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+    })
+    .from(element)
+    .save()
+    .then(function() {
+      element.style.maxWidth = previousMaxWidth;
+      pdfHeader.style.display = 'none';
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    });
+}
+</script>
+{% endblock %}

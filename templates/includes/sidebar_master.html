@@ -191,9 +191,10 @@
         <a class="nav-link {{ 'active' if ep == 'leads.reports' else '' }}" href="{{ url_for('leads.reports') }}">Lead Report</a>
         <a class="nav-link {{ 'active' if ep == 'reports.dashboard' else '' }}" href="{{ url_for('reports.dashboard') }}">Analytics</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.daily_report' else '' }}" href="{{ url_for('attendance.daily_report') }}">Attendance Daily Report</a>
-        <a class="nav-link {{ 'active' if ep == 'attendance.monthly_summary' else '' }}" href="{{ url_for('attendance.monthly_summary') }}">Attendance Monthly Summary</a>
+        <a class="nav-link {{ 'active' if ep == 'reports.attendance_monthly_report' else '' }}" href="{{ url_for('reports.attendance_monthly_report') }}">Attendance Monthly Summary</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.defaulters' else '' }}" href="{{ url_for('attendance.defaulters') }}">Defaulters</a>
         {% if is_admin %}
+          <a class="nav-link {{ 'active' if ep == 'reports.attendance_calendar_settings' else '' }}" href="{{ url_for('reports.attendance_calendar_settings') }}">Attendance Calendar Settings</a>
           <a class="nav-link {{ 'active' if ep == 'reports.import_page' else '' }}" href="{{ url_for('reports.import_page') }}">Import Data</a>
         {% endif %}
       </div>

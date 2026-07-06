@@ -375,6 +375,26 @@ def init_db():
         )
     """)
 
+    # ---------- ATTENDANCE CALENDAR SETTINGS ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS attendance_calendar_settings (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            working_days TEXT NOT NULL DEFAULT '0,1,2,3,4,5',
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS attendance_holidays (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            holiday_date TEXT NOT NULL UNIQUE,
+            title TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+
     # ---------- ATTENDANCE FOLLOWUPS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS attendance_followups (
@@ -1900,6 +1920,13 @@ def init_db():
                 show_grade, enable_certificate_verification, year_format, sequence_length, created_at
             ) VALUES (1, 'GIT', ?, 50.0, '{root}verify-certificate/{cert_no}', 1, 1, 1, 1, 1, 1, 'YYYY', 6, ?)
         """, (template_id, now))
+
+    cur.execute("SELECT id FROM attendance_calendar_settings WHERE id = 1")
+    if not cur.fetchone():
+        cur.execute("""
+            INSERT INTO attendance_calendar_settings (id, working_days, created_at)
+            VALUES (1, '0,1,2,3,4,5', ?)
+        """, (now,))
 
     conn.commit()
     conn.close()

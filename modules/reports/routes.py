@@ -1,5 +1,7 @@
 import io
 import csv
+import calendar
+from collections import defaultdict
 from flask import Blueprint, render_template, send_file, flash, redirect, url_for, session, request
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
@@ -534,6 +536,773 @@ def daily_report_download():
 
     filename = f"daily_report_{report_date}{branch_label}.csv"
     return send_file(buf, mimetype="text/csv", as_attachment=True, download_name=filename)
+
+
+def _resolve_report_branch(cur):
+    """Return branch filter details using the same access rules as daily reports."""
+    cur.execute("SELECT id, branch_name, branch_code FROM branches WHERE is_active = 1 ORDER BY branch_name")
+    branches = cur.fetchall()
+
+    can_view_all = session.get("can_view_all_branches", False) or session.get("role") == "admin"
+    user_branch_id = session.get("branch_id")
+    branch_param = request.args.get("branch_id", "").strip()
+
+    if can_view_all:
+        selected_branch_id = int(branch_param) if branch_param.isdigit() else None
+    else:
+        selected_branch_id = user_branch_id
+
+    selected_branch_name = "All Branches"
+    if selected_branch_id:
+        for branch in branches:
+            if branch["id"] == selected_branch_id:
+                selected_branch_name = branch["branch_name"]
+                break
+
+    return branches, selected_branch_id, selected_branch_name, can_view_all
+
+
+REPORT_IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _today_ist():
+    return datetime.now(REPORT_IST).strftime("%Y-%m-%d")
+
+
+def _month_bounds(month_value):
+    """Validate YYYY-MM and return month metadata for queries and headings."""
+    today_month = datetime.now(REPORT_IST).strftime("%Y-%m")
+
+    try:
+        month_start = datetime.strptime(month_value or today_month, "%Y-%m")
+    except ValueError:
+        month_start = datetime.strptime(today_month, "%Y-%m")
+
+    last_day = calendar.monthrange(month_start.year, month_start.month)[1]
+    start_date = month_start.strftime("%Y-%m-01")
+    end_date = month_start.replace(day=last_day).strftime("%Y-%m-%d")
+    month_label = month_start.strftime("%B %Y")
+    month_value = month_start.strftime("%Y-%m")
+
+    return month_value, month_label, start_date, end_date, last_day
+
+
+def _calculation_window(start_date, end_date):
+    """Never calculate expected/unmarked attendance for future dates."""
+    today = _today_ist()
+    calculation_end = min(end_date, today)
+    if start_date > calculation_end:
+        query_end = (datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        return today, calculation_end, query_end, False
+    return today, calculation_end, calculation_end, True
+
+
+def _attendance_where(selected_branch_id):
+    where = ["ar.attendance_date BETWEEN ? AND ?"]
+    if selected_branch_id:
+        where.append("ar.branch_id = ?")
+    return " AND ".join(where)
+
+
+def _attendance_params(start_date, end_date, selected_branch_id):
+    params = [start_date, end_date]
+    if selected_branch_id:
+        params.append(selected_branch_id)
+    return params
+
+
+def _date_range(start_date, end_date):
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    days = []
+    while start <= end:
+        days.append(start.strftime("%Y-%m-%d"))
+        start += timedelta(days=1)
+    return days
+
+
+def _ensure_attendance_calendar_tables(cur):
+    now = datetime.now(REPORT_IST).strftime("%Y-%m-%d %H:%M:%S")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS attendance_calendar_settings (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            working_days TEXT NOT NULL DEFAULT '0,1,2,3,4,5',
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS attendance_holidays (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            holiday_date TEXT NOT NULL UNIQUE,
+            title TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+    cur.execute("SELECT id FROM attendance_calendar_settings WHERE id = 1")
+    if not cur.fetchone():
+        cur.execute("""
+            INSERT INTO attendance_calendar_settings (id, working_days, created_at)
+            VALUES (1, '0,1,2,3,4,5', ?)
+        """, (now,))
+
+
+def _get_attendance_calendar(cur, start_date=None, end_date=None):
+    _ensure_attendance_calendar_tables(cur)
+    row = cur.execute("SELECT working_days FROM attendance_calendar_settings WHERE id = 1").fetchone()
+    raw_days = (row["working_days"] if row else "0,1,2,3,4,5") or "0,1,2,3,4,5"
+    working_days = {
+        int(day)
+        for day in raw_days.split(",")
+        if day.strip().isdigit() and 0 <= int(day.strip()) <= 6
+    }
+    if not working_days:
+        working_days = {0, 1, 2, 3, 4, 5}
+
+    if start_date and end_date:
+        cur.execute("""
+            SELECT id, holiday_date, title
+            FROM attendance_holidays
+            WHERE holiday_date BETWEEN ? AND ?
+            ORDER BY holiday_date
+        """, (start_date, end_date))
+    else:
+        cur.execute("""
+            SELECT id, holiday_date, title
+            FROM attendance_holidays
+            ORDER BY holiday_date DESC
+        """)
+    holidays = [dict(row) for row in cur.fetchall()]
+    holiday_map = {row["holiday_date"]: row["title"] for row in holidays}
+
+    return {
+        "working_days": working_days,
+        "working_days_csv": ",".join(str(day) for day in sorted(working_days)),
+        "holidays": holidays,
+        "holiday_map": holiday_map,
+    }
+
+
+def _is_expected_working_date(date_value, calendar_settings):
+    date_obj = datetime.strptime(date_value, "%Y-%m-%d")
+    if date_obj.weekday() not in calendar_settings["working_days"]:
+        return False
+    return date_value not in calendar_settings["holiday_map"]
+
+
+def _clamp_date(value, fallback):
+    if not value:
+        return fallback
+    try:
+        return datetime.strptime(str(value)[:10], "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        return fallback
+
+
+def _load_expected_attendance(cur, start_date, end_date, selected_branch_id, calendar_settings):
+    """Build expected student/batch attendance rows for each day in a report period."""
+    query = """
+        SELECT
+            sb.student_id,
+            sb.batch_id,
+            sb.joined_on,
+            s.student_code,
+            s.full_name,
+            s.phone,
+            b.batch_name,
+            b.branch_id,
+            b.start_date,
+            b.end_date,
+            c.course_name,
+            br.branch_name,
+            u.full_name AS trainer_name
+        FROM student_batches sb
+        JOIN students s ON sb.student_id = s.id
+        JOIN batches b ON sb.batch_id = b.id
+        LEFT JOIN courses c ON b.course_id = c.id
+        LEFT JOIN branches br ON b.branch_id = br.id
+        LEFT JOIN users u ON b.trainer_id = u.id
+        WHERE sb.status = 'active'
+          AND b.status = 'active'
+          AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
+          AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
+    """
+    params = [end_date, start_date]
+    if selected_branch_id:
+        query += " AND b.branch_id = ?"
+        params.append(selected_branch_id)
+    query += " ORDER BY br.branch_name, b.batch_name, s.full_name"
+
+    cur.execute(query, params)
+    roster_rows = [dict(row) for row in cur.fetchall()]
+
+    period_dates = [
+        day for day in _date_range(start_date, end_date)
+        if _is_expected_working_date(day, calendar_settings)
+    ]
+    expected_keys = set()
+    expected_by_day = defaultdict(set)
+    expected_by_branch = defaultdict(set)
+    expected_by_batch = defaultdict(set)
+    expected_by_student_batch = defaultdict(set)
+    expected_row_lookup = {}
+
+    for row in roster_rows:
+        effective_start = max(
+            start_date,
+            _clamp_date(row.get("start_date"), start_date),
+            _clamp_date(row.get("joined_on"), start_date),
+        )
+        effective_end = min(end_date, _clamp_date(row.get("end_date"), end_date))
+        if effective_start > effective_end:
+            continue
+
+        branch_key = row.get("branch_id") or 0
+        batch_key = row.get("batch_id") or 0
+        student_batch_key = (row.get("student_id"), batch_key)
+        expected_row_lookup[student_batch_key] = row
+
+        for day in period_dates:
+            if day < effective_start or day > effective_end:
+                continue
+            key = (day, row.get("student_id"), batch_key)
+            expected_keys.add(key)
+            expected_by_day[day].add(key)
+            expected_by_branch[branch_key].add(key)
+            expected_by_batch[batch_key].add(key)
+            expected_by_student_batch[student_batch_key].add(key)
+
+    return {
+        "period_dates": period_dates,
+        "keys": expected_keys,
+        "by_day": expected_by_day,
+        "by_branch": expected_by_branch,
+        "by_batch": expected_by_batch,
+        "by_student_batch": expected_by_student_batch,
+        "row_lookup": expected_row_lookup,
+    }
+
+
+def _load_marked_keys(cur, start_date, end_date, selected_branch_id):
+    where_clause = _attendance_where(selected_branch_id)
+    params = _attendance_params(start_date, end_date, selected_branch_id)
+    cur.execute(f"""
+        SELECT ar.attendance_date, ar.student_id, ar.batch_id
+        FROM attendance_records ar
+        WHERE {where_clause}
+    """, params)
+    return {
+        (row["attendance_date"], row["student_id"], row["batch_id"] or 0)
+        for row in cur.fetchall()
+    }
+
+
+@reports_bp.route("/attendance/monthly")
+@login_required
+def attendance_monthly_report():
+    """Month-level attendance report for the Reports module."""
+    report_month, month_label, start_date, end_date, last_day = _month_bounds(request.args.get("month"))
+    today, calculation_end_date, query_end_date, has_calculation_window = _calculation_window(start_date, end_date)
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        branches, selected_branch_id, selected_branch_name, can_view_all = _resolve_report_branch(cur)
+        calendar_settings = _get_attendance_calendar(cur, start_date, end_date)
+        where_clause = _attendance_where(selected_branch_id)
+        params = _attendance_params(start_date, query_end_date, selected_branch_id)
+        expected_data = _load_expected_attendance(cur, start_date, query_end_date, selected_branch_id, calendar_settings)
+        marked_keys = _load_marked_keys(cur, start_date, query_end_date, selected_branch_id)
+
+        cur.execute(f"""
+            SELECT
+                COUNT(*) AS total_marked,
+                COUNT(DISTINCT ar.student_id) AS unique_students,
+                COUNT(DISTINCT ar.batch_id) AS unique_batches,
+                SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
+                SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+                SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) AS late,
+                SUM(CASE WHEN ar.status = 'leave' THEN 1 ELSE 0 END) AS leave_count
+            FROM attendance_records ar
+            WHERE {where_clause}
+        """, params)
+        raw_totals = cur.fetchone()
+        totals = {
+            "total_marked": raw_totals["total_marked"] or 0,
+            "unique_students": raw_totals["unique_students"] or 0,
+            "unique_batches": raw_totals["unique_batches"] or 0,
+            "present": raw_totals["present"] or 0,
+            "absent": raw_totals["absent"] or 0,
+            "late": raw_totals["late"] or 0,
+            "leave": raw_totals["leave_count"] or 0,
+        }
+        attended = totals["present"] + totals["late"]
+        totals["attendance_rate"] = round((attended / totals["total_marked"] * 100), 1) if totals["total_marked"] else 0
+        totals["expected_records"] = len(expected_data["keys"])
+        totals["expected_unique_students"] = len({key[1] for key in expected_data["keys"]})
+        totals["expected_unique_batches"] = len({key[2] for key in expected_data["keys"]})
+        totals["unmarked"] = 0
+        totals["marking_completion_rate"] = 0
+
+        cur.execute(f"""
+            SELECT
+                ar.attendance_date,
+                COUNT(*) AS total_marked,
+                SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
+                SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+                SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) AS late,
+                SUM(CASE WHEN ar.status = 'leave' THEN 1 ELSE 0 END) AS leave_count
+            FROM attendance_records ar
+            WHERE {where_clause}
+            GROUP BY ar.attendance_date
+            ORDER BY ar.attendance_date
+        """, params)
+        daily_map = {row["attendance_date"]: dict(row) for row in cur.fetchall()}
+        daily_breakdown = []
+        monthly_unmarked = 0
+        for day in range(1, last_day + 1):
+            day_date = f"{report_month}-{day:02d}"
+            row = daily_map.get(day_date, {})
+            total_marked = row.get("total_marked") or 0
+            present = row.get("present") or 0
+            late = row.get("late") or 0
+            is_future = day_date > today
+            is_working_day = _is_expected_working_date(day_date, calendar_settings)
+            holiday_title = calendar_settings["holiday_map"].get(day_date)
+            day_expected_keys = expected_data["by_day"].get(day_date, set())
+            expected_for_day = len(day_expected_keys)
+            day_unmarked = max(0, expected_for_day - total_marked)
+            monthly_unmarked += day_unmarked
+            daily_breakdown.append({
+                "attendance_date": day_date,
+                "day_name": datetime.strptime(day_date, "%Y-%m-%d").strftime("%a"),
+                "expected": expected_for_day,
+                "total_marked": total_marked,
+                "unmarked": day_unmarked,
+                "present": present,
+                "absent": row.get("absent") or 0,
+                "late": late,
+                "leave": row.get("leave_count") or 0,
+                "rate": round(((present + late) / total_marked * 100), 1) if total_marked else 0,
+                "is_future": is_future,
+                "is_working_day": is_working_day,
+                "holiday_title": holiday_title,
+                "calendar_note": (
+                    "Future"
+                    if is_future else
+                    holiday_title
+                    if holiday_title else
+                    "Weekly Off"
+                    if not is_working_day else
+                    ""
+                ),
+            })
+        totals["unmarked"] = monthly_unmarked
+        totals["marking_completion_rate"] = (
+            round(((totals["expected_records"] - monthly_unmarked) / totals["expected_records"] * 100), 1)
+            if totals["expected_records"] else 0
+        )
+
+        cur.execute(f"""
+            SELECT
+                ar.branch_id,
+                br.branch_name,
+                COUNT(*) AS total_marked,
+                COUNT(DISTINCT ar.student_id) AS unique_students,
+                COUNT(DISTINCT ar.batch_id) AS unique_batches,
+                SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
+                SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+                SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) AS late,
+                SUM(CASE WHEN ar.status = 'leave' THEN 1 ELSE 0 END) AS leave_count
+            FROM attendance_records ar
+            LEFT JOIN branches br ON ar.branch_id = br.id
+            WHERE {where_clause}
+            GROUP BY ar.branch_id, br.branch_name
+            ORDER BY br.branch_name
+        """, params)
+        branch_summary = []
+        for row in cur.fetchall():
+            total_marked = row["total_marked"] or 0
+            present = row["present"] or 0
+            late = row["late"] or 0
+            branch_expected_keys = expected_data["by_branch"].get(row["branch_id"] or 0, set())
+            expected = len(branch_expected_keys)
+            branch_summary.append({
+                **dict(row),
+                "unique_students": max(row["unique_students"] or 0, len({key[1] for key in branch_expected_keys})),
+                "unique_batches": max(row["unique_batches"] or 0, len({key[2] for key in branch_expected_keys})),
+                "expected": expected,
+                "unmarked": max(0, expected - total_marked),
+                "leave": row["leave_count"] or 0,
+                "rate": round(((present + late) / total_marked * 100), 1) if total_marked else 0,
+                "marking_rate": round((min(total_marked, expected) / expected * 100), 1) if expected else 0,
+            })
+        branch_ids_with_rows = {row["branch_id"] or 0 for row in branch_summary}
+        branch_lookup = {branch["id"]: branch["branch_name"] for branch in branches}
+        for branch_id, keys in expected_data["by_branch"].items():
+            if branch_id in branch_ids_with_rows:
+                continue
+            expected = len(keys)
+            branch_summary.append({
+                "branch_id": branch_id,
+                "branch_name": branch_lookup.get(branch_id, "Unassigned"),
+                "total_marked": 0,
+                "unique_students": len({key[1] for key in keys}),
+                "unique_batches": len({key[2] for key in keys}),
+                "present": 0,
+                "absent": 0,
+                "late": 0,
+                "leave_count": 0,
+                "expected": expected,
+                "unmarked": expected,
+                "leave": 0,
+                "rate": 0,
+                "marking_rate": 0,
+            })
+        branch_summary.sort(key=lambda row: row.get("branch_name") or "")
+
+        cur.execute(f"""
+            SELECT
+                b.id AS batch_id,
+                b.batch_name,
+                c.course_name,
+                br.branch_name,
+                u.full_name AS trainer_name,
+                COUNT(*) AS total_marked,
+                COUNT(DISTINCT ar.student_id) AS unique_students,
+                SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
+                SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+                SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) AS late,
+                SUM(CASE WHEN ar.status = 'leave' THEN 1 ELSE 0 END) AS leave_count
+            FROM attendance_records ar
+            LEFT JOIN batches b ON ar.batch_id = b.id
+            LEFT JOIN courses c ON b.course_id = c.id
+            LEFT JOIN branches br ON ar.branch_id = br.id
+            LEFT JOIN users u ON b.trainer_id = u.id
+            WHERE {where_clause}
+            GROUP BY ar.batch_id, b.batch_name, c.course_name, br.branch_name, u.full_name
+            ORDER BY br.branch_name, b.batch_name
+        """, params)
+        batch_summary = []
+        for row in cur.fetchall():
+            total_marked = row["total_marked"] or 0
+            present = row["present"] or 0
+            late = row["late"] or 0
+            batch_expected_keys = expected_data["by_batch"].get(row["batch_id"] or 0, set())
+            expected = len(batch_expected_keys)
+            batch_summary.append({
+                **dict(row),
+                "unique_students": max(row["unique_students"] or 0, len({key[1] for key in batch_expected_keys})),
+                "expected": expected,
+                "unmarked": max(0, expected - total_marked),
+                "leave": row["leave_count"] or 0,
+                "rate": round(((present + late) / total_marked * 100), 1) if total_marked else 0,
+                "marking_rate": round((min(total_marked, expected) / expected * 100), 1) if expected else 0,
+            })
+        batch_ids_with_rows = {row["batch_id"] or 0 for row in batch_summary}
+        for batch_id, keys in expected_data["by_batch"].items():
+            if batch_id in batch_ids_with_rows:
+                continue
+            sample_row = next((row for row in expected_data["row_lookup"].values() if (row.get("batch_id") or 0) == batch_id), {})
+            expected = len(keys)
+            batch_summary.append({
+                "batch_id": batch_id,
+                "batch_name": sample_row.get("batch_name") or "Batch",
+                "course_name": sample_row.get("course_name"),
+                "branch_name": sample_row.get("branch_name"),
+                "trainer_name": sample_row.get("trainer_name"),
+                "total_marked": 0,
+                "unique_students": len({key[1] for key in keys}),
+                "present": 0,
+                "absent": 0,
+                "late": 0,
+                "leave_count": 0,
+                "expected": expected,
+                "unmarked": expected,
+                "leave": 0,
+                "rate": 0,
+                "marking_rate": 0,
+            })
+        batch_summary.sort(key=lambda row: ((row.get("branch_name") or ""), (row.get("batch_name") or "")))
+
+        cur.execute(f"""
+            SELECT
+                s.id AS student_id,
+                s.student_code,
+                s.full_name,
+                s.phone,
+                b.id AS batch_id,
+                b.batch_name,
+                br.id AS branch_id,
+                br.branch_name,
+                COUNT(*) AS total_marked,
+                SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END) AS present,
+                SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+                SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) AS late,
+                SUM(CASE WHEN ar.status = 'leave' THEN 1 ELSE 0 END) AS leave_count,
+                MAX(ar.attendance_date) AS last_marked
+            FROM attendance_records ar
+            JOIN students s ON ar.student_id = s.id
+            LEFT JOIN batches b ON ar.batch_id = b.id
+            LEFT JOIN branches br ON ar.branch_id = br.id
+            WHERE {where_clause}
+            GROUP BY ar.student_id, ar.batch_id, s.student_code, s.full_name, s.phone, b.id, b.batch_name, br.id, br.branch_name
+            ORDER BY s.full_name, b.batch_name
+        """, params)
+        student_summary = []
+        for row in cur.fetchall():
+            total_marked = row["total_marked"] or 0
+            present = row["present"] or 0
+            late = row["late"] or 0
+            student_batch_key = (row["student_id"], row["batch_id"] or 0)
+            student_expected_keys = expected_data["by_student_batch"].get(student_batch_key, set())
+            expected = len(student_expected_keys)
+            student_summary.append({
+                **dict(row),
+                "expected": expected,
+                "unmarked": max(0, expected - total_marked),
+                "leave": row["leave_count"] or 0,
+                "rate": round(((present + late) / total_marked * 100), 1) if total_marked else 0,
+                "marking_rate": round((min(total_marked, expected) / expected * 100), 1) if expected else 0,
+            })
+        student_batch_keys_with_rows = {(row["student_id"], row["batch_id"] or 0) for row in student_summary}
+        for student_batch_key, keys in expected_data["by_student_batch"].items():
+            if student_batch_key in student_batch_keys_with_rows:
+                continue
+            sample_row = expected_data["row_lookup"].get(student_batch_key, {})
+            expected = len(keys)
+            student_summary.append({
+                "student_id": sample_row.get("student_id"),
+                "student_code": sample_row.get("student_code"),
+                "full_name": sample_row.get("full_name"),
+                "phone": sample_row.get("phone"),
+                "batch_id": sample_row.get("batch_id"),
+                "batch_name": sample_row.get("batch_name"),
+                "branch_id": sample_row.get("branch_id"),
+                "branch_name": sample_row.get("branch_name"),
+                "total_marked": 0,
+                "present": 0,
+                "absent": 0,
+                "late": 0,
+                "leave_count": 0,
+                "last_marked": None,
+                "expected": expected,
+                "unmarked": expected,
+                "leave": 0,
+                "rate": 0,
+                "marking_rate": 0,
+            })
+        student_summary.sort(key=lambda row: ((row.get("full_name") or ""), (row.get("batch_name") or "")))
+
+        return render_template(
+            "reports/attendance_monthly.html",
+            report_month=report_month,
+            month_label=month_label,
+            start_date=start_date,
+            end_date=end_date,
+            calculation_end_date=calculation_end_date,
+            has_calculation_window=has_calculation_window,
+            branches=branches,
+            selected_branch_id=selected_branch_id,
+            selected_branch_name=selected_branch_name,
+            can_view_all=can_view_all,
+            calendar_settings=calendar_settings,
+            totals=totals,
+            daily_breakdown=daily_breakdown,
+            branch_summary=branch_summary,
+            batch_summary=batch_summary,
+            student_summary=student_summary,
+        )
+    finally:
+        conn.close()
+
+
+@reports_bp.route("/attendance/monthly/download")
+@login_required
+def attendance_monthly_download():
+    """Download the monthly attendance report as CSV."""
+    report_month, month_label, start_date, end_date, _last_day = _month_bounds(request.args.get("month"))
+    _today, calculation_end_date, query_end_date, _has_calculation_window = _calculation_window(start_date, end_date)
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        _branches, selected_branch_id, selected_branch_name, _can_view_all = _resolve_report_branch(cur)
+        calendar_settings = _get_attendance_calendar(cur, start_date, end_date)
+        where_clause = _attendance_where(selected_branch_id)
+        params = _attendance_params(start_date, query_end_date, selected_branch_id)
+        expected_data = _load_expected_attendance(cur, start_date, query_end_date, selected_branch_id, calendar_settings)
+        marked_keys = _load_marked_keys(cur, start_date, query_end_date, selected_branch_id)
+
+        cur.execute(f"""
+            SELECT
+                ar.attendance_date,
+                br.branch_name,
+                b.batch_name,
+                c.course_name,
+                u.full_name AS trainer_name,
+                s.full_name AS student_name,
+                s.student_code,
+                s.phone,
+                ar.status,
+                ar.remarks
+            FROM attendance_records ar
+            JOIN students s ON ar.student_id = s.id
+            LEFT JOIN batches b ON ar.batch_id = b.id
+            LEFT JOIN courses c ON b.course_id = c.id
+            LEFT JOIN branches br ON ar.branch_id = br.id
+            LEFT JOIN users u ON b.trainer_id = u.id
+            WHERE {where_clause}
+            ORDER BY ar.attendance_date, br.branch_name, b.batch_name, s.full_name
+        """, params)
+        rows = cur.fetchall()
+        unmarked_rows = []
+        for attendance_date, student_id, batch_id in sorted(expected_data["keys"] - marked_keys):
+            sample_row = expected_data["row_lookup"].get((student_id, batch_id), {})
+            unmarked_rows.append({
+                "attendance_date": attendance_date,
+                "branch_name": sample_row.get("branch_name") or "",
+                "batch_name": sample_row.get("batch_name") or "",
+                "course_name": sample_row.get("course_name") or "",
+                "trainer_name": sample_row.get("trainer_name") or "",
+                "student_name": sample_row.get("full_name") or "",
+                "student_code": sample_row.get("student_code") or "",
+                "phone": sample_row.get("phone") or "",
+                "status": "not_marked",
+                "remarks": "",
+            })
+    finally:
+        conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([f"Monthly Attendance Report - {month_label} - {selected_branch_name}"])
+    writer.writerow([f"Calculated through: {calculation_end_date}"])
+    writer.writerow([])
+    writer.writerow(["Date", "Branch", "Batch", "Course", "Trainer", "Student", "Reg. No", "Phone", "Status", "Remarks"])
+    for row in rows:
+        writer.writerow([
+            row["attendance_date"],
+            row["branch_name"] or "",
+            row["batch_name"] or "",
+            row["course_name"] or "",
+            row["trainer_name"] or "",
+            row["student_name"] or "",
+            row["student_code"] or "",
+            row["phone"] or "",
+            row["status"] or "",
+            row["remarks"] or "",
+        ])
+    for row in unmarked_rows:
+        writer.writerow([
+            row["attendance_date"],
+            row["branch_name"],
+            row["batch_name"],
+            row["course_name"],
+            row["trainer_name"],
+            row["student_name"],
+            row["student_code"],
+            row["phone"],
+            row["status"],
+            row["remarks"],
+        ])
+    if not rows and not unmarked_rows:
+        writer.writerow(["No attendance records found for the selected month"])
+
+    buf = io.BytesIO()
+    buf.write(output.getvalue().encode("utf-8-sig"))
+    buf.seek(0)
+    output.close()
+
+    branch_label = ""
+    if selected_branch_id:
+        branch_label = "_" + selected_branch_name.replace(" ", "_")
+    filename = f"monthly_attendance_{report_month}{branch_label}.csv"
+    return send_file(buf, mimetype="text/csv", as_attachment=True, download_name=filename)
+
+
+@reports_bp.route("/attendance/settings", methods=["GET", "POST"])
+@login_required
+@admin_required
+def attendance_calendar_settings():
+    """Configure working days and attendance holidays used by monthly reports."""
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        _ensure_attendance_calendar_tables(cur)
+        now = datetime.now(REPORT_IST).strftime("%Y-%m-%d %H:%M:%S")
+
+        if request.method == "POST":
+            action = request.form.get("action", "").strip()
+
+            if action == "save_working_days":
+                selected_days = []
+                for day in request.form.getlist("working_days"):
+                    if day.isdigit() and 0 <= int(day) <= 6:
+                        selected_days.append(str(int(day)))
+                if not selected_days:
+                    flash("Please select at least one working day.", "danger")
+                    return redirect(url_for("reports.attendance_calendar_settings"))
+
+                working_days = ",".join(sorted(set(selected_days), key=int))
+                cur.execute("""
+                    UPDATE attendance_calendar_settings
+                    SET working_days = ?, updated_at = ?
+                    WHERE id = 1
+                """, (working_days, now))
+                conn.commit()
+                flash("Attendance working days updated.", "success")
+                return redirect(url_for("reports.attendance_calendar_settings"))
+
+            if action == "add_holiday":
+                holiday_date = (request.form.get("holiday_date") or "").strip()
+                title = (request.form.get("title") or "").strip()
+                try:
+                    datetime.strptime(holiday_date, "%Y-%m-%d")
+                except ValueError:
+                    flash("Please enter a valid holiday date.", "danger")
+                    return redirect(url_for("reports.attendance_calendar_settings"))
+                if not title:
+                    flash("Holiday title is required.", "danger")
+                    return redirect(url_for("reports.attendance_calendar_settings"))
+
+                cur.execute("""
+                    INSERT INTO attendance_holidays (holiday_date, title, created_at, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(holiday_date) DO UPDATE SET
+                        title = excluded.title,
+                        updated_at = excluded.updated_at
+                """, (holiday_date, title, now, now))
+                conn.commit()
+                flash("Holiday saved.", "success")
+                return redirect(url_for("reports.attendance_calendar_settings"))
+
+            if action == "delete_holiday":
+                holiday_id = request.form.get("holiday_id")
+                if holiday_id and holiday_id.isdigit():
+                    cur.execute("DELETE FROM attendance_holidays WHERE id = ?", (int(holiday_id),))
+                    conn.commit()
+                    flash("Holiday deleted.", "success")
+                return redirect(url_for("reports.attendance_calendar_settings"))
+
+        settings = _get_attendance_calendar(cur)
+        day_options = [
+            (0, "Monday"),
+            (1, "Tuesday"),
+            (2, "Wednesday"),
+            (3, "Thursday"),
+            (4, "Friday"),
+            (5, "Saturday"),
+            (6, "Sunday"),
+        ]
+        return render_template(
+            "reports/attendance_settings.html",
+            settings=settings,
+            day_options=day_options,
+        )
+    finally:
+        conn.close()
 
 
 @reports_bp.route("/export/<table_name>")
