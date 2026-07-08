@@ -118,58 +118,70 @@
 
 <div class="row g-2 mb-3">
   <div class="col-6 col-lg-2">
-    <div class="card action-card border-start border-4 border-danger">
-      <div class="card-body">
-        <div class="label">Overdue Follow-ups</div>
-        <div class="value text-danger">{{ overdue_followups_count }}</div>
-        <div class="hint">Immediate priority</div>
+    <a href="{{ url_for('leads.leads_list', followup_due='overdue') }}" class="text-decoration-none">
+      <div class="card action-card border-start border-4 border-danger">
+        <div class="card-body">
+          <div class="label">Overdue Follow-ups</div>
+          <div class="value text-danger">{{ overdue_followups_count }}</div>
+          <div class="hint">Immediate priority</div>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
   <div class="col-6 col-lg-2">
-    <div class="card action-card border-start border-4 border-warning">
-      <div class="card-body">
-        <div class="label">Today Follow-ups</div>
-        <div class="value text-warning">{{ today_followups_count }}</div>
-        <div class="hint">Due today</div>
+    <a href="{{ url_for('leads.leads_list', followup_due='today') }}" class="text-decoration-none">
+      <div class="card action-card border-start border-4 border-warning">
+        <div class="card-body">
+          <div class="label">Today Follow-ups</div>
+          <div class="value text-warning">{{ today_followups_count }}</div>
+          <div class="hint">Due today</div>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
   <div class="col-6 col-lg-2">
-    <div class="card action-card border-start border-4 border-danger">
-      <div class="card-body">
-        <div class="label">Hot Leads</div>
-        <div class="value text-danger">{{ hot_leads_count }}</div>
-        <div class="hint">Score 60+</div>
+    <a href="{{ url_for('leads.leads_list', min_score='60', status_filter='active') }}" class="text-decoration-none">
+      <div class="card action-card border-start border-4 border-danger">
+        <div class="card-body">
+          <div class="label">Hot Leads</div>
+          <div class="value text-danger">{{ hot_leads_count }}</div>
+          <div class="hint">Score 60+</div>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
   <div class="col-6 col-lg-2">
-    <div class="card action-card border-start border-4 border-info">
-      <div class="card-body">
-        <div class="label">New Leads Today</div>
-        <div class="value text-info">{{ new_leads_today }}</div>
-        <div class="hint">Fresh enquiries</div>
+    <a href="{{ url_for('leads.leads_list', date_from=now.strftime('%Y-%m-%d'), date_to=now.strftime('%Y-%m-%d')) }}" class="text-decoration-none">
+      <div class="card action-card border-start border-4 border-info">
+        <div class="card-body">
+          <div class="label">New Leads Today</div>
+          <div class="value text-info">{{ new_leads_today }}</div>
+          <div class="hint">Fresh enquiries</div>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
   <div class="col-6 col-lg-2">
-    <div class="card action-card border-start border-4 border-secondary">
-      <div class="card-body">
-        <div class="label">Inactive Leads</div>
-        <div class="value text-secondary">{{ inactive_leads_count }}</div>
-        <div class="hint">7+ days idle</div>
+    <a href="{{ url_for('leads.leads_list', inactive='1') }}" class="text-decoration-none">
+      <div class="card action-card border-start border-4 border-secondary">
+        <div class="card-body">
+          <div class="label">Inactive Leads</div>
+          <div class="value text-secondary">{{ inactive_leads_count }}</div>
+          <div class="hint">7+ days idle</div>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
   <div class="col-6 col-lg-2">
-    <div class="card action-card border-start border-4 border-success">
-      <div class="card-body">
-        <div class="label">Converted This Month</div>
-        <div class="value text-success">{{ converted_this_month }}</div>
-        <div class="hint">Admissions won</div>
+    <a href="{{ url_for('leads.leads_list', converted_this_month='1') }}" class="text-decoration-none">
+      <div class="card action-card border-start border-4 border-success">
+        <div class="card-body">
+          <div class="label">Converted This Month</div>
+          <div class="value text-success">{{ converted_this_month }}</div>
+          <div class="hint">Admissions won</div>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
 </div>
 

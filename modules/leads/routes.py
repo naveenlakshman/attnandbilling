@@ -296,6 +296,16 @@ def dashboard():
 
     # Hot leads
     cur.execute(f"""
+        SELECT COUNT(*) AS cnt
+        FROM leads
+        WHERE status = 'active'
+          AND is_deleted = 0
+          AND lead_score >= 60
+          {assigned_filter_sql}
+    """, assigned_params)
+    hot_leads_count = cur.fetchone()["cnt"]
+
+    cur.execute(f"""
         SELECT l.*, u.full_name AS owner_name, u.username AS owner_username
         FROM leads l
         LEFT JOIN users u ON l.assigned_to_id = u.id
@@ -529,7 +539,7 @@ def dashboard():
         top_overdue_followups=overdue_followups[:5],
         top_hot_leads=hot_leads_all[:5],
         new_not_contacted=new_not_contacted,
-        hot_leads_count=len(hot_leads_all),
+        hot_leads_count=hot_leads_count,
         inactive_leads_count=inactive_leads_count,
         new_leads_today=new_leads_today,
         followups_due=followups_due[:10],
@@ -936,11 +946,15 @@ def leads_list():
     status_filter = request.args.get("status_filter", "").strip()
     lost_this_month_param = request.args.get("lost_this_month", "").strip()
     converted_this_month_param = request.args.get("converted_this_month", "").strip()
+    min_score = request.args.get("min_score", "").strip()
+    inactive = request.args.get("inactive", "").strip()
 
     if lost_this_month_param == "1":
         status_filter = "lost"
     elif converted_this_month_param == "1":
         status_filter = "converted"
+    elif inactive == "1":
+        status_filter = "active"
 
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
@@ -997,6 +1011,15 @@ def leads_list():
     if lost_this_month_param == "1" or converted_this_month_param == "1":
         query += " AND substr(l.updated_at, 1, 7) = ?"
         params.append(today_str[:7])
+
+    if min_score.isdigit():
+        query += " AND l.lead_score >= ?"
+        params.append(int(min_score))
+
+    if inactive == "1":
+        inactive_cutoff = (date.today() - timedelta(days=7)).strftime("%Y-%m-%d")
+        query += " AND (l.last_contact_date IS NULL OR l.last_contact_date = '' OR l.last_contact_date < ?)"
+        params.append(inactive_cutoff)
 
     if followup_due == "overdue":
         query += " AND l.status = 'active' AND l.next_followup_date IS NOT NULL AND l.next_followup_date < ?"
@@ -1135,6 +1158,10 @@ def leads_list():
         parent_discussion_status=parent_discussion_status,
         visit_status=visit_status,
         lost_reason_filter=lost_reason_filter,
+        lost_this_month=lost_this_month_param,
+        converted_this_month=converted_this_month_param,
+        min_score=min_score,
+        inactive=inactive,
         stages=stages,
         sources=sources,
         course_options=course_options,

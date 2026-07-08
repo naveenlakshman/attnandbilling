@@ -112,7 +112,7 @@ def get_lead_temperature(score, followup_status, stage):
     except (TypeError, ValueError):
         numeric_score = 0
 
-    if numeric_score >= 75:
+    if numeric_score >= 60:
         return "Hot"
     if numeric_score >= 40:
         return "Warm"
@@ -149,6 +149,9 @@ def enrich_lead_for_crm(lead, today=None):
     stage = lead_dict.get("stage")
 
     lead_dict["followup_status"] = followup_status
+    if lead_dict.get("status") in ("converted", "lost"):
+        lead_dict["followup_status"] = "none"
+        followup_status = "none"
     lead_dict["inactive_days"] = get_inactive_days(
         lead_dict.get("last_contact_date"),
         lead_dict.get("updated_at"),

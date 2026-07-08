@@ -2675,9 +2675,11 @@ def student_new():
             cur.execute(
                 """INSERT INTO leads
                        (name, phone, gender, education_status, lead_location,
-                        stage, status, lead_source, conversion_date, branch_id, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, 'Converted', 'converted', 'Walk-in', ?, ?, ?, ?)""",
-                (full_name, phone, gender, lead_edu, student_location, now[:10], branch_id, now, now)
+                        stage, status, lead_source, conversion_date, branch_id,
+                        assigned_to_id, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, 'Converted', 'converted', 'Walk-in', ?, ?, ?, ?, ?)""",
+                (full_name, phone, gender, lead_edu, student_location, now[:10], branch_id,
+                 session["user_id"], now, now)
             )
             new_lead_id = cur.lastrowid
             cur.execute("UPDATE students SET lead_id = ? WHERE id = ?", (new_lead_id, student_id))

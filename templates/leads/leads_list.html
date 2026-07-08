@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}Leads - {{ company.company_short_name }}{% endblock %}
 
 {% block extra_css %}
@@ -376,7 +376,7 @@
           {% elif l.followup_status == 'today' %}
             <span class="badge bg-warning text-dark">Today</span>
           {% endif %}
-          {% if l.parent_discussion_status == 'Pending' %}
+          {% if l.parent_discussion_status == 'Pending' and l.status == 'active' %}
             <span class="badge bg-warning text-dark">Parent Pending</span>
           {% endif %}
           {% if l.visit_status and l.visit_status != 'Not Visited' %}
@@ -424,7 +424,7 @@
             <td class="row-num">{{ loop.index }}</td>
             <td data-sort-key="name" data-sort-value="{{ l.name }}">
               {{ l.name }}
-              {% if l.parent_discussion_status == 'Pending' %}
+              {% if l.parent_discussion_status == 'Pending' and l.status == 'active' %}
                 <br><span class="badge bg-warning text-dark" style="font-size:9px;">Parent Pending</span>
               {% endif %}
               {% if l.visit_status and l.visit_status != 'Not Visited' %}
@@ -449,7 +449,7 @@
               {% endif %}
             </td>
             <td data-sort-key="score" data-sort-value="{{ l.lead_score }}">
-              <span class="badge {% if l.lead_score >= 75 %}bg-danger{% elif l.lead_score >= 40 %}bg-warning text-dark{% else %}bg-primary{% endif %}">
+              <span class="badge {% if l.lead_score >= 60 %}bg-danger{% elif l.lead_score >= 40 %}bg-warning text-dark{% else %}bg-primary{% endif %}">
                 {{ l.lead_score }}
               </span>
             </td>
