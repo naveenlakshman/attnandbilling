@@ -227,9 +227,10 @@
       </select>
     </div>
 
+    {% if mode == 'create' %}
     <div class="col-md-4">
       <label class="form-label">Last Contact Date *</label>
-      <input class="form-control" type="date" name="last_contact_date" value="{{ lead.last_contact_date if lead and lead.last_contact_date else '' }}" min="{{ last_contact_min_date }}" max="{{ last_contact_max_date }}" required>
+      <input class="form-control" type="date" name="last_contact_date" value="{{ lead.last_contact_date if lead and lead.last_contact_date else last_contact_max_date }}" min="{{ last_contact_min_date }}" max="{{ last_contact_max_date }}" required>
       <div class="form-text">Must be between lead created date and today.</div>
     </div>
 
@@ -237,6 +238,10 @@
       <label class="form-label">Next Follow-up Date *</label>
       <input class="form-control" type="date" name="next_followup_date" value="{{ lead.next_followup_date if lead and lead.next_followup_date else '' }}" required>
     </div>
+    {% else %}
+      <input type="hidden" name="last_contact_date" value="{{ lead.last_contact_date if lead and lead.last_contact_date else '' }}">
+      <input type="hidden" name="next_followup_date" value="{{ lead.next_followup_date if lead and lead.next_followup_date else '' }}">
+    {% endif %}
 
     <div class="col-12">
       <label class="form-label">Notes *</label>
