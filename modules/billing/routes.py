@@ -3248,7 +3248,17 @@ def _student_lms_progress_rows(cur, student_id):
                       AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
                 ) THEN 2
                 ELSE 1
-            END AS access_priority
+            END AS access_priority,
+            CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM lms_student_program_access spa
+                    WHERE spa.student_id = ?
+                      AND spa.program_id = lp.id
+                      AND spa.is_active = 0
+                ) THEN 1
+                ELSE 0
+            END AS is_suspended
         FROM lms_programs lp
         LEFT JOIN courses c ON c.id = lp.course_id
         WHERE lp.is_active = 1
@@ -3259,8 +3269,6 @@ def _student_lms_progress_rows(cur, student_id):
                   FROM lms_student_program_access spa
                   WHERE spa.student_id = ?
                     AND spa.program_id = lp.id
-                    AND spa.is_active = 1
-                    AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
               )
               OR EXISTS (
                   SELECT 1
@@ -3291,7 +3299,7 @@ def _student_lms_progress_rows(cur, student_id):
               )
           )
         ORDER BY course_name, lp.program_name
-    """, (student_id, student_id, student_id, student_id, student_id, student_id))
+    """, (student_id, student_id, student_id, student_id, student_id, student_id, student_id))
     programs = cur.fetchall()
 
     progress_rows = []
@@ -3393,6 +3401,7 @@ def _student_lms_progress_rows(cur, student_id):
             "last_activity": last_activity,
             "access_priority": int(program["access_priority"] or 1),
             "version_sort": program["version_sort"] or "",
+            "is_suspended": bool(program["is_suspended"]),
         })
 
     selected_by_course = {}
@@ -7327,4 +7336,67 @@ def activity_logs():
         branch_id=branch_id,
         module_name=module_name
     )
+
+
+@billing_bp.route("/student/<int:student_id>/toggle-program-access/<int:program_id>", methods=["POST"])
+@login_required
+@admin_required
+def student_toggle_program_access(student_id, program_id):
+    conn = get_conn()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT id, full_name, branch_id FROM students WHERE id = ?", (student_id,))
+    student = cur.fetchone()
+    if not student:
+        conn.close()
+        flash("Student not found.", "danger")
+        return redirect(url_for("billing.students"))
+        
+    cur.execute("SELECT id, program_name FROM lms_programs WHERE id = ?", (program_id,))
+    program = cur.fetchone()
+    if not program:
+        conn.close()
+        flash("LMS program not found.", "danger")
+        return redirect(url_for("billing.student_profile", student_id=student_id))
+        
+    cur.execute("""
+        SELECT id, is_active FROM lms_student_program_access
+        WHERE student_id = ? AND program_id = ?
+    """, (student_id, program_id))
+    existing = cur.fetchone()
+    
+    now_date = datetime.now().strftime("%Y-%m-%d")
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    
+    if existing:
+        new_status = 0 if existing["is_active"] == 1 else 1
+        cur.execute("""
+            UPDATE lms_student_program_access
+            SET is_active = ?, access_status = ?, updated_at = ?
+            WHERE id = ?
+        """, (new_status, "active" if new_status == 1 else "suspended", now_iso, existing["id"]))
+        action = "suspended" if new_status == 0 else "restored"
+    else:
+        cur.execute("""
+            INSERT INTO lms_student_program_access (
+                student_id, program_id, access_start_date, access_status, is_active, created_at, updated_at
+            ) VALUES (?, ?, ?, 'suspended', 0, ?, ?)
+        """, (student_id, program_id, now_date, now_iso, now_iso))
+        action = "suspended"
+        
+    conn.commit()
+    conn.close()
+    
+    log_activity(
+        user_id=session["user_id"],
+        branch_id=student["branch_id"] or session.get("branch_id"),
+        action_type="update",
+        module_name="students",
+        record_id=student_id,
+        description=f"LMS Access for program '{program['program_name']}' was {action} for student {student['full_name']}"
+    )
+    
+    flash(f"LMS Access for '{program['program_name']}' was {action} successfully.", "success")
+    return redirect(url_for("billing.student_profile", student_id=student_id))
+
 

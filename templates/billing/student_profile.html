@@ -234,20 +234,31 @@
         {% if lms_progress_rows %}
         <div class="profile-lms-grid">
           {% for row in lms_progress_rows %}
-          <article class="profile-lms-card profile-lms-{{ row.progress_class }}">
+          <article class="profile-lms-card profile-lms-{{ row.progress_class }}" {% if row.is_suspended %}style="border-color: #fca5a5; background-color: #fef2f2;"{% endif %}>
             <div class="profile-lms-card-head">
               <div>
                 <div class="profile-lms-course">{{ row.course_name }}</div>
                 <div class="profile-lms-program">{{ row.program_name }}</div>
               </div>
+              {% if row.is_suspended %}
+              <span class="profile-lms-status" style="background-color: #ef4444; color: #ffffff;">Suspended</span>
+              {% else %}
               <span class="profile-lms-status">{{ row.progress_status }}</span>
+              {% endif %}
             </div>
             <div class="profile-lms-progress-line">
               <div>
                 <strong>{{ row.progress_pct }}%</strong>
                 <span>{{ row.completed_topics }}/{{ row.total_topics }} lessons</span>
               </div>
-              <a class="profile-inline-link" href="{{ url_for('lms_admin.view_student_progress', student_id=student.id, program_id=row.program_id) }}">View Details</a>
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <a class="profile-inline-link" href="{{ url_for('lms_admin.view_student_progress', student_id=student.id, program_id=row.program_id) }}">View Details</a>
+                <form action="{{ url_for('billing.student_toggle_program_access', student_id=student.id, program_id=row.program_id) }}" method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to {% if row.is_suspended %}restore{% else %}suspend{% endif %} LMS access for this program?');">
+                  <button type="submit" class="profile-inline-link" style="border: none; background: transparent; padding: 0; cursor: pointer; color: {% if row.is_suspended %}#22c55e{% else %}#ef4444{% endif %}; font-weight: 600; font-size: inherit; font-family: inherit;">
+                    {% if row.is_suspended %}Restore Access{% else %}Suspend Access{% endif %}
+                  </button>
+                </form>
+              </div>
             </div>
             <progress class="profile-lms-progress" value="{{ row.progress_pct }}" max="100">{{ row.progress_pct }}%</progress>
             <div class="profile-lms-last">

@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from flask import render_template, request, redirect, url_for, session, flash, current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -247,6 +248,10 @@ def _has_program_access(conn, program_id, student_id):
     direct_access = conn.execute("""
         SELECT 1 FROM lms_programs lp
         WHERE lp.id = ? AND lp.is_active = 1
+        AND NOT EXISTS (
+            SELECT 1 FROM lms_student_program_access spa
+            WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 0
+        )
         AND (
             EXISTS (
                 SELECT 1 FROM lms_student_program_access spa
@@ -260,7 +265,7 @@ def _has_program_access(conn, program_id, student_id):
                   AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
             )
         )
-    """, (program_id, student_id, student_id)).fetchone()
+    """, (program_id, student_id, student_id, student_id)).fetchone()
 
     if direct_access:
         return True
@@ -307,6 +312,10 @@ def _has_program_access(conn, program_id, student_id):
     invoice_access = conn.execute("""
         SELECT 1 FROM lms_programs lp
         WHERE lp.id = ? AND lp.is_active = 1
+        AND NOT EXISTS (
+            SELECT 1 FROM lms_student_program_access spa
+            WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 0
+        )
         AND (
             EXISTS (
                 SELECT 1 FROM invoices i
@@ -322,7 +331,7 @@ def _has_program_access(conn, program_id, student_id):
                 WHERE i.student_id = ?
             )
         )
-    """, (program_id, student_id, student_id)).fetchone()
+    """, (program_id, student_id, student_id, student_id)).fetchone()
 
     return bool(invoice_access)
 
@@ -979,6 +988,10 @@ def dashboard():
                     ) AS map_order
                 FROM lms_programs lp
                 WHERE lp.is_active = 1
+                AND NOT EXISTS (
+                    SELECT 1 FROM lms_student_program_access spa_susp
+                    WHERE spa_susp.student_id = ? AND spa_susp.program_id = lp.id AND spa_susp.is_active = 0
+                )
                 AND (
                     -- 1. Direct explicit program access
                     EXISTS (
@@ -1043,7 +1056,7 @@ def dashboard():
                     )
                 )
                 ORDER BY CASE WHEN map_order IS NULL THEN 1 ELSE 0 END, map_order, lp.program_name
-            """, (student_id,) * 10).fetchall()
+            """, (student_id,) * 11).fetchall()
 
         programs = [dict(program) for program in programs]
         for program in programs:
