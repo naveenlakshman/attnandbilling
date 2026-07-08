@@ -1054,7 +1054,7 @@ def leads_list():
         query += " AND l.lost_reason = ?"
         params.append(lost_reason_filter)
 
-    query += " ORDER BY l.updated_at DESC"
+    query += " ORDER BY l.created_at DESC"
 
     cur.execute(query, params)
     leads = [lead_services.enrich_lead_for_crm(row) for row in cur.fetchall()]
