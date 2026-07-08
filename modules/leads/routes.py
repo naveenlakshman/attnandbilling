@@ -334,6 +334,7 @@ def dashboard():
         FROM leads l
         LEFT JOIN users u ON l.assigned_to_id = u.id
         WHERE l.is_deleted = 0
+          AND l.status = 'active'
           AND substr(l.created_at, 1, 10) = ?
           AND (l.last_contact_date IS NULL OR l.last_contact_date = '')
           {assigned_filter_sql}
