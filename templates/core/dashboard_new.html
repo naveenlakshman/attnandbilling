@@ -74,17 +74,17 @@
     </div>
   </div>
 
-  <!-- Admissions Card -->
+  <!-- Leads Card -->
   <div class="col-6 col-md-6 col-xl-3">
     <div class="kpi-card kpi-leads">
       <div class="kpi-body">
-        <div class="kpi-label">🎯 Admissions</div>
+        <div class="kpi-label">🎯 Leads</div>
         <div class="kpi-value text-leads">{{ active_leads }}</div>
         <div class="kpi-subtext">
           Active Leads (<span class="text-success fw-bold">{{ conversion_rate }}% win</span>)
         </div>
         <a href="{{ url_for('leads.dashboard') }}"
-          class="btn btn-sm btn-outline-primary kpi-action-btn w-100 text-center">Go to Admissions</a>
+          class="btn btn-sm btn-outline-primary kpi-action-btn w-100 text-center">Go to Leads</a>
       </div>
     </div>
   </div>
@@ -159,10 +159,10 @@
     </div>
   </div>
 
-  <!-- Admissions Pipeline Stages Widget -->
+  <!-- Leads Pipeline Stages Widget -->
   <div class="col-12 col-lg-5">
     <div class="card p-3 border-light h-100">
-      <h3 class="h6 text-uppercase fw-bold text-muted mb-3"><i class="bi bi-funnel text-primary"></i> Admissions
+      <h3 class="h6 text-uppercase fw-bold text-muted mb-3"><i class="bi bi-funnel text-primary"></i> Leads
         Pipeline</h3>
       <div class="pipeline-badges-container mb-3">
         {% set stage_colors = {
