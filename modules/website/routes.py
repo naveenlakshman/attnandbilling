@@ -59,9 +59,43 @@ def enquire():
     interested_course = request.form.get("interested_course", "").strip()
     message = request.form.get("message", "").strip()
 
+    # Honeypot check (Spambot detection)
+    honeypot = request.form.get("website_url_honeypot", "").strip()
+    
+    # Link & Spam Keyword detection
+    import re
+    link_pattern = re.compile(r"https?://|www\.|href=|<a\b|(?:\b[a-z0-9\-]+\.)+[a-z]{2,}(?:/[^\s]*)?", re.IGNORECASE)
+    has_links = (
+        link_pattern.search(name) or 
+        link_pattern.search(message)
+    )
+    
+    spam_keywords = ["withdraw", "btc", "bitcoin", "crypto", "casino", "earn money", "viagra", "pills", "btc", "withdraw link"]
+    text_to_check = f"{name} {email} {message}".lower()
+    has_spam_words = any(kw in text_to_check for kw in spam_keywords)
+    
+    if honeypot or has_links or has_spam_words:
+        # Silent discard: pretend it succeeded so spambots don't try other workarounds
+        flash("Thank you! We will contact you shortly.", "success")
+        return redirect(url_for("website.home") + "#enquire")
+
     if not name or not phone:
         flash("Name and phone are required.", "danger")
         return redirect(url_for("website.home") + "#enquire")
+
+    # Clean and validate Indian Mobile Number
+    cleaned_phone = re.sub(r"[\s\-\(\)]", "", phone)
+    phone_pattern = re.compile(r"^(?:\+91|91|0)?[6-9]\d{9}$")
+    if not phone_pattern.match(cleaned_phone):
+        flash("Please enter a valid 10-digit Indian mobile number.", "danger")
+        return redirect(url_for("website.home") + "#enquire")
+
+    # Validate email formatting if provided
+    if email:
+        email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+        if not email_pattern.match(email):
+            flash("Please enter a valid email address.", "danger")
+            return redirect(url_for("website.home") + "#enquire")
 
     now = datetime.now().isoformat(timespec="seconds")
     notes = message if message else None

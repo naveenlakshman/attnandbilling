@@ -140,6 +140,10 @@
         <div class="enquire-card">
           <form method="POST" action="{{ url_for('website.enquire') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <!-- Honeypot Field for Spambot Prevention -->
+            <div style="display:none !important;" aria-hidden="true">
+              <input type="text" name="website_url_honeypot" tabindex="-1" autocomplete="off" placeholder="Do not fill this field">
+            </div>
             <div class="row g-3">
               <div class="col-sm-6">
                 <label class="form-label fw-semibold">Your Name <span class="text-danger">*</span></label>
@@ -149,8 +153,8 @@
               <div class="col-sm-6">
                 <label class="form-label fw-semibold">Phone Number <span class="text-danger">*</span></label>
                 <input type="tel" name="phone" class="form-control form-control-lg"
-                       placeholder="10-digit mobile number" required maxlength="15"
-                       pattern="[0-9+\s\-]{7,15}">
+                       placeholder="e.g. +91 98765 43210" required maxlength="20"
+                       pattern="(?:\+91|91|0)?[6-9]\d{9}">
               </div>
               <div class="col-sm-6">
                 <label class="form-label fw-semibold">Email Address</label>
