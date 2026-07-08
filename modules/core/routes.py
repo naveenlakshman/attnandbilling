@@ -9,6 +9,13 @@ from extensions import public_auth_limit
 
 core_bp = Blueprint("core", __name__)
 
+
+def _marked_percentage(marked_count, expected_count):
+    if not expected_count:
+        return None
+    return round((min(marked_count, expected_count) / expected_count) * 100, 1)
+
+
 @core_bp.route("/erp")
 def home():
     if "user_id" in session:
@@ -196,9 +203,8 @@ def dashboard():
     att_late = att_summary.get("late", 0)
     att_absent = att_summary.get("absent", 0)
     att_leave = att_summary.get("leave", 0)
-    att_total = att_present + att_late + att_absent
-    attendance_rate = round(((att_present + att_late) / att_total * 100), 1) if att_total else None
     att_marked = att_present + att_late + att_absent + att_leave
+    att_total = att_marked
 
     cur.execute("""
         SELECT COUNT(*) AS cnt
@@ -210,6 +216,7 @@ def dashboard():
           AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
     """, [today, today])
     total_students_today = cur.fetchone()["cnt"]
+    attendance_rate = _marked_percentage(att_marked, total_students_today)
 
     # ── Active batches ──────────────────────────────────────────
     cur.execute("SELECT COUNT(*) AS cnt FROM batches WHERE status = 'active'")
@@ -349,9 +356,8 @@ def _staff_dashboard():
     att_late = att_summary.get("late", 0)
     att_absent = att_summary.get("absent", 0)
     att_leave = att_summary.get("leave", 0)
-    att_total = att_present + att_late + att_absent
-    attendance_rate = round(((att_present + att_late) / att_total * 100), 1) if att_total else None
     att_marked = att_present + att_late + att_absent + att_leave
+    att_total = att_marked
 
     if today_batch_ids:
         placeholders = ",".join("?" * len(today_batch_ids))
@@ -363,6 +369,7 @@ def _staff_dashboard():
         total_students_today = cur.fetchone()["cnt"]
     else:
         total_students_today = 0
+    attendance_rate = _marked_percentage(att_marked, total_students_today)
 
     # ── My assigned leads — followup overdue ───────────────────
     cur.execute("""
