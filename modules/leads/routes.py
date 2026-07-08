@@ -934,6 +934,14 @@ def leads_list():
     course = request.args.get("course", "").strip()
     followup_due = request.args.get("followup_due", "").strip()
     status_filter = request.args.get("status_filter", "").strip()
+    lost_this_month_param = request.args.get("lost_this_month", "").strip()
+    converted_this_month_param = request.args.get("converted_this_month", "").strip()
+
+    if lost_this_month_param == "1":
+        status_filter = "lost"
+    elif converted_this_month_param == "1":
+        status_filter = "converted"
+
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
     hide_converted = request.args.get("hide_converted", "").strip()
@@ -985,6 +993,10 @@ def leads_list():
     if status_filter in ("active", "converted", "lost"):
         query += " AND l.status = ?"
         params.append(status_filter)
+
+    if lost_this_month_param == "1" or converted_this_month_param == "1":
+        query += " AND substr(l.updated_at, 1, 7) = ?"
+        params.append(today_str[:7])
 
     if followup_due == "overdue":
         query += " AND l.status = 'active' AND l.next_followup_date IS NOT NULL AND l.next_followup_date < ?"

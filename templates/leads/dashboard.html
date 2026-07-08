@@ -176,7 +176,7 @@
 <!-- CRM Action Cards Row -->
 <div class="row g-2 mb-3">
   <div class="col-6 col-lg-3">
-    <a href="{{ url_for('leads.leads_list', parent_discussion_status='Pending') }}" class="text-decoration-none">
+    <a href="{{ url_for('leads.leads_list', parent_discussion_status='Pending', status_filter='active') }}" class="text-decoration-none">
       <div class="card action-card border-start border-4 border-warning">
         <div class="card-body">
           <div class="label">Parent Discussion Pending</div>
@@ -187,7 +187,7 @@
     </a>
   </div>
   <div class="col-6 col-lg-3">
-    <a href="{{ url_for('leads.leads_list', visit_status='Visit Scheduled') }}" class="text-decoration-none">
+    <a href="{{ url_for('leads.leads_list', visit_status='Visit Scheduled', status_filter='active') }}" class="text-decoration-none">
       <div class="card action-card border-start border-4 border-info">
         <div class="card-body">
           <div class="label">Visit Scheduled</div>
@@ -198,7 +198,7 @@
     </a>
   </div>
   <div class="col-6 col-lg-3">
-    <a href="{{ url_for('leads.leads_list', visit_status='Visited') }}" class="text-decoration-none">
+    <a href="{{ url_for('leads.leads_list', visit_status='Visited', status_filter='active') }}" class="text-decoration-none">
       <div class="card action-card border-start border-4 border-primary">
         <div class="card-body">
           <div class="label">Visited, Not Converted</div>
@@ -209,7 +209,7 @@
     </a>
   </div>
   <div class="col-6 col-lg-3">
-    <a href="{{ url_for('leads.leads_list', status_filter='lost') }}" class="text-decoration-none">
+    <a href="{{ url_for('leads.leads_list', lost_this_month='1') }}" class="text-decoration-none">
       <div class="card action-card border-start border-4 border-danger">
         <div class="card-body">
           <div class="label">Lost This Month</div>
