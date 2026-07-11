@@ -1544,8 +1544,22 @@ def init_db():
             receipt_result = cur.fetchone()
             total_received = float(receipt_result["total_received"] or 0)
 
-            if total_received >= total_amount and total_amount > 0:
-                new_status = "paid"
+            cur.execute("""
+                SELECT IFNULL(SUM(amount_written_off), 0) AS total_written_off
+                FROM bad_debt_writeoffs
+                WHERE invoice_id = ?
+            """, (invoice_id,))
+            writeoff_result = cur.fetchone()
+            total_written_off = float(writeoff_result["total_written_off"] or 0)
+
+            covered = round(total_received + total_written_off, 2)
+            if covered >= round(total_amount, 2) and total_amount > 0:
+                if total_written_off > 0:
+                    new_status = "write_off"
+                else:
+                    new_status = "paid"
+            elif total_written_off > 0:
+                new_status = "partially_written_off"
             elif total_received > 0:
                 new_status = "partially_paid"
             else:

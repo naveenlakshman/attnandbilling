@@ -358,16 +358,12 @@ def _final_exam_dues_check(cur, student_id):
         """
             SELECT COALESCE(SUM(
                 CASE
-                    WHEN i.total_amount - COALESCE((
-                        SELECT SUM(r.amount_received)
-                        FROM receipts r
-                        WHERE r.invoice_id = i.id
-                    ), 0) > 0
-                    THEN i.total_amount - COALESCE((
-                        SELECT SUM(r.amount_received)
-                        FROM receipts r
-                        WHERE r.invoice_id = i.id
-                    ), 0)
+                    WHEN i.total_amount 
+                         - COALESCE((SELECT SUM(r.amount_received) FROM receipts r WHERE r.invoice_id = i.id), 0)
+                         - COALESCE((SELECT SUM(w.amount_written_off) FROM bad_debt_writeoffs w WHERE w.invoice_id = i.id), 0) > 0
+                    THEN i.total_amount 
+                         - COALESCE((SELECT SUM(r.amount_received) FROM receipts r WHERE r.invoice_id = i.id), 0)
+                         - COALESCE((SELECT SUM(w.amount_written_off) FROM bad_debt_writeoffs w WHERE w.invoice_id = i.id), 0)
                     ELSE 0
                 END
             ), 0) AS balance

@@ -1820,7 +1820,9 @@ def profile():
         invoices = conn.execute("""
             SELECT i.invoice_no, i.invoice_date, i.total_amount, i.status,
                    COALESCE((SELECT SUM(r.amount_received) FROM receipts r WHERE r.invoice_id = i.id), 0) AS paid_amount,
-                   i.total_amount - COALESCE((SELECT SUM(r.amount_received) FROM receipts r WHERE r.invoice_id = i.id), 0) AS balance_amount
+                   i.total_amount 
+                   - COALESCE((SELECT SUM(r.amount_received) FROM receipts r WHERE r.invoice_id = i.id), 0)
+                   - COALESCE((SELECT SUM(w.amount_written_off) FROM bad_debt_writeoffs w WHERE w.invoice_id = i.id), 0) AS balance_amount
             FROM invoices i
             WHERE i.student_id = ?
             ORDER BY i.invoice_date DESC

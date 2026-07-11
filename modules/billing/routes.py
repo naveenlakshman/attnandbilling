@@ -5694,8 +5694,21 @@ def receipt_new():
             """, (invoice_id,))
             total_received = float(cur.fetchone()["total_received"] or 0)
 
-            if total_received >= invoice_data["total_amount"]:
-                new_status = "paid"
+            cur.execute("""
+                SELECT IFNULL(SUM(amount_written_off), 0) AS total_written_off
+                FROM bad_debt_writeoffs
+                WHERE invoice_id = ?
+            """, (invoice_id,))
+            total_written_off = float(cur.fetchone()["total_written_off"] or 0)
+
+            covered = round(total_received + total_written_off, 2)
+            if covered >= round(invoice_data["total_amount"], 2):
+                if total_written_off > 0:
+                    new_status = "write_off"
+                else:
+                    new_status = "paid"
+            elif total_written_off > 0:
+                new_status = "partially_written_off"
             elif total_received > 0:
                 new_status = "partially_paid"
             else:
@@ -5968,24 +5981,25 @@ def receipt_edit(receipt_id):
             current_status = inv_row["status"] if inv_row else "unpaid"
             total_written_off = float(inv_row["total_written_off"] or 0) if inv_row else 0.0
 
-            if current_status not in ("write_off", "partially_written_off"):
-                # Recalculate status including any write-offs
-                if round(total_received + total_written_off, 2) >= round(invoice_total, 2):
-                    new_status = "write_off" if total_received == 0 else "paid"
-                elif total_written_off > 0:
-                    new_status = "partially_written_off"
-                elif total_received >= invoice_total:
-                    new_status = "paid"
-                elif total_received > 0:
-                    new_status = "partially_paid"
+            # Recalculate status including any write-offs
+            covered = round(total_received + total_written_off, 2)
+            if covered >= round(invoice_total, 2):
+                if total_written_off > 0:
+                    new_status = "write_off"
                 else:
-                    new_status = "unpaid"
+                    new_status = "paid"
+            elif total_written_off > 0:
+                new_status = "partially_written_off"
+            elif total_received > 0:
+                new_status = "partially_paid"
+            else:
+                new_status = "unpaid"
 
-                cur.execute("""
-                    UPDATE invoices
-                    SET status = ?, updated_at = ?
-                    WHERE id = ?
-                """, (new_status, now, receipt["invoice_id"]))
+            cur.execute("""
+                UPDATE invoices
+                SET status = ?, updated_at = ?
+                WHERE id = ?
+            """, (new_status, now, receipt["invoice_id"]))
 
             # Reallocate installment payments based on updated receipt total
             cur.execute("""
