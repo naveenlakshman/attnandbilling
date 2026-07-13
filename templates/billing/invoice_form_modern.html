@@ -1708,6 +1708,15 @@
         return;
       }
     }
+
+    // Disable submit button to prevent double-submits
+    const submitBtn = document.querySelector('.submit-btn');
+    if (submitBtn) {
+      setTimeout(() => {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = 'Creating...';
+      }, 0);
+    }
   });
 
   // Initialize on page load

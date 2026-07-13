@@ -4640,9 +4640,6 @@ def invoice_new():
         if not form_token or form_token != saved_token:
             flash("This invoice has already been created or the request is no longer valid.", "warning")
             return redirect(url_for("billing.invoices"))
-            
-        # Invalidate the token immediately so subsequent requests fail
-        session.pop("invoice_form_token", None)
 
         conn = None
         try:
@@ -4743,6 +4740,9 @@ def invoice_new():
             if not invoice_items_to_save:
                 flash("Please enter at least one valid bill item.", "danger")
                 return redirect(url_for("billing.invoice_new"))
+
+            # Invalidate the token now that all validations have passed
+            session.pop("invoice_form_token", None)
 
             cur.execute("""
                 INSERT INTO invoices (
