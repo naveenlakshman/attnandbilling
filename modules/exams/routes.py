@@ -116,7 +116,7 @@ def _get_student_programs(cur, student_id):
     if session.get("demo_mode"):
         return cur.execute(
             """
-                SELECT lp.id, lp.program_name, c.course_name
+                SELECT lp.id, lp.program_name, c.course_name, lp.course_id
                 FROM lms_programs lp
                 LEFT JOIN courses c ON c.id = lp.course_id
                 WHERE lp.is_active = 1
@@ -128,7 +128,7 @@ def _get_student_programs(cur, student_id):
 
     return cur.execute(
         """
-            SELECT DISTINCT lp.id, lp.program_name, c.course_name
+            SELECT DISTINCT lp.id, lp.program_name, c.course_name, lp.course_id
             FROM lms_programs lp
             LEFT JOIN courses c ON c.id = lp.course_id
             WHERE lp.is_active = 1
@@ -1193,6 +1193,8 @@ def final_exam_apply():
         selected_program = None
         checks = None
         application = None
+        exam_pass = None
+        certificate = None
         if selected_program_id:
             selected_program = next(
                 (program for program in programs if program["id"] == selected_program_id),
@@ -1200,6 +1202,30 @@ def final_exam_apply():
             )
             checks = _final_exam_checks(cur, student_id, selected_program_id)
             application = _latest_final_exam_application(cur, student_id, selected_program_id)
+
+            # Check if they already passed the exam
+            settings_row = cur.execute("SELECT default_pass_percentage FROM certificate_settings WHERE id = 1").fetchone()
+            pass_threshold = settings_row["default_pass_percentage"] if settings_row else 50.0
+            exam_pass = cur.execute(
+                """
+                SELECT id, score_percent FROM lms_final_exam_attempts
+                WHERE student_id = ? AND course_id = ? AND score_percent >= ?
+                ORDER BY score_percent DESC, id DESC
+                LIMIT 1
+                """,
+                (student_id, selected_program_id, pass_threshold)
+            ).fetchone()
+
+            # Check if active certificate exists
+            if selected_program and selected_program["course_id"]:
+                certificate = cur.execute(
+                    """
+                    SELECT id, certificate_number FROM certificates
+                    WHERE student_id = ? AND course_id = ? AND status = 'Active'
+                    LIMIT 1
+                    """,
+                    (student_id, selected_program["course_id"])
+                ).fetchone()
 
         return render_template(
             "exams/student_final_exam_apply.html",
@@ -1209,6 +1235,8 @@ def final_exam_apply():
             selected_program_id=selected_program_id,
             checks=checks,
             application=application,
+            exam_pass=exam_pass,
+            certificate=certificate,
             today=date.today().isoformat(),
         )
     finally:

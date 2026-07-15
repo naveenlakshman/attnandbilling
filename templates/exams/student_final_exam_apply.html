@@ -140,7 +140,20 @@
           </div>
         </div>
 
-        {% if not checks.all_passed %}
+        {% if certificate %}
+          <div class="alert alert-success mt-3 mb-0">
+            <div class="unlock-action">
+              <span>Congratulations! You have successfully completed this program. Your certificate has been issued: <strong>{{ certificate.certificate_number }}</strong>.</span>
+              <a href="{{ url_for('certificates.student_certificate_view', cert_id=certificate.id) }}" class="btn btn-success" target="_blank">View Certificate</a>
+            </div>
+          </div>
+        {% elif exam_pass %}
+          <div class="alert alert-success mt-3 mb-0">
+            <div class="unlock-action">
+              <span>You have completed and passed the final exam (Score: {{ exam_pass.score_percent }}%). Your certificate will be issued shortly.</span>
+            </div>
+          </div>
+        {% elif not checks.all_passed %}
           <div class="alert alert-danger mt-3 mb-0">
             {% if not checks.syllabus.passed %}
               <div>Complete all remaining LMS topics for this program.</div>
@@ -173,7 +186,7 @@
       </div>
     </div>
 
-    {% if checks.all_passed and (not application or application.status == 'REJECTED') %}
+    {% if checks.all_passed and (not application or application.status == 'REJECTED') and not exam_pass and not certificate %}
       <div class="exam-card">
         <div class="exam-card-header">
           <div>
