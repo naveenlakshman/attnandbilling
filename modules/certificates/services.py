@@ -38,71 +38,100 @@ class EligibilityService:
         if not course:
             return False, {"error": "Course not found"}, {}
 
-        # Resolve active program_id for this course to check syllabus/assignment progress
-        program_row = cur.execute(
-            """
-            SELECT lp.id
-            FROM lms_programs lp
-            JOIN lms_student_program_access spa ON spa.program_id = lp.id
-            WHERE lp.course_id = ? AND spa.student_id = ? AND spa.is_active = 1
-            UNION
-            SELECT lp.id
-            FROM lms_programs lp
-            JOIN lms_batch_program_access bpa ON bpa.program_id = lp.id
-            JOIN student_batches sb ON sb.batch_id = bpa.batch_id
-            WHERE lp.course_id = ? AND sb.student_id = ? AND sb.status = 'active'
-            LIMIT 1
-            """,
-            (course_id, student_id, course_id, student_id)
-        ).fetchone()
+        # Resolve active program_id(s) for this course from lms_course_program_map
+        mapped_rows = cur.execute(
+            "SELECT program_id FROM lms_course_program_map WHERE course_id = ? ORDER BY display_order",
+            (course_id,)
+        ).fetchall()
+        mapped_program_ids = [r["program_id"] for r in mapped_rows]
 
-        program_id = None
-        if program_row:
-            program_id = program_row["id"]
-        else:
-            # Fallback to the first active program mapping to this course
-            fallback_program = cur.execute(
-                "SELECT id FROM lms_programs WHERE course_id = ? AND is_active = 1 AND COALESCE(is_deleted, 0) = 0 LIMIT 1",
-                (course_id,)
+        # If no mapping exists, fall back to lp.course_id mapping
+        if not mapped_program_ids:
+            # Check active program access or batch access
+            program_row = cur.execute(
+                """
+                SELECT lp.id
+                FROM lms_programs lp
+                JOIN lms_student_program_access spa ON spa.program_id = lp.id
+                WHERE lp.course_id = ? AND spa.student_id = ? AND spa.is_active = 1
+                UNION
+                SELECT lp.id
+                FROM lms_programs lp
+                JOIN lms_batch_program_access bpa ON bpa.program_id = lp.id
+                JOIN student_batches sb ON sb.batch_id = bpa.batch_id
+                WHERE lp.course_id = ? AND sb.student_id = ? AND sb.status = 'active'
+                LIMIT 1
+                """,
+                (course_id, student_id, course_id, student_id)
             ).fetchone()
-            program_id = fallback_program["id"] if fallback_program else None
 
-        # 2. Check Exam Attempt (Must pass)
-        attempt = cur.execute(
-            """
-            SELECT score_percent, submitted_at
-            FROM lms_final_exam_attempts
-            WHERE student_id = ? AND course_id = ?
-            ORDER BY score_percent DESC, submitted_at DESC
-            LIMIT 1
-            """,
-            (student_id, program_id)
-        ).fetchone()
+            if program_row:
+                mapped_program_ids = [program_row["id"]]
+            else:
+                fallback_program = cur.execute(
+                    "SELECT id FROM lms_programs WHERE course_id = ? AND is_active = 1 AND COALESCE(is_deleted, 0) = 0 LIMIT 1",
+                    (course_id,)
+                ).fetchone()
+                if fallback_program:
+                    mapped_program_ids = [fallback_program["id"]]
 
-        has_passed_exam = False
-        exam_score = 0
-        completion_date = datetime.date.today().isoformat()
+        # 2. Check Exam Attempt (Must pass all mapped programs)
+        has_passed_exam = True
+        exam_score_sum = 0
+        latest_submitted_at = None
         
-        if attempt:
-            exam_score = attempt["score_percent"]
-            has_passed_exam = exam_score >= pass_threshold
-            if attempt["submitted_at"]:
-                completion_date = attempt["submitted_at"][:10]
+        if mapped_program_ids:
+            for pid in mapped_program_ids:
+                attempt = cur.execute(
+                    """
+                    SELECT score_percent, submitted_at
+                    FROM lms_final_exam_attempts
+                    WHERE student_id = ? AND course_id = ?
+                    ORDER BY score_percent DESC, submitted_at DESC
+                    LIMIT 1
+                    """,
+                    (student_id, pid)
+                ).fetchone()
+                
+                if not attempt or attempt["score_percent"] < pass_threshold:
+                    has_passed_exam = False
+                    break
+                else:
+                    exam_score_sum += attempt["score_percent"]
+                    if not latest_submitted_at or (attempt["submitted_at"] and attempt["submitted_at"] > latest_submitted_at):
+                        latest_submitted_at = attempt["submitted_at"]
+        else:
+            has_passed_exam = False
 
-        # 3. Syllabus & Assignment Progress Checks
-        syllabus_completed = False
-        assignments_completed = False
-        syllabus = {"completed": 0, "total": 0, "passed": False}
-        assignments = {"submitted": 0, "total": 0, "passed": False}
+        exam_score = (exam_score_sum / len(mapped_program_ids)) if mapped_program_ids and has_passed_exam else 0
+        completion_date = latest_submitted_at[:10] if latest_submitted_at else datetime.date.today().isoformat()
 
-        if program_id:
-            from modules.exams.routes import _final_exam_syllabus_check
-            syllabus = _final_exam_syllabus_check(cur, student_id, program_id)
-            syllabus_completed = syllabus.get("passed", False)
+        # 3. Syllabus & Assignment Progress Checks across all mapped programs
+        syllabus_completed = True if mapped_program_ids else False
+        assignments_completed = True if mapped_program_ids else False
+        
+        total_syllabus_chapters = 0
+        total_syllabus_completed = 0
+        total_assign_total = 0
+        total_assign_submitted = 0
 
-            from modules.exams.routes import _final_exam_assignment_check
-            assignments = _final_exam_assignment_check(cur, student_id, program_id)
-            assignments_completed = assignments.get("passed", False)
+        for pid in mapped_program_ids:
+            from modules.exams.routes import _final_exam_syllabus_check, _final_exam_assignment_check
+            
+            prog_syllabus = _final_exam_syllabus_check(cur, student_id, pid)
+            total_syllabus_chapters += prog_syllabus.get("total", 0)
+            total_syllabus_completed += prog_syllabus.get("completed", 0)
+            if not prog_syllabus.get("passed", False):
+                syllabus_completed = False
+
+            prog_assign = _final_exam_assignment_check(cur, student_id, pid)
+            total_assign_total += prog_assign.get("total", 0)
+            total_assign_submitted += prog_assign.get("submitted", 0)
+            if not prog_assign.get("passed", False):
+                assignments_completed = False
+
+        syllabus = {"completed": total_syllabus_completed, "total": total_syllabus_chapters, "passed": syllabus_completed}
+        assignments = {"submitted": total_assign_submitted, "total": total_assign_total, "passed": assignments_completed}
 
         # 4. Financial Dues (Must be <= 0 balance)
         from modules.exams.routes import _final_exam_dues_check
@@ -122,16 +151,21 @@ class EligibilityService:
         ).fetchone()
         is_invoiced = invoice_check is not None
 
-        # 6. Student Profile Verification Check (Must have an approved final exam application)
-        app_check = cur.execute(
-            """
-            SELECT id FROM lms_final_exam_applications
-            WHERE student_id = ? AND course_id = ? AND status = 'APPROVED'
-            LIMIT 1
-            """,
-            (student_id, program_id)
-        ).fetchone()
-        is_profile_verified = app_check is not None
+        # 6. Student Profile Verification Check (Must have an approved final exam application for all or at least one)
+        is_profile_verified = False
+        if mapped_program_ids:
+            for pid in mapped_program_ids:
+                app_check = cur.execute(
+                    """
+                    SELECT id FROM lms_final_exam_applications
+                    WHERE student_id = ? AND course_id = ? AND status = 'APPROVED'
+                    LIMIT 1
+                    """,
+                    (student_id, pid)
+                ).fetchone()
+                if app_check:
+                    is_profile_verified = True
+                    break
 
         is_eligible = (
             has_passed_exam
