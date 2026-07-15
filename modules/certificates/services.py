@@ -76,7 +76,7 @@ class EligibilityService:
             ORDER BY score_percent DESC, submitted_at DESC
             LIMIT 1
             """,
-            (student_id, course_id)
+            (student_id, program_id)
         ).fetchone()
 
         has_passed_exam = False
@@ -122,14 +122,33 @@ class EligibilityService:
         ).fetchone()
         is_invoiced = invoice_check is not None
 
-        is_eligible = has_passed_exam and syllabus_completed and assignments_completed and no_dues and is_invoiced
+        # 6. Student Profile Verification Check (Must have an approved final exam application)
+        app_check = cur.execute(
+            """
+            SELECT id FROM lms_final_exam_applications
+            WHERE student_id = ? AND course_id = ? AND status = 'APPROVED'
+            LIMIT 1
+            """,
+            (student_id, program_id)
+        ).fetchone()
+        is_profile_verified = app_check is not None
+
+        is_eligible = (
+            has_passed_exam
+            and syllabus_completed
+            and assignments_completed
+            and no_dues
+            and is_invoiced
+            and is_profile_verified
+        )
 
         reasons = {
             "has_passed_exam": has_passed_exam,
             "syllabus_completed": syllabus_completed,
             "assignments_completed": assignments_completed,
             "no_dues": no_dues,
-            "is_invoiced": is_invoiced
+            "is_invoiced": is_invoiced,
+            "is_profile_verified": is_profile_verified
         }
 
         details = {
@@ -141,7 +160,8 @@ class EligibilityService:
             "completion_date": completion_date,
             "course_id": course_id,
             "course_name": course["course_name"],
-            "course_duration": course["duration"]
+            "course_duration": course["duration"],
+            "is_profile_verified": is_profile_verified
         }
 
         return is_eligible, reasons, details

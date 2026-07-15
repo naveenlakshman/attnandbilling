@@ -416,7 +416,8 @@ def _get_final_exam_application(cur, application_id):
                 s.phone AS current_student_phone,
                 s.date_of_birth AS current_student_dob,
                 lp.program_name,
-                c.course_name
+                c.course_name,
+                c.id AS actual_course_id
             FROM lms_final_exam_applications app
             JOIN students s ON s.id = app.student_id
             LEFT JOIN lms_programs lp ON lp.id = app.course_id
@@ -1219,7 +1220,11 @@ def final_exam_apply():
 def final_exam_applications():
     conn = get_conn()
     try:
-        applications = conn.execute(
+        cur = conn.cursor()
+        settings_row = cur.execute("SELECT default_pass_percentage FROM certificate_settings WHERE id = 1").fetchone()
+        pass_threshold = settings_row["default_pass_percentage"] if settings_row else 50.0
+
+        applications = cur.execute(
             """
                 SELECT
                     app.*,
@@ -1227,11 +1232,22 @@ def final_exam_applications():
                     s.full_name AS current_student_name,
                     s.phone AS current_student_phone,
                     lp.program_name,
-                    c.course_name
+                    c.course_name,
+                    c.id AS actual_course_id,
+                    att.score_percent,
+                    att.correct_count,
+                    att.total_questions,
+                    att.submitted_at AS exam_submitted_at,
+                    cert.certificate_number,
+                    cert.id AS certificate_id
                 FROM lms_final_exam_applications app
                 JOIN students s ON s.id = app.student_id
                 LEFT JOIN lms_programs lp ON lp.id = app.course_id
                 LEFT JOIN courses c ON c.id = lp.course_id
+                LEFT JOIN lms_final_exam_attempts att ON att.application_id = app.id
+                LEFT JOIN certificates cert ON cert.student_id = app.student_id 
+                                           AND cert.course_id = c.id 
+                                           AND cert.status = 'Active'
                 ORDER BY
                     CASE app.status
                         WHEN 'PENDING' THEN 0
@@ -1247,6 +1263,7 @@ def final_exam_applications():
     return render_template(
         "exams/admin_final_exam_applications.html",
         applications=applications,
+        pass_threshold=pass_threshold,
         today=date.today().isoformat(),
     )
 
@@ -1460,22 +1477,7 @@ def submit_final_exam():
             )
             conn.commit()
 
-            # Trigger certificate auto-issuance if settings allow and student is eligible
-            try:
-                from modules.certificates.services import EligibilityService, CertificateService
-                settings = EligibilityService.get_settings(cur)
-                if settings.get("auto_generate_certificates", 1) == 1 and score_percent >= settings.get("default_pass_percentage", 50.0):
-                    CertificateService.issue_certificate(
-                        conn, session["student_id"], course_id,
-                        performed_by=None,
-                        ip_address="Auto-Exam Submit",
-                        user_agent="System Auto-Generation Flow"
-                    )
-                    conn.commit()
-            except Exception as ex:
-                # Log warning but do not block student submission flow
-                print(f"Warning: Certificate auto-issuance skipped: {ex}")
-                conn.rollback()
+            # Certificate auto-issuance is handled asynchronously via the 24-hour delayed background flow.
     finally:
         conn.close()
 
@@ -1777,3 +1779,90 @@ def review_chapter_mock(chapter_id):
         review_items=review_items,
         submitted_at=attempt["submitted_at"],
     )
+
+
+@exams_bp.route("/lms_admin/final-exam/applications/<int:application_id>/result", methods=["GET"])
+@lms_content_manager_required
+def admin_final_exam_result(application_id):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        application = _get_final_exam_application(cur, application_id)
+        if not application:
+            flash("Final exam application not found.", "warning")
+            return redirect(url_for("exams.final_exam_applications"))
+
+        attempt = _get_final_exam_attempt(cur, application_id, application["student_id"])
+        if not attempt:
+            flash("Final exam has not been attempted yet.", "warning")
+            return redirect(url_for("exams.final_exam_applications"))
+
+        # Fetch eligibility details
+        from modules.certificates.services import EligibilityService
+        is_eligible, reasons, details = EligibilityService.check_eligibility(cur, application["student_id"], application["actual_course_id"])
+        
+        # Check if active certificate exists
+        existing_cert = cur.execute(
+            "SELECT id, certificate_number FROM certificates WHERE student_id = ? AND course_id = ? AND status = 'Active'",
+            (application["student_id"], application["actual_course_id"])
+        ).fetchone()
+
+        # Build review items (answers review)
+        question_ids = json.loads(attempt["question_ids_json"] or "[]")
+        submitted_answers = json.loads(attempt["submitted_answers_json"] or "{}")
+        correct_answers = json.loads(attempt["correct_answers_json"] or "{}")
+        review_items = _build_mock_review_items(cur, question_ids, submitted_answers, correct_answers)
+    finally:
+        conn.close()
+
+    return render_template(
+        "exams/admin_final_exam_result.html",
+        application=application,
+        attempt=attempt,
+        is_eligible=is_eligible,
+        reasons=reasons,
+        details=details,
+        existing_cert=existing_cert,
+        review_items=review_items,
+    )
+
+
+@exams_bp.route("/lms_admin/final-exam/applications/<int:application_id>/generate-certificate", methods=["POST"])
+@lms_content_manager_required
+def admin_generate_certificate(application_id):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        application = _get_final_exam_application(cur, application_id)
+        if not application:
+            flash("Final exam application not found.", "warning")
+            return redirect(url_for("exams.final_exam_applications"))
+
+        from modules.certificates.services import CertificateService
+        
+        # Resolve client IP and User Agent
+        ip_address = request.remote_addr or "127.0.0.1"
+        user_agent = request.headers.get("User-Agent", "System Admin Flow")
+        
+        try:
+            cert_no = CertificateService.issue_certificate(
+                conn,
+                application["student_id"],
+                application["actual_course_id"],
+                performed_by=session.get("user_id"),
+                ip_address=ip_address,
+                user_agent=user_agent,
+                force=False  # Strictly validate eligibility first
+            )
+            conn.commit()
+            flash(f"Certificate successfully generated! Number: {cert_no}", "success")
+        except ValueError as ex:
+            conn.rollback()
+            flash(f"Eligibility Error: {str(ex)}", "danger")
+        except Exception as ex:
+            conn.rollback()
+            flash(f"Error generating certificate: {str(ex)}", "danger")
+    finally:
+        conn.close()
+
+    return redirect(url_for("exams.final_exam_applications"))

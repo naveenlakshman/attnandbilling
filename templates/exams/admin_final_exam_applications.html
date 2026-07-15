@@ -98,6 +98,8 @@
             <th>Verified Details</th>
             <th>Exam Date</th>
             <th>Status</th>
+            <th>Exam Result</th>
+            <th>Certificate</th>
             <th>Applied On</th>
             <th>Actions</th>
           </tr>
@@ -132,7 +134,32 @@
               <td>
                 <span class="status-pill status-{{ app.status|lower }}">{{ app.status }}</span>
               </td>
-              <td>{{ app.applied_on }}</td>
+              <td>
+                {% if app.score_percent is not none %}
+                  <div class="student-main {% if app.score_percent >= pass_threshold %}text-success{% else %}text-danger{% endif %}" style="font-weight:700;">
+                    {{ app.score_percent }}%
+                  </div>
+                  <div class="student-sub">{{ app.correct_count }}/{{ app.total_questions }} correct</div>
+                  <a href="{{ url_for('exams.admin_final_exam_result', application_id=app.id) }}" class="small text-primary" style="text-decoration:underline;">View responses</a>
+                {% else %}
+                  <span class="text-muted small">Not Attempted</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if app.certificate_number %}
+                  <a href="{{ url_for('certificates.student_certificate_view', cert_id=app.certificate_id) }}" class="student-main text-success" target="_blank" style="font-weight:700; text-decoration:underline;">
+                    {{ app.certificate_number }}
+                  </a>
+                {% elif app.score_percent is not none and app.score_percent >= pass_threshold %}
+                  <form method="post" action="{{ url_for('exams.admin_generate_certificate', application_id=app.id) }}" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-primary">Generate</button>
+                  </form>
+                {% else %}
+                  <span class="text-muted small">-</span>
+                {% endif %}
+              </td>
+              <td>{{ app.applied_on|format_ist_datetime }}</td>
               <td>
                 {% if app.status == 'PENDING' %}
                   <div class="action-row">

@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Final Exam Attempt Details - Admin{% endblock %}
+
+{% block content %}
+<style>
+  .admin-result-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  .info-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+  .card-header-custom {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 16px 20px;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #1e293b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .card-body-custom {
+    padding: 20px;
+  }
+  .grid-info {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .info-item {
+    font-size: 0.95rem;
+  }
+  .info-label {
+    color: #64748b;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+  }
+  .info-value {
+    color: #0f172a;
+    font-weight: 700;
+  }
+  .checklist-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .checklist-item:last-child {
+    border-bottom: none;
+  }
+  .check-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 600;
+    color: #334155;
+  }
+  .check-icon {
+    font-size: 1.2rem;
+  }
+  .check-icon.success {
+    color: #10b981;
+  }
+  .check-icon.danger {
+    color: #ef4444;
+  }
+  .review-list {
+    display: grid;
+    gap: 16px;
+  }
+  .review-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+  }
+  .review-card-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+  .review-card-body {
+    padding: 16px;
+  }
+  .review-question {
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 16px;
+  }
+  .options-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .option-box {
+    padding: 10px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.9rem;
+  }
+  .option-box.is-student {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+  }
+  .option-box.is-correct {
+    border-color: #86efac;
+    background: #dcfce7;
+    color: #166534;
+    font-weight: 700;
+  }
+  .option-box.is-wrong {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+  }
+</style>
+
+<div class="admin-result-page">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0" style="font-weight: 800; color: #0f172a;">Final Exam Attempt Details</h1>
+    <a href="{{ url_for('exams.final_exam_applications') }}" class="btn btn-outline-secondary">
+      &larr; Back to Applications
+    </a>
+  </div>
+
+  <!-- Student Info Card -->
+  <div class="info-card">
+    <div class="card-header-custom">Student & Exam Details</div>
+    <div class="card-body-custom">
+      <div class="grid-info">
+        <div class="info-item">
+          <div class="info-label">Student Name</div>
+          <div class="info-value">{{ application.current_student_name }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Registration No.</div>
+          <div class="info-value">{{ application.student_code }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Program / Course</div>
+          <div class="info-value">{{ application.program_name }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Score Percentage</div>
+          <div class="info-value" style="font-size: 1.2rem; color: #2563eb;">{{ attempt.score_percent }}%</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Answers Correct</div>
+          <div class="info-value">{{ attempt.correct_count }} / {{ attempt.total_questions }}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Submitted On</div>
+          <div class="info-value">{{ attempt.submitted_at|format_ist_datetime }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Eligibility Checklist Card -->
+  <div class="info-card">
+    <div class="card-header-custom">Certificate Eligibility Checklist</div>
+    <div class="card-body-custom p-0">
+      
+      <!-- Exam Check -->
+      <div class="checklist-item">
+        <div class="check-label">
+          {% if reasons.has_passed_exam %}
+            <span class="check-icon success">&#10003;</span>
+          {% else %}
+            <span class="check-icon danger">&#10007;</span>
+          {% endif %}
+          <span>Passed Final Exam (Score: {{ attempt.score_percent }}%, Req: >= {{ details.exam_threshold }}%)</span>
+        </div>
+        <span class="badge {% if reasons.has_passed_exam %}bg-success{% else %}bg-danger{% endif %}">
+          {% if reasons.has_passed_exam %}Passed{% else %}Failed{% endif %}
+        </span>
+      </div>
+
+      <!-- Syllabus Progress Check -->
+      <div class="checklist-item">
+        <div class="check-label">
+          {% if reasons.syllabus_completed %}
+            <span class="check-icon success">&#10003;</span>
+          {% else %}
+            <span class="check-icon danger">&#10007;</span>
+          {% endif %}
+          <span>Course Progress Completed (Syllabus: {{ details.syllabus.completed }} / {{ details.syllabus.total }} topics)</span>
+        </div>
+        <span class="badge {% if reasons.syllabus_completed %}bg-success{% else %}bg-danger{% endif %}">
+          {% if reasons.syllabus_completed %}100% Complete{% else %}Incomplete{% endif %}
+        </span>
+      </div>
+
+      <!-- Assignment Check -->
+      <div class="checklist-item">
+        <div class="check-label">
+          {% if reasons.assignments_completed %}
+            <span class="check-icon success">&#10003;</span>
+          {% else %}
+            <span class="check-icon danger">&#10007;</span>
+          {% endif %}
+          <span>Required Assignments Submitted (Assignments: {{ details.assignments.submitted }} / {{ details.assignments.total }})</span>
+        </div>
+        <span class="badge {% if reasons.assignments_completed %}bg-success{% else %}bg-danger{% endif %}">
+          {% if reasons.assignments_completed %}All Submitted{% else %}Missing{% endif %}
+        </span>
+      </div>
+
+      <!-- Profile Verified -->
+      <div class="checklist-item">
+        <div class="check-label">
+          {% if reasons.is_profile_verified %}
+            <span class="check-icon success">&#10003;</span>
+          {% else %}
+            <span class="check-icon danger">&#10007;</span>
+          {% endif %}
+          <span>Student Profile Details Approved</span>
+        </div>
+        <span class="badge {% if reasons.is_profile_verified %}bg-success{% else %}bg-danger{% endif %}">
+          {% if reasons.is_profile_verified %}Verified{% else %}Unverified{% endif %}
+        </span>
+      </div>
+
+      <!-- Financial Check -->
+      <div class="checklist-item">
+        <div class="check-label">
+          {% if reasons.no_dues %}
+            <span class="check-icon success">&#10003;</span>
+          {% else %}
+            <span class="check-icon danger">&#10007;</span>
+          {% endif %}
+          <span>Financial Fees Cleared (Current Dues Balance: &nbsp;&#8377;{{ details.dues.balance }})</span>
+        </div>
+        <span class="badge {% if reasons.no_dues %}bg-success{% else %}bg-danger{% endif %}">
+          {% if reasons.no_dues %}Cleared{% else %}Dues Pending{% endif %}
+        </span>
+      </div>
+
+      <!-- Invoiced Check -->
+      <div class="checklist-item">
+        <div class="check-label">
+          {% if reasons.is_invoiced %}
+            <span class="check-icon success">&#10003;</span>
+          {% else %}
+            <span class="check-icon danger">&#10007;</span>
+          {% endif %}
+          <span>Course Invoiced Registered</span>
+        </div>
+        <span class="badge {% if reasons.is_invoiced %}bg-success{% else %}bg-danger{% endif %}">
+          {% if reasons.is_invoiced %}Registered{% else %}Not Invoiced{% endif %}
+        </span>
+      </div>
+
+    </div>
+    
+    <!-- Action Footer -->
+    <div class="card-body-custom border-top" style="background: #f8fafc; padding: 16px 20px;">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <strong>Status:</strong> 
+          {% if existing_cert %}
+            <span class="text-success fw-bold">&#10003; Certificate Issued ({{ existing_cert.certificate_number }})</span>
+          {% elif is_eligible %}
+            <span class="text-success fw-bold">&#10003; Fully Eligible</span>
+          {% else %}
+            <span class="text-danger fw-bold">&#10007; Ineligible (Unmet conditions exist)</span>
+          {% endif %}
+        </div>
+        <div>
+          {% if existing_cert %}
+            <a href="{{ url_for('certificates.student_certificate_view', cert_id=existing_cert.id) }}" class="btn btn-success" target="_blank">
+              View Certificate
+            </a>
+          {% elif is_eligible %}
+            <form method="post" action="{{ url_for('exams.admin_generate_certificate', application_id=application.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-primary">Generate Certificate</button>
+            </form>
+          {% else %}
+            <button class="btn btn-secondary" disabled>Generate Certificate</button>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed Responses -->
+  <h2 class="h5 mb-3" style="font-weight: 700; color: #1e293b;">Detailed Question Responses</h2>
+  <div class="review-list">
+    {% for item in review_items %}
+      {% set question = item.question %}
+      {% set student_answer = item.student_answer %}
+      {% set correct_answer = item.correct_answer %}
+      
+      <div class="review-card">
+        <div class="review-card-header">
+          <span>Question {{ loop.index }}</span>
+          {% if item.is_correct %}
+            <span class="badge bg-success">Correct</span>
+          {% else %}
+            <span class="badge bg-danger">Incorrect</span>
+          {% endif %}
+        </div>
+        <div class="review-card-body">
+          <div class="review-question">{{ question.question_text|safe }}</div>
+          
+          <div class="options-grid">
+            {% for opt in ['A', 'B', 'C', 'D'] %}
+              {% set opt_text = question['option_' ~ opt|lower] %}
+              {% set is_student = student_answer == opt %}
+              {% set is_correct = correct_answer == opt %}
+              
+              <div class="option-box {% if is_correct %}is-correct{% endif %} {% if is_student and not is_correct %}is-wrong{% elif is_student %}is-student{% endif %}">
+                <strong>{{ opt }}.</strong> {{ opt_text }}
+                {% if is_student %}
+                  <div class="small mt-1" style="font-size:0.75rem; font-weight: 600;">Student's choice</div>
+                {% endif %}
+                {% if is_correct and not item.is_correct %}
+                  <div class="small mt-1" style="font-size:0.75rem; font-weight: 600;">Correct choice</div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

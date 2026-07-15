@@ -2,7 +2,7 @@ import datetime
 # pyrefly: ignore [missing-import]
 from flask import render_template, request, redirect, url_for, session, flash, jsonify, abort, current_app
 from db import get_conn
-from modules.core.utils import lms_content_manager_required
+from modules.core.utils import lms_content_manager_required, admin_required
 from . import certificates_bp
 from .services import EligibilityService, CertificateService
 from .verifier import verify_certificate_number
@@ -146,17 +146,21 @@ def student_certificates_list():
         settings = EligibilityService.get_settings(cur)
         
         if settings.get("auto_generate_certificates", 1) == 1:
-            # Query courses for which student has exam attempts
+            # Query courses for which student has passed final exam attempts submitted at least 24 hours ago
+            pass_threshold = settings.get("default_pass_percentage", 50.0)
             invoiced_courses = cur.execute(
                 """
                 SELECT DISTINCT c.id
                 FROM courses c
                 WHERE EXISTS (
                     SELECT 1 FROM lms_final_exam_attempts a
-                    WHERE a.student_id = ? AND a.course_id = c.id
+                    WHERE a.student_id = ? 
+                      AND a.course_id = c.id
+                      AND a.score_percent >= ?
+                      AND datetime(a.submitted_at) <= datetime('now', '-24 hours')
                 )
                 """,
-                (student_id,)
+                (student_id, pass_threshold)
             ).fetchall()
             
             for c in invoiced_courses:
@@ -331,7 +335,7 @@ def admin_list():
 # Admin Panel - Issue Certificate Screen
 # ---------------------------------------------------------------------------
 @certificates_bp.route("/lms_admin/certificates/issue", methods=["GET", "POST"])
-@lms_content_manager_required
+@admin_required
 def admin_issue():
     conn = get_conn()
     try:
