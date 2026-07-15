@@ -352,7 +352,68 @@ class CertificateService:
             user_agent=user_agent
         )
         
+        # 10. Check and update student status to 'completed' if all enrolled courses are certified
+        cls.check_and_update_student_status(conn, student_id)
+        
         return cert_no
+
+    @classmethod
+    def check_and_update_student_status(cls, conn, student_id):
+        """
+        Evaluate if all of the student's invoiced courses have Active certificates.
+        If yes, mark their student status as 'completed'.
+        """
+        cur = conn.cursor()
+        
+        # Get all courses invoiced to the student (excluding cancelled)
+        invoiced_courses = cur.execute(
+            """
+            SELECT DISTINCT ii.course_id
+            FROM invoice_items ii
+            JOIN invoices i ON i.id = ii.invoice_id
+            WHERE i.student_id = ? AND i.status != 'cancelled'
+            """,
+            (student_id,)
+        ).fetchall()
+        
+        invoiced_course_ids = {r["course_id"] for r in invoiced_courses}
+        
+        # If student has no invoiced courses, do not change status
+        if not invoiced_course_ids:
+            return
+            
+        # Get all courses for which the student holds an Active certificate
+        certified_courses = cur.execute(
+            """
+            SELECT DISTINCT course_id
+            FROM certificates
+            WHERE student_id = ? AND status = 'Active'
+            """,
+            (student_id,)
+        ).fetchall()
+        
+        certified_course_ids = {r["course_id"] for r in certified_courses}
+        
+        # Check if all invoiced courses are certified
+        if invoiced_course_ids.issubset(certified_course_ids):
+            # Update student status to 'completed'
+            cur.execute(
+                "UPDATE students SET status = 'completed' WHERE id = ?",
+                (student_id,)
+            )
+            try:
+                from db import log_activity
+                log_activity(
+                    user_id=None,
+                    branch_id=None,
+                    action_type="status_change",
+                    module_name="students",
+                    record_id=student_id,
+                    description="Student status updated to 'completed' after all course certificates generated",
+                    conn=conn
+                )
+            except Exception:
+                pass
 
     @classmethod
     def reissue_certificate(cls, conn, cert_id, reason=None, performed_by=None, ip_address=None, user_agent=None):

@@ -1942,5 +1942,46 @@ def init_db():
             VALUES (1, '0,1,2,3,4,5', ?)
         """, (now,))
 
+    # Migration: Add profile_approved_updates_count to students if not exists
+    student_cols = [row["name"] for row in cur.execute("PRAGMA table_info(students)").fetchall()]
+    if "profile_approved_updates_count" not in student_cols:
+        cur.execute("ALTER TABLE students ADD COLUMN profile_approved_updates_count INTEGER DEFAULT 0")
+
+    # Create student_uploaded_documents table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS student_uploaded_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            category TEXT NOT NULL CHECK(category IN ('qualification', 'identity', 'address')),
+            document_type TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_student_uploaded_documents_student
+        ON student_uploaded_documents(student_id, category)
+    """)
+
+    # Create student_profile_update_requests table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS student_profile_update_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            requested_data TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED')),
+            rejection_reason TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            processed_by INTEGER,
+            processed_at TEXT,
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_student_profile_update_requests_student
+        ON student_profile_update_requests(student_id, status)
+    """)
+
     conn.commit()
     conn.close()

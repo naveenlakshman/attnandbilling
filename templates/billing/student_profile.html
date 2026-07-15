@@ -99,6 +99,13 @@
                   {% if origin_lead %}
                   <a class="source-lead-pill" href="{{ url_for('leads.lead_detail', lead_id=origin_lead.id) }}">🔗 Source Lead: {{ origin_lead.name }}</a>
                   {% endif %}
+                  <div style="display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; vertical-align: middle;">
+                    <span style="font-size: 12px; font-weight: 600; color: #475569;">Profile Score:</span>
+                    <div style="width: 100px; height: 8px; background-color: #cbd5e1; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle;">
+                      <div style="width: {{ profile_score }}%; height: 100%; background-image: linear-gradient(90deg, #3b82f6, #10b981);"></div>
+                    </div>
+                    <span style="font-size: 12px; font-weight: 700; color: {% if profile_score == 100 %}#10b981{% else %}#2563eb{% endif %};">{{ profile_score }}%</span>
+                  </div>
                 </div>
               </div>
 

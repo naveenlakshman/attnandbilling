@@ -1828,13 +1828,211 @@ def profile():
             ORDER BY i.invoice_date DESC
         """, (student_id,)).fetchall()
 
+        # Fetch uploaded documents
+        uploaded_docs = conn.execute(
+            "SELECT * FROM student_uploaded_documents WHERE student_id = ?",
+            (student_id,)
+        ).fetchall()
+        docs_by_cat = {d['category']: d for d in uploaded_docs}
+
+        # Fetch pending update requests
+        pending_update = conn.execute(
+            "SELECT * FROM student_profile_update_requests WHERE student_id = ? AND status = 'PENDING' LIMIT 1",
+            (student_id,)
+        ).fetchone()
+
+        profile_score = calculate_profile_score(student, uploaded_docs)
+
+        from modules.billing.routes import QUALIFICATION_LEVELS
+
     finally:
         conn.close()
 
     return render_template('students/profile.html',
                            student=student, batches=batches,
                            invoice_courses=invoice_courses,
-                           invoices=invoices, company=company)
+                           invoices=invoices, company=company,
+                           docs_by_cat=docs_by_cat,
+                           pending_update=pending_update,
+                           profile_score=profile_score,
+                           qualification_levels=QUALIFICATION_LEVELS)
+
+
+def calculate_profile_score(student, uploaded_docs):
+    """Calculate the profile completion percentage from 0 to 100 based on 22 criteria."""
+    if not student:
+        return 0
+    
+    student_dict = dict(student)
+    uploaded_cats = {d['category'] for d in uploaded_docs}
+    
+    fields_to_check = [
+        'full_name', 'phone', 'email', 'address', 'gender', 'education_level', 
+        'qualification', 'employment_status', 'date_of_birth', 'parent_name', 
+        'parent_contact', 'father_name', 'mother_name', 'tenth_institution', 
+        'tenth_percentage', 'puc_institution', 'puc_percentage',
+        'student_signature_filename', 'parent_signature_filename'
+    ]
+    
+    filled_count = 0
+    for field in fields_to_check:
+        val = student_dict.get(field)
+        if val is not None and str(val).strip() != "":
+            filled_count += 1
+            
+    if 'qualification' in uploaded_cats:
+        filled_count += 1
+    if 'identity' in uploaded_cats:
+        filled_count += 1
+    if 'address' in uploaded_cats:
+        filled_count += 1
+        
+    total_items = len(fields_to_check) + 3
+    return int((filled_count / total_items) * 100)
+
+
+@students_bp.route('/profile/upload-document', methods=['POST'])
+@student_login_required
+def profile_upload_document():
+    student_id = session['student_id']
+    category = request.form.get('category')
+    doc_type = request.form.get('document_type')
+    
+    if category not in ('qualification', 'identity', 'address') or not doc_type:
+        flash('Invalid document category or type.', 'danger')
+        return redirect(url_for('students.profile'))
+        
+    if 'document_file' not in request.files:
+        flash('No file uploaded.', 'danger')
+        return redirect(url_for('students.profile'))
+        
+    file = request.files['document_file']
+    if not file or file.filename == '':
+        flash('No file selected.', 'danger')
+        return redirect(url_for('students.profile'))
+        
+    # Check extension
+    allowed_exts = {'.pdf', '.png', '.jpg', '.jpeg'}
+    _, ext = os.path.splitext(file.filename.lower())
+    if ext not in allowed_exts:
+        flash('Invalid file format. Only PDF, PNG, JPG, and JPEG are allowed.', 'danger')
+        return redirect(url_for('students.profile'))
+        
+    # Ensure upload folder exists
+    upload_dir = os.path.abspath(os.path.join("uploads", "student_documents"))
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    # Save file with a secure, unique filename
+    unique_fn = f"doc_{student_id}_{category}_{uuid.uuid4().hex}{ext}"
+    dest_path = os.path.join(upload_dir, unique_fn)
+    file.save(dest_path)
+    
+    # Database update
+    conn = get_conn()
+    try:
+        # Check if record exists for this category, update it or insert new one
+        existing = conn.execute(
+            "SELECT id, file_path FROM student_uploaded_documents WHERE student_id = ? AND category = ?",
+            (student_id, category)
+        ).fetchone()
+        
+        if existing:
+            # Optionally delete old file
+            try:
+                old_path = os.path.abspath(existing['file_path'])
+                if os.path.exists(old_path):
+                    os.remove(old_path)
+            except Exception:
+                pass
+            conn.execute(
+                """
+                UPDATE student_uploaded_documents
+                SET document_type = ?, file_path = ?, uploaded_at = datetime('now')
+                WHERE id = ?
+                """,
+                (doc_type, dest_path, existing['id'])
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO student_uploaded_documents (student_id, category, document_type, file_path)
+                VALUES (?, ?, ?, ?)
+                """,
+                (student_id, category, doc_type, dest_path)
+            )
+        conn.commit()
+        flash('Document uploaded successfully.', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Database error: {str(e)}', 'danger')
+    finally:
+        conn.close()
+        
+    return redirect(url_for('students.profile'))
+
+
+@students_bp.route('/profile/request-update', methods=['POST'])
+@student_login_required
+def profile_request_update():
+    student_id = session['student_id']
+    conn = get_conn()
+    try:
+        # 1. Fetch current student details
+        student = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+        
+        # Check 3 approved updates limit
+        if student.get('profile_approved_updates_count', 0) >= 3:
+            flash('You have reached the maximum limit of 3 approved profile updates.', 'danger')
+            return redirect(url_for('students.profile'))
+            
+        # Check if there is already a PENDING request
+        pending = conn.execute(
+            "SELECT id FROM student_profile_update_requests WHERE student_id = ? AND status = 'PENDING' LIMIT 1",
+            (student_id,)
+        ).fetchone()
+        if pending:
+            flash('You already have a pending profile update request.', 'warning')
+            return redirect(url_for('students.profile'))
+            
+        # 2. Gather allowed fields from form
+        allowed_fields = [
+            'full_name', 'phone', 'email', 'address', 'gender', 'education_level', 
+            'qualification', 'employment_status', 'date_of_birth', 'parent_name', 
+            'parent_contact', 'father_name', 'mother_name', 'tenth_institution', 
+            'tenth_board', 'tenth_year', 'tenth_percentage', 'puc_institution', 
+            'puc_board', 'puc_stream', 'puc_year', 'puc_percentage'
+        ]
+        
+        requested_data = {}
+        for field in allowed_fields:
+            val = request.form.get(field, '').strip()
+            # Compare with current value to only request changes for modified fields
+            curr_val = str(student[field]) if student[field] is not None else ''
+            if val != curr_val:
+                requested_data[field] = val
+                
+        if not requested_data:
+            flash('No changes were made to your profile.', 'info')
+            return redirect(url_for('students.profile'))
+            
+        # 3. Save pending request
+        import json
+        conn.execute(
+            """
+            INSERT INTO student_profile_update_requests (student_id, requested_data, status)
+            VALUES (?, ?, 'PENDING')
+            """,
+            (student_id, json.dumps(requested_data))
+        )
+        conn.commit()
+        flash('Your profile update request has been submitted for staff approval.', 'success')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Database error: {str(e)}', 'danger')
+    finally:
+        conn.close()
+        
+    return redirect(url_for('students.profile'))
 
 
 @students_bp.route('/change-password', methods=['GET', 'POST'])
@@ -2456,4 +2654,53 @@ def attendance_calendar():
         leave=leave,
         absent=absent,
     )
+
+
+@students_bp.route('/profile/save-signature', methods=['POST'])
+@student_login_required
+def profile_save_signature():
+    import base64
+    student_id = session['student_id']
+    sig_type = request.form.get('sig_type')
+    sig_data = request.form.get('sig_data')
+
+    if sig_type not in ('student', 'parent') or not sig_data:
+        return {"success": False, "error": "Invalid signature details."}, 400
+
+    conn = get_conn()
+    try:
+        student = conn.execute("SELECT student_code FROM students WHERE id = ?", (student_id,)).fetchone()
+        if not student:
+            return {"success": False, "error": "Student not found."}, 404
+
+        if ',' in sig_data:
+            sig_data = sig_data.split(',')[1]
+        sig_bytes = base64.b64decode(sig_data)
+
+        sig_dir = os.path.join("static", "images", "student_signatures")
+        os.makedirs(sig_dir, exist_ok=True)
+
+        code = student["student_code"]
+        filename = f"{code}_{sig_type}_signature.png"
+        filepath = os.path.join(sig_dir, filename)
+        with open(filepath, "wb") as f:
+            f.write(sig_bytes)
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if sig_type == "student":
+            conn.execute(
+                "UPDATE students SET student_signature_filename=?, student_signature_date=?, updated_at=? WHERE id=?",
+                (filename, now, now, student_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE students SET parent_signature_filename=?, parent_signature_date=?, updated_at=? WHERE id=?",
+                (filename, now, now, student_id)
+            )
+        conn.commit()
+        return {"success": True, "filename": filename, "signed_at": now}
+    except Exception as e:
+        return {"success": False, "error": str(e)}, 500
+    finally:
+        conn.close()
 

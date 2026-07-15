@@ -157,6 +157,7 @@ def create_app():
     app.jinja_env.filters['format_datetime'] = format_datetime
     app.jinja_env.filters['to_ist_time'] = to_ist_time
     app.jinja_env.filters['format_ist_datetime'] = format_ist_datetime
+    app.jinja_env.filters['basename'] = os.path.basename
 
     import json as _json
     def _from_json_len(val):
@@ -166,9 +167,34 @@ def create_app():
             return 0
     app.jinja_env.filters['from_json_len'] = _from_json_len
 
+    def _from_json(val):
+        try:
+            return _json.loads(val) if val else {}
+        except Exception:
+            return {}
+    app.jinja_env.filters['from_json'] = _from_json
+
     @app.context_processor
     def inject_company():
         return {"company": get_company_profile()}
+
+    @app.context_processor
+    def inject_student_profile_score():
+        student_id = session.get('student_id')
+        if not student_id:
+            return {}
+        try:
+            from modules.students.routes import calculate_profile_score
+            conn = get_conn()
+            try:
+                student = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+                uploaded_docs = conn.execute("SELECT category FROM student_uploaded_documents WHERE student_id = ?", (student_id,)).fetchall()
+                score = calculate_profile_score(student, uploaded_docs)
+                return {"student_profile_score": score}
+            finally:
+                conn.close()
+        except Exception:
+            return {}
 
     return app
 

@@ -104,6 +104,59 @@
   </div>
 </div>
 
+<!-- Profile Completion Dashboard -->
+<div class="info-card" style="margin-bottom: 24px; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; position: relative; overflow: hidden;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
+    <div>
+      <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #1e293b;">⚡ Profile Completion Status</h3>
+      <p class="text-muted" style="margin: 2px 0 0; font-size: 12px;">Complete all details, uploads, and signatures to reach 100% completion.</p>
+    </div>
+    <div style="font-size: 20px; font-weight: 800; color: {% if profile_score == 100 %}#10b981{% else %}#3b82f6{% endif %};">
+      {{ profile_score }}%
+    </div>
+  </div>
+  
+  <div class="progress" style="height: 12px; background-color: #e2e8f0; border-radius: 6px; overflow: hidden; margin-bottom: 16px;">
+    <div class="progress-bar {% if profile_score == 100 %}bg-success{% else %}bg-primary{% endif %}" role="progressbar" 
+         style="width: {{ profile_score }}%; transition: width 0.6s ease; background-image: linear-gradient(90deg, #3b82f6, #10b981);" 
+         aria-valuenow="{{ profile_score }}" aria-valuemin="0" aria-valuemax="100"></div>
+  </div>
+
+  <div class="row g-3" style="font-size: 12px; color: #475569;">
+    <!-- Document Statuses -->
+    <div class="col-md-6">
+      <div style="font-weight: 600; margin-bottom: 6px; color: #334155;">📄 Verification Documents Uploads:</div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <div>Qualification: {% if docs_by_cat and docs_by_cat.qualification %}<span class="text-success" style="font-weight: 600;">✅ Uploaded</span>{% else %}<span class="text-danger" style="font-weight: 600;">❌ Missing</span>{% endif %}</div>
+        <div>Identity: {% if docs_by_cat and docs_by_cat.identity %}<span class="text-success" style="font-weight: 600;">✅ Uploaded</span>{% else %}<span class="text-danger" style="font-weight: 600;">❌ Missing</span>{% endif %}</div>
+        <div>Address: {% if docs_by_cat and docs_by_cat.address %}<span class="text-success" style="font-weight: 600;">✅ Uploaded</span>{% else %}<span class="text-danger" style="font-weight: 600;">❌ Missing</span>{% endif %}</div>
+      </div>
+    </div>
+    <!-- Signature Statuses -->
+    <div class="col-md-6">
+      <div style="font-weight: 600; margin-bottom: 6px; color: #334155;">✍️ Enrollment Signatures:</div>
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <div>
+          Student: 
+          {% if student.student_signature_filename %}
+            <span class="text-success" style="font-weight: 600;">✅ Signed</span>
+          {% else %}
+            <span class="text-danger" style="font-weight: 600;">❌ Missing (sign below)</span>
+          {% endif %}
+        </div>
+        <div>
+          Parent/Guardian: 
+          {% if student.parent_signature_filename %}
+            <span class="text-success" style="font-weight: 600;">✅ Signed</span>
+          {% else %}
+            <span class="text-danger" style="font-weight: 600;">❌ Missing (sign below)</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="row g-4">
   <!-- Personal Information -->
   <div class="col-md-6">
@@ -156,7 +209,357 @@
         <p class="text-muted text-center mb-0" style="font-size:13px;">No contact details available.</p>
       {% endif %}
     </div>
+</div>
+
+<!-- Verification Documents -->
+<div class="info-card">
+  <h3 style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin: 0 0 16px;">📄 Verification Documents</h3>
+  <div class="row g-3">
+    
+    <!-- Qualification Proof -->
+    <div class="col-md-4">
+      <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; background-color: #f8fafc; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <h4 style="font-size: 13px; font-weight: 700; color: #495057; margin-bottom: 12px; text-transform: uppercase;">Proof of Qualification</h4>
+          {% if docs_by_cat and docs_by_cat.qualification %}
+            <div class="mb-3">
+              <span class="badge bg-success text-white mb-2" style="font-size: 11px; padding: 4px 8px; border-radius: 4px;">Uploaded</span>
+              <div style="font-size: 13px; font-weight: 600; color: #212529;">{{ docs_by_cat.qualification.document_type }}</div>
+              <div class="text-muted" style="font-size: 11px;">Uploaded: {{ docs_by_cat.qualification.uploaded_at[:10] }}</div>
+            </div>
+            <div class="mb-3">
+              <a href="/uploads/student_documents/{{ docs_by_cat.qualification.file_path | basename }}" class="btn btn-outline-primary btn-sm w-100" target="_blank">View Uploaded Document</a>
+            </div>
+          {% else %}
+            <p class="text-muted mb-3" style="font-size: 12px; font-style: italic;">No qualification proof uploaded yet.</p>
+          {% endif %}
+        </div>
+        
+        <form action="{{ url_for('students.profile_upload_document') }}" method="post" enctype="multipart/form-data" style="margin-top: auto;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="category" value="qualification">
+          <div class="mb-2">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px; display: block;">Document Type</label>
+            <select name="document_type" class="form-select form-select-sm" required>
+              <option value="" disabled selected>-- Select Type --</option>
+              <option value="SSLC / 10th Marks Card">SSLC / 10th Marks Card</option>
+              <option value="PUC / 12th Marks Card">PUC / 12th Marks Card</option>
+              <option value="Degree Certificate / Semester Marks Card">Degree Certificate / Semester Marks Card</option>
+              <option value="Diploma Certificate">Diploma Certificate</option>
+              <option value="Post Graduation Certificate">Post Graduation Certificate</option>
+              <option value="Other Academic Document">Other Academic Document</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <input type="file" name="document_file" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">Upload / Replace</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Identity Proof -->
+    <div class="col-md-4">
+      <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; background-color: #f8fafc; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <h4 style="font-size: 13px; font-weight: 700; color: #495057; margin-bottom: 12px; text-transform: uppercase;">Proof of Identity</h4>
+          {% if docs_by_cat and docs_by_cat.identity %}
+            <div class="mb-3">
+              <span class="badge bg-success text-white mb-2" style="font-size: 11px; padding: 4px 8px; border-radius: 4px;">Uploaded</span>
+              <div style="font-size: 13px; font-weight: 600; color: #212529;">{{ docs_by_cat.identity.document_type }}</div>
+              <div class="text-muted" style="font-size: 11px;">Uploaded: {{ docs_by_cat.identity.uploaded_at[:10] }}</div>
+            </div>
+            <div class="mb-3">
+              <a href="/uploads/student_documents/{{ docs_by_cat.identity.file_path | basename }}" class="btn btn-outline-primary btn-sm w-100" target="_blank">View Uploaded Document</a>
+            </div>
+          {% else %}
+            <p class="text-muted mb-3" style="font-size: 12px; font-style: italic;">No identity proof uploaded yet.</p>
+          {% endif %}
+        </div>
+        
+        <form action="{{ url_for('students.profile_upload_document') }}" method="post" enctype="multipart/form-data" style="margin-top: auto;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="category" value="identity">
+          <div class="mb-2">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px; display: block;">Document Type</label>
+            <select name="document_type" class="form-select form-select-sm" required>
+              <option value="" disabled selected>-- Select Type --</option>
+              <option value="Aadhaar Card">Aadhaar Card</option>
+              <option value="PAN Card">PAN Card</option>
+              <option value="Passport">Passport</option>
+              <option value="Voter ID">Voter ID</option>
+              <option value="Driving License">Driving License</option>
+              <option value="Other Government ID">Other Government ID</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <input type="file" name="document_file" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">Upload / Replace</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Address Proof -->
+    <div class="col-md-4">
+      <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; background-color: #f8fafc; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <h4 style="font-size: 13px; font-weight: 700; color: #495057; margin-bottom: 12px; text-transform: uppercase;">Proof of Address</h4>
+          {% if docs_by_cat and docs_by_cat.address %}
+            <div class="mb-3">
+              <span class="badge bg-success text-white mb-2" style="font-size: 11px; padding: 4px 8px; border-radius: 4px;">Uploaded</span>
+              <div style="font-size: 13px; font-weight: 600; color: #212529;">{{ docs_by_cat.address.document_type }}</div>
+              <div class="text-muted" style="font-size: 11px;">Uploaded: {{ docs_by_cat.address.uploaded_at[:10] }}</div>
+            </div>
+            <div class="mb-3">
+              <a href="/uploads/student_documents/{{ docs_by_cat.address.file_path | basename }}" class="btn btn-outline-primary btn-sm w-100" target="_blank">View Uploaded Document</a>
+            </div>
+          {% else %}
+            <p class="text-muted mb-3" style="font-size: 12px; font-style: italic;">No address proof uploaded yet.</p>
+          {% endif %}
+        </div>
+        
+        <form action="{{ url_for('students.profile_upload_document') }}" method="post" enctype="multipart/form-data" style="margin-top: auto;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="category" value="address">
+          <div class="mb-2">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px; display: block;">Document Type</label>
+            <select name="document_type" class="form-select form-select-sm" required>
+              <option value="" disabled selected>-- Select Type --</option>
+              <option value="Aadhaar Card (Address Page)">Aadhaar Card (Address Page)</option>
+              <option value="Voter ID">Voter ID</option>
+              <option value="Ration Card">Ration Card</option>
+              <option value="Electricity Bill">Electricity Bill</option>
+              <option value="Water Bill">Water Bill</option>
+              <option value="Rental / Lease Agreement">Rental / Lease Agreement</option>
+              <option value="Bank Passbook / Statement">Bank Passbook / Statement</option>
+              <option value="Other Address Proof">Other Address Proof</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <input type="file" name="document_file" class="form-control form-control-sm" accept=".pdf,.png,.jpg,.jpeg" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">Upload / Replace</button>
+        </form>
+      </div>
+    </div>
+
   </div>
+</div>
+
+<!-- Enrollment Signatures -->
+<div class="info-card">
+  <h3 style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin: 0 0 16px;">✍️ Enrollment Signatures</h3>
+  <div class="row g-4">
+    
+    <!-- Student Signature -->
+    <div class="col-md-6">
+      <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; background-color: #f8fafc; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <h4 style="font-size: 13px; font-weight: 700; color: #495057; margin-bottom: 12px; text-transform: uppercase;">Student Signature</h4>
+          {% if student.student_signature_filename %}
+            <div style="background-color: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; margin-bottom: 12px;">
+              <img src="/static/images/student_signatures/{{ student.student_signature_filename }}" alt="Student Signature" style="max-height: 80px; max-width: 100%;">
+            </div>
+            <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">Signed On: {{ student.student_signature_date }}</p>
+          {% else %}
+            <p class="text-muted" style="font-size: 12px; font-style: italic; margin-bottom: 12px;">Not yet signed. Please draw and save your signature below.</p>
+          {% endif %}
+        </div>
+        
+        <div style="margin-top: auto;">
+          <div class="mb-2">
+            <canvas id="student-sig-canvas" width="400" height="150" style="border: 1px dashed #cbd5e1; border-radius: 6px; background-color: #fff; touch-action: none; cursor: crosshair; width: 100%; display: block; height: 150px;"></canvas>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="student-sig-clear" class="btn btn-outline-secondary btn-sm" style="flex: 1;">Clear</button>
+            <button type="button" id="student-sig-save" class="btn btn-primary btn-sm" style="flex: 1;">Save Signature</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Parent Signature -->
+    <div class="col-md-6">
+      <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; background-color: #f8fafc; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <h4 style="font-size: 13px; font-weight: 700; color: #495057; margin-bottom: 12px; text-transform: uppercase;">Parent / Guardian Signature</h4>
+          {% if student.parent_signature_filename %}
+            <div style="background-color: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; margin-bottom: 12px;">
+              <img src="/static/images/student_signatures/{{ student.parent_signature_filename }}" alt="Parent Signature" style="max-height: 80px; max-width: 100%;">
+            </div>
+            <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">Signed On: {{ student.parent_signature_date }}</p>
+          {% else %}
+            <p class="text-muted" style="font-size: 12px; font-style: italic; margin-bottom: 12px;">Not yet signed. Please draw and save parent signature below.</p>
+          {% endif %}
+        </div>
+        
+        <div style="margin-top: auto;">
+          <div class="mb-2">
+            <canvas id="parent-sig-canvas" width="400" height="150" style="border: 1px dashed #cbd5e1; border-radius: 6px; background-color: #fff; touch-action: none; cursor: crosshair; width: 100%; display: block; height: 150px;"></canvas>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="parent-sig-clear" class="btn btn-outline-secondary btn-sm" style="flex: 1;">Clear</button>
+            <button type="button" id="parent-sig-save" class="btn btn-primary btn-sm" style="flex: 1;">Save Signature</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Profile Update Request -->
+<div class="info-card">
+  <h3 style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6c757d; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; margin: 0 0 16px;">✏️ Request Profile Update</h3>
+  
+  {% if pending_update %}
+    <div class="alert alert-warning mb-0" style="font-size: 13px;">
+      <strong>⚠️ Pending Review:</strong> Your profile update request was submitted on <strong>{{ pending_update.created_at[:10] }}</strong> and is currently awaiting staff approval. You cannot submit new changes until this request is resolved.
+    </div>
+  {% elif student.profile_approved_updates_count >= 3 %}
+    <div class="alert alert-danger mb-0" style="font-size: 13px;">
+      <strong>🚫 Limit Reached:</strong> You have successfully updated your details the maximum of 3 times. If you need any further corrections, please contact staff.
+    </div>
+  {% else %}
+    <div class="alert alert-info" style="font-size: 13px; margin-bottom: 20px;">
+      You can request updates to your profile details. Your request will be reviewed and applied by staff. (Approved updates: <strong>{{ student.profile_approved_updates_count or 0 }}/3</strong>)
+    </div>
+    
+    <form action="{{ url_for('students.profile_request_update') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Full Name</label>
+          <input type="text" name="full_name" class="form-control form-control-sm" value="{{ student.full_name or '' }}" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Date of Birth</label>
+          <input type="date" name="date_of_birth" class="form-control form-control-sm" value="{{ student.date_of_birth or '' }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Phone</label>
+          <input type="text" name="phone" class="form-control form-control-sm" value="{{ student.phone or '' }}" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Email</label>
+          <input type="email" name="email" class="form-control form-control-sm" value="{{ student.email or '' }}">
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Gender</label>
+          <select name="gender" class="form-select form-select-sm">
+            <option value="" {% if not student.gender %}selected{% endif %}>-- Select --</option>
+            <option value="male" {% if (student.gender or '') | lower == 'male' %}selected{% endif %}>Male</option>
+            <option value="female" {% if (student.gender or '') | lower == 'female' %}selected{% endif %}>Female</option>
+            <option value="other" {% if (student.gender or '') | lower == 'other' %}selected{% endif %}>Other</option>
+          </select>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Employment Status</label>
+          <select name="employment_status" class="form-select form-select-sm">
+            <option value="unemployed" {% if (student.employment_status or '') | lower == 'unemployed' %}selected{% endif %}>Unemployed</option>
+            <option value="employed" {% if (student.employment_status or '') | lower == 'employed' %}selected{% endif %}>Employed</option>
+            <option value="student" {% if (student.employment_status or '') | lower == 'student' %}selected{% endif %}>Student</option>
+          </select>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Education Level</label>
+          <select name="education_level" class="form-select form-select-sm" required>
+            <option value="">-- Select --</option>
+            <option value="School" {% if student.education_level == 'School' %}selected{% endif %}>School (1st–10th)</option>
+            <option value="Pre-University" {% if student.education_level == 'Pre-University' %}selected{% endif %}>Pre-University / PUC / 11th–12th</option>
+            <option value="Diploma" {% if student.education_level == 'Diploma' %}selected{% endif %}>Diploma</option>
+            <option value="Undergraduate" {% if student.education_level == 'Undergraduate' %}selected{% endif %}>Undergraduate (Degree)</option>
+            <option value="Postgraduate" {% if student.education_level == 'Postgraduate' %}selected{% endif %}>Postgraduate</option>
+            <option value="Doctoral" {% if student.education_level == 'Doctoral' %}selected{% endif %}>Doctoral (Ph.D / M.Phil)</option>
+            <option value="Technical" {% if student.education_level == 'Technical' %}selected{% endif %}>Technical / ITI / Polytechnic</option>
+            <option value="Professional" {% if student.education_level == 'Professional' %}selected{% endif %}>Working Professional</option>
+          </select>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Qualification</label>
+          <select id="qualification_select" name="qualification_select" class="form-select form-select-sm" required>
+            <option value="">-- Select Education Level first --</option>
+            <option value="custom">Other / Enter Custom</option>
+          </select>
+          <input type="text" id="qualification_custom" name="qualification" class="form-control form-control-sm" placeholder="Type here if selecting Other above" value="{{ student.qualification or '' }}" style="margin-top:8px; display:none;">
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Parent / Guardian Name</label>
+          <input type="text" name="parent_name" class="form-control form-control-sm" value="{{ student.parent_name or '' }}">
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Parent Contact</label>
+          <input type="text" name="parent_contact" class="form-control form-control-sm" value="{{ student.parent_contact or '' }}">
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Father's Name</label>
+          <input type="text" name="father_name" class="form-control form-control-sm" value="{{ student.father_name or '' }}">
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Mother's Name</label>
+          <input type="text" name="mother_name" class="form-control form-control-sm" value="{{ student.mother_name or '' }}">
+        </div>
+
+        <div class="col-12">
+          <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">Address</label>
+          <textarea name="address" class="form-control form-control-sm" rows="2">{{ student.address or '' }}</textarea>
+        </div>
+        
+        <!-- Academic Background (10th / SSLC) -->
+        <div id="tenthDetailSection" class="row g-3 col-12" style="margin: 0; padding: 0;">
+          <div class="col-md-6">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">10th / SSLC Institution</label>
+            <input type="text" name="tenth_institution" class="form-control form-control-sm" value="{{ student.tenth_institution or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">10th Board</label>
+            <input type="text" name="tenth_board" class="form-control form-control-sm" value="{{ student.tenth_board or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">10th Year</label>
+            <input type="text" name="tenth_year" class="form-control form-control-sm" value="{{ student.tenth_year or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">10th %</label>
+            <input type="text" name="tenth_percentage" class="form-control form-control-sm" value="{{ student.tenth_percentage or '' }}">
+          </div>
+        </div>
+        
+        <!-- Academic Background (PUC / 12th) -->
+        <div id="pucDetailSection" class="row g-3 col-12" style="margin: 0; padding: 0;">
+          <div class="col-md-6">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">PUC / 12th Institution</label>
+            <input type="text" name="puc_institution" class="form-control form-control-sm" value="{{ student.puc_institution or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">PUC Stream</label>
+            <input type="text" name="puc_stream" class="form-control form-control-sm" value="{{ student.puc_stream or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">PUC Year</label>
+            <input type="text" name="puc_year" class="form-control form-control-sm" value="{{ student.puc_year or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size: 11px; font-weight: 600; color: #6c757d; margin-bottom: 4px;">PUC %</label>
+            <input type="text" name="puc_percentage" class="form-control form-control-sm" value="{{ student.puc_percentage or '' }}">
+          </div>
+        </div>
+      </div>
+      
+      <div class="mt-3">
+        <button type="submit" class="btn btn-primary btn-sm">Request Profile Update</button>
+      </div>
+    </form>
+  {% endif %}
 </div>
 
 <!-- Enrolled Batches -->
@@ -246,4 +649,219 @@
   {% endif %}
 </div>
 #}
+<script>
+  function initSignaturePad(canvasId, clearBtnId, saveBtnId, sigType) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      let drawing = false;
+      let lastX = 0;
+      let lastY = 0;
+
+      function getPos(e) {
+          const rect = canvas.getBoundingClientRect();
+          const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+          const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+          return {
+              x: clientX - rect.left,
+              y: clientY - rect.top
+          };
+      }
+
+      function startDraw(e) {
+          drawing = true;
+          const pos = getPos(e);
+          lastX = pos.x;
+          lastY = pos.y;
+          if (e.touches) e.preventDefault();
+      }
+
+      function draw(e) {
+          if (!drawing) return;
+          const pos = getPos(e);
+          ctx.beginPath();
+          ctx.moveTo(lastX, lastY);
+          ctx.lineTo(pos.x, pos.y);
+          ctx.stroke();
+          lastX = pos.x;
+          lastY = pos.y;
+          if (e.touches) e.preventDefault();
+      }
+
+      function stopDraw() {
+          drawing = false;
+      }
+
+      canvas.addEventListener('mousedown', startDraw);
+      canvas.addEventListener('mousemove', draw);
+      canvas.addEventListener('mouseup', stopDraw);
+      canvas.addEventListener('mouseleave', stopDraw);
+
+      canvas.addEventListener('touchstart', startDraw, {passive: false});
+      canvas.addEventListener('touchmove', draw, {passive: false});
+      canvas.addEventListener('touchend', stopDraw);
+
+      document.getElementById(clearBtnId).addEventListener('click', () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+      });
+
+      document.getElementById(saveBtnId).addEventListener('click', () => {
+          const blank = document.createElement('canvas');
+          blank.width = canvas.width;
+          blank.height = canvas.height;
+          if (canvas.toDataURL() === blank.toDataURL()) {
+              alert('Please draw a signature before saving.');
+              return;
+          }
+
+          const dataURL = canvas.toDataURL('image/png');
+          
+          const formData = new FormData();
+          formData.append('csrf_token', '{{ csrf_token() }}');
+          formData.append('sig_type', sigType);
+          formData.append('sig_data', dataURL);
+
+          fetch('/student/profile/save-signature', {
+              method: 'POST',
+              body: formData
+          })
+          .then(res => res.json())
+          .then(data => {
+              if (data.success) {
+                  alert('Signature saved successfully!');
+                  location.reload();
+              } else {
+                  alert('Error: ' + data.error);
+              }
+          })
+          .catch(err => {
+              alert('Failed to save signature: ' + err);
+          });
+      });
+  }
+
+  const qualificationLevels = {{ qualification_levels | tojson if qualification_levels else '{}' }};
+  const educationLevelSelect = document.querySelector('select[name="education_level"]');
+  const qualificationSelect = document.getElementById('qualification_select');
+  const qualificationCustom = document.getElementById('qualification_custom');
+
+  const tenthDetailSection = document.getElementById('tenthDetailSection');
+  const pucDetailSection = document.getElementById('pucDetailSection');
+
+  function getSelectedQualification() {
+    return (qualificationCustom.value || qualificationSelect.value || '').trim();
+  }
+
+  function setResumeSectionVisibility(section, shouldShow) {
+    if (!section) return;
+    section.style.display = shouldShow ? '' : 'none';
+    section.querySelectorAll('input').forEach(input => {
+      input.disabled = !shouldShow;
+    });
+  }
+
+  function updateResumeEducationSections() {
+    const selectedLevel = educationLevelSelect ? educationLevelSelect.value : '';
+    const qualification = getSelectedQualification().toLowerCase();
+
+    const completedSchool = (selectedLevel === 'School' && qualification.includes('completed')) || 
+                            (selectedLevel !== 'School' && selectedLevel !== '');
+  
+    const completedPUC = (selectedLevel === 'Pre-University' && (qualification.includes('completed') || qualification.includes('2nd') || qualification.includes('12th'))) ||
+                         (['Diploma', 'Undergraduate', 'Postgraduate', 'Doctoral', 'Technical', 'Professional'].includes(selectedLevel));
+
+    const needsTenth = completedSchool;
+    const needsPuc = completedPUC;
+
+    setResumeSectionVisibility(tenthDetailSection, needsTenth);
+    setResumeSectionVisibility(pucDetailSection, needsPuc);
+  }
+
+  function updateQualifications() {
+    if (!educationLevelSelect || !qualificationSelect) return;
+    const selectedLevel = educationLevelSelect.value;
+
+    while (qualificationSelect.options.length > 2) {
+      qualificationSelect.remove(2);
+    }
+
+    if (selectedLevel && qualificationLevels[selectedLevel]) {
+      qualificationSelect.options[0].textContent = '-- Select Qualification --';
+
+      const qualifications = qualificationLevels[selectedLevel];
+      qualifications.forEach(qual => {
+        const option = document.createElement('option');
+        option.value = qual;
+        option.textContent = qual;
+        qualificationSelect.appendChild(option);
+      });
+
+      const existingVal = qualificationCustom.value.trim();
+      if (existingVal) {
+        const matchingOpt = Array.from(qualificationSelect.options).find(o => o.value.toLowerCase() === existingVal.toLowerCase());
+        if (matchingOpt) {
+          qualificationSelect.value = matchingOpt.value;
+          qualificationCustom.style.display = 'none';
+          qualificationCustom.required = false;
+        } else {
+          qualificationSelect.value = 'custom';
+          qualificationCustom.style.display = '';
+          qualificationCustom.required = true;
+        }
+      }
+    } else {
+      qualificationSelect.options[0].textContent = '-- Select Education Level first --';
+      qualificationCustom.style.display = 'none';
+      qualificationCustom.required = false;
+    }
+    updateResumeEducationSections();
+  }
+
+  if (qualificationSelect) {
+    qualificationSelect.addEventListener('change', function() {
+      if (this.value === 'custom') {
+        qualificationCustom.value = '';
+        qualificationCustom.style.display = '';
+        qualificationCustom.required = true;
+        qualificationCustom.focus();
+      } else if (this.value) {
+        qualificationCustom.value = this.value;
+        qualificationCustom.style.display = 'none';
+        qualificationCustom.required = false;
+      } else {
+        qualificationCustom.value = '';
+        qualificationCustom.style.display = 'none';
+        qualificationCustom.required = false;
+      }
+      updateResumeEducationSections();
+    });
+  }
+
+  if (qualificationCustom) {
+    qualificationCustom.addEventListener('input', updateResumeEducationSections);
+  }
+
+  if (educationLevelSelect) {
+    educationLevelSelect.addEventListener('change', function() {
+      qualificationSelect.value = '';
+      qualificationCustom.value = '';
+      qualificationCustom.style.display = 'none';
+      qualificationCustom.required = false;
+      updateQualifications();
+      updateResumeEducationSections();
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+      initSignaturePad('student-sig-canvas', 'student-sig-clear', 'student-sig-save', 'student');
+      initSignaturePad('parent-sig-canvas', 'parent-sig-clear', 'parent-sig-save', 'parent');
+      updateQualifications();
+  });
+</script>
+
 {% endblock %}

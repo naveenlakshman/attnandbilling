@@ -3729,6 +3729,66 @@ def student_profile(student_id):
         )
         origin_lead = cur.fetchone()
 
+    # Fetch final exam applications and certificates
+    cur.execute(
+        """
+        SELECT 
+            app.id AS application_id,
+            app.course_id AS program_id,
+            app.requested_exam_date,
+            app.status AS application_status,
+            app.applied_on,
+            lp.program_name,
+            c.course_name,
+            att.score_percent,
+            att.correct_count,
+            att.total_questions,
+            att.submitted_at
+        FROM lms_final_exam_applications app
+        LEFT JOIN lms_programs lp ON lp.id = app.course_id
+        LEFT JOIN courses c ON c.id = lp.course_id
+        LEFT JOIN lms_final_exam_attempts att ON att.application_id = app.id
+        WHERE app.student_id = ?
+        ORDER BY app.applied_on DESC
+        """,
+        (student_id,)
+    )
+    exam_applications = cur.fetchall()
+
+    cur.execute(
+        """
+        SELECT 
+            cert.id AS certificate_id,
+            cert.certificate_number,
+            cert.course_id,
+            cert.snapshot_course_name,
+            cert.issue_date,
+            cert.score,
+            cert.snapshot_grade,
+            cert.status AS certificate_status
+        FROM certificates cert
+        WHERE cert.student_id = ?
+        ORDER BY cert.issue_date DESC
+        """,
+        (student_id,)
+    )
+    certificates = cur.fetchall()
+
+    # Fetch student uploaded documents
+    uploaded_docs = cur.execute(
+        "SELECT * FROM student_uploaded_documents WHERE student_id = ? ORDER BY category, uploaded_at DESC",
+        (student_id,)
+    ).fetchall()
+
+    # Fetch pending update requests
+    pending_update = cur.execute(
+        "SELECT * FROM student_profile_update_requests WHERE student_id = ? AND status = 'PENDING' LIMIT 1",
+        (student_id,)
+    ).fetchone()
+
+    from modules.students.routes import calculate_profile_score
+    profile_score = calculate_profile_score(student, uploaded_docs)
+
     conn.close()
 
     return render_template(
@@ -3752,10 +3812,142 @@ def student_profile(student_id):
         lms_progress_rows=lms_progress_rows,
         recent_activity=recent_activity,
         origin_lead=origin_lead,
+        exam_applications=exam_applications,
+        certificates=certificates,
+        uploaded_docs=uploaded_docs,
+        pending_update=pending_update,
+        profile_score=profile_score,
         format_datetime=_format_display_datetime,
         format_date=_format_display_date,
         format_inr=_format_inr,
     )
+
+
+@billing_bp.route("/lms_admin/student/<int:student_id>/approve-profile-update", methods=["POST"])
+@login_required
+def approve_profile_update(student_id):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        
+        # 1. Fetch the request
+        request_row = cur.execute(
+            "SELECT * FROM student_profile_update_requests WHERE student_id = ? AND status = 'PENDING' LIMIT 1",
+            (student_id,)
+        ).fetchone()
+        
+        if not request_row:
+            flash("No pending update request found for this student.", "danger")
+            return redirect(url_for("billing.student_profile", student_id=student_id))
+            
+        # Parse json
+        import json
+        requested_data = json.loads(request_row["requested_data"])
+        
+        # Check approved updates count limit
+        student = cur.execute("SELECT profile_approved_updates_count FROM students WHERE id = ?", (student_id,)).fetchone()
+        if student["profile_approved_updates_count"] >= 3:
+            flash("Student has already reached the maximum limit of 3 approved profile updates.", "danger")
+            return redirect(url_for("billing.student_profile", student_id=student_id))
+            
+        # 2. Build update query
+        if requested_data:
+            fields = []
+            params = []
+            for field, val in requested_data.items():
+                fields.append(f"{field} = ?")
+                params.append(val)
+                
+            # Add increment to count
+            fields.append("profile_approved_updates_count = profile_approved_updates_count + 1")
+            params.append(student_id) # for the WHERE clause
+            
+            query = f"UPDATE students SET {', '.join(fields)} WHERE id = ?"
+            cur.execute(query, params)
+            
+        # 3. Mark request as APPROVED
+        now = datetime.now().isoformat(timespec="seconds")
+        cur.execute(
+            """
+            UPDATE student_profile_update_requests
+            SET status = 'APPROVED', processed_by = ?, processed_at = ?
+            WHERE id = ?
+            """,
+            (session.get("user_id"), now, request_row["id"])
+        )
+        
+        conn.commit()
+        flash("Profile update request has been successfully approved and applied.", "success")
+        
+        # Log activity
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=None,
+            action_type="update",
+            module_name="students",
+            record_id=student_id,
+            description=f"Approved and applied profile update request #{request_row['id']}"
+        )
+    except Exception as e:
+        conn.rollback()
+        flash(f"Database error: {str(e)}", "danger")
+    finally:
+        conn.close()
+        
+    return redirect(url_for("billing.student_profile", student_id=student_id))
+
+
+@billing_bp.route("/lms_admin/student/<int:student_id>/reject-profile-update", methods=["POST"])
+@login_required
+def reject_profile_update(student_id):
+    rejection_reason = request.form.get("rejection_reason", "").strip()
+    if not rejection_reason:
+        flash("Please provide a reason for rejection.", "danger")
+        return redirect(url_for("billing.student_profile", student_id=student_id))
+        
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        
+        # Fetch the request
+        request_row = cur.execute(
+            "SELECT id FROM student_profile_update_requests WHERE student_id = ? AND status = 'PENDING' LIMIT 1",
+            (student_id,)
+        ).fetchone()
+        
+        if not request_row:
+            flash("No pending update request found for this student.", "danger")
+            return redirect(url_for("billing.student_profile", student_id=student_id))
+            
+        now = datetime.now().isoformat(timespec="seconds")
+        cur.execute(
+            """
+            UPDATE student_profile_update_requests
+            SET status = 'REJECTED', rejection_reason = ?, processed_by = ?, processed_at = ?
+            WHERE id = ?
+            """,
+            (rejection_reason, session.get("user_id"), now, request_row["id"])
+        )
+        conn.commit()
+        flash("Profile update request has been rejected.", "warning")
+        
+        # Log activity
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=None,
+            action_type="update",
+            module_name="students",
+            record_id=student_id,
+            description=f"Rejected profile update request #{request_row['id']}. Reason: {rejection_reason}"
+        )
+    except Exception as e:
+        conn.rollback()
+        flash(f"Database error: {str(e)}", "danger")
+    finally:
+        conn.close()
+        
+    return redirect(url_for("billing.student_profile", student_id=student_id))
+
 
 @billing_bp.route("/students/export-csv")
 @admin_required
@@ -4934,6 +5126,12 @@ def invoice_new():
             for item in invoice_items_to_save:
                 if item.get("course_id"):
                     _provision_program_access_for_course(cur, student_id, item["course_id"])
+
+            # Reset student status to active because of new invoice/enrolled course
+            cur.execute(
+                "UPDATE students SET status = 'active' WHERE id = ?",
+                (student_id,)
+            )
 
             conn.commit()
 
