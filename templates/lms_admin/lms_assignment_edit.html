@@ -246,3 +246,47 @@
   </section>
 </div>
 {% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.tiny.cloud/1/{{ config['TINYMCE_API_KEY'] }}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  if (typeof tinymce === 'undefined') {
+    var script = document.createElement('script');
+    script.src = "https://cdn.jsdelivr.net/npm/tinymce@6/tinymce.min.js";
+    script.onload = initTinyMCE;
+    document.head.appendChild(script);
+  } else {
+    initTinyMCE();
+  }
+
+  function initTinyMCE() {
+    if (!document.getElementById('assignmentDescription')) return;
+    tinymce.init({
+      selector: '#assignmentDescription',
+      plugins: 'lists link table code wordcount autoresize',
+      toolbar: 'undo redo | blocks | bold italic underline | bullist numlist | link table | code',
+      menubar: false,
+      branding: false,
+      min_height: 220,
+      autoresize_bottom_margin: 16,
+      content_style: 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.6; }',
+      setup: function (editor) {
+        editor.on('change keyup', function () {
+          editor.save();
+        });
+      }
+    });
+  }
+
+  var forms = document.querySelectorAll('form');
+  forms.forEach(function(form) {
+    form.addEventListener('submit', function () {
+      if (window.tinymce) {
+        tinymce.triggerSave();
+      }
+    });
+  });
+});
+</script>
+{% endblock %}

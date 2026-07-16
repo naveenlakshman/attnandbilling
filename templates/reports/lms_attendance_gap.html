@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}LMS vs Attendance Defaulters{% endblock %}
+{% block page_title %}LMS vs Attendance Progress Gap{% endblock %}
+
+{% block extra_css %}
+<style>
+  .mr-page { max-width: 1400px; margin: 0 auto; }
+  .mr-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .mr-summary-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    margin-bottom: 24px;
+  }
+  .mr-summary-card { border-top: 4px solid #3b82f6; }
+  .mr-summary-card.defaulters { border-top-color: #ef4444; }
+  .mr-summary-card.highest { border-top-color: #7c3aed; }
+  .mr-summary-card.average { border-top-color: #f59e0b; }
+  
+  .mr-card-label { color: #64748b; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+  .mr-card-value { color: #0f172a; font-size: 32px; font-weight: 800; margin: 8px 0 4px; }
+  .mr-card-note { color: #64748b; font-size: 12px; }
+
+  .mr-section {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    overflow: hidden;
+  }
+  .mr-section-header {
+    align-items: center;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    padding: 16px 20px;
+  }
+  .mr-section-title { color: #0f172a; font-size: 16px; font-weight: 700; margin: 0; }
+  .mr-table { margin-bottom: 0; }
+  .mr-table th {
+    background: #f8fafc;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    padding: 14px 20px;
+    text-transform: uppercase;
+  }
+  .mr-table td {
+    color: #334155;
+    font-size: 13px;
+    padding: 14px 20px;
+    vertical-align: middle;
+  }
+  .badge-gap {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 10px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .badge-gap-critical { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
+  .badge-gap-warning { background: #fffbeb; color: #d97706; border: 1px solid #fef3c7; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mr-page">
+  <!-- Explanation Alert -->
+  <div class="alert alert-info border-0 shadow-sm d-flex align-items-start gap-3 p-3 mb-4" style="border-radius: 12px; background: #eff6ff; color: #1e3a8a;">
+    <span style="font-size: 20px; line-height: 1;">💡</span>
+    <div>
+      <h6 class="alert-heading fw-bold mb-1" style="font-size: 14px;">How is the Gap calculated?</h6>
+      <p class="mb-0 small" style="opacity: 0.9;">
+        This page identifies students who physically attend classes (marked <strong>Present</strong> or <strong>Late</strong>) but are lagging in their online LMS topic completion. Since each topic is designed to be completed in 1 to 1.5 hours, a high class attendance count paired with a low completed topic count indicates a performance discrepancy.
+      </p>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="mr-card">
+    <h6 style="font-size: 13px; font-weight: 700; color: #475569; text-transform: uppercase; margin-bottom: 16px; letter-spacing: 0.05em;">Filter Reports</h6>
+    <form method="get" action="{{ url_for('reports.lms_attendance_gap') }}" class="row g-3 align-items-end">
+      
+      {% if can_view_all %}
+      <div class="col-md-3">
+        <label class="form-label fw-bold text-muted small text-uppercase" style="font-size: 11px; letter-spacing: 0.05em; margin-bottom: 6px; display: block;">Branch</label>
+        <select name="branch_id" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">-- All Branches --</option>
+          {% for b in branches %}
+            <option value="{{ b.id }}" {% if selected_branch_id == b.id %}selected{% endif %}>{{ b.branch_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
+      <div class="col-md-3">
+        <label class="form-label fw-bold text-muted small text-uppercase" style="font-size: 11px; letter-spacing: 0.05em; margin-bottom: 6px; display: block;">Batch</label>
+        <select name="batch_id" class="form-select form-select-sm">
+          <option value="">-- All Batches --</option>
+          {% for b in batches %}
+            <option value="{{ b.id }}" {% if selected_batch_id == b.id %}selected{% endif %}>{{ b.batch_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label fw-bold text-muted small text-uppercase" style="font-size: 11px; letter-spacing: 0.05em; margin-bottom: 6px; display: block;">LMS Program</label>
+        <select name="program_id" class="form-select form-select-sm">
+          <option value="">-- All Programs --</option>
+          {% for p in programs %}
+            <option value="{{ p.id }}" {% if selected_program_id == p.id %}selected{% endif %}>{{ p.program_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label fw-bold text-muted small text-uppercase" style="font-size: 11px; letter-spacing: 0.05em; margin-bottom: 6px; display: block;">Min Deficit (Gap)</label>
+        <select name="min_gap" class="form-select form-select-sm">
+          <option value="1" {% if min_gap == 1 %}selected{% endif %}>&ge; 1 topic</option>
+          <option value="3" {% if min_gap == 3 %}selected{% endif %}>&ge; 3 topics</option>
+          <option value="5" {% if min_gap == 5 %}selected{% endif %}>&ge; 5 topics</option>
+          <option value="8" {% if min_gap == 8 %}selected{% endif %}>&ge; 8 topics</option>
+          <option value="10" {% if min_gap == 10 %}selected{% endif %}>&ge; 10 topics</option>
+        </select>
+      </div>
+
+      <div class="col-md-1 d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm w-100" style="height: 31px;">Filter</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Summary metrics dashboard -->
+  <div class="mr-summary-grid">
+    <div class="mr-card mr-summary-card defaulters">
+      <div class="mr-card-label">Defaulters Identified</div>
+      <div class="mr-card-value">{{ defaulters | length }}</div>
+      <div class="mr-card-note">Students meeting gap criteria</div>
+    </div>
+    <div class="mr-card mr-summary-card highest">
+      <div class="mr-card-label">Highest Gap Deficit</div>
+      <div class="mr-card-value">
+        {% if defaulters %}
+          {{ defaulters[0].gap }} <span style="font-size: 14px; font-weight: 500; color: #64748b;">topics</span>
+        {% else %}
+          0
+        {% endif %}
+      </div>
+      <div class="mr-card-note">
+        {% if defaulters %}
+          {{ defaulters[0].full_name }}
+        {% else %}
+          No defaulters
+        {% endif %}
+      </div>
+    </div>
+    <div class="mr-card mr-summary-card average">
+      <div class="mr-card-label">Average Deficit</div>
+      <div class="mr-card-value">
+        {% if defaulters %}
+          {% set total_gap = namespace(val=0) %}
+          {% for d in defaulters %}
+            {% set total_gap.val = total_gap.val + d.gap %}
+          {% endfor %}
+          {{ (total_gap.val / (defaulters | length)) | round(1) }} <span style="font-size: 14px; font-weight: 500; color: #64748b;">topics</span>
+        {% else %}
+          0
+        {% endif %}
+      </div>
+      <div class="mr-card-note">Average discrepancy margin</div>
+    </div>
+  </div>
+
+  <!-- Main Report Roster Table -->
+  <div class="mr-section">
+    <div class="mr-section-header">
+      <h3 class="mr-section-title">Defaulter Students Roster</h3>
+      <span class="badge bg-danger">{{ defaulters | length }} Defaulters</span>
+    </div>
+    <div class="mr-section-body">
+      {% if defaulters %}
+      <div class="table-responsive">
+        <table class="table table-hover mr-table">
+          <thead>
+            <tr>
+              <th style="width: 60px;">Sl. No.</th>
+              <th>Student</th>
+              <th>Branch / Batch</th>
+              <th>LMS Program</th>
+              <th class="text-center">Classes Attended</th>
+              <th class="text-center">LMS Completed</th>
+              <th class="text-center">Deficit Gap</th>
+              <th>LMS Progress</th>
+              <th>Last LMS Activity</th>
+              <th class="text-end" style="width: 180px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in defaulters %}
+            <tr>
+              <td class="text-muted">{{ loop.index }}</td>
+              <td>
+                <a href="{{ url_for('billing.student_profile', student_id=row.student_id) }}" class="fw-bold text-primary" style="text-decoration:none;">
+                  {{ row.full_name }}
+                </a>
+                <div class="text-muted small" style="font-size: 11px; margin-top: 2px;">Code: {{ row.student_code }}</div>
+              </td>
+              <td>
+                <div class="fw-semibold text-dark">{{ row.batch_name }}</div>
+                <div class="text-muted small" style="font-size: 11px; margin-top: 2px;">{{ row.branch_name }}</div>
+              </td>
+              <td>
+                <span class="text-dark fw-semibold">{{ row.program_name }}</span>
+                {% if row.trainer_name %}
+                <div class="text-muted small" style="font-size: 11px; margin-top: 2px;">Trainer: {{ row.trainer_name }}</div>
+                {% endif %}
+              </td>
+              <td class="text-center fw-semibold text-secondary" style="font-size: 14px;">
+                {{ row.classes_attended }} <span style="font-size: 11px; font-weight: normal; color: #94a3b8;">days</span>
+              </td>
+              <td class="text-center fw-semibold text-success" style="font-size: 14px;">
+                {{ row.completed_topics }} / {{ row.total_topics }}
+              </td>
+              <td class="text-center">
+                <span class="badge-gap {% if row.gap >= 8 %}badge-gap-critical{% else %}badge-gap-warning{% endif %}">
+                  {% if row.gap >= 8 %}🚨{% else %}⚠️{% endif %} {{ row.gap }} topics
+                </span>
+              </td>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="progress" style="height: 6px; flex: 1; min-width: 60px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                    <div class="progress-bar bg-{% if row.progress_pct <= 25 %}danger{% elif row.progress_pct <= 60 %}warning{% else %}success{% endif %}" 
+                         role="progressbar" 
+                         style="width: {{ row.progress_pct }}%;" 
+                         aria-valuenow="{{ row.progress_pct }}" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100"></div>
+                  </div>
+                  <span class="fw-bold small" style="font-size: 11px; color: #475569;">{{ row.progress_pct }}%</span>
+                </div>
+              </td>
+              <td class="text-muted" style="font-size: 12px;">{{ row.last_activity }}</td>
+              <td class="text-end">
+                <div class="d-flex gap-1 justify-content-end">
+                  <a href="{{ url_for('lms_admin.view_student_progress', student_id=row.student_id) }}?program_id={{ row.program_id }}" 
+                     class="btn btn-sm btn-outline-primary" style="font-size: 11px; padding: 4px 8px;" title="View LMS Progress">
+                    LMS Progress
+                  </a>
+                  <a href="{{ url_for('attendance.student_attendance_history', student_id=row.student_id) }}" 
+                     class="btn btn-sm btn-outline-secondary" style="font-size: 11px; padding: 4px 8px;" title="View Attendance History">
+                    Attendance
+                  </a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="py-5 text-center text-muted">
+        <span style="font-size: 40px; display: block; margin-bottom: 12px;">✨</span>
+        <p class="mb-0 fw-semibold">No students meet the gap threshold criteria.</p>
+        <p class="small mb-0">All attending students are maintaining expected online topic progress!</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

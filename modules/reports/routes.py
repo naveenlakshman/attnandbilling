@@ -2519,3 +2519,284 @@ def upload_csv():
             flash(f"❌ Error importing CSV:\n\n{error_detail}\n\n📋 Try downloading a sample CSV and comparing your format.", "danger")
         
         return redirect(url_for("reports.import_page"))
+
+
+@reports_bp.route("/lms-attendance-gap", methods=["GET"])
+@login_required
+def lms_attendance_gap():
+    """Report showing students who attend physical classes but are lagging in LMS progress."""
+    user_id = session.get('user_id')
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        
+        # Determine accessible branch context
+        cur.execute("SELECT id, branch_id, can_view_all_branches, role FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+        if not user:
+            flash("User session not found", "danger")
+            return redirect(url_for("core.dashboard"))
+
+        # Extract filters
+        f_branch_id = request.args.get("branch_id", "").strip()
+        f_batch_id = request.args.get("batch_id", "").strip()
+        f_program_id = request.args.get("program_id", "").strip()
+        f_min_gap = request.args.get("min_gap", "3").strip()
+        
+        selected_branch_id = int(f_branch_id) if f_branch_id.isdigit() else None
+        selected_batch_id = int(f_batch_id) if f_batch_id.isdigit() else None
+        selected_program_id = int(f_program_id) if f_program_id.isdigit() else None
+        min_gap = int(f_min_gap) if f_min_gap.isdigit() else 3
+
+        # Scoping/Permissions check
+        role = user["role"]
+        user_branch_id = user["branch_id"]
+        can_view_all = user["can_view_all_branches"] or (role == 'admin')
+
+        if not can_view_all:
+            # Force user's branch
+            selected_branch_id = user_branch_id
+
+        # Load dropdown filters
+        if can_view_all:
+            branches = cur.execute(
+                "SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name"
+            ).fetchall()
+        else:
+            branches = cur.execute(
+                "SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1",
+                (user_branch_id,)
+            ).fetchall()
+
+        if selected_branch_id:
+            batches = cur.execute(
+                "SELECT id, batch_name FROM batches WHERE branch_id = ? AND status = 'active' ORDER BY batch_name",
+                (selected_branch_id,)
+            ).fetchall()
+        elif not can_view_all:
+            batches = cur.execute(
+                "SELECT id, batch_name FROM batches WHERE branch_id = ? AND status = 'active' ORDER BY batch_name",
+                (user_branch_id,)
+            ).fetchall()
+        else:
+            batches = cur.execute(
+                "SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name"
+            ).fetchall()
+
+        programs = cur.execute(
+            "SELECT id, program_name FROM lms_programs WHERE is_active = 1 AND is_deleted = 0 ORDER BY program_name"
+        ).fetchall()
+
+        # Enforce program enrollment 4-path check
+        _enroll_check = """(
+            EXISTS (
+                SELECT 1 FROM lms_student_program_access spa
+                WHERE spa.student_id = s.id AND spa.program_id = lp.id
+                  AND spa.is_active = 1
+                  AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+            )
+            OR EXISTS (
+                SELECT 1 FROM lms_batch_program_access bpa
+                JOIN student_batches sb ON sb.batch_id = bpa.batch_id
+                WHERE sb.student_id = s.id AND bpa.program_id = lp.id
+                  AND bpa.is_active = 1 AND sb.status = 'active'
+                  AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
+            )
+            OR EXISTS (
+                SELECT 1 FROM invoices inv
+                JOIN invoice_items ii ON ii.invoice_id = inv.id
+                WHERE inv.student_id = s.id AND ii.course_id = lp.course_id
+                  AND lp.course_id IS NOT NULL
+            )
+            OR EXISTS (
+                SELECT 1 FROM invoices inv
+                JOIN invoice_items ii ON ii.invoice_id = inv.id
+                JOIN lms_course_program_map cpm ON cpm.course_id = ii.course_id
+                  AND cpm.program_id = lp.id
+                WHERE inv.student_id = s.id
+            )
+        )"""
+
+        where_clauses = [
+            "s.status = 'active'",
+            "lp.is_active = 1",
+            "lp.is_deleted = 0",
+            _enroll_check,
+            "EXISTS (SELECT 1 FROM student_batches sb_act WHERE sb_act.student_id = s.id AND sb_act.status = 'active')"
+        ]
+        params = []
+
+        if selected_program_id:
+            where_clauses.append("lp.id = ?")
+            params.append(selected_program_id)
+
+        if selected_batch_id:
+            where_clauses.append("""EXISTS (
+                SELECT 1 FROM student_batches sb_f
+                WHERE sb_f.student_id = s.id AND sb_f.batch_id = ? AND sb_f.status = 'active'
+            )""")
+            params.append(selected_batch_id)
+
+        if selected_branch_id:
+            where_clauses.append("""(
+                EXISTS (
+                    SELECT 1 FROM student_batches sb_br
+                    JOIN batches bat_br ON bat_br.id = sb_br.batch_id
+                    WHERE sb_br.student_id = s.id AND sb_br.status = 'active'
+                      AND bat_br.branch_id = ?
+                )
+                OR s.branch_id = ?
+            )""")
+            params.extend([selected_branch_id, selected_branch_id])
+
+        where_sql = " AND ".join(where_clauses)
+
+        _master_check = """EXISTS (
+            SELECT 1 FROM lms_program_chapters pcx
+            JOIN lms_master_chapters mcx ON mcx.id = pcx.master_chapter_id
+            JOIN lms_master_topics   mtx ON mtx.master_chapter_id = mcx.id
+            WHERE pcx.program_id = lp.id AND pcx.is_visible = 1
+              AND mcx.status = 'active' AND mtx.status = 'active'
+        )"""
+
+        # Query all student/program pairings
+        sql = f"""
+            SELECT
+                s.id               AS student_id,
+                s.student_code,
+                s.full_name,
+                lp.id              AS program_id,
+                lp.program_name,
+                COALESCE(b.batch_name,  '') AS batch_name,
+                COALESCE(br.branch_name, br2.branch_name, '') AS branch_name,
+                COALESCE(u.full_name,   '') AS trainer_name,
+                -- 1. Classes attended (unique days marked present/late)
+                (
+                    SELECT COUNT(DISTINCT ar.attendance_date)
+                    FROM attendance_records ar
+                    WHERE ar.student_id = s.id AND ar.status IN ('present', 'late')
+                ) AS classes_attended,
+                -- 2. Total topics
+                CASE WHEN {_master_check} THEN (
+                    SELECT COUNT(*)
+                    FROM lms_master_topics mt
+                    JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                    JOIN lms_master_chapters  mc ON mc.id = pc.master_chapter_id
+                    WHERE pc.program_id = lp.id AND pc.is_visible = 1
+                      AND mc.status = 'active'  AND mt.status = 'active'
+                ) ELSE (
+                    SELECT COUNT(*)
+                    FROM lms_topics lt
+                    JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                    WHERE lc.program_id = lp.id AND lt.is_active = 1
+                ) END AS total_topics,
+                -- 3. Completed topics
+                CASE WHEN {_master_check} THEN (
+                    SELECT COUNT(*)
+                    FROM lms_master_topic_progress mtp
+                    JOIN lms_master_topics mt ON mt.id = mtp.master_topic_id
+                    JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                    JOIN lms_master_chapters  mc ON mc.id = pc.master_chapter_id
+                    WHERE mtp.student_id = s.id AND mtp.program_id = lp.id AND mtp.is_completed = 1
+                      AND pc.program_id = lp.id AND pc.is_visible = 1
+                      AND mc.status = 'active'  AND mt.status = 'active'
+                ) ELSE (
+                    SELECT COUNT(*)
+                    FROM lms_topic_progress tp
+                    JOIN lms_topics lt ON tp.topic_id = lt.id
+                    JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                    WHERE tp.student_id = s.id AND lc.program_id = lp.id AND tp.is_completed = 1
+                ) END AS completed_topics,
+                -- last activity
+                (
+                    SELECT MAX(last_act) FROM (
+                        SELECT MAX(tp.completed_at) AS last_act
+                        FROM lms_topic_progress tp
+                        JOIN lms_topics lt ON tp.topic_id = lt.id
+                        JOIN lms_chapters lc ON lt.chapter_id = lc.id
+                        WHERE tp.student_id = s.id AND lc.program_id = lp.id
+                        UNION ALL
+                        SELECT MAX(mtp.completed_at) AS last_act
+                        FROM lms_master_topic_progress mtp
+                        WHERE mtp.student_id = s.id AND mtp.program_id = lp.id
+                    )
+                ) AS last_activity
+            FROM students s
+            JOIN lms_programs lp ON lp.is_active = 1 AND lp.is_deleted = 0
+            LEFT JOIN batches b ON b.id = COALESCE(
+                (SELECT spa2.batch_id FROM lms_student_program_access spa2
+                 WHERE spa2.student_id = s.id AND spa2.program_id = lp.id
+                   AND spa2.is_active = 1 AND spa2.batch_id IS NOT NULL LIMIT 1),
+                (SELECT MIN(sb3.batch_id) FROM student_batches sb3
+                 WHERE sb3.student_id = s.id AND sb3.status = 'active')
+            )
+            LEFT JOIN branches br  ON br.id  = b.branch_id
+            LEFT JOIN branches br2 ON br2.id = s.branch_id
+            LEFT JOIN users    u   ON u.id   = b.trainer_id
+            WHERE {where_sql}
+        """
+
+        raw_rows = cur.execute(sql, params).fetchall()
+        
+        # Filter and compute stats
+        defaulters = []
+        for r in raw_rows:
+            attended = r["classes_attended"] or 0
+            completed = r["completed_topics"] or 0
+            total = r["total_topics"] or 0
+            
+            # Only consider students who have actually attended some classes
+            if attended == 0:
+                continue
+                
+            gap = attended - completed
+            if gap >= min_gap:
+                progress_pct = round((completed / total * 100), 1) if total > 0 else 0.0
+                
+                # Format last activity date
+                last_act_str = "—"
+                if r["last_activity"]:
+                    try:
+                        from datetime import datetime as _dt
+                        last_act_str = _dt.fromisoformat(str(r["last_activity"]).replace('T', ' ').split('.')[0]).strftime('%d %b %Y %I:%M %p')
+                    except Exception:
+                        last_act_str = str(r["last_activity"])[:16]
+
+                defaulters.append({
+                    "student_id": r["student_id"],
+                    "student_code": r["student_code"],
+                    "full_name": r["full_name"],
+                    "batch_name": r["batch_name"],
+                    "branch_name": r["branch_name"],
+                    "trainer_name": r["trainer_name"],
+                    "program_id": r["program_id"],
+                    "program_name": r["program_name"],
+                    "classes_attended": attended,
+                    "completed_topics": completed,
+                    "total_topics": total,
+                    "gap": gap,
+                    "progress_pct": progress_pct,
+                    "last_activity": last_act_str
+                })
+
+        # Sort by gap descending (highest gap first)
+        defaulters.sort(key=lambda x: x["gap"], reverse=True)
+
+        from datetime import datetime
+        m_month_label = datetime.now().strftime("%B %Y")
+
+        return render_template(
+            "reports/lms_attendance_gap.html",
+            defaulters=defaulters,
+            branches=branches,
+            batches=batches,
+            programs=programs,
+            selected_branch_id=selected_branch_id,
+            selected_batch_id=selected_batch_id,
+            selected_program_id=selected_program_id,
+            min_gap=min_gap,
+            can_view_all=can_view_all,
+            m_month_label=m_month_label
+        )
+    finally:
+        conn.close()

@@ -193,6 +193,7 @@
         <a class="nav-link {{ 'active' if ep == 'attendance.daily_report' else '' }}" href="{{ url_for('attendance.daily_report') }}">Attendance Daily Report</a>
         <a class="nav-link {{ 'active' if ep == 'reports.attendance_monthly_report' else '' }}" href="{{ url_for('reports.attendance_monthly_report') }}">Attendance Monthly Summary</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.defaulters' else '' }}" href="{{ url_for('attendance.defaulters') }}">Defaulters</a>
+        <a class="nav-link {{ 'active' if ep == 'reports.lms_attendance_gap' else '' }}" href="{{ url_for('reports.lms_attendance_gap') }}">LMS vs Attendance Defaulters</a>
         {% if is_admin %}
           <a class="nav-link {{ 'active' if ep == 'reports.attendance_calendar_settings' else '' }}" href="{{ url_for('reports.attendance_calendar_settings') }}">Attendance Calendar Settings</a>
           <a class="nav-link {{ 'active' if ep == 'reports.import_page' else '' }}" href="{{ url_for('reports.import_page') }}">Import Data</a>
