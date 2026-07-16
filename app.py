@@ -82,7 +82,10 @@ def format_ist_datetime(value):
     if parsed.tzinfo:
         parsed = parsed.astimezone(IST)
     elif len(raw) > 10:
-        parsed = parsed + timedelta(hours=5, minutes=30)
+        import time
+        server_offset_seconds = time.localtime().tm_gmtoff
+        adjustment_seconds = 19800 - server_offset_seconds
+        parsed = parsed + timedelta(seconds=adjustment_seconds)
 
     if len(raw) <= 10:
         return parsed.strftime("%d-%m-%Y")
