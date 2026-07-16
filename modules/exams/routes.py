@@ -380,15 +380,39 @@ def _final_exam_dues_check(cur, student_id):
     }
 
 
+def _final_exam_profile_check(cur, student_id):
+    student = cur.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+    if not student:
+        return {"score": 0, "passed": False}
+        
+    uploaded_docs = cur.execute(
+        "SELECT * FROM student_uploaded_documents WHERE student_id = ?",
+        (student_id,)
+    ).fetchall()
+    
+    from modules.students.routes import calculate_profile_score
+    profile_score = calculate_profile_score(student, uploaded_docs)
+    
+    return {
+        "score": profile_score,
+        "passed": profile_score >= 100,
+    }
+
+
 def _final_exam_checks(cur, student_id, program_id):
     syllabus = _final_exam_syllabus_check(cur, student_id, program_id)
     assignments = _final_exam_assignment_check(cur, student_id, program_id)
     dues = _final_exam_dues_check(cur, student_id)
+    profile = _final_exam_profile_check(cur, student_id)
     return {
         "syllabus": syllabus,
         "assignments": assignments,
         "dues": dues,
-        "all_passed": syllabus["passed"] and assignments["passed"] and dues["passed"],
+        "profile": profile,
+        "all_passed": (syllabus["passed"] and 
+                       assignments["passed"] and 
+                       dues["passed"] and 
+                       profile["passed"]),
     }
 
 

@@ -29,7 +29,7 @@
   .exam-card .form-group { margin-bottom: 1rem; }
   .check-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 12px;
   }
   .check-panel {
@@ -137,6 +137,10 @@
           <div class="check-panel {{ 'pass' if checks.dues.passed else 'fail' }}">
             <div class="check-label">Fee Clearance</div>
             <p class="check-detail">Pending balance: Rs. {{ "%.2f"|format(checks.dues.balance) }}</p>
+          </div>
+          <div class="check-panel {{ 'pass' if checks.profile.passed else 'fail' }}">
+            <div class="check-label">Profile Completeness</div>
+            <p class="check-detail">Profile completeness: {{ checks.profile.score }}% (100% required).</p>
           </div>
         </div>
 
