@@ -581,7 +581,7 @@ function _renderAssignments(assignments) {
 
     html += '<div class="assign-card" id="assign-card-' + a.id + '">';
     html += '<div class="assign-card-title">' + _esc(a.title) + '</div>';
-    if (a.description) html += '<div class="assign-card-desc">' + _esc(a.description) + '</div>';
+    if (a.description) html += '<div class="assign-card-desc">' + a.description + '</div>';
 
     // Status badge + assignment download
     html += '<div class="d-flex align-items-center gap-3 flex-wrap mb-2">';
