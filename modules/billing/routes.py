@@ -3582,19 +3582,48 @@ def student_profile(student_id):
         "leave": 0,
     }
     attendance_query = """
+        WITH collapsed_attendance AS (
+            SELECT 
+                attendance_date,
+                status,
+                CASE 
+                    WHEN status = 'present' THEN 4
+                    WHEN status = 'late' THEN 3
+                    WHEN status = 'leave' THEN 2
+                    WHEN status = 'absent' THEN 1
+                    ELSE 0
+                END as priority
+            FROM attendance_records
+            WHERE student_id = ?
+    """
+    attendance_params = [student_id]
+    if student["branch_id"]:
+        attendance_query += " AND branch_id = ?"
+        attendance_params.append(student["branch_id"])
+
+    attendance_query += """
+        ),
+        daily_attendance AS (
+            SELECT 
+                attendance_date,
+                CASE MAX(priority)
+                    WHEN 4 THEN 'present'
+                    WHEN 3 THEN 'late'
+                    WHEN 2 THEN 'leave'
+                    WHEN 1 THEN 'absent'
+                    ELSE 'absent'
+                END as status
+            FROM collapsed_attendance
+            GROUP BY attendance_date
+        )
         SELECT
             COUNT(*) AS total_marked,
             COALESCE(SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END), 0) AS present,
             COALESCE(SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END), 0) AS absent,
             COALESCE(SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END), 0) AS late,
             COALESCE(SUM(CASE WHEN status = 'leave' THEN 1 ELSE 0 END), 0) AS leave
-        FROM attendance_records
-        WHERE student_id = ?
+        FROM daily_attendance
     """
-    attendance_params = [student_id]
-    if student["branch_id"]:
-        attendance_query += " AND branch_id = ?"
-        attendance_params.append(student["branch_id"])
 
     cur.execute(attendance_query, attendance_params)
     attendance_row = cur.fetchone()

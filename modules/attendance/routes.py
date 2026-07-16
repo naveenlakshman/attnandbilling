@@ -2331,6 +2331,33 @@ def student_attendance_history(student_id):
         
         # Get monthly attendance statistics
         cur.execute("""
+            WITH collapsed_attendance AS (
+                SELECT 
+                    attendance_date,
+                    status,
+                    CASE 
+                        WHEN status = 'present' THEN 4
+                        WHEN status = 'late' THEN 3
+                        WHEN status = 'leave' THEN 2
+                        WHEN status = 'absent' THEN 1
+                        ELSE 0
+                    END as priority
+                FROM attendance_records
+                WHERE student_id = ? AND branch_id = ?
+            ),
+            daily_attendance AS (
+                SELECT 
+                    attendance_date,
+                    CASE MAX(priority)
+                        WHEN 4 THEN 'present'
+                        WHEN 3 THEN 'late'
+                        WHEN 2 THEN 'leave'
+                        WHEN 1 THEN 'absent'
+                        ELSE 'absent'
+                    END as status
+                FROM collapsed_attendance
+                GROUP BY attendance_date
+            )
             SELECT 
                 strftime('%Y-%m', attendance_date) as month,
                 COUNT(*) as total_marked,
@@ -2338,8 +2365,7 @@ def student_attendance_history(student_id):
                 SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent,
                 SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
                 SUM(CASE WHEN status = 'leave' THEN 1 ELSE 0 END) as leave
-            FROM attendance_records
-            WHERE student_id = ? AND branch_id = ?
+            FROM daily_attendance
             GROUP BY strftime('%Y-%m', attendance_date)
             ORDER BY month DESC
         """, (student_id, student['branch_id']))
@@ -2358,14 +2384,40 @@ def student_attendance_history(student_id):
         
         # Calculate overall statistics
         cur.execute("""
+            WITH collapsed_attendance AS (
+                SELECT 
+                    attendance_date,
+                    status,
+                    CASE 
+                        WHEN status = 'present' THEN 4
+                        WHEN status = 'late' THEN 3
+                        WHEN status = 'leave' THEN 2
+                        WHEN status = 'absent' THEN 1
+                        ELSE 0
+                    END as priority
+                FROM attendance_records
+                WHERE student_id = ? AND branch_id = ?
+            ),
+            daily_attendance AS (
+                SELECT 
+                    attendance_date,
+                    CASE MAX(priority)
+                        WHEN 4 THEN 'present'
+                        WHEN 3 THEN 'late'
+                        WHEN 2 THEN 'leave'
+                        WHEN 1 THEN 'absent'
+                        ELSE 'absent'
+                    END as status
+                FROM collapsed_attendance
+                GROUP BY attendance_date
+            )
             SELECT 
                 COUNT(*) as total_marked,
                 SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present,
                 SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent,
                 SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
                 SUM(CASE WHEN status = 'leave' THEN 1 ELSE 0 END) as leave
-            FROM attendance_records
-            WHERE student_id = ? AND branch_id = ?
+            FROM daily_attendance
         """, (student_id, student['branch_id']))
         
         overall_stats = cur.fetchone()

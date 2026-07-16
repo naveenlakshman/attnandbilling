@@ -2,7 +2,7 @@ import io
 import csv
 import calendar
 from collections import defaultdict
-from flask import Blueprint, render_template, send_file, flash, redirect, url_for, session, request
+from flask import Blueprint, render_template, send_file, flash, redirect, url_for, session, request, jsonify
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
 from werkzeug.security import generate_password_hash
@@ -716,7 +716,8 @@ def _load_expected_attendance(cur, start_date, end_date, selected_branch_id, cal
             b.end_date,
             c.course_name,
             br.branch_name,
-            u.full_name AS trainer_name
+            u.full_name AS trainer_name,
+            b.trainer_id
         FROM student_batches sb
         JOIN students s ON sb.student_id = s.id
         JOIN batches b ON sb.batch_id = b.id
@@ -872,7 +873,7 @@ def attendance_monthly_report():
             holiday_title = calendar_settings["holiday_map"].get(day_date)
             day_expected_keys = expected_data["by_day"].get(day_date, set())
             expected_for_day = len(day_expected_keys)
-            day_unmarked = max(0, expected_for_day - total_marked)
+            day_unmarked = sum(1 for key in day_expected_keys if key not in marked_keys)
             monthly_unmarked += day_unmarked
             daily_breakdown.append({
                 "attendance_date": day_date,
@@ -933,7 +934,7 @@ def attendance_monthly_report():
                 "unique_students": max(row["unique_students"] or 0, len({key[1] for key in branch_expected_keys})),
                 "unique_batches": max(row["unique_batches"] or 0, len({key[2] for key in branch_expected_keys})),
                 "expected": expected,
-                "unmarked": max(0, expected - total_marked),
+                "unmarked": sum(1 for key in branch_expected_keys if key not in marked_keys),
                 "leave": row["leave_count"] or 0,
                 "rate": round(((present + late) / total_marked * 100), 1) if total_marked else 0,
                 "marking_rate": round((min(total_marked, expected) / expected * 100), 1) if expected else 0,
@@ -995,7 +996,7 @@ def attendance_monthly_report():
                 **dict(row),
                 "unique_students": max(row["unique_students"] or 0, len({key[1] for key in batch_expected_keys})),
                 "expected": expected,
-                "unmarked": max(0, expected - total_marked),
+                "unmarked": sum(1 for key in batch_expected_keys if key not in marked_keys),
                 "leave": row["leave_count"] or 0,
                 "rate": round(((present + late) / total_marked * 100), 1) if total_marked else 0,
                 "marking_rate": round((min(total_marked, expected) / expected * 100), 1) if expected else 0,
@@ -1061,7 +1062,7 @@ def attendance_monthly_report():
             student_summary.append({
                 **dict(row),
                 "expected": expected,
-                "unmarked": max(0, expected - total_marked),
+                "unmarked": sum(1 for key in student_expected_keys if key not in marked_keys),
                 "leave": row["leave_count"] or 0,
                 "rate": round(((present + late) / total_marked * 100), 1) if total_marked else 0,
                 "marking_rate": round((min(total_marked, expected) / expected * 100), 1) if expected else 0,
@@ -1114,6 +1115,179 @@ def attendance_monthly_report():
             batch_summary=batch_summary,
             student_summary=student_summary,
         )
+    finally:
+        conn.close()
+
+
+@reports_bp.route("/attendance/unmarked-details")
+@login_required
+def attendance_unmarked_details():
+    date_str = request.args.get("date")
+    branch_id_str = request.args.get("branch_id")
+    
+    if not date_str:
+        return redirect(url_for("reports.attendance_monthly_report"))
+        
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        branches, selected_branch_id, selected_branch_name, can_view_all = _resolve_report_branch(cur)
+        if branch_id_str:
+            try:
+                selected_branch_id = int(branch_id_str)
+                selected_branch_row = next((b for b in branches if b["id"] == selected_branch_id), None)
+                selected_branch_name = selected_branch_row["branch_name"] if selected_branch_row else "Selected Branch"
+            except ValueError:
+                pass
+
+        calendar_settings = _get_attendance_calendar(cur, date_str, date_str)
+        expected_data = _load_expected_attendance(cur, date_str, date_str, selected_branch_id, calendar_settings)
+        marked_keys = _load_marked_keys(cur, date_str, date_str, selected_branch_id)
+        
+        # Get active trainers for dropdown
+        trainers_rows = cur.execute("""
+            SELECT DISTINCT u.id, u.full_name
+            FROM batches b
+            JOIN users u ON b.trainer_id = u.id
+            WHERE b.status = 'active'
+            ORDER BY u.full_name
+        """).fetchall()
+        trainers = [dict(r) for r in trainers_rows]
+
+        selected_trainer_id = request.args.get("trainer_id")
+        try:
+            if selected_trainer_id:
+                selected_trainer_id = int(selected_trainer_id)
+        except ValueError:
+            selected_trainer_id = None
+
+        # Load monthly statistics of unmarked records by trainer
+        selected_month = date_str[:7]
+        m_report_month, m_month_label, m_start_date, m_end_date, m_last_day = _month_bounds(selected_month)
+        m_calendar_settings = _get_attendance_calendar(cur, m_start_date, m_end_date)
+        m_expected_data = _load_expected_attendance(cur, m_start_date, m_end_date, selected_branch_id, m_calendar_settings)
+        m_marked_keys = _load_marked_keys(cur, m_start_date, m_end_date, selected_branch_id)
+        
+        from collections import defaultdict
+        unmarked_by_trainer = defaultdict(int)
+        trainer_id_map = {}
+        for key in m_expected_data["keys"]:
+            day, student_id, batch_id = key
+            if key not in m_marked_keys:
+                row = m_expected_data["row_lookup"].get((student_id, batch_id))
+                if row:
+                    trainer_name = row.get("trainer_name") or "Unknown Trainer"
+                    trainer_id = row.get("trainer_id")
+                    unmarked_by_trainer[trainer_name] += 1
+                    if trainer_id:
+                        trainer_id_map[trainer_name] = trainer_id
+
+        for t in trainers:
+            tname = t["full_name"]
+            if tname not in unmarked_by_trainer:
+                unmarked_by_trainer[tname] = 0
+                trainer_id_map[tname] = t["id"]
+
+        trainer_monthly_stats = [
+            {
+                "trainer_id": trainer_id_map.get(name),
+                "trainer_name": name,
+                "count": count
+            }
+            for name, count in unmarked_by_trainer.items()
+        ]
+        trainer_monthly_stats.sort(key=lambda x: x["count"], reverse=True)
+
+        unmarked_students = []
+        for key in expected_data["keys"]:
+            day, student_id, batch_id = key
+            if key not in marked_keys:
+                row = expected_data["row_lookup"].get((student_id, batch_id))
+                if row:
+                    if selected_trainer_id and row.get("trainer_id") != selected_trainer_id:
+                        continue
+                    unmarked_students.append(row)
+                    
+        unmarked_students.sort(key=lambda r: (r.get("batch_name") or "", r.get("full_name") or ""))
+        
+        from datetime import datetime
+        display_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d-%m-%Y")
+        
+        return render_template(
+            "reports/attendance_unmarked_details.html",
+            date_str=date_str,
+            display_date=display_date,
+            selected_branch_id=selected_branch_id,
+            selected_branch_name=selected_branch_name,
+            unmarked_students=unmarked_students,
+            trainers=trainers,
+            selected_trainer_id=selected_trainer_id,
+            trainer_monthly_stats=trainer_monthly_stats,
+            m_month_label=m_month_label
+        )
+    finally:
+        conn.close()
+
+
+@reports_bp.route("/attendance/quick-mark", methods=["POST"])
+@login_required
+def attendance_quick_mark():
+    """AJAX endpoint to quickly mark attendance for a student on a specific date."""
+    user_id = session.get('user_id')
+    student_id = request.form.get("student_id")
+    batch_id = request.form.get("batch_id")
+    branch_id = request.form.get("branch_id")
+    attendance_date = request.form.get("date")
+    status = request.form.get("status")
+    remarks = request.form.get("remarks") or ""
+
+    if not all([student_id, batch_id, branch_id, attendance_date, status]):
+        return jsonify({"success": False, "error": "Missing required fields"}), 400
+
+    if status not in ["present", "absent", "late", "leave"]:
+        return jsonify({"success": False, "error": "Invalid status"}), 400
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+        if not user:
+            return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+        # Check if record already exists
+        cur.execute("""
+            SELECT id FROM attendance_records
+            WHERE batch_id = ? AND student_id = ? AND attendance_date = ?
+        """, (batch_id, student_id, attendance_date))
+        existing = cur.fetchone()
+
+        now = datetime.now().isoformat(timespec="seconds")
+        if existing:
+            cur.execute("""
+                UPDATE attendance_records
+                SET status = ?, remarks = ?, marked_by = ?, updated_at = ?
+                WHERE batch_id = ? AND student_id = ? AND attendance_date = ?
+            """, (status, remarks, user_id, now, batch_id, student_id, attendance_date))
+        else:
+            cur.execute("""
+                INSERT INTO attendance_records (
+                    attendance_date, student_id, batch_id, branch_id,
+                    status, remarks, marked_by, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (attendance_date, student_id, batch_id, branch_id,
+                  status, remarks, user_id, now, now))
+
+        conn.commit()
+
+        log_activity(user_id, branch_id, 'CREATE' if not existing else 'UPDATE',
+                     'attendance', batch_id,
+                     f'Quick marked attendance for student {student_id} on {attendance_date}: {status}')
+
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         conn.close()
 

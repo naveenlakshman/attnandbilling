@@ -288,7 +288,13 @@
                 <td class="text-center fw-semibold">{{ day.expected }}</td>
                 <td class="text-center">{{ day.total_marked }}</td>
                 <td class="text-center {% if day.unmarked > 0 %}text-danger fw-semibold{% else %}text-muted{% endif %}">
-                  {{ day.unmarked }}
+                  {% if day.unmarked > 0 %}
+                    <a href="{{ url_for('reports.attendance_unmarked_details', date=day.attendance_date, branch_id=selected_branch_id) }}" class="text-danger fw-semibold" style="text-decoration: underline;" title="View unmarked students">
+                      {{ day.unmarked }}
+                    </a>
+                  {% else %}
+                    {{ day.unmarked }}
+                  {% endif %}
                 </td>
                 <td class="text-center text-success fw-semibold">{{ day.present }}</td>
                 <td class="text-center text-danger fw-semibold">{{ day.absent }}</td>
