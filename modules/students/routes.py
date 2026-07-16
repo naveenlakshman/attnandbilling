@@ -244,96 +244,17 @@ def _has_program_access(conn, program_id, student_id):
     if _is_demo():
         return True
 
-    # 1. Direct explicit program or batch access
-    direct_access = conn.execute("""
+    access = conn.execute("""
         SELECT 1 FROM lms_programs lp
-        WHERE lp.id = ? AND lp.is_active = 1
-        AND NOT EXISTS (
-            SELECT 1 FROM lms_student_program_access spa
-            WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 0
-        )
-        AND (
-            EXISTS (
-                SELECT 1 FROM lms_student_program_access spa
-                WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 1
-                  AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
-            )
-            OR EXISTS (
-                SELECT 1 FROM lms_batch_program_access bpa
-                JOIN student_batches sb ON bpa.batch_id = sb.batch_id
-                WHERE sb.student_id = ? AND bpa.program_id = lp.id AND bpa.is_active = 1
-                  AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-            )
-        )
-    """, (program_id, student_id, student_id, student_id)).fetchone()
-
-    if direct_access:
-        return True
-
-    # 2. Check if student has explicit/batch access to any OTHER program mapped to the same course.
-    # If they do, they are locked to that program version, so we deny fallback access to this program.
-    rows = conn.execute("""
-        SELECT DISTINCT course_id FROM (
-            SELECT course_id FROM lms_programs WHERE id = ? AND course_id IS NOT NULL
-            UNION
-            SELECT course_id FROM lms_course_program_map WHERE program_id = ?
-        )
-    """, (program_id, program_id)).fetchall()
-    course_ids = [r['course_id'] for r in rows if r['course_id']]
-
-    if course_ids:
-        placeholders = ', '.join('?' for _ in course_ids)
-        has_other_explicit = conn.execute(f"""
-            SELECT 1 FROM lms_programs lp
-            WHERE lp.id != ? AND lp.is_active = 1
-              AND (lp.course_id IN ({placeholders}) OR EXISTS (
-                  SELECT 1 FROM lms_course_program_map cpm 
-                  WHERE cpm.program_id = lp.id AND cpm.course_id IN ({placeholders})
-              ))
-              AND (
-                  EXISTS (
-                      SELECT 1 FROM lms_student_program_access spa
-                      WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 1
-                        AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
-                  )
-                  OR EXISTS (
-                      SELECT 1 FROM lms_batch_program_access bpa
-                      JOIN student_batches sb ON bpa.batch_id = sb.batch_id
-                      WHERE sb.student_id = ? AND bpa.program_id = lp.id AND bpa.is_active = 1
-                        AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-                  )
-              )
-        """, [program_id] + course_ids + course_ids + [student_id, student_id]).fetchone()
-
-        if has_other_explicit:
-            return False
-
-    # 3. Fallback to invoice-based access (only if no explicit access to any version exists)
-    invoice_access = conn.execute("""
-        SELECT 1 FROM lms_programs lp
-        WHERE lp.id = ? AND lp.is_active = 1
-        AND NOT EXISTS (
-            SELECT 1 FROM lms_student_program_access spa
-            WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 0
-        )
-        AND (
-            EXISTS (
-                SELECT 1 FROM invoices i
-                JOIN invoice_items ii ON ii.invoice_id = i.id
-                WHERE i.student_id = ? AND ii.course_id = lp.course_id
-                  AND lp.course_id IS NOT NULL
-            )
-            OR EXISTS (
-                SELECT 1 FROM invoices i
-                JOIN invoice_items ii ON ii.invoice_id = i.id
-                JOIN lms_course_program_map cpm
-                     ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
-                WHERE i.student_id = ?
-            )
-        )
-    """, (program_id, student_id, student_id, student_id)).fetchone()
-
-    return bool(invoice_access)
+        WHERE lp.id = ? AND lp.is_active = 1 AND COALESCE(lp.is_deleted, 0) = 0
+          AND EXISTS (
+              SELECT 1 FROM lms_student_program_access spa
+              WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 1
+                AND COALESCE(spa.access_status, 'active') = 'active'
+                AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+          )
+    """, (program_id, student_id)).fetchone()
+    return bool(access)
 
 
 def _youtube_embed(url):
@@ -987,76 +908,16 @@ def dashboard():
                         WHERE cpm_ord.program_id = lp.id AND i_ord.student_id = ?
                     ) AS map_order
                 FROM lms_programs lp
-                WHERE lp.is_active = 1
-                AND NOT EXISTS (
-                    SELECT 1 FROM lms_student_program_access spa_susp
-                    WHERE spa_susp.student_id = ? AND spa_susp.program_id = lp.id AND spa_susp.is_active = 0
-                )
-                AND (
-                    -- 1. Direct explicit program access
-                    EXISTS (
-                        SELECT 1 FROM lms_student_program_access spa
-                        WHERE spa.student_id = ? AND spa.program_id = lp.id
-                          AND spa.is_active = 1
-                          AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
-                    )
-                    OR EXISTS (
-                        SELECT 1 FROM lms_batch_program_access bpa
-                        JOIN student_batches sb ON bpa.batch_id = sb.batch_id
-                        WHERE sb.student_id = ? AND bpa.program_id = lp.id
-                          AND bpa.is_active = 1 AND sb.status = 'active'
-                          AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-                    )
-                    -- 2. Fallback invoice access, but only if student has NO explicit/batch access to any other program of the same course
-                    OR (
-                        (
-                            EXISTS (
-                                SELECT 1 FROM invoices i
-                                JOIN invoice_items ii ON ii.invoice_id = i.id
-                                WHERE i.student_id = ? AND ii.course_id = lp.course_id
-                                  AND lp.course_id IS NOT NULL
-                            )
-                            OR EXISTS (
-                                SELECT 1 FROM invoices i
-                                JOIN invoice_items ii ON ii.invoice_id = i.id
-                                JOIN lms_course_program_map cpm
-                                     ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
-                                WHERE i.student_id = ?
-                            )
-                        )
-                        AND NOT EXISTS (
-                            SELECT 1 FROM lms_programs lp2
-                            WHERE lp2.id != lp.id AND lp2.is_active = 1
-                              AND (
-                                  (lp2.course_id IS NOT NULL AND lp2.course_id = lp.course_id)
-                                  OR EXISTS (
-                                      SELECT 1 FROM lms_course_program_map cpm1 
-                                      WHERE cpm1.program_id = lp.id AND (cpm1.course_id = lp2.course_id OR cpm1.course_id IN (
-                                          SELECT cpm2.course_id FROM lms_course_program_map cpm2 WHERE cpm2.program_id = lp2.id
-                                      ))
-                                  )
-                                  OR (lp.course_id IS NOT NULL AND EXISTS (
-                                      SELECT 1 FROM lms_course_program_map cpm3 WHERE cpm3.program_id = lp2.id AND cpm3.course_id = lp.course_id
-                                  ))
-                              )
-                              AND (
-                                  EXISTS (
-                                      SELECT 1 FROM lms_student_program_access spa2
-                                      WHERE spa2.student_id = ? AND spa2.program_id = lp2.id AND spa2.is_active = 1
-                                        AND (spa2.access_end_date IS NULL OR spa2.access_end_date >= date('now'))
-                                  )
-                                  OR EXISTS (
-                                      SELECT 1 FROM lms_batch_program_access bpa2
-                                      JOIN student_batches sb2 ON bpa2.batch_id = sb2.batch_id
-                                      WHERE sb2.student_id = ? AND bpa2.program_id = lp2.id AND bpa2.is_active = 1
-                                        AND (bpa2.access_end_date IS NULL OR bpa2.access_end_date >= date('now'))
-                                  )
-                              )
-                        )
-                    )
-                )
+                WHERE lp.is_active = 1 AND COALESCE(lp.is_deleted, 0) = 0
+                  AND EXISTS (
+                      SELECT 1 FROM lms_student_program_access spa
+                      WHERE spa.student_id = ? AND spa.program_id = lp.id
+                        AND spa.is_active = 1
+                        AND COALESCE(spa.access_status, 'active') = 'active'
+                        AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+                  )
                 ORDER BY CASE WHEN map_order IS NULL THEN 1 ELSE 0 END, map_order, lp.program_name
-            """, (student_id,) * 11).fetchall()
+            """, (student_id, student_id, student_id, student_id, student_id)).fetchall()
 
         programs = [dict(program) for program in programs]
         for program in programs:

@@ -187,44 +187,17 @@ def _student_has_program_access(cur, student_id, program_id):
             WHERE lp.id = ?
               AND lp.is_active = 1
               AND COALESCE(lp.is_deleted, 0) = 0
-              AND (
-                EXISTS (
-                    SELECT 1
-                    FROM lms_student_program_access spa
-                    WHERE spa.student_id = ?
-                      AND spa.program_id = lp.id
-                      AND spa.is_active = 1
-                      AND COALESCE(spa.access_status, 'active') = 'active'
-                      AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1
-                    FROM lms_batch_program_access bpa
-                    JOIN student_batches sb ON bpa.batch_id = sb.batch_id
-                    WHERE sb.student_id = ?
-                      AND bpa.program_id = lp.id
-                      AND bpa.is_active = 1
-                      AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1
-                    FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    WHERE i.student_id = ?
-                      AND ii.course_id = lp.course_id
-                      AND lp.course_id IS NOT NULL
-                )
-                OR EXISTS (
-                    SELECT 1
-                    FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    JOIN lms_course_program_map cpm
-                         ON cpm.course_id = ii.course_id AND cpm.program_id = lp.id
-                    WHERE i.student_id = ?
-                )
+              AND EXISTS (
+                  SELECT 1
+                  FROM lms_student_program_access spa
+                  WHERE spa.student_id = ?
+                    AND spa.program_id = lp.id
+                    AND spa.is_active = 1
+                    AND COALESCE(spa.access_status, 'active') = 'active'
+                    AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
               )
         """,
-        (program_id, student_id, student_id, student_id, student_id),
+        (program_id, student_id),
     ).fetchone() is not None
 
 

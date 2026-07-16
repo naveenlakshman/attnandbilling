@@ -3239,16 +3239,6 @@ def _student_lms_progress_rows(cur, student_id):
                       AND spa.is_active = 1
                       AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
                 ) THEN 3
-                WHEN EXISTS (
-                    SELECT 1
-                    FROM lms_batch_program_access bpa
-                    JOIN student_batches sb ON sb.batch_id = bpa.batch_id
-                    WHERE sb.student_id = ?
-                      AND bpa.program_id = lp.id
-                      AND bpa.is_active = 1
-                      AND sb.status = 'active'
-                      AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-                ) THEN 2
                 ELSE 1
             END AS access_priority,
             CASE
@@ -3265,43 +3255,14 @@ def _student_lms_progress_rows(cur, student_id):
         LEFT JOIN courses c ON c.id = lp.course_id
         WHERE lp.is_active = 1
           AND COALESCE(lp.is_deleted, 0) = 0
-          AND (
-              EXISTS (
-                  SELECT 1
-                  FROM lms_student_program_access spa
-                  WHERE spa.student_id = ?
-                    AND spa.program_id = lp.id
-              )
-              OR EXISTS (
-                  SELECT 1
-                  FROM lms_batch_program_access bpa
-                  JOIN student_batches sb ON sb.batch_id = bpa.batch_id
-                  WHERE sb.student_id = ?
-                    AND bpa.program_id = lp.id
-                    AND bpa.is_active = 1
-                    AND sb.status = 'active'
-                    AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-              )
-              OR EXISTS (
-                  SELECT 1
-                  FROM invoices inv
-                  JOIN invoice_items ii ON ii.invoice_id = inv.id
-                  WHERE inv.student_id = ?
-                    AND ii.course_id = lp.course_id
-                    AND lp.course_id IS NOT NULL
-              )
-              OR EXISTS (
-                  SELECT 1
-                  FROM invoices inv
-                  JOIN invoice_items ii ON ii.invoice_id = inv.id
-                  JOIN lms_course_program_map cpm
-                    ON cpm.course_id = ii.course_id
-                   AND cpm.program_id = lp.id
-                  WHERE inv.student_id = ?
-              )
+          AND EXISTS (
+              SELECT 1
+              FROM lms_student_program_access spa
+              WHERE spa.student_id = ?
+                AND spa.program_id = lp.id
           )
         ORDER BY course_name, lp.program_name
-    """, (student_id, student_id, student_id, student_id, student_id, student_id, student_id))
+    """, (student_id, student_id, student_id))
     programs = cur.fetchall()
 
     progress_rows = []

@@ -2362,9 +2362,7 @@ def program_view(program_id):
               AND mt.status = 'active'
         """, (program_id,))
         total_topics = cur.fetchone()['count']
-        
-        # Mirror progress dashboard enrollment: direct access, batch access,
-        # invoice course access, or invoice course-to-program mapping.
+
         cur.execute("""
             SELECT COUNT(DISTINCT s.id) as count
             FROM students s
@@ -2372,33 +2370,11 @@ def program_view(program_id):
             WHERE s.status = 'active'
               AND lp.is_active = 1
               AND lp.is_deleted = 0
-              AND (
-                EXISTS (
-                    SELECT 1 FROM lms_student_program_access spa
-                    WHERE spa.student_id = s.id AND spa.program_id = lp.id
-                      AND spa.is_active = 1
-                      AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1 FROM lms_batch_program_access bpa
-                    JOIN student_batches sb ON sb.batch_id = bpa.batch_id
-                    WHERE sb.student_id = s.id AND bpa.program_id = lp.id
-                      AND bpa.is_active = 1 AND sb.status = 'active'
-                      AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1 FROM invoices inv
-                    JOIN invoice_items ii ON ii.invoice_id = inv.id
-                    WHERE inv.student_id = s.id AND ii.course_id = lp.course_id
-                      AND lp.course_id IS NOT NULL
-                )
-                OR EXISTS (
-                    SELECT 1 FROM invoices inv
-                    JOIN invoice_items ii ON ii.invoice_id = inv.id
-                    JOIN lms_course_program_map cpm ON cpm.course_id = ii.course_id
-                      AND cpm.program_id = lp.id
-                    WHERE inv.student_id = s.id
-                )
+              AND EXISTS (
+                  SELECT 1 FROM lms_student_program_access spa
+                  WHERE spa.student_id = s.id AND spa.program_id = lp.id
+                    AND spa.is_active = 1
+                    AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
               )
         """, (program_id,))
         total_students = cur.fetchone()['count']

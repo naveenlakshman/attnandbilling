@@ -2587,33 +2587,13 @@ def lms_attendance_gap():
             "SELECT id, program_name FROM lms_programs WHERE is_active = 1 AND is_deleted = 0 ORDER BY program_name"
         ).fetchall()
 
-        # Enforce program enrollment 4-path check
+        # Enforce program enrollment explicit check
         _enroll_check = """(
             EXISTS (
                 SELECT 1 FROM lms_student_program_access spa
                 WHERE spa.student_id = s.id AND spa.program_id = lp.id
                   AND spa.is_active = 1
                   AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
-            )
-            OR EXISTS (
-                SELECT 1 FROM lms_batch_program_access bpa
-                JOIN student_batches sb ON sb.batch_id = bpa.batch_id
-                WHERE sb.student_id = s.id AND bpa.program_id = lp.id
-                  AND bpa.is_active = 1 AND sb.status = 'active'
-                  AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-            )
-            OR EXISTS (
-                SELECT 1 FROM invoices inv
-                JOIN invoice_items ii ON ii.invoice_id = inv.id
-                WHERE inv.student_id = s.id AND ii.course_id = lp.course_id
-                  AND lp.course_id IS NOT NULL
-            )
-            OR EXISTS (
-                SELECT 1 FROM invoices inv
-                JOIN invoice_items ii ON ii.invoice_id = inv.id
-                JOIN lms_course_program_map cpm ON cpm.course_id = ii.course_id
-                  AND cpm.program_id = lp.id
-                WHERE inv.student_id = s.id
             )
         )"""
 
