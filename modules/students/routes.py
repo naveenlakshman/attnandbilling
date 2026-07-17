@@ -1649,7 +1649,31 @@ def profile():
     conn = get_conn()
     try:
         company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
-        student = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+        if _is_demo():
+            student = {
+                'id': 0,
+                'full_name': 'Demo Student',
+                'student_code': 'DEMO',
+                'status': 'active',
+                'photo_filename': None,
+                'phone': '+91 98765 43210',
+                'email': 'demo@globalit.com',
+                'joined_date': '2026-07-17',
+                'gender': 'male',
+                'education_level': 'Graduate',
+                'qualification': 'Bachelor of Computer Applications',
+                'employment_status': 'student',
+                'student_location': 'Bangalore',
+                'address': '123, Main Road, Bangalore, Karnataka',
+                'parent_name': 'Demo Parent',
+                'parent_contact': '+91 98765 43211',
+                'student_signature_filename': None,
+                'parent_signature_filename': None,
+                'profile_approved_updates_count': 0,
+                'date_of_birth': '2000-01-01'
+            }
+        else:
+            student = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
 
         # Enrolled batches
         batches = conn.execute("""

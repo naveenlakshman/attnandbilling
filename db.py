@@ -102,6 +102,21 @@ class MySQLCursorWrapper:
             query,
             flags=re.IGNORECASE
         )
+        
+        # Translate SQLite string concatenation (||) to MySQL CONCAT
+        query = query.replace("'course:' || lp.course_id", "CONCAT('course:', lp.course_id)")
+        query = re.sub(
+            r"'course:'\s*\|\|\s*\(\s*SELECT\s+MIN\s*\(\s*cpm_group\.course_id\s*\)\s+FROM\s+lms_course_program_map\s+cpm_group\s+WHERE\s+cpm_group\.program_id\s*=\s*lp\.id\s*\)",
+            r"CONCAT('course:', (SELECT MIN(cpm_group.course_id) FROM lms_course_program_map cpm_group WHERE cpm_group.program_id = lp.id))",
+            query,
+            flags=re.IGNORECASE
+        )
+        query = re.sub(
+            r"'ref:'\s*\|\|\s*(lower\s*\(\s*trim\s*\(\s*COALESCE\s*\(\s*NULLIF\s*\(\s*lp\.program_reference_name\s*,\s*(?:''|\"\")\s*\)\s*,\s*lp\.program_name\s*\)\s*\)\s*\))",
+            r"CONCAT('ref:', \1)",
+            query,
+            flags=re.IGNORECASE
+        )
             
         if args is not None:
             query = query.replace('?', '%s')
@@ -168,6 +183,21 @@ class MySQLCursorWrapper:
         query = re.sub(
             r"\bparse_date\s*\(\s*([^)]+)\s*\)",
             r"CASE WHEN \1 REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4}' THEN DATE_FORMAT(STR_TO_DATE(\1, '%d-%m-%Y'), '%Y-%m-%d') ELSE SUBSTRING(\1, 1, 10) END",
+            query,
+            flags=re.IGNORECASE
+        )
+        
+        # Translate SQLite string concatenation (||) to MySQL CONCAT
+        query = query.replace("'course:' || lp.course_id", "CONCAT('course:', lp.course_id)")
+        query = re.sub(
+            r"'course:'\s*\|\|\s*\(\s*SELECT\s+MIN\s*\(\s*cpm_group\.course_id\s*\)\s+FROM\s+lms_course_program_map\s+cpm_group\s+WHERE\s+cpm_group\.program_id\s*=\s*lp\.id\s*\)",
+            r"CONCAT('course:', (SELECT MIN(cpm_group.course_id) FROM lms_course_program_map cpm_group WHERE cpm_group.program_id = lp.id))",
+            query,
+            flags=re.IGNORECASE
+        )
+        query = re.sub(
+            r"'ref:'\s*\|\|\s*(lower\s*\(\s*trim\s*\(\s*COALESCE\s*\(\s*NULLIF\s*\(\s*lp\.program_reference_name\s*,\s*(?:''|\"\")\s*\)\s*,\s*lp\.program_name\s*\)\s*\)\s*\))",
+            r"CONCAT('ref:', \1)",
             query,
             flags=re.IGNORECASE
         )
