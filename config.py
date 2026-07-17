@@ -38,6 +38,14 @@ class Config:
     SQLALCHEMY_DATABASE_URI = f"sqlite:///{DB_PATH}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    DB_TYPE = os.environ.get("DB_TYPE", "sqlite")
+    MYSQL_HOST = os.environ.get("MYSQL_HOST", "127.0.0.1")
+    MYSQL_USER = os.environ.get("MYSQL_USER", "root")
+    MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "")
+    MYSQL_DB = os.environ.get("MYSQL_DB", "attn_billing_db")
+    MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
+
+
     # Session: sliding expiry — stays alive while active, expires after 7 days idle
     PERMANENT_SESSION_LIFETIME = timedelta(days=7)
     SESSION_REFRESH_EACH_REQUEST = True

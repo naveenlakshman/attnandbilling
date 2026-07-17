@@ -1,11 +1,237 @@
 import sqlite3
 import time
+import re
+import pymysql
 from datetime import datetime
 from werkzeug.security import generate_password_hash
-from config import DB_PATH
+from config import DB_PATH, Config
+from pymysql.cursors import DictCursor
 
+def convert_sqlite_datetime_to_mysql(query):
+    pos = 0
+    while True:
+        match = re.search(r"\bdatetime\s*\(", query[pos:], re.IGNORECASE)
+        if not match:
+            break
+        
+        start_idx = pos + match.start()
+        paren_count = 1
+        i = start_idx + len(match.group(0))
+        expr_start = i
+        while i < len(query) and paren_count > 0:
+            if query[i] == '(':
+                paren_count += 1
+            elif query[i] == ')':
+                paren_count -= 1
+            i += 1
+            
+        if paren_count == 0:
+            expr = query[expr_start : i - 1]
+            query = query[:start_idx] + "CAST(" + expr + " AS DATETIME)" + query[i:]
+            pos = start_idx + len("CAST(") + len(expr) + len(" AS DATETIME)")
+        else:
+            pos = start_idx + len(match.group(0))
+    return query
+
+class MySQLRow(dict):
+    def __init__(self, *args, **kwargs):
+        import datetime
+        raw_dict = dict(*args, **kwargs)
+        cleaned = {}
+        for k, v in raw_dict.items():
+            if isinstance(v, datetime.datetime):
+                cleaned[k] = v.strftime('%Y-%m-%d %H:%M:%S')
+            elif isinstance(v, datetime.date):
+                cleaned[k] = v.strftime('%Y-%m-%d')
+            else:
+                cleaned[k] = v
+        super().__init__(cleaned)
+        self._keys_list = list(self.keys())
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            try:
+                dict_key = self._keys_list[key]
+                return super().__getitem__(dict_key)
+            except IndexError:
+                raise KeyError(key)
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        if isinstance(key, int):
+            try:
+                dict_key = self._keys_list[key]
+                return super().get(dict_key, default)
+            except IndexError:
+                return default
+        return super().get(key, default)
+
+class MySQLRowCursor(DictCursor):
+    def _conv_row(self, row):
+        if row is None:
+            return None
+        return MySQLRow(zip(self._fields, row))
+
+class MySQLCursorWrapper:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def execute(self, query, args=None):
+        if query.strip().upper().startswith("PRAGMA") or re.search(r"^\s*CREATE\s+(TABLE|INDEX)", query, re.IGNORECASE):
+            return self
+            
+        # Translate SQLite strftime(format, col) to MySQL DATE_FORMAT(col, format)
+        query = re.sub(r"\bstrftime\s*\(\s*('[^']+'|\"[^\"]+\")\s*,\s*([^)]+)\)", r"DATE_FORMAT(\2, \1)", query, flags=re.IGNORECASE)
+        
+        # Translate COLLATE NOCASE to empty string for MySQL compatibility
+        query = re.sub(r"\bCOLLATE\s+NOCASE\b", "", query, flags=re.IGNORECASE)
+        
+        # Translate SQLite julianday(a) - julianday(b) to MySQL DATEDIFF(a, b)
+        query = re.sub(
+            r"\bjulianday\s*\(\s*([^)]+)\s*\)\s*-\s*julianday\s*\(\s*([^)]+)\s*\)",
+            r"DATEDIFF(\1, \2)",
+            query,
+            flags=re.IGNORECASE
+        )
+            
+        if args is not None:
+            query = query.replace('?', '%s')
+        
+        # Translate date('now') and datetime('now') to MySQL CURDATE() and NOW()
+        query = re.sub(r"\bdate\s*\(\s*'now'\s*\)", "CURDATE()", query, flags=re.IGNORECASE)
+        query = re.sub(r"\bdatetime\s*\(\s*'now'\s*\)", "NOW()", query, flags=re.IGNORECASE)
+        query = re.sub(r"\bdatetime\s*\(\s*'now'\s*,\s*'-24 hours'\s*\)", "DATE_SUB(NOW(), INTERVAL 24 HOUR)", query, flags=re.IGNORECASE)
+        
+        # Translate general datetime(col) functions to CAST(col AS DATETIME)
+        query = convert_sqlite_datetime_to_mysql(query)
+        
+        # Translate SQLite excluded.col_name to MySQL VALUES(col_name)
+        query = re.sub(r"\bexcluded\.(\w+)\b", r"VALUES(\1)", query, flags=re.IGNORECASE)
+        
+        # Translate UNION ALL subqueries for MySQL compatibility by appending 'AS _last_act_sub'
+        query = re.sub(
+            r"(\bSELECT\s+MAX\s*\(\s*last_act\s*\)\s+FROM\s*\(\s*SELECT\s+MAX\s*\(.*?\)\s+AS\s+last_act\s+FROM\s+lms_topic_progress\s+tp\s+.*?\s+UNION\s+ALL\s+SELECT\s+MAX\s*\(\s*mtp\.completed_at\s*\)\s+AS\s+last_act\s+FROM\s+lms_master_topic_progress\s+mtp\s+.*?)\s*\)",
+            r"\1) AS _last_act_sub",
+            query,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        
+        # Translate ON CONFLICT to ON DUPLICATE KEY UPDATE
+        if "ON CONFLICT" in query:
+            query = re.sub(
+                r"ON CONFLICT\s*\([^)]*\)\s*DO\s+UPDATE\s+(?:SET\s+)?",
+                "ON DUPLICATE KEY UPDATE ",
+                query,
+                flags=re.IGNORECASE
+            )
+            query = re.sub(
+                r"ON CONFLICT\s*\([^)]*\)\s*DO\s+NOTHING",
+                "",
+                query,
+                flags=re.IGNORECASE
+            )
+            
+        # Escape any percent sign not used as a parameter placeholder for PyMySQL
+        query = re.sub(r"%(?!s|\()", "%%", query)
+        
+        self._cursor.execute(query, args)
+        return self
+
+    def executemany(self, query, args=None):
+        if query.strip().upper().startswith("PRAGMA") or re.search(r"^\s*CREATE\s+(TABLE|INDEX)", query, re.IGNORECASE):
+            return self
+            
+        query = re.sub(r"\bstrftime\s*\(\s*('[^']+'|\"[^\"]+\")\s*,\s*([^)]+)\)", r"DATE_FORMAT(\2, \1)", query, flags=re.IGNORECASE)
+        
+        # Translate COLLATE NOCASE to empty string for MySQL compatibility
+        query = re.sub(r"\bCOLLATE\s+NOCASE\b", "", query, flags=re.IGNORECASE)
+        
+        # Translate SQLite julianday(a) - julianday(b) to MySQL DATEDIFF(a, b)
+        query = re.sub(
+            r"\bjulianday\s*\(\s*([^)]+)\s*\)\s*-\s*julianday\s*\(\s*([^)]+)\s*\)",
+            r"DATEDIFF(\1, \2)",
+            query,
+            flags=re.IGNORECASE
+        )
+            
+        if args is not None:
+            query = query.replace('?', '%s')
+        query = re.sub(r"\bdate\s*\(\s*'now'\s*\)", "CURDATE()", query, flags=re.IGNORECASE)
+        query = re.sub(r"\bdatetime\s*\(\s*'now'\s*\)", "NOW()", query, flags=re.IGNORECASE)
+        
+        # Translate general datetime(col) functions to CAST(col AS DATETIME)
+        query = convert_sqlite_datetime_to_mysql(query)
+        
+        query = re.sub(r"\bexcluded\.(\w+)\b", r"VALUES(\1)", query, flags=re.IGNORECASE)
+        
+        # Translate UNION ALL subqueries for MySQL compatibility by appending 'AS _last_act_sub'
+        query = re.sub(
+            r"(\bSELECT\s+MAX\s*\(\s*last_act\s*\)\s+FROM\s*\(\s*SELECT\s+MAX\s*\(.*?\)\s+AS\s+last_act\s+FROM\s+lms_topic_progress\s+tp\s+.*?\s+UNION\s+ALL\s+SELECT\s+MAX\s*\(\s*mtp\.completed_at\s*\)\s+AS\s+last_act\s+FROM\s+lms_master_topic_progress\s+mtp\s+.*?)\s*\)",
+            r"\1) AS _last_act_sub",
+            query,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        if "ON CONFLICT" in query:
+            query = re.sub(
+                r"ON CONFLICT\s*\([^)]*\)\s*DO\s+UPDATE\s+(?:SET\s+)?",
+                "ON DUPLICATE KEY UPDATE ",
+                query,
+                flags=re.IGNORECASE
+            )
+            
+        query = re.sub(r"%(?!s|\()", "%%", query)
+        
+        self._cursor.executemany(query, args)
+        return self
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
+class MySQLConnectionWrapper:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def cursor(self):
+        return MySQLCursorWrapper(self._conn.cursor(MySQLRowCursor))
+
+    def execute(self, query, args=None):
+        cursor = self.cursor()
+        cursor.execute(query, args)
+        return cursor
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        return self._conn.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self.rollback()
+        else:
+            self.commit()
+        self.close()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
 
 def get_conn():
+    if getattr(Config, "DB_TYPE", "sqlite") == "mysql":
+        conn = pymysql.connect(
+            host=Config.MYSQL_HOST,
+            user=Config.MYSQL_USER,
+            password=Config.MYSQL_PASSWORD,
+            database=Config.MYSQL_DB,
+            port=Config.MYSQL_PORT
+        )
+        return MySQLConnectionWrapper(conn)
+
     conn = sqlite3.connect(DB_PATH, timeout=10.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -129,6 +355,9 @@ def add_column_if_not_exists(cur, table_name, column_name, column_def):
 
 
 def init_db():
+    if getattr(Config, "DB_TYPE", "sqlite") == "mysql":
+        return
+        
     conn = get_conn()
     # One-time DB configuration (WAL mode + performance settings)
     conn.execute("PRAGMA journal_mode = WAL;")

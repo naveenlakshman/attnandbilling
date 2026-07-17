@@ -26,48 +26,14 @@ def _pick_student_program_topic() -> dict[str, Any] | None:
             """
             SELECT
                 s.id AS student_id,
-                p.id AS program_id,
+                spa.program_id AS program_id,
                 mt.id AS master_topic_id
             FROM students s
-            JOIN lms_programs p ON p.is_active = 1 AND p.slug != '__lms_master_bridge__'
+            JOIN lms_student_program_access spa ON spa.student_id = s.id AND spa.is_active = 1 AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
+            JOIN lms_programs p ON p.id = spa.program_id AND p.is_active = 1 AND p.slug != '__lms_master_bridge__'
             JOIN lms_program_chapters pc ON pc.program_id = p.id AND pc.is_visible = 1
             JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id AND mc.status = 'active'
             JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id AND mt.status = 'active'
-            WHERE
-                EXISTS (
-                    SELECT 1
-                    FROM lms_student_program_access spa
-                    WHERE spa.student_id = s.id
-                      AND spa.program_id = p.id
-                      AND spa.is_active = 1
-                      AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1
-                    FROM lms_batch_program_access bpa
-                    JOIN student_batches sb ON sb.batch_id = bpa.batch_id
-                    WHERE sb.student_id = s.id
-                      AND bpa.program_id = p.id
-                      AND bpa.is_active = 1
-                      AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
-                )
-                OR EXISTS (
-                    SELECT 1
-                    FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    WHERE i.student_id = s.id
-                      AND ii.course_id = p.course_id
-                      AND p.course_id IS NOT NULL
-                )
-                OR EXISTS (
-                    SELECT 1
-                    FROM invoices i
-                    JOIN invoice_items ii ON ii.invoice_id = i.id
-                    JOIN lms_course_program_map cpm
-                      ON cpm.course_id = ii.course_id
-                     AND cpm.program_id = p.id
-                    WHERE i.student_id = s.id
-                )
             ORDER BY s.id, p.id, pc.chapter_order, mt.topic_order
             LIMIT 1
             """

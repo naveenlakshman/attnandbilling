@@ -736,7 +736,7 @@ def dashboard():
                       AND COALESCE(lp.is_deleted, 0) = 0
                       AND lp.is_published = 1
                 )
-                SELECT DISTINCT
+                SELECT
                     lp.id, lp.program_name, lp.description,
                     CASE
                         WHEN EXISTS (

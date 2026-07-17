@@ -18,46 +18,59 @@ def get_all_tables_data():
     Retrieves all tables and their data from the database.
     Returns a dictionary where keys are table names and values are lists of dictionaries.
     """
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = get_conn()
     cursor = conn.cursor()
     
-    # Get all table names from sqlite_master
-    cursor.execute("""
-        SELECT name FROM sqlite_master 
-        WHERE type='table' AND name NOT LIKE 'sqlite_%'
-        ORDER BY name
-    """)
-    tables = cursor.fetchall()
+    # Check if MySQL or SQLite
+    import pymysql
+    is_mysql = hasattr(conn, '_conn') and isinstance(conn._conn, pymysql.connections.Connection)
+    
+    if is_mysql:
+        cursor.execute("SHOW TABLES")
+        tables = cursor.fetchall()
+        # Since it uses DictCursor, tables is a list of dicts. Extract values:
+        table_names = [list(row.values())[0] for row in tables]
+    else:
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+        """)
+        table_names = [row[0] for row in cursor.fetchall()]
     
     tables_data = {}
     
-    for table in tables:
-        table_name = table[0]
-        
+    for table_name in table_names:
         # Get all data from the table
-        cursor.execute(f"SELECT * FROM [{table_name}]")
+        cursor.execute(f"SELECT * FROM `{table_name}`")
         rows = cursor.fetchall()
         
         # Convert rows to list of dictionaries
         data = []
         if rows:
-            columns = [desc[0] for desc in cursor.description]
             for row in rows:
-                row_dict = dict(row)
-                data.append(row_dict)
+                data.append(dict(row))
+        
+        # Get column names
+        columns = []
+        if rows:
+            columns = list(rows[0].keys())
         else:
-            # If table is empty, still get column names
-            cursor.execute(f"PRAGMA table_info([{table_name}])")
-            columns = [col[1] for col in cursor.fetchall()]
+            if is_mysql:
+                cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
+                columns = [col['Field'] for col in cursor.fetchall()]
+            else:
+                cursor.execute(f"PRAGMA table_info([{table_name}])")
+                columns = [col[1] for col in cursor.fetchall()]
         
         tables_data[table_name] = {
-            'columns': [desc[0] for desc in cursor.description] if rows else columns,
+            'columns': columns,
             'data': data
         }
     
     conn.close()
     return tables_data
+
 
 
 def create_excel_workbook(tables_data):
