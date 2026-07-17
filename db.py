@@ -93,6 +93,15 @@ class MySQLCursorWrapper:
             query,
             flags=re.IGNORECASE
         )
+        
+        # Translate SQLite parse_date(expr) to MySQL-compatible inline CASE statement
+        # (Bypasses MySQL SUPER privilege restrictions on hosting platforms like PythonAnywhere)
+        query = re.sub(
+            r"\bparse_date\s*\(\s*([^)]+)\s*\)",
+            r"CASE WHEN \1 REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4}' THEN DATE_FORMAT(STR_TO_DATE(\1, '%d-%m-%Y'), '%Y-%m-%d') ELSE SUBSTRING(\1, 1, 10) END",
+            query,
+            flags=re.IGNORECASE
+        )
             
         if args is not None:
             query = query.replace('?', '%s')
@@ -150,6 +159,15 @@ class MySQLCursorWrapper:
         query = re.sub(
             r"\bjulianday\s*\(\s*([^)]+)\s*\)\s*-\s*julianday\s*\(\s*([^)]+)\s*\)",
             r"DATEDIFF(\1, \2)",
+            query,
+            flags=re.IGNORECASE
+        )
+        
+        # Translate SQLite parse_date(expr) to MySQL-compatible inline CASE statement
+        # (Bypasses MySQL SUPER privilege restrictions on hosting platforms like PythonAnywhere)
+        query = re.sub(
+            r"\bparse_date\s*\(\s*([^)]+)\s*\)",
+            r"CASE WHEN \1 REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4}' THEN DATE_FORMAT(STR_TO_DATE(\1, '%d-%m-%Y'), '%Y-%m-%d') ELSE SUBSTRING(\1, 1, 10) END",
             query,
             flags=re.IGNORECASE
         )
