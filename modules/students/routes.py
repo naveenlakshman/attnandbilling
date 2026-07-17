@@ -794,6 +794,19 @@ def dashboard():
                     (SELECT lt4.id FROM lms_topics lt4 JOIN lms_chapters lc5 ON lt4.chapter_id = lc5.id
                      WHERE lc5.program_id = lp.id AND lc5.is_active = 1 AND lt4.is_active = 1
                      ORDER BY lc5.chapter_order, lt4.topic_order LIMIT 1) AS first_topic_id,
+                    (
+                        SELECT mt.id
+                        FROM lms_program_chapters pc
+                        JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                        JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+                        WHERE pc.program_id = lp.id
+                          AND pc.is_visible = 1
+                          AND mc.status = 'active'
+                          AND mt.status = 'active'
+                        ORDER BY pc.chapter_order ASC, mt.topic_order ASC, mt.id ASC
+                        LIMIT 1
+                    ) AS first_master_topic_id,
+                    NULL AS last_master_topic_id,
                     NULL AS map_order
                 FROM ranked_demo_programs lp
                 WHERE lp.demo_rank = 1
@@ -901,6 +914,33 @@ def dashboard():
                         ORDER BY lc5.chapter_order, lt4.topic_order LIMIT 1
                     ) AS first_topic_id,
                     (
+                        SELECT mt.id
+                        FROM lms_program_chapters pc
+                        JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                        JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+                        WHERE pc.program_id = lp.id
+                          AND pc.is_visible = 1
+                          AND mc.status = 'active'
+                          AND mt.status = 'active'
+                        ORDER BY pc.chapter_order ASC, mt.topic_order ASC, mt.id ASC
+                        LIMIT 1
+                    ) AS first_master_topic_id,
+                    (
+                        SELECT la.master_topic_id
+                        FROM student_program_last_activity la
+                        JOIN lms_master_topics mt ON mt.id = la.master_topic_id
+                        JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+                        JOIN lms_program_chapters pc
+                            ON pc.master_chapter_id = mt.master_chapter_id
+                           AND pc.program_id = la.program_id
+                        WHERE la.student_id = ?
+                          AND la.program_id = lp.id
+                          AND pc.is_visible = 1
+                          AND mc.status = 'active'
+                          AND mt.status = 'active'
+                        LIMIT 1
+                    ) AS last_master_topic_id,
+                    (
                         SELECT MIN(cpm_ord.display_order)
                         FROM lms_course_program_map cpm_ord
                         JOIN invoice_items ii_ord ON cpm_ord.course_id = ii_ord.course_id
@@ -917,19 +957,9 @@ def dashboard():
                         AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
                   )
                 ORDER BY CASE WHEN map_order IS NULL THEN 1 ELSE 0 END, map_order, lp.program_name
-            """, (student_id, student_id, student_id, student_id, student_id)).fetchall()
+            """, (student_id, student_id, student_id, student_id, student_id, student_id)).fetchall()
 
         programs = [dict(program) for program in programs]
-        for program in programs:
-            if _program_has_master_content(conn, program['id']):
-                first_master_topic = _first_master_topic_for_program(conn, program['id'])
-                last_master_topic = _last_master_topic_for_program(conn, student_id, program['id'])
-                program['first_master_topic_id'] = first_master_topic['id'] if first_master_topic else None
-                program['last_master_topic_id'] = last_master_topic['id'] if last_master_topic else None
-            else:
-                program['first_master_topic_id'] = None
-                program['last_master_topic_id'] = None
-
     finally:
         conn.close()
 

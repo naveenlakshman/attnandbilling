@@ -3336,7 +3336,7 @@ def _student_lms_progress_rows(cur, student_id):
                 WHERE mtp.student_id = ?
                   AND mtp.program_id = ?
                   AND mtp.is_completed = 1
-            )
+            ) AS sub_activity
         """, (student_id, program_id, student_id, program_id))
         last_activity = (cur.fetchone() or {"last_activity": None})["last_activity"]
 

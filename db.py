@@ -132,9 +132,12 @@ class MySQLCursorWrapper:
         # Translate SQLite excluded.col_name to MySQL VALUES(col_name)
         query = re.sub(r"\bexcluded\.(\w+)\b", r"VALUES(\1)", query, flags=re.IGNORECASE)
         
+        # Translate SQLite 'AS leave' aliases to MySQL-compatible backtick-quoted aliases
+        query = re.sub(r"\bAS\s+leave\b", "AS `leave` ", query, flags=re.IGNORECASE)
+        
         # Translate UNION ALL subqueries for MySQL compatibility by appending 'AS _last_act_sub'
         query = re.sub(
-            r"(\bSELECT\s+MAX\s*\(\s*last_act\s*\)\s+FROM\s*\(\s*SELECT\s+MAX\s*\(.*?\)\s+AS\s+last_act\s+FROM\s+lms_topic_progress\s+tp\s+.*?\s+UNION\s+ALL\s+SELECT\s+MAX\s*\(\s*mtp\.completed_at\s*\)\s+AS\s+last_act\s+FROM\s+lms_master_topic_progress\s+mtp\s+.*?)\s*\)",
+            r"(\bSELECT\s+MAX\s*\(\s*last_act(?:ivity)?\s*\)\s+FROM\s*\(\s*SELECT\s+MAX\s*\(.*?\)\s+AS\s+last_act(?:ivity)?\s+FROM\s+lms_topic_progress\s+tp\s+.*?\s+UNION\s+ALL\s+SELECT\s+MAX\s*\(\s*mtp\.completed_at\s*\)\s+AS\s+last_act(?:ivity)?\s+FROM\s+lms_master_topic_progress\s+mtp\s+.*?)\s*\)",
             r"\1) AS _last_act_sub",
             query,
             flags=re.IGNORECASE | re.DOTALL
@@ -212,9 +215,12 @@ class MySQLCursorWrapper:
         
         query = re.sub(r"\bexcluded\.(\w+)\b", r"VALUES(\1)", query, flags=re.IGNORECASE)
         
+        # Translate SQLite 'AS leave' aliases to MySQL-compatible backtick-quoted aliases
+        query = re.sub(r"\bAS\s+leave\b", "AS `leave` ", query, flags=re.IGNORECASE)
+        
         # Translate UNION ALL subqueries for MySQL compatibility by appending 'AS _last_act_sub'
         query = re.sub(
-            r"(\bSELECT\s+MAX\s*\(\s*last_act\s*\)\s+FROM\s*\(\s*SELECT\s+MAX\s*\(.*?\)\s+AS\s+last_act\s+FROM\s+lms_topic_progress\s+tp\s+.*?\s+UNION\s+ALL\s+SELECT\s+MAX\s*\(\s*mtp\.completed_at\s*\)\s+AS\s+last_act\s+FROM\s+lms_master_topic_progress\s+mtp\s+.*?)\s*\)",
+            r"(\bSELECT\s+MAX\s*\(\s*last_act(?:ivity)?\s*\)\s+FROM\s*\(\s*SELECT\s+MAX\s*\(.*?\)\s+AS\s+last_act(?:ivity)?\s+FROM\s+lms_topic_progress\s+tp\s+.*?\s+UNION\s+ALL\s+SELECT\s+MAX\s*\(\s*mtp\.completed_at\s*\)\s+AS\s+last_act(?:ivity)?\s+FROM\s+lms_master_topic_progress\s+mtp\s+.*?)\s*\)",
             r"\1) AS _last_act_sub",
             query,
             flags=re.IGNORECASE | re.DOTALL
