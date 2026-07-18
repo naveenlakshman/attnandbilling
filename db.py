@@ -283,14 +283,24 @@ class MySQLConnectionWrapper:
 
 def get_conn():
     if getattr(Config, "DB_TYPE", "sqlite") == "mysql":
-        conn = pymysql.connect(
-            host=Config.MYSQL_HOST,
-            user=Config.MYSQL_USER,
-            password=Config.MYSQL_PASSWORD,
-            database=Config.MYSQL_DB,
-            port=Config.MYSQL_PORT
-        )
+        connection_options = {
+            "user": Config.MYSQL_USER,
+            "password": Config.MYSQL_PASSWORD,
+            "database": Config.MYSQL_DB,
+            "charset": "utf8mb4",
+            "autocommit": False,
+        }
+
+        unix_socket = getattr(Config, "MYSQL_UNIX_SOCKET", None)
+        if unix_socket:
+            connection_options["unix_socket"] = unix_socket
+        else:
+            connection_options["host"] = Config.MYSQL_HOST
+            connection_options["port"] = Config.MYSQL_PORT
+
+        conn = pymysql.connect(**connection_options)
         return MySQLConnectionWrapper(conn)
+
 
     conn = sqlite3.connect(DB_PATH, timeout=10.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row

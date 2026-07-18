@@ -44,6 +44,8 @@ class Config:
     MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "")
     MYSQL_DB = os.environ.get("MYSQL_DB", "attn_billing_db")
     MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
+    MYSQL_UNIX_SOCKET = os.environ.get("MYSQL_UNIX_SOCKET")
+
 
 
     # Session: sliding expiry — stays alive while active, expires after 7 days idle
