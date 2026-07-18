@@ -86,6 +86,9 @@ class MySQLCursorWrapper:
         # Translate COLLATE NOCASE to empty string for MySQL compatibility
         query = re.sub(r"\bCOLLATE\s+NOCASE\b", "", query, flags=re.IGNORECASE)
         
+        # Translate SQLite CAST(col AS INTEGER) to MySQL-compatible CAST(col AS SIGNED)
+        query = re.sub(r"\bAS\s+INTEGER\b", "AS SIGNED", query, flags=re.IGNORECASE)
+        
         # Translate SQLite julianday(a) - julianday(b) to MySQL DATEDIFF(a, b)
         query = re.sub(
             r"\bjulianday\s*\(\s*([^)]+)\s*\)\s*-\s*julianday\s*\(\s*([^)]+)\s*\)",
@@ -172,6 +175,9 @@ class MySQLCursorWrapper:
         
         # Translate COLLATE NOCASE to empty string for MySQL compatibility
         query = re.sub(r"\bCOLLATE\s+NOCASE\b", "", query, flags=re.IGNORECASE)
+        
+        # Translate SQLite CAST(col AS INTEGER) to MySQL-compatible CAST(col AS SIGNED)
+        query = re.sub(r"\bAS\s+INTEGER\b", "AS SIGNED", query, flags=re.IGNORECASE)
         
         # Translate SQLite julianday(a) - julianday(b) to MySQL DATEDIFF(a, b)
         query = re.sub(

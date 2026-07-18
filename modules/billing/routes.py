@@ -5921,7 +5921,8 @@ def receipt_new():
 
             for inst in installments:
                 inst_id = inst["id"]
-                inst_due = inst["amount_due"]
+                inst_due = float(inst["amount_due"] or 0)
+
 
                 if remaining_payment <= 0:
                     cur.execute("""
