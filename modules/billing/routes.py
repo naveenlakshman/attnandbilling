@@ -2527,8 +2527,8 @@ def student_new():
                     form_data=request.form
                 )
 
-        # Invalidate the token immediately so subsequent requests fail
-        session.pop("student_form_token", None)
+
+
 
         cur.execute("""
             SELECT student_code
@@ -2720,6 +2720,8 @@ def student_new():
         except Exception:
             pass  # Never block registration if SMS fails
 
+        # Invalidate the token only after successful database commit
+        session.pop("student_form_token", None)
         flash("Student added successfully.", "success")
         return redirect(url_for("billing.students"))
 
