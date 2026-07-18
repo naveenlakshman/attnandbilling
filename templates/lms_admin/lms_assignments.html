@@ -149,6 +149,7 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
+    align-items: flex-start;
     gap: 8px;
   }
 
@@ -243,6 +244,52 @@
       padding: 28px 14px;
     }
   }
+
+  /* LMS rich text rendering support */
+  .lms-rich-content {
+    font-size: 15px;
+    line-height: 1.75;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-break: normal;
+    width: 100%;
+  }
+  .lms-rich-content img,
+  .lms-rich-content video,
+  .lms-rich-content iframe {
+    max-width: 100%;
+    height: auto;
+  }
+  .lms-rich-content table { border-collapse: collapse; max-width: 100%; margin: 12px 0; }
+  .lms-rich-content table td,
+  .lms-rich-content table th { border: 1px solid #dee2e6; padding: 6px 12px; vertical-align: top; }
+  .lms-rich-content table th { background: #f8f9fa; font-weight: 600; }
+  .lms-rich-content h1 { font-size: 1.9em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.2; }
+  .lms-rich-content h2 { font-size: 1.55em; font-weight: 700; margin: 0.6em 0 0.3em; line-height: 1.25; }
+  .lms-rich-content h3 { font-size: 1.25em; font-weight: 600; margin: 0.55em 0 0.25em; line-height: 1.3; }
+  .lms-rich-content h4 { font-size: 1.05em; font-weight: 600; margin: 0.5em 0 0.2em; line-height: 1.35; }
+  .lms-rich-content ul, .lms-rich-content ol { margin-bottom: 1rem; padding-left: 2rem; }
+  .lms-rich-content pre {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid #3e3e42;
+    overflow-x: auto;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 12px 0;
+  }
+  .lms-rich-content code {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+  }
+  .lms-rich-content pre code {
+    display: block;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
 </style>
 {% endblock %}
 
@@ -308,7 +355,7 @@
         <div>
           <div class="assignment-title">{{ a.title }}</div>
           {% if a.description %}
-          <div class="assignment-desc">{{ a.description }}</div>
+          <div class="assignment-desc lms-rich-content">{{ a.description|safe }}</div>
           {% endif %}
           <div class="assignment-meta">
             <span class="meta-chip">Added {{ a.created_date }}</span>

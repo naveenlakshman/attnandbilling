@@ -580,8 +580,13 @@ function _renderAssignments(assignments) {
     var reviewStatus = sub ? (sub.review_status || sub.status || 'submitted') : 'not-submitted';
 
     html += '<div class="assign-card" id="assign-card-' + a.id + '">';
-    html += '<div class="assign-card-title">' + _esc(a.title) + '</div>';
-    if (a.description) html += '<div class="assign-card-desc">' + a.description + '</div>';
+    html += '<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">';
+    html += '<div class="assign-card-title mb-0">' + _esc(a.title) + '</div>';
+    if (a.description) {
+      html += '<button class="btn btn-sm btn-outline-secondary copy-assignment-btn" onclick="copyAssignmentText(' + a.id + ')">📋 Copy Assignment</button>';
+    }
+    html += '</div>';
+    if (a.description) html += '<div class="assign-card-desc lms-rich-content">' + a.description + '</div>';
 
     // Status badge + assignment download
     html += '<div class="d-flex align-items-center gap-3 flex-wrap mb-2">';
@@ -671,6 +676,62 @@ function submitAssignment(assignmentId) {
     msgEl.className = 'text-danger';
     msgEl.textContent = 'Upload failed. Check your connection.';
   });
+}
+
+function copyAssignmentText(assignmentId) {
+  var card = document.getElementById('assign-card-' + assignmentId);
+  if (!card) return;
+  var descEl = card.querySelector('.assign-card-desc');
+  if (!descEl) return;
+
+  var textToCopy = descEl.innerText || descEl.textContent;
+  var htmlToCopy = descEl.innerHTML;
+
+  var btn = card.querySelector('.copy-assignment-btn');
+  function showSuccess() {
+    if (btn) {
+      var originalText = btn.innerHTML;
+      btn.innerHTML = '✅ Copied!';
+      btn.classList.remove('btn-outline-secondary');
+      btn.classList.add('btn-success');
+      setTimeout(function() {
+        btn.innerHTML = originalText;
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-outline-secondary');
+      }, 2000);
+    }
+  }
+
+  if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
+    var blobHtml = new Blob([htmlToCopy], { type: 'text/html' });
+    var blobText = new Blob([textToCopy], { type: 'text/plain' });
+    var data = [new ClipboardItem({
+      'text/html': blobHtml,
+      'text/plain': blobText
+    })];
+    
+    navigator.clipboard.write(data).then(function() {
+      showSuccess();
+    }).catch(function(err) {
+      navigator.clipboard.writeText(textToCopy).then(showSuccess);
+    });
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(textToCopy).then(showSuccess);
+  } else {
+    var textarea = document.createElement('textarea');
+    textarea.value = textToCopy;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      showSuccess();
+    } catch (e) {
+      alert('Copy failed: ' + e);
+    }
+    document.body.removeChild(textarea);
+  }
 }
 
 /* ── Interactive Image Hotspots ─────────────────────────────────── */
