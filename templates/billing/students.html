@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}{{ company.company_short_name }} - Students{% endblock %}
 
@@ -884,6 +884,55 @@
     </div>
   {% endif %}
 </div>
+
+<!-- Server-side Pagination -->
+{% if total_pages and total_pages > 1 %}
+<div class="pagination-wrapper" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: #fff; border: 1px solid #dee2e6; border-radius: 10px; margin-top: 20px; margin-bottom: 24px; font-size: 14px; color: #4b5563; box-shadow: 0 1px 3px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 12px;">
+  <div>
+    Showing <span style="font-weight:600;">{{ (page - 1) * 50 + 1 }}</span> to 
+    <span style="font-weight:600;">{{ page * 50 if page * 50 < total_matching else total_matching }}</span> of 
+    <span style="font-weight:600;">{{ total_matching }}</span> records
+  </div>
+  
+  <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+    <!-- Previous Page Link -->
+    {% if page > 1 %}
+      <a class="pagination-btn" href="{{ url_for('billing.students', page=page-1, search=search_query, branch=branch_filter, status=status_filter, batch=batch_filter) }}" style="padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; text-decoration: none; color: #374151; background: #fff; font-weight: 500; transition: all 0.15s;">&larr; Previous</a>
+    {% else %}
+      <span style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; color: #9ca3af; background: #f9fafb; cursor: not-allowed; font-weight: 500;">&larr; Previous</span>
+    {% endif %}
+    
+    <!-- Page Number Links -->
+    {% for p in range(1, total_pages + 1) %}
+      {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+        {% if p == page %}
+          <span style="padding: 6px 12px; border: 1px solid #2563eb; border-radius: 6px; color: #fff; background: #2563eb; font-weight: 600;">{{ p }}</span>
+        {% else %}
+          <a class="pagination-btn" href="{{ url_for('billing.students', page=p, search=search_query, branch=branch_filter, status=status_filter, batch=batch_filter) }}" style="padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; text-decoration: none; color: #374151; background: #fff; transition: all 0.15s;">{{ p }}</a>
+        {% endif %}
+      {% elif p == page - 3 or p == page + 3 %}
+        <span style="padding: 6px 12px; color: #9ca3af;">...</span>
+      {% endif %}
+    {% endfor %}
+    
+    <!-- Next Page Link -->
+    {% if page < total_pages %}
+      <a class="pagination-btn" href="{{ url_for('billing.students', page=page+1, search=search_query, branch=branch_filter, status=status_filter, batch=batch_filter) }}" style="padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; text-decoration: none; color: #374151; background: #fff; font-weight: 500; transition: all 0.15s;">Next &rarr;</a>
+    {% else %}
+      <span style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; color: #9ca3af; background: #f9fafb; cursor: not-allowed; font-weight: 500;">Next &rarr;</span>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+  .pagination-btn:hover {
+    background: #f3f4f6 !important;
+    border-color: #9ca3af !important;
+    color: #111827 !important;
+  }
+</style>
+{% endif %}
+
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {

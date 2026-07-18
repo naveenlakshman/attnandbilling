@@ -1181,12 +1181,31 @@ def students():
     """)
     branch_stats = cur.fetchall()
 
-    # Build student list query
-    query = """
+    import math
+
+    # Get page and offset parameters
+    page = request.args.get("page", 1, type=int)
+    if page < 1:
+        page = 1
+    per_page = 50
+    offset = (page - 1) * per_page
+
+    # Build student list query parts
+    query_cols = """
         SELECT
-            students.*,
+            students.id,
+            students.student_code,
+            students.full_name,
+            students.phone,
+            students.gender,
+            students.education_level,
+            students.qualification,
+            students.status,
+            students.photo_filename,
             branches.branch_name,
             branches.branch_code
+    """
+    query_from = """
         FROM students
         LEFT JOIN branches
             ON students.branch_id = branches.id
@@ -1196,7 +1215,7 @@ def students():
 
     # Search filter
     if search_query:
-        query += """
+        query_from += """
             AND (
                 students.full_name LIKE ?
                 OR students.phone LIKE ?
@@ -1209,13 +1228,13 @@ def students():
 
     # Branch filter
     if branch_filter:
-        query += " AND students.branch_id = ?"
+        query_from += " AND students.branch_id = ?"
         params.append(branch_filter)
 
     # Status filter
     if status_filter == 'active_completed_batch':
         # Active students who have completed ALL their batches (no active batches remaining)
-        query += """ AND students.status = 'active'
+        query_from += """ AND students.status = 'active'
             AND students.id IN (
                 SELECT DISTINCT sb.student_id
                 FROM student_batches sb
@@ -1229,16 +1248,16 @@ def students():
                 WHERE b.status = 'active'
             )"""
     elif status_filter:
-        query += " AND students.status = ?"
+        query_from += " AND students.status = ?"
         params.append(status_filter)
 
     # Batch filter
     if batch_filter == 'none':
-        query += """ AND students.id NOT IN (
+        query_from += """ AND students.id NOT IN (
             SELECT DISTINCT student_id FROM student_batches
         )"""
     elif batch_filter == 'unassigned':
-        query += """ AND students.status = 'active'
+        query_from += """ AND students.status = 'active'
             AND students.id NOT IN (
                 SELECT DISTINCT sb.student_id
                 FROM student_batches sb
@@ -1248,15 +1267,22 @@ def students():
                   AND b.trainer_id IS NOT NULL
             )"""
     elif batch_filter:
-        query += """ AND students.id IN (
+        query_from += """ AND students.id IN (
             SELECT student_id FROM student_batches WHERE batch_id = ?
         )"""
         params.append(batch_filter)
 
-    query += " ORDER BY students.id DESC"
+    # 1. Get total matching count for pagination
+    cur.execute("SELECT COUNT(*) AS total " + query_from, params)
+    total_count = cur.fetchone()["total"]
+    total_pages = max(1, math.ceil(total_count / per_page))
 
-    cur.execute(query, params)
+    # 2. Retrieve paginated matching records
+    select_query = query_cols + query_from + " ORDER BY students.id DESC LIMIT ? OFFSET ?"
+    select_params = list(params) + [per_page, offset]
+    cur.execute(select_query, select_params)
     students = cur.fetchall()
+
 
     # Build batch lookup for all returned students (single query, no N+1)
     student_batches_map = {}
@@ -1359,8 +1385,12 @@ def students():
         branch_stats=branch_stats,
         student_batches_map=student_batches_map,
         student_batch_courses_map=student_batch_courses_map,
-        student_invoiced_courses_map=student_invoiced_courses_map
+        student_invoiced_courses_map=student_invoiced_courses_map,
+        page=page,
+        total_pages=total_pages,
+        total_matching=total_count
     )
+
 
 
 @billing_bp.route("/students/batch-progress")

@@ -190,59 +190,84 @@ def dashboard():
         total_marked = 0
         total_not_marked = 0
         
-        for batch in batches:
-            batch_id = batch['id']
+        batch_ids = [batch['id'] for batch in batches]
+        
+        if batch_ids:
+            placeholders = ",".join(["?"] * len(batch_ids))
             
-            # Get all students in this batch
-            cur.execute("""
-                SELECT COUNT(*) as total_students
+            # 1. Fetch student counts for all batches in bulk
+            cur.execute(f"""
+                SELECT batch_id, COUNT(*) as total_students
                 FROM student_batches
-                WHERE batch_id = ? AND status = 'active'
-            """, (batch_id,))
-            total_students = cur.fetchone()['total_students']
-            
-            # Get attendance marked today
-            cur.execute("""
-                SELECT COUNT(*) as marked_count
+                WHERE batch_id IN ({placeholders}) AND status = 'active'
+                GROUP BY batch_id
+            """, tuple(batch_ids))
+            student_counts = {row['batch_id']: row['total_students'] for row in cur.fetchall()}
+
+            # 2. Fetch marked-attendance counts for all batches in bulk
+            cur.execute(f"""
+                SELECT batch_id, COUNT(*) as marked_count
                 FROM attendance_records
-                WHERE batch_id = ? AND attendance_date = ?
-            """, (batch_id, today))
-            marked_count = cur.fetchone()['marked_count']
-            
-            # Get attendance counts by status
-            cur.execute("""
-                SELECT status, COUNT(*) as count
+                WHERE batch_id IN ({placeholders}) AND attendance_date = ?
+                GROUP BY batch_id
+            """, tuple(batch_ids) + (today,))
+            marked_counts = {row['batch_id']: row['marked_count'] for row in cur.fetchall()}
+
+            # 3. Fetch attendance-status counts for all batches in bulk
+            cur.execute(f"""
+                SELECT batch_id, status, COUNT(*) as count
                 FROM attendance_records
-                WHERE batch_id = ? AND attendance_date = ?
-                GROUP BY status
-            """, (batch_id, today))
+                WHERE batch_id IN ({placeholders}) AND attendance_date = ?
+                GROUP BY batch_id, status
+            """, tuple(batch_ids) + (today,))
             
             status_counts = {}
             for row in cur.fetchall():
-                status_counts[row['status']] = row['count']
-            
-            present = status_counts.get('present', 0)
-            absent = status_counts.get('absent', 0)
-            late = status_counts.get('late', 0)
-            leave = status_counts.get('leave', 0)
-            not_marked = total_students - marked_count
+                bid = row['batch_id']
+                status = row['status']
+                count = row['count']
+                if bid not in status_counts:
+                    status_counts[bid] = {}
+                status_counts[bid][status] = count
 
-            # Fetch students in this batch for client-side search
-            cur.execute("""
-                SELECT s.full_name, s.student_code, s.phone
+            # 4. Fetch students in all active batches for client-side search in bulk
+            cur.execute(f"""
+                SELECT sb.batch_id, s.full_name, s.student_code, s.phone
                 FROM student_batches sb
                 JOIN students s ON sb.student_id = s.id
-                WHERE sb.batch_id = ? AND sb.status = 'active'
-            """, (batch_id,))
-            students_in_batch = []
-            for st in cur.fetchall():
-                students_in_batch.append(
-                    '|'.join(filter(None, [
-                        (st['full_name'] or '').lower(),
-                        (st['student_code'] or '').lower(),
-                        (st['phone'] or '').lower()
-                    ]))
-                )
+                WHERE sb.batch_id IN ({placeholders}) AND sb.status = 'active'
+            """, tuple(batch_ids))
+            
+            students_in_batches = {}
+            for row in cur.fetchall():
+                bid = row['batch_id']
+                term = '|'.join(filter(None, [
+                    (row['full_name'] or '').lower(),
+                    (row['student_code'] or '').lower(),
+                    (row['phone'] or '').lower()
+                ]))
+                if bid not in students_in_batches:
+                    students_in_batches[bid] = []
+                students_in_batches[bid].append(term)
+        else:
+            student_counts = {}
+            marked_counts = {}
+            status_counts = {}
+            students_in_batches = {}
+
+        for batch in batches:
+            batch_id = batch['id']
+            total_students = student_counts.get(batch_id, 0)
+            marked_count = marked_counts.get(batch_id, 0)
+            
+            batch_status_counts = status_counts.get(batch_id, {})
+            present = batch_status_counts.get('present', 0)
+            absent = batch_status_counts.get('absent', 0)
+            late = batch_status_counts.get('late', 0)
+            leave = batch_status_counts.get('leave', 0)
+            not_marked = total_students - marked_count
+
+            students_search_list = students_in_batches.get(batch_id, [])
             
             batch_stats.append({
                 'batch': batch,
@@ -254,7 +279,7 @@ def dashboard():
                 'late': late,
                 'leave': leave,
                 'percentage_marked': (marked_count / total_students * 100) if total_students > 0 else 0,
-                'students_search': ' '.join(students_in_batch)
+                'students_search': ' '.join(students_search_list)
             })
             
             total_present += present
@@ -263,6 +288,7 @@ def dashboard():
             total_leave += leave
             total_marked += marked_count
             total_not_marked += not_marked
+
 
         # Sort: currently running batches first, then by start_time ASC
         # Uses IST time (already set above) so this works correctly on UTC servers (e.g. PythonAnywhere)
