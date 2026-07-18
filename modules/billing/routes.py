@@ -66,6 +66,11 @@ def _existing_student_photo(filename):
         return None
 
     safe_filename = os.path.basename(photo_filename)
+    
+    # If GCS mode is active, assume the file exists (browser handles fallback)
+    if getattr(Config, "STORAGE_PROVIDER", "local").lower() == "gcs":
+        return safe_filename
+
     photo_path = os.path.join(
         current_app.root_path,
         "static",
@@ -1740,6 +1745,11 @@ def student_batch_progress_monitor():
             return None
 
         safe_filename = os.path.basename(photo_filename)
+
+        # If GCS mode is active, assume the file exists (browser handles fallback)
+        if getattr(Config, "STORAGE_PROVIDER", "local").lower() == "gcs":
+            return safe_filename
+
         photo_path = os.path.join(
             current_app.root_path,
             "static",
@@ -1748,6 +1758,7 @@ def student_batch_progress_monitor():
             safe_filename
         )
         return safe_filename if os.path.isfile(photo_path) else None
+
 
     grouped_rows = {}
     for row in rows:
