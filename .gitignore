@@ -229,3 +229,8 @@ scratch/test_layout_integration.py
 static/images/certificate_templates/certificate_preview.webp
 database.db
 docs/planning/*.md
+pythonanywhere_uploads.tar.gz
+pythonanywhere_uploads/static/images/*/*.png
+
+pythonanywhere_uploads/static/images/student_photos/*.jpg
+uploads/student_documents/*.jpg
