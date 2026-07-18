@@ -147,6 +147,20 @@ def create_app():
             pass
         return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'student_photos'), filename)
 
+    @app.route('/static/lms/images/<path:filename>')
+    def serve_fallback_lms_images(filename):
+        try:
+            storage_service = get_storage_service()
+            dest_path = f"lms/images/{filename}"
+            if storage_service.file_exists(dest_path):
+                url = storage_service.generate_public_url(dest_path)
+                if url.startswith("http"):
+                    return redirect(url)
+        except Exception:
+            pass
+        return send_from_directory(os.path.join(app.root_path, 'static', 'lms', 'images'), filename)
+
+
     @app.route('/static/images/student_signatures/<path:filename>')
     def serve_fallback_student_signatures(filename):
         if filename.startswith("signatures/"):
