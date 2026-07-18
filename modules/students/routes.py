@@ -2480,7 +2480,7 @@ def submit_assignment(assignment_id):
 @students_bp.route('/assignments/file/<int:assignment_id>')
 @student_login_required
 def download_assignment_file(assignment_id):
-    from flask import send_file, abort
+    from flask import send_file, abort, redirect
     student_id = session['student_id']
     conn = get_conn()
     try:
@@ -2506,19 +2506,34 @@ def download_assignment_file(assignment_id):
         orig_name = a['original_filename'] or file_path
     finally:
         conn.close()
+
+    try:
+        storage_service = get_storage_service()
+        if storage_service.file_exists(file_path):
+            url = storage_service.generate_public_url(file_path)
+            if url.startswith("http"):
+                return redirect(url)
+    except Exception as e:
+        logger.error(f"Error in download_assignment_file GCS check: {e}")
+
     base_dir  = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'assignments')
     )
     full_path = os.path.join(base_dir, file_path)
     if not os.path.isfile(full_path):
-        abort(404)
+        clean_path = file_path.replace("documents/", "", 1) if file_path.startswith("documents/") else file_path
+        full_path_fallback = os.path.join(base_dir, clean_path)
+        if os.path.isfile(full_path_fallback):
+            full_path = full_path_fallback
+        else:
+            abort(404)
     return send_file(full_path, as_attachment=True, download_name=orig_name)
 
 
 @students_bp.route('/submissions/file/<int:submission_id>')
 @student_login_required
 def download_own_submission(submission_id):
-    from flask import send_file, abort
+    from flask import send_file, abort, redirect
     student_id = session['student_id']
     conn = get_conn()
     try:
@@ -2532,12 +2547,27 @@ def download_own_submission(submission_id):
         orig_name = sub['original_filename'] or file_path
     finally:
         conn.close()
+
+    try:
+        storage_service = get_storage_service()
+        if storage_service.file_exists(file_path):
+            url = storage_service.generate_public_url(file_path)
+            if url.startswith("http"):
+                return redirect(url)
+    except Exception as e:
+        logger.error(f"Error in download_own_submission GCS check: {e}")
+
     base_dir  = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
     )
     full_path = os.path.join(base_dir, file_path)
     if not os.path.isfile(full_path):
-        abort(404)
+        clean_path = file_path.replace("documents/", "", 1) if file_path.startswith("documents/") else file_path
+        full_path_fallback = os.path.join(base_dir, clean_path)
+        if os.path.isfile(full_path_fallback):
+            full_path = full_path_fallback
+        else:
+            abort(404)
     return send_file(full_path, as_attachment=True, download_name=orig_name)
 
 

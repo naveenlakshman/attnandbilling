@@ -655,6 +655,15 @@
               {% if a.description %}
               <div class="assignment-desc lms-rich-content">{{ a.description|safe }}</div>
               {% endif %}
+              {% if a.original_filename %}
+              <div class="mt-1 mb-1">
+                <a class="text-decoration-none small d-inline-flex align-items-center gap-1"
+                   href="{{ url_for('lms_admin.admin_download_assignment', assignment_id=a.id) }}"
+                   title="Download Assignment File">
+                  📁 <span class="text-primary fw-semibold">{{ a.original_filename }}</span>
+                </a>
+              </div>
+              {% endif %}
               <div class="assignment-mobile-summary">
                 <div class="assignment-mobile-meta">
                   <div class="assignment-mobile-topic">{{ a.topic_title }}</div>

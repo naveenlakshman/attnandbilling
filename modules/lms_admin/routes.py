@@ -7484,7 +7484,7 @@ def preview_submission(submission_id):
 @lms_admin_bp.route('/submission/public-file')
 def preview_submission_public_file():
     """Short-lived signed URL endpoint for Office Online preview fetches."""
-    from flask import send_file
+    from flask import send_file, abort, redirect
 
     sid = _read_submission_preview_token(request.args.get('token'))
     if not sid:
@@ -7504,12 +7504,27 @@ def preview_submission_public_file():
 
     file_path = sub['file_path']
     orig_name = sub['original_filename'] or file_path
+
+    try:
+        storage_service = get_storage_service()
+        if storage_service.file_exists(file_path):
+            url = storage_service.generate_public_url(file_path)
+            if url.startswith("http"):
+                return redirect(url)
+    except Exception as e:
+        logger.error(f"Error in preview_submission_public_file GCS check: {e}")
+
     base_dir = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
     )
     full_path = os.path.join(base_dir, file_path)
     if not os.path.isfile(full_path):
-        abort(404)
+        clean_path = file_path.replace("documents/", "", 1) if file_path.startswith("documents/") else file_path
+        full_path_fallback = os.path.join(base_dir, clean_path)
+        if os.path.isfile(full_path_fallback):
+            full_path = full_path_fallback
+        else:
+            abort(404)
 
     return send_file(full_path, as_attachment=False, download_name=orig_name)
 
@@ -7517,7 +7532,7 @@ def preview_submission_public_file():
 @lms_admin_bp.route('/master/assignments/file/<int:assignment_id>')
 @login_required
 def admin_download_assignment(assignment_id):
-    from flask import send_file, abort
+    from flask import send_file, abort, redirect
     conn = get_conn()
     try:
         a = conn.execute(
@@ -7530,19 +7545,34 @@ def admin_download_assignment(assignment_id):
         orig_name = a['original_filename'] or file_path
     finally:
         conn.close()
+
+    try:
+        storage_service = get_storage_service()
+        if storage_service.file_exists(file_path):
+            url = storage_service.generate_public_url(file_path)
+            if url.startswith("http"):
+                return redirect(url)
+    except Exception as e:
+        logger.error(f"Error in admin_download_assignment GCS check: {e}")
+
     base_dir  = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'assignments')
     )
     full_path = os.path.join(base_dir, file_path)
     if not os.path.isfile(full_path):
-        abort(404)
+        clean_path = file_path.replace("documents/", "", 1) if file_path.startswith("documents/") else file_path
+        full_path_fallback = os.path.join(base_dir, clean_path)
+        if os.path.isfile(full_path_fallback):
+            full_path = full_path_fallback
+        else:
+            abort(404)
     return send_file(full_path, as_attachment=True, download_name=orig_name)
 
 
 @lms_admin_bp.route('/master/submissions/file/<int:submission_id>')
 @login_required
 def admin_download_submission(submission_id):
-    from flask import send_file, abort
+    from flask import send_file, abort, redirect
     conn = get_conn()
     try:
         sub = conn.execute(
@@ -7555,12 +7585,27 @@ def admin_download_submission(submission_id):
         orig_name = sub['original_filename'] or file_path
     finally:
         conn.close()
+
+    try:
+        storage_service = get_storage_service()
+        if storage_service.file_exists(file_path):
+            url = storage_service.generate_public_url(file_path)
+            if url.startswith("http"):
+                return redirect(url)
+    except Exception as e:
+        logger.error(f"Error in admin_download_submission GCS check: {e}")
+
     base_dir  = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
     )
     full_path = os.path.join(base_dir, file_path)
     if not os.path.isfile(full_path):
-        abort(404)
+        clean_path = file_path.replace("documents/", "", 1) if file_path.startswith("documents/") else file_path
+        full_path_fallback = os.path.join(base_dir, clean_path)
+        if os.path.isfile(full_path_fallback):
+            full_path = full_path_fallback
+        else:
+            abort(404)
     # Default stays as attachment for normal downloads. Preview iframe uses ?inline=1.
     inline = request.args.get('inline') == '1'
     mimetype = 'application/pdf' if (orig_name or '').lower().endswith('.pdf') else None
