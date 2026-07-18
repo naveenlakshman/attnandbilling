@@ -234,3 +234,5 @@ pythonanywhere_uploads/static/images/*/*.png
 
 pythonanywhere_uploads/static/images/student_photos/*.jpg
 uploads/student_documents/*.jpg
+lms_inline.tar.gz
+static/lms/images/inline/*.*
