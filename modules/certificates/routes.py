@@ -2,8 +2,12 @@ import datetime
 # pyrefly: ignore [missing-import]
 from flask import render_template, request, redirect, url_for, session, flash, jsonify, abort, current_app
 from db import get_conn
+from services.storage import get_storage_service
+import logging
 from modules.core.utils import lms_content_manager_required, admin_required
 from . import certificates_bp
+
+logger = logging.getLogger("app.certificates")
 from .services import EligibilityService, CertificateService
 from .verifier import verify_certificate_number
 from .generator import get_certificate_render_data
@@ -551,12 +555,18 @@ def admin_templates():
                 bg_filename = "default.png"
                 bg_file = request.files.get("background_image")
                 if bg_file and bg_file.filename:
-                    import os
                     from werkzeug.utils import secure_filename
-                    bg_filename = secure_filename(bg_file.filename)
-                    dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates')
-                    os.makedirs(dest_dir, exist_ok=True)
-                    bg_file.save(os.path.join(dest_dir, bg_filename))
+                    safe_name = secure_filename(bg_file.filename)
+                    bg_filename = f"certificates/{safe_name}"
+                    try:
+                        storage_service = get_storage_service()
+                        storage_service.upload_file(bg_file, bg_filename, content_type=bg_file.content_type)
+                    except Exception as e:
+                        logger.error(f"Failed to upload background image: {e}", exc_info=True)
+                        flash(f"Failed to upload background image: {str(e)}", "danger")
+                        conn.rollback()
+                        conn.close()
+                        return redirect(url_for("certificates.admin_templates"))
 
                 orientation = request.form.get("orientation", "Landscape").strip()
                 version_row = cur.execute("SELECT COALESCE(MAX(version), 0) + 1 AS next_ver FROM certificate_templates WHERE template_name = ?", (name,)).fetchone()
@@ -613,33 +623,53 @@ def admin_templates():
                     
                 bg_filename = template["background_filename"]
                 bg_file = request.files.get("background_image")
+                storage_service = get_storage_service()
+                
                 if bg_file and bg_file.filename:
-                    import os
                     from werkzeug.utils import secure_filename
-                    bg_filename = secure_filename(bg_file.filename)
-                    dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates')
-                    os.makedirs(dest_dir, exist_ok=True)
-                    bg_file.save(os.path.join(dest_dir, bg_filename))
-                    
+                    safe_name = secure_filename(bg_file.filename)
+                    new_bg_filename = f"certificates/{safe_name}"
+                    try:
+                        storage_service.replace_file(bg_file, bg_filename, new_bg_filename, content_type=bg_file.content_type)
+                        bg_filename = new_bg_filename
+                    except Exception as e:
+                        logger.error(f"Failed to upload background image: {e}", exc_info=True)
+                        flash(f"Failed to upload background image: {str(e)}", "danger")
+                        conn.rollback()
+                        conn.close()
+                        return redirect(url_for("certificates.admin_templates"))
+                        
                 sig_filename = template["authorized_signature_image"]
                 sig_file = request.files.get("signature_image")
                 if sig_file and sig_file.filename:
-                    import os
                     from werkzeug.utils import secure_filename
-                    sig_filename = secure_filename(sig_file.filename)
-                    dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'signatures')
-                    os.makedirs(dest_dir, exist_ok=True)
-                    sig_file.save(os.path.join(dest_dir, sig_filename))
-                    
+                    safe_name = secure_filename(sig_file.filename)
+                    new_sig_filename = f"certificates/{safe_name}"
+                    try:
+                        storage_service.replace_file(sig_file, sig_filename, new_sig_filename, content_type=sig_file.content_type)
+                        sig_filename = new_sig_filename
+                    except Exception as e:
+                        logger.error(f"Failed to upload signature image: {e}", exc_info=True)
+                        flash(f"Failed to upload signature image: {str(e)}", "danger")
+                        conn.rollback()
+                        conn.close()
+                        return redirect(url_for("certificates.admin_templates"))
+                        
                 seal_filename = template["seal_image"]
                 seal_file = request.files.get("seal_image")
                 if seal_file and seal_file.filename:
-                    import os
                     from werkzeug.utils import secure_filename
-                    seal_filename = secure_filename(seal_file.filename)
-                    dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'seals')
-                    os.makedirs(dest_dir, exist_ok=True)
-                    seal_file.save(os.path.join(dest_dir, seal_filename))
+                    safe_name = secure_filename(seal_file.filename)
+                    new_seal_filename = f"certificates/{safe_name}"
+                    try:
+                        storage_service.replace_file(seal_file, seal_filename, new_seal_filename, content_type=seal_file.content_type)
+                        seal_filename = new_seal_filename
+                    except Exception as e:
+                        logger.error(f"Failed to upload seal image: {e}", exc_info=True)
+                        flash(f"Failed to upload seal image: {str(e)}", "danger")
+                        conn.rollback()
+                        conn.close()
+                        return redirect(url_for("certificates.admin_templates"))
                     
                 orientation = request.form.get("orientation", "Landscape").strip()
 

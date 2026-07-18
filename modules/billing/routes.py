@@ -12,6 +12,9 @@ import io
 import csv
 import os
 import base64
+from services.storage import get_storage_service
+
+logger = logging.getLogger("app.billing")
 
 
 IST_OFFSET = timedelta(hours=5, minutes=30)
@@ -630,21 +633,16 @@ def save_student_photo(photo_data, student_code):
         if ',' in photo_data:
             photo_data = photo_data.split(',')[1]
         
-        # Create directory if it doesn't exist
-        photo_dir = os.path.join('static', 'images', 'student_photos')
-        os.makedirs(photo_dir, exist_ok=True)
-        
-        # Decode and save
+        # Decode and save to storage
         photo_bytes = base64.b64decode(photo_data)
-        filename = f"{student_code}.jpg"
-        filepath = os.path.join(photo_dir, filename)
+        dest_path = f"student_photos/{student_code}.jpg"
         
-        with open(filepath, 'wb') as f:
-            f.write(photo_bytes)
+        storage_service = get_storage_service()
+        storage_service.upload_file(photo_bytes, dest_path, content_type="image/jpeg")
         
-        return filename
+        return dest_path
     except Exception as e:
-        print(f"Error saving photo: {e}")
+        logger.error(f"Error saving photo: {e}", exc_info=True)
         return None
 
 @billing_bp.route("/")
@@ -3138,14 +3136,11 @@ def student_save_signature(student_id):
             sig_data = sig_data.split(',')[1]
         sig_bytes = base64.b64decode(sig_data)
 
-        sig_dir = os.path.join("static", "images", "student_signatures")
-        os.makedirs(sig_dir, exist_ok=True)
-
         code = student["student_code"]
-        filename = f"{code}_{sig_type}_signature.png"
-        filepath = os.path.join(sig_dir, filename)
-        with open(filepath, "wb") as f:
-            f.write(sig_bytes)
+        filename = f"signatures/{code}_{sig_type}_signature.png"
+        
+        storage_service = get_storage_service()
+        storage_service.upload_file(sig_bytes, filename, content_type="image/png")
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if sig_type == "student":

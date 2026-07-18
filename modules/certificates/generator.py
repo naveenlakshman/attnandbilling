@@ -32,31 +32,55 @@ def ensure_template_preview(bg_filename):
     import os
     from flask import current_app
     from PIL import Image
+    from services.storage import get_storage_service, map_local_path_to_gcs_path
     
+    # Normalize bg_filename
+    bg_filename = map_local_path_to_gcs_path(bg_filename)
+    if "/" in bg_filename:
+        bg_filename = bg_filename.split("/")[-1]
+        
     dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates')
     original_path = os.path.join(dest_dir, bg_filename)
     preview_name = os.path.splitext(bg_filename)[0] + "_preview.webp"
     preview_path = os.path.join(dest_dir, preview_name)
     
-    if not os.path.exists(original_path):
-        return bg_filename
-        
-    if os.path.exists(preview_path):
-        return preview_name
-        
+    if os.path.exists(original_path):
+        if os.path.exists(preview_path):
+            return preview_name
+        try:
+            img = Image.open(original_path)
+            resample_mode = getattr(Image, 'Resampling', None)
+            mode = resample_mode.LANCZOS if (resample_mode and hasattr(resample_mode, 'LANCZOS')) else Image.BICUBIC
+            img.thumbnail((1200, 1200), mode)
+            img.save(preview_path, "WEBP", quality=80)
+            return preview_name
+        except Exception as e:
+            print("Error creating template preview:", e)
+            return bg_filename
+
+    # If the original file does not exist locally (e.g. GCS provider is active)
+    # We download the original background from storage and generate the preview locally
     try:
-        img = Image.open(original_path)
-        resample_mode = getattr(Image, 'Resampling', None)
-        if resample_mode and hasattr(resample_mode, 'LANCZOS'):
-            mode = resample_mode.LANCZOS
-        else:
-            mode = getattr(Image, 'LANCZOS', Image.BICUBIC)
+        storage_service = get_storage_service()
+        gcs_bg_path = f"certificates/{bg_filename}"
+        if not storage_service.file_exists(gcs_bg_path):
+            return bg_filename
             
+        if os.path.exists(preview_path):
+            return preview_name
+            
+        bg_bytes = storage_service.download_file(gcs_bg_path)
+        import io
+        img = Image.open(io.BytesIO(bg_bytes))
+        
+        os.makedirs(dest_dir, exist_ok=True)
+        resample_mode = getattr(Image, 'Resampling', None)
+        mode = resample_mode.LANCZOS if (resample_mode and hasattr(resample_mode, 'LANCZOS')) else Image.BICUBIC
         img.thumbnail((1200, 1200), mode)
         img.save(preview_path, "WEBP", quality=80)
         return preview_name
     except Exception as e:
-        print("Error creating template preview:", e)
+        print("Error creating template preview from GCS:", e)
         return bg_filename
 
 def get_certificate_render_data(cur, cert_id, base_url):

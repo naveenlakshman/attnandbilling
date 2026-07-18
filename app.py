@@ -1,11 +1,12 @@
 import os
 
-from flask import Flask, send_from_directory, session, abort
+from flask import Flask, send_from_directory, session, abort, redirect, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 from extensions import csrf, limiter
 from config import Config
 from db import get_conn
 from db import init_db, get_company_profile
+from services.storage import get_storage_service
 from modules.leads.routes import leads_bp
 from modules.billing.routes import billing_bp
 from modules.assets.routes import assets_bp
@@ -117,6 +118,94 @@ def create_app():
     app.register_blueprint(students_bp)
     from modules.certificates.routes import certificates_bp
     app.register_blueprint(certificates_bp)
+
+    # Register storage_url global in Jinja templates
+    def storage_url(path):
+        if not path:
+            return ""
+        try:
+            storage_service = get_storage_service()
+            return storage_service.generate_public_url(path)
+        except Exception:
+            return f"/static/{path}"
+            
+    app.jinja_env.globals['storage_url'] = storage_url
+
+    # Backward compatibility fallback routes to redirect old static file URLs to GCS
+    @app.route('/static/images/student_photos/<path:filename>')
+    def serve_fallback_student_photos(filename):
+        if filename.startswith("student_photos/"):
+            filename = filename.replace("student_photos/", "", 1)
+        try:
+            storage_service = get_storage_service()
+            dest_path = f"student_photos/{filename}"
+            if storage_service.file_exists(dest_path):
+                url = storage_service.generate_public_url(dest_path)
+                if url.startswith("http"):
+                    return redirect(url)
+        except Exception:
+            pass
+        return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'student_photos'), filename)
+
+    @app.route('/static/images/student_signatures/<path:filename>')
+    def serve_fallback_student_signatures(filename):
+        if filename.startswith("signatures/"):
+            filename = filename.replace("signatures/", "", 1)
+        try:
+            storage_service = get_storage_service()
+            dest_path = f"signatures/{filename}"
+            if storage_service.file_exists(dest_path):
+                url = storage_service.generate_public_url(dest_path)
+                if url.startswith("http"):
+                    return redirect(url)
+        except Exception:
+            pass
+        return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'student_signatures'), filename)
+
+    @app.route('/static/images/company_logo/<path:filename>')
+    def serve_fallback_company_logo(filename):
+        if filename.startswith("logos/"):
+            filename = filename.replace("logos/", "", 1)
+        try:
+            storage_service = get_storage_service()
+            dest_path = f"logos/{filename}"
+            if storage_service.file_exists(dest_path):
+                url = storage_service.generate_public_url(dest_path)
+                if url.startswith("http"):
+                    return redirect(url)
+        except Exception:
+            pass
+        return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'company_logo'), filename)
+
+    @app.route('/static/images/certificate_templates/<path:filename>')
+    def serve_fallback_certificate_templates(filename):
+        if filename.startswith("certificates/"):
+            filename = filename.replace("certificates/", "", 1)
+        try:
+            storage_service = get_storage_service()
+            dest_path = f"certificates/{filename}"
+            if storage_service.file_exists(dest_path):
+                url = storage_service.generate_public_url(dest_path)
+                if url.startswith("http"):
+                    return redirect(url)
+        except Exception:
+            pass
+        return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'certificate_templates'), filename)
+
+    @app.route('/uploads/student_documents/<path:filename>')
+    def serve_fallback_student_documents(filename):
+        if filename.startswith("documents/"):
+            filename = filename.replace("documents/", "", 1)
+        try:
+            storage_service = get_storage_service()
+            dest_path = f"documents/{filename}"
+            if storage_service.file_exists(dest_path):
+                url = storage_service.generate_public_url(dest_path)
+                if url.startswith("http"):
+                    return redirect(url)
+        except Exception:
+            pass
+        return send_from_directory(os.path.join(app.root_path, 'uploads', 'student_documents'), filename)
 
     # File serving route for uploaded content
     @app.route('/uploads/content/<path:filename>')

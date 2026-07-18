@@ -15,6 +15,10 @@ from bleach.css_sanitizer import CSSSanitizer
 from werkzeug.utils import secure_filename
 from config import Config, DB_PATH
 from modules.core.utils import login_required, admin_required, lms_content_manager_required
+from services.storage import get_storage_service
+import logging
+
+logger = logging.getLogger("app.lms_admin")
 
 # ── Rich text sanitization config ──────────────────────────────────────────
 _BLEACH_TAGS = [
@@ -679,18 +683,20 @@ def upload_file(file_obj, content_type):
     else:
         subdir = 'downloads'
 
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'static', 'lms', subdir))
-    os.makedirs(base_dir, exist_ok=True)
-
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_")
     unique_filename = timestamp + filename
-    full_path = os.path.join(base_dir, unique_filename)
+    
+    if content_type == 'interactive_image':
+        dest_path = f"course_images/{unique_filename}"
+    else:
+        dest_path = f"documents/{unique_filename}"
 
     try:
-        file_obj.save(full_path)
-        # Store as Flask static path: static/lms/<subdir>/filename
-        return True, f"static/lms/{subdir}/{unique_filename}"
+        storage_service = get_storage_service()
+        storage_service.upload_file(file_obj, dest_path, content_type=file_obj.content_type)
+        return True, dest_path
     except Exception as e:
+        logger.error(f"Error saving LMS file to storage: {e}", exc_info=True)
         return False, f"Error saving file: {str(e)}"
 
 
@@ -4379,13 +4385,13 @@ def upload_inline_image():
     if size > 10 * 1024 * 1024:
         return jsonify({'success': False, 'error': 'File too large (max 10 MB)'}), 400
 
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'static', 'lms', 'images', 'inline'))
-    os.makedirs(base_dir, exist_ok=True)
-
     unique_name = datetime.now().strftime('%Y%m%d_%H%M%S_') + filename
+    dest_path = f"course_images/inline/{unique_name}"
     try:
-        file_obj.save(os.path.join(base_dir, unique_name))
+        storage_service = get_storage_service()
+        storage_service.upload_file(file_obj, dest_path, content_type=file_obj.content_type)
     except Exception as e:
+        logger.error(f"Failed to upload inline image to storage: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
     return jsonify({'success': True, 'filename': unique_name,
@@ -4399,14 +4405,27 @@ def serve_inline_image(filename):
         return 'Unauthorised', 403
     # Prevent path traversal
     safe_name = os.path.basename(filename)
+    dest_path = f"course_images/inline/{safe_name}"
+    
+    try:
+        storage_service = get_storage_service()
+        if storage_service.file_exists(dest_path):
+            return redirect(storage_service.generate_public_url(dest_path))
+    except Exception as e:
+        logger.error(f"Failed to serve inline image from storage: {e}", exc_info=True)
+        
+    # Fallback to local files if it exists, for backward compatibility
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'static', 'lms', 'images', 'inline'))
-    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
-    mime_map = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
-                'gif': 'image/gif', 'webp': 'image/webp'}
-    mimetype = mime_map.get(ext, 'image/jpeg')
-    resp = send_from_directory(base_dir, safe_name, mimetype=mimetype)
-    resp.headers['Cache-Control'] = 'no-store, no-cache'
-    return resp
+    if os.path.exists(os.path.join(base_dir, safe_name)):
+        ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+        mime_map = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+                    'gif': 'image/gif', 'webp': 'image/webp'}
+        mimetype = mime_map.get(ext, 'image/jpeg')
+        resp = send_from_directory(base_dir, safe_name, mimetype=mimetype)
+        resp.headers['Cache-Control'] = 'no-store, no-cache'
+        return resp
+        
+    return 'Not Found', 404
 
 
 @lms_admin_bp.route('/content/<int:content_id>/image', methods=['GET'])
@@ -6697,13 +6716,16 @@ def _save_assignment_file(file_obj):
     file_obj.seek(0)
     if size > _ASSIGNMENT_MAX_BYTES:
         return False, f'File too large ({size / 1048576:.1f} MB). Max 50 MB.', ''
-    base_dir = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'assignments')
-    )
-    os.makedirs(base_dir, exist_ok=True)
     unique_name = datetime.now().strftime('%Y%m%d_%H%M%S_') + filename
-    file_obj.save(os.path.join(base_dir, unique_name))
-    return True, unique_name, orig_name
+    dest_path = f"documents/{unique_name}"
+    
+    try:
+        storage_service = get_storage_service()
+        storage_service.upload_file(file_obj, dest_path, content_type=file_obj.content_type)
+        return True, dest_path, orig_name
+    except Exception as e:
+        logger.error(f"Failed to upload assignment file to storage: {e}", exc_info=True)
+        return False, f"Failed to upload assignment file: {str(e)}", ""
 
 
 @lms_admin_bp.route('/assignments')

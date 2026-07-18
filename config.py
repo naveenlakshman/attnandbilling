@@ -45,6 +45,9 @@ class Config:
     MYSQL_DB = os.environ.get("MYSQL_DB", "attn_billing_db")
     MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
     MYSQL_UNIX_SOCKET = os.environ.get("MYSQL_UNIX_SOCKET")
+    STORAGE_PROVIDER = os.environ.get("STORAGE_PROVIDER", "local")
+    GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "global-it-erp-storage")
+
 
 
 

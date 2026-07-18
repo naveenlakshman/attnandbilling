@@ -2,8 +2,13 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
 import os
+import logging
 from db import get_conn, get_company_profile, clear_company_cache
+from services.storage import get_storage_service
 from .utils import login_required, admin_required
+
+logger = logging.getLogger("app.core")
+
 from .sms import send_sms
 from extensions import public_auth_limit
 
@@ -1043,12 +1048,17 @@ def company_profile():
             if len(logo_bytes) > MAX_LOGO_SIZE_BYTES:
                 flash("Logo file too large. Maximum size is 2 MB.", "danger")
                 return redirect(url_for("core.company_profile"))
-            os.makedirs(COMPANY_LOGO_DIR, exist_ok=True)
+            
             safe_filename = f"company_logo{ext}"
-            save_path = os.path.join(COMPANY_LOGO_DIR, safe_filename)
-            with open(save_path, 'wb') as f:
-                f.write(logo_bytes)
-            logo_filename = safe_filename
+            dest_path = f"logos/{safe_filename}"
+            try:
+                storage_service = get_storage_service()
+                storage_service.replace_file(logo_bytes, logo_filename, dest_path, content_type=logo_file.content_type)
+                logo_filename = dest_path
+            except Exception as e:
+                logger.error(f"Failed to upload logo: {e}", exc_info=True)
+                flash(f"Failed to upload logo: {str(e)}", "danger")
+                return redirect(url_for("core.company_profile"))
 
         now = datetime.now().isoformat(timespec="seconds")
         conn = get_conn()
@@ -1090,9 +1100,11 @@ def company_profile_remove_logo():
     profile = get_company_profile()
     old_logo = profile.get("logo_filename")
     if old_logo:
-        path = os.path.join(COMPANY_LOGO_DIR, old_logo)
-        if os.path.isfile(path):
-            os.remove(path)
+        try:
+            storage_service = get_storage_service()
+            storage_service.delete_file(old_logo)
+        except Exception as e:
+            logger.error(f"Failed to delete logo: {e}", exc_info=True)
 
     now = datetime.now().isoformat(timespec="seconds")
     conn = get_conn()

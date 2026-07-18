@@ -12,7 +12,11 @@ import os
 import uuid
 from db import get_conn
 from extensions import limiter, public_auth_limit
+from services.storage import get_storage_service
+import logging
 from . import students_bp
+
+logger = logging.getLogger("app.students")
 
 
 # ---------------------------------------------------------------------------
@@ -1833,17 +1837,15 @@ def profile_upload_document():
         flash('Invalid file format. Only PDF, PNG, JPG, and JPEG are allowed.', 'danger')
         return redirect(url_for('students.profile'))
         
-    # Ensure upload folder exists
-    upload_dir = os.path.abspath(os.path.join("uploads", "student_documents"))
-    os.makedirs(upload_dir, exist_ok=True)
-    
     # Save file with a secure, unique filename
     unique_fn = f"doc_{student_id}_{category}_{uuid.uuid4().hex}{ext}"
-    dest_path = os.path.join(upload_dir, unique_fn)
-    file.save(dest_path)
+    dest_path = f"documents/{unique_fn}"
+    
+    storage_service = get_storage_service()
     
     # Database update
     conn = get_conn()
+    uploaded_to_storage = False
     try:
         # Check if record exists for this category, update it or insert new one
         existing = conn.execute(
@@ -1851,14 +1853,11 @@ def profile_upload_document():
             (student_id, category)
         ).fetchone()
         
+        # Upload new file to storage
+        storage_service.upload_file(file, dest_path, content_type=file.content_type)
+        uploaded_to_storage = True
+        
         if existing:
-            # Optionally delete old file
-            try:
-                old_path = os.path.abspath(existing['file_path'])
-                if os.path.exists(old_path):
-                    os.remove(old_path)
-            except Exception:
-                pass
             conn.execute(
                 """
                 UPDATE student_uploaded_documents
@@ -1876,9 +1875,24 @@ def profile_upload_document():
                 (student_id, category, doc_type, dest_path)
             )
         conn.commit()
+        
+        # If DB update is committed successfully, delete the old file
+        if existing:
+            try:
+                storage_service.delete_file(existing['file_path'])
+            except Exception:
+                pass
+                
         flash('Document uploaded successfully.', 'success')
     except Exception as e:
         conn.rollback()
+        # Clean up the newly uploaded file if DB transaction failed
+        if uploaded_to_storage:
+            try:
+                storage_service.delete_file(dest_path)
+            except Exception:
+                pass
+        logger.error(f"Failed to upload document: {e}", exc_info=True)
         flash(f'Database error: {str(e)}', 'danger')
     finally:
         conn.close()
@@ -2087,6 +2101,8 @@ def leave_apply():
         # --- Optional document upload ---
         document_filename = None
         doc_file = request.files.get('document')
+        uploaded_to_storage = False
+        dest_path = None
         if doc_file and doc_file.filename:
             allowed_ext = {'jpg', 'jpeg', 'png', 'pdf'}
             ext = doc_file.filename.rsplit('.', 1)[-1].lower() if '.' in doc_file.filename else ''
@@ -2102,11 +2118,18 @@ def leave_apply():
                 flash('Document too large. Maximum size is 5 MB.', 'danger')
                 return redirect(url_for('students.leave_apply'))
 
-            from config import LEAVE_DOCS_DIR
             safe_name = secure_filename(doc_file.filename)
             unique_name = f"{uuid.uuid4().hex}_{safe_name}"
-            doc_file.save(os.path.join(LEAVE_DOCS_DIR, unique_name))
-            document_filename = unique_name
+            dest_path = f"documents/{unique_name}"
+            try:
+                storage_service = get_storage_service()
+                storage_service.upload_file(doc_file, dest_path, content_type=doc_file.content_type)
+                uploaded_to_storage = True
+                document_filename = dest_path
+            except Exception as e:
+                logger.error(f"Failed to upload leave document: {e}", exc_info=True)
+                flash('Failed to upload document.', 'danger')
+                return redirect(url_for('students.leave_apply'))
 
         # --- Save to DB ---
         now = datetime.now().isoformat(timespec="seconds")
@@ -2119,6 +2142,17 @@ def leave_apply():
                 VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)
             """, (student_id, from_date, to_date, reason, document_filename, now, now))
             conn.commit()
+        except Exception as e:
+            conn.rollback()
+            if uploaded_to_storage and dest_path:
+                try:
+                    storage_service = get_storage_service()
+                    storage_service.delete_file(dest_path)
+                except Exception:
+                    pass
+            logger.error(f"Failed to insert leave request: {e}", exc_info=True)
+            flash(f'Database error: {str(e)}', 'danger')
+            return redirect(url_for('students.leave_apply'))
         finally:
             conn.close()
 
@@ -2312,13 +2346,15 @@ def _save_submission_file(file_obj):
     file_obj.seek(0)
     if size > _SUBMISSION_MAX_BYTES:
         return False, f'File too large ({size / 1048576:.1f} MB). Max 20 MB.', ''
-    base_dir = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
-    )
-    os.makedirs(base_dir, exist_ok=True)
     unique_name = datetime.now().strftime('%Y%m%d_%H%M%S_') + filename
-    file_obj.save(os.path.join(base_dir, unique_name))
-    return True, unique_name, orig_name
+    dest_path = f"documents/{unique_name}"
+    try:
+        storage_service = get_storage_service()
+        storage_service.upload_file(file_obj, dest_path, content_type=file_obj.content_type)
+        return True, dest_path, orig_name
+    except Exception as e:
+        logger.error(f"Failed to upload submission to storage: {e}", exc_info=True)
+        return False, f"Failed to upload submission file: {str(e)}", ""
 
 
 @students_bp.route('/program/<int:program_id>/master-topic/<int:master_topic_id>/assignments')
@@ -2592,14 +2628,11 @@ def profile_save_signature():
             sig_data = sig_data.split(',')[1]
         sig_bytes = base64.b64decode(sig_data)
 
-        sig_dir = os.path.join("static", "images", "student_signatures")
-        os.makedirs(sig_dir, exist_ok=True)
-
         code = student["student_code"]
-        filename = f"{code}_{sig_type}_signature.png"
-        filepath = os.path.join(sig_dir, filename)
-        with open(filepath, "wb") as f:
-            f.write(sig_bytes)
+        filename = f"signatures/{code}_{sig_type}_signature.png"
+        
+        storage_service = get_storage_service()
+        storage_service.upload_file(sig_bytes, filename, content_type="image/png")
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if sig_type == "student":

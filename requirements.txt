@@ -57,3 +57,4 @@ WTForms==3.2.1
 pillow==12.2.0
 qrcode==8.2
 PyMySQL==1.1.1
+google-cloud-storage==2.14.0
