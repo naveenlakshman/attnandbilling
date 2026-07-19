@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask, send_from_directory, session, abort, redirect, url_for
+from flask import Flask, send_from_directory, session, abort, redirect, url_for, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 from extensions import csrf, limiter
 from config import Config
@@ -301,6 +301,14 @@ def create_app():
                 conn.close()
         except Exception:
             return {}
+
+    @app.after_request
+    def add_cors_headers_to_static(response):
+        if request.path.startswith('/static/') or request.path.startswith('/uploads/'):
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        return response
 
     return app
 
