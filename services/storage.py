@@ -17,6 +17,10 @@ def map_local_path_to_gcs_path(path):
     # Normalize backslashes to forward slashes
     path = path.replace("\\", "/")
     
+    if "student_photos/" in path:
+        filename = path.split("student_photos/")[-1]
+        return f"student_photos/{filename}"
+        
     # Extract path from absolute paths if needed
     if "static/images/certificate_templates/" in path:
         filename = path.split("static/images/certificate_templates/")[-1]

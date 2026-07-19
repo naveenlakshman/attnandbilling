@@ -47,6 +47,9 @@
     border-radius: 4px;
     background-color: #f1f5f9;
     object-fit: cover;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
 .cert-qr-code {

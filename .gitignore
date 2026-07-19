@@ -237,3 +237,7 @@ uploads/student_documents/*.jpg
 lms_inline.tar.gz
 static/lms/images/inline/*.*
 static/certificates/*.*
+gcp-key.json
+.env.docker
+.env.local
+cloud-sql-proxy.exe

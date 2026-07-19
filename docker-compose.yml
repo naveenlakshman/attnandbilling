@@ -1,0 +1,27 @@
+services:
+  db-proxy:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+    container_name: attn_billing_db_proxy
+    volumes:
+      - ./gcp-key.json:/config/gcp-key.json:ro
+    command:
+      - "--json-credentials-file=/config/gcp-key.json"
+      - "--address=0.0.0.0"
+      - "--port=3306"
+      - "global-it-edu-app:asia-south1:attn-billing-testing-db"
+    ports:
+      - "3307:3306"
+    restart: always
+
+  web:
+    build: .
+    container_name: attn_billing_web
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./gcp-key.json:/app/gcp-key.json:ro
+    env_file:
+      - .env.docker
+    depends_on:
+      - db-proxy
+    restart: always
