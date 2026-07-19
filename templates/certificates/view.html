@@ -209,7 +209,8 @@
     element.classList.add('cert-pdf-export');
     
     // Swap source to high-resolution lossless background
-    bgImg.src = highresUrl;
+    // Append a unique timestamp query parameter to bypass browser caching of CORS headers
+    bgImg.src = highresUrl + (highresUrl.indexOf('?') >= 0 ? '&' : '?') + 't=' + new Date().getTime();
     
     function triggerDownload() {
       const opt = {

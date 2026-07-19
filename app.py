@@ -132,6 +132,12 @@ def create_app():
     app.jinja_env.globals['storage_url'] = storage_url
 
     # Backward compatibility fallback routes to redirect old static file URLs to GCS
+    def redirect_with_query(url):
+        if request.query_string:
+            qs = request.query_string.decode('utf-8')
+            url += ("&" if "?" in url else "?") + qs
+        return redirect(url)
+
     @app.route('/static/images/student_photos/<path:filename>')
     def serve_fallback_student_photos(filename):
         if filename.startswith("student_photos/"):
@@ -142,7 +148,7 @@ def create_app():
             if storage_service.file_exists(dest_path):
                 url = storage_service.generate_public_url(dest_path)
                 if url.startswith("http"):
-                    return redirect(url)
+                    return redirect_with_query(url)
         except Exception:
             pass
         return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'student_photos'), filename)
@@ -155,7 +161,7 @@ def create_app():
             if storage_service.file_exists(dest_path):
                 url = storage_service.generate_public_url(dest_path)
                 if url.startswith("http"):
-                    return redirect(url)
+                    return redirect_with_query(url)
         except Exception:
             pass
         return send_from_directory(os.path.join(app.root_path, 'static', 'lms', 'images'), filename)
@@ -171,7 +177,7 @@ def create_app():
             if storage_service.file_exists(dest_path):
                 url = storage_service.generate_public_url(dest_path)
                 if url.startswith("http"):
-                    return redirect(url)
+                    return redirect_with_query(url)
         except Exception:
             pass
         return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'student_signatures'), filename)
@@ -186,7 +192,7 @@ def create_app():
             if storage_service.file_exists(dest_path):
                 url = storage_service.generate_public_url(dest_path)
                 if url.startswith("http"):
-                    return redirect(url)
+                    return redirect_with_query(url)
         except Exception:
             pass
         return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'company_logo'), filename)
@@ -201,7 +207,7 @@ def create_app():
             if storage_service.file_exists(dest_path):
                 url = storage_service.generate_public_url(dest_path)
                 if url.startswith("http"):
-                    return redirect(url)
+                    return redirect_with_query(url)
         except Exception:
             pass
         return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'certificate_templates'), filename)
@@ -216,7 +222,7 @@ def create_app():
             if storage_service.file_exists(dest_path):
                 url = storage_service.generate_public_url(dest_path)
                 if url.startswith("http"):
-                    return redirect(url)
+                    return redirect_with_query(url)
         except Exception:
             pass
         return send_from_directory(os.path.join(app.root_path, 'uploads', 'student_documents'), filename)
