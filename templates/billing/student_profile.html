@@ -799,13 +799,43 @@
     }
   }
 
-  function saveContact() {
+  async function fetchImageAsBase64(url) {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64String = reader.result.split(',')[1];
+          resolve(base64String);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.error("Failed to fetch profile image as base64:", e);
+      return null;
+    }
+  }
+
+  async function saveContact() {
     var name    = {{ student.full_name | tojson }};
     var phone   = {{ (student.phone or '') | tojson }};
     var email   = {{ (student.email or '') | tojson }};
     var address = {{ (student.address or '') | tojson }};
     var org     = {{ company.company_short_name | tojson }};
     var note    = "Student Code: " + {{ student.student_code | tojson }};
+
+    var imgEl = document.getElementById('profilePhotoImg');
+    var photoUrl = (imgEl && !imgEl.classList.contains('d-none') && imgEl.src) ? imgEl.src : null;
+    var photoLine = "";
+
+    if (photoUrl) {
+      var base64Photo = await fetchImageAsBase64(photoUrl);
+      if (base64Photo) {
+        photoLine = "PHOTO;TYPE=JPEG;ENCODING=b:" + base64Photo;
+      }
+    }
 
     var vcard = [
       "BEGIN:VCARD",
@@ -817,6 +847,7 @@
       address? "ADR:;;" + address.replace(/\n/g, " ") + ";;;;;" : "",
       "ORG:" + org,
       "NOTE:" + note,
+      photoLine,
       "END:VCARD"
     ].filter(Boolean).join("\r\n");
 
