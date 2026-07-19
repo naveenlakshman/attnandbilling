@@ -18,7 +18,13 @@ def map_local_path_to_gcs_path(path):
     path = path.replace("\\", "/")
     
     # Extract path from absolute paths if needed
-    if "static/images/student_photos/" in path:
+    if "static/images/certificate_templates/" in path:
+        filename = path.split("static/images/certificate_templates/")[-1]
+        return f"certificates/{filename}"
+    elif "certificate.png" in path or "default.png" in path:
+        filename = path.split("/")[-1]
+        return f"certificates/{filename}"
+    elif "static/images/student_photos/" in path:
         filename = path.split("static/images/student_photos/")[-1]
         return f"student_photos/{filename}"
     elif "static/images/student_signatures/" in path:

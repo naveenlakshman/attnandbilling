@@ -99,6 +99,10 @@ LOCAL_DIR_MAPPINGS = [
         "folder": "certificates"
     },
     {
+        "dir": "static/images/certificate_templates",
+        "folder": "certificates"
+    },
+    {
         "dir": "static/lms/images/inline",
         "folder": "course_images/inline"
     },

@@ -35,6 +35,7 @@
     <div class="card shadow-sm border-0 p-3 mb-4">
       <h5 class="fw-bold mb-3">Edit Template Settings</h5>
       <form method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="action_type" value="edit_template">
         <input type="hidden" name="template_id" value="{{ sel_template.id }}">
         
@@ -211,6 +212,7 @@
                   <div id="collapse-{{ f.id }}" class="accordion-collapse collapse" data-bs-parent="#coordsAccordion">
                     <div class="accordion-body bg-light">
                       <form method="POST" class="row g-2" data-field-name="{{ f.field_name }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action_type" value="update_coordinates">
                         <input type="hidden" name="template_id" value="{{ selected_id }}">
                         <input type="hidden" name="field_name" value="{{ f.field_name }}">
@@ -296,6 +298,7 @@
 <div class="modal fade" id="createTemplateModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <form method="POST" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action_type" value="create_template">
       <div class="modal-content">
         <div class="modal-header">
