@@ -53,8 +53,8 @@
     
     <!-- High-Resolution Lossless Background Image Tag -->
     <img id="bgImg" 
-         src="{{ url_for('static', filename='images/certificate_templates/' ~ (template.preview_filename or template.background_filename)) }}" 
-         data-highres="{{ url_for('static', filename='images/certificate_templates/' ~ template.background_filename) }}"
+         src="{{ storage_url('static/images/certificate_templates/' ~ (template.preview_filename or template.background_filename)) }}" 
+         data-highres="{{ storage_url('static/images/certificate_templates/' ~ template.background_filename) }}"
          crossorigin="anonymous"
          style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none;" 
          alt="Certificate Background">
@@ -128,7 +128,7 @@
 
     <!-- Student Photo Layer -->
     {% if settings.get('show_student_photo') == 1 and cert.photo_filename and overlay_styles.get('student_photo') %}
-    <img src="{{ url_for('static', filename='images/student_photos/' ~ cert.photo_filename) }}" 
+    <img src="{{ storage_url('static/images/student_photos/' ~ cert.photo_filename) }}" 
          crossorigin="anonymous"
          style="{{ overlay_styles['student_photo'] }}" 
          class="cert-student-photo" alt="Student Photo">
