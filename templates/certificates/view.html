@@ -55,6 +55,7 @@
     <img id="bgImg" 
          src="{{ url_for('static', filename='images/certificate_templates/' ~ (template.preview_filename or template.background_filename)) }}" 
          data-highres="{{ url_for('static', filename='images/certificate_templates/' ~ template.background_filename) }}"
+         crossorigin="anonymous"
          style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none;" 
          alt="Certificate Background">
     
@@ -128,6 +129,7 @@
     <!-- Student Photo Layer -->
     {% if settings.get('show_student_photo') == 1 and cert.photo_filename and overlay_styles.get('student_photo') %}
     <img src="{{ url_for('static', filename='images/student_photos/' ~ cert.photo_filename) }}" 
+         crossorigin="anonymous"
          style="{{ overlay_styles['student_photo'] }}" 
          class="cert-student-photo" alt="Student Photo">
     {% endif %}
@@ -142,6 +144,7 @@
     <!-- Signature Overlay (If Configured) -->
     {% if template.authorized_signature_image %}
     <img src="{{ url_for('static', filename='images/signatures/' ~ template.authorized_signature_image) }}" 
+         crossorigin="anonymous"
          style="position: absolute; bottom: 80px; right: 280px; z-index: 5;" 
          class="cert-signature" alt="Authorized Signature">
     {% endif %}
@@ -149,6 +152,7 @@
     <!-- Seal Overlay (If Configured) -->
     {% if template.seal_image %}
     <img src="{{ url_for('static', filename='images/seals/' ~ template.seal_image) }}" 
+         crossorigin="anonymous"
          style="position: absolute; bottom: 65px; left: 280px; z-index: 5;" 
          class="cert-seal" alt="Official Seal">
     {% endif %}
