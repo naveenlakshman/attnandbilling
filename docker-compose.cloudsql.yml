@@ -11,4 +11,4 @@ services:
         condition: service_started
 
   cloud-sql-proxy:
-    profiles: []
+    profiles: !override []
