@@ -16,3 +16,8 @@ scratch/
 scripts/
 *.log
 uploads/
+.env*
+!.env.cloudsql.example
+gcp-key.json
+*.json.key
+cloud-sql-proxy.exe
