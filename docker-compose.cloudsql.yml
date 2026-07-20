@@ -12,3 +12,7 @@ services:
 
   cloud-sql-proxy:
     profiles: !override []
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-key.json
+    volumes: !override
+      - ./gcp-key.json:/secrets/gcp-key.json:ro
