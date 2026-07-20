@@ -1,10 +1,17 @@
+from flask import request
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+
+def get_client_ip():
+    # Extract client IP behind Google Cloud Run proxy / load balancer
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    if ip and "," in ip:
+        ip = ip.split(",")[0].strip()
+    return ip or "127.0.0.1"
 
 csrf = CSRFProtect()
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=get_client_ip,
 )
 
 
