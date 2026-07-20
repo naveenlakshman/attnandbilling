@@ -231,7 +231,8 @@ database.db
 docs/planning/*.md
 pythonanywhere_uploads.tar.gz
 pythonanywhere_uploads/static/images/*/*.png
-
+*.sql
+backup_test_attn_billing.sql
 pythonanywhere_uploads/static/images/student_photos/*.jpg
 uploads/student_documents/*.jpg
 lms_inline.tar.gz
