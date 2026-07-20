@@ -246,3 +246,4 @@ gcp-key.json
 .env.cloudsql
 cloud-sql-proxy.exe
 scratch/production_dump.sql
+uploads/student_documents/doc_391_qualification_7ccad2d0ccd54a78a7080d51c11217a6.pdf
