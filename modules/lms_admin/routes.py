@@ -128,6 +128,15 @@ def _read_submission_preview_token(token):
 
 def sanitize_rich_text(html):
     """Strip script tags and unsafe JS from editor HTML while preserving safe CSS."""
+    if not html:
+        return ""
+    if isinstance(html, str) and html.startswith("base64:"):
+        import base64
+        try:
+            html = base64.b64decode(html[7:]).decode("utf-8")
+        except Exception as e:
+            logger.error(f"Failed to decode base64 rich text: {e}")
+
     return bleach.clean(
         html,
         tags=_BLEACH_TAGS,

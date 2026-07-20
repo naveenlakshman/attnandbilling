@@ -979,10 +979,15 @@
 
             if (lockedType === 'rich_text') {
                 // Sync ALL TinyMCE instances to their underlying textarea before submit.
-                // triggerSave() is the canonical API; more reliable than .save() on a named instance.
                 if (window.tinymce) tinymce.triggerSave();
-                const body = document.getElementById('rich_text_body').value.trim();
+                const el = document.getElementById('rich_text_body');
+                const body = el ? el.value.trim() : '';
                 if (!body) { e.preventDefault(); alert('Rich text content cannot be empty.'); return; }
+                try {
+                    el.value = "base64:" + btoa(unescape(encodeURIComponent(body)));
+                } catch(e) {
+                    console.error("Base64 encoding failed:", e);
+                }
             }
 
             // ── Clear draft and suppress beforeunload on successful submit ──
