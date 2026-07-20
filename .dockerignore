@@ -21,3 +21,10 @@ uploads/
 gcp-key.json
 *.json.key
 cloud-sql-proxy.exe
+pythonanywhere_uploads/
+pythonanywhere_uploads*.tar.gz
+lms_inline.tar.gz
+*.tar.gz
+*.sql
+*.db
+cloud-sql-proxy*
