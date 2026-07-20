@@ -241,3 +241,4 @@ gcp-key.json
 .env.docker
 .env.local
 cloud-sql-proxy.exe
+scratch/production_dump.sql

@@ -1,16 +1,17 @@
 services:
-  db-proxy:
-    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
-    container_name: attn_billing_db_proxy
-    volumes:
-      - ./gcp-key.json:/config/gcp-key.json:ro
-    command:
-      - "--json-credentials-file=/config/gcp-key.json"
-      - "--address=0.0.0.0"
-      - "--port=3306"
-      - "global-it-edu-app:asia-south1:attn-billing-testing-db"
+  local-db:
+    image: mysql:8.0
+    container_name: attn_billing_local_db
+    environment:
+      MYSQL_ROOT_PASSWORD: admin210499_root
+      MYSQL_DATABASE: attn_billing_testing
+      MYSQL_USER: attn_app
+      MYSQL_PASSWORD: admin210499
     ports:
-      - "3307:3306"
+      - "3308:3306"
+    volumes:
+      - ./scratch/production_dump.sql:/docker-entrypoint-initdb.d/production_dump.sql:ro
+      - mysql_data:/var/lib/mysql
     restart: always
 
   web:
@@ -23,5 +24,8 @@ services:
     env_file:
       - .env.docker
     depends_on:
-      - db-proxy
+      - local-db
     restart: always
+
+volumes:
+  mysql_data:
