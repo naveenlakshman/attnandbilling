@@ -1,0 +1,14 @@
+services:
+  local-db:
+    profiles:
+      - localmysql
+
+  web:
+    env_file:
+      - .env.cloudsql
+    depends_on: !override
+      cloud-sql-proxy:
+        condition: service_started
+
+  cloud-sql-proxy:
+    profiles: []

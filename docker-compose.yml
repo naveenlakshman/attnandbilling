@@ -27,5 +27,22 @@ services:
       - local-db
     restart: always
 
+  cloud-sql-proxy:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.22.0
+    container_name: attn_billing_cloud_sql_proxy
+    command:
+      - "--auto-iam-authn"
+      - "--address=0.0.0.0"
+      - "--port=3306"
+      - "global-it-edu-app:asia-south1:attn-billing-local-test-db"
+    ports:
+      - "3307:3306"
+    volumes:
+      # Windows Docker Desktop ADC path. Set GCLOUD_CONFIG_DIR explicitly if needed.
+      - "${GCLOUD_CONFIG_DIR:-${APPDATA}/gcloud}:/home/nonroot/.config/gcloud:ro"
+    profiles:
+      - cloudsql
+    restart: unless-stopped
+
 volumes:
   mysql_data:

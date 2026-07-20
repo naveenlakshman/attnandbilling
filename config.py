@@ -45,6 +45,16 @@ class Config:
     MYSQL_DB = os.environ.get("MYSQL_DB", "attn_billing_db")
     MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
     MYSQL_UNIX_SOCKET = os.environ.get("MYSQL_UNIX_SOCKET")
+    # "cloud-sql-connector" enables the in-process Python connector. The default
+    # remains a normal TCP/socket connection (local MySQL or Auth Proxy).
+    DB_CONNECTION_MODE = os.environ.get("DB_CONNECTION_MODE", "direct")
+    CLOUD_SQL_CONNECTION_NAME = os.environ.get("CLOUD_SQL_CONNECTION_NAME")
+    CLOUD_SQL_IAM_PRINCIPAL = os.environ.get(
+        "CLOUD_SQL_IAM_PRINCIPAL",
+        "644631083795-compute@developer.gserviceaccount.com",
+    )
+    CLOUD_SQL_ENABLE_IAM_AUTH = _env_bool("CLOUD_SQL_ENABLE_IAM_AUTH", default=False)
+    CLOUD_SQL_IP_TYPE = os.environ.get("CLOUD_SQL_IP_TYPE", "PUBLIC").upper()
     STORAGE_PROVIDER = os.environ.get("STORAGE_PROVIDER", "local")
     GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "global-it-erp-storage")
 

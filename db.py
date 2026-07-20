@@ -7,6 +7,50 @@ from werkzeug.security import generate_password_hash
 from config import DB_PATH, Config
 from pymysql.cursors import DictCursor
 
+_cloud_sql_connector = None
+
+
+def _mysql_iam_username(principal):
+    """Return the MySQL username Cloud SQL derives from an IAM principal."""
+    principal = (principal or "").strip().lower()
+    if principal.endswith(".gserviceaccount.com") and "@" in principal:
+        return principal.split("@", 1)[0]
+    if "@" in principal:
+        return principal.split("@", 1)[0]
+    return principal
+
+
+def _get_cloud_sql_connection():
+    """Create a PyMySQL connection with automatic Cloud SQL IAM auth."""
+    global _cloud_sql_connector
+    if not Config.CLOUD_SQL_CONNECTION_NAME:
+        raise RuntimeError(
+            "CLOUD_SQL_CONNECTION_NAME is required in cloud-sql-connector mode"
+        )
+    if not Config.CLOUD_SQL_ENABLE_IAM_AUTH:
+        raise RuntimeError(
+            "CLOUD_SQL_ENABLE_IAM_AUTH must be true in cloud-sql-connector mode"
+        )
+
+    from google.cloud.sql.connector import Connector, IPTypes
+
+    if _cloud_sql_connector is None:
+        ip_type = getattr(IPTypes, Config.CLOUD_SQL_IP_TYPE, None)
+        if ip_type is None:
+            raise RuntimeError("CLOUD_SQL_IP_TYPE must be PUBLIC, PRIVATE, or PSC")
+        _cloud_sql_connector = Connector(ip_type=ip_type)
+
+    # Cloud SQL registers the full IAM service-account email, but MySQL stores
+    # and accepts its local part as the database username.
+    db_user = _mysql_iam_username(Config.CLOUD_SQL_IAM_PRINCIPAL)
+    return _cloud_sql_connector.connect(
+        Config.CLOUD_SQL_CONNECTION_NAME,
+        "pymysql",
+        user=db_user,
+        db=Config.MYSQL_DB,
+        enable_iam_auth=True,
+    )
+
 def convert_sqlite_datetime_to_mysql(query):
     pos = 0
     while True:
@@ -283,6 +327,9 @@ class MySQLConnectionWrapper:
 
 def get_conn():
     if getattr(Config, "DB_TYPE", "sqlite") == "mysql":
+        if Config.DB_CONNECTION_MODE == "cloud-sql-connector":
+            return MySQLConnectionWrapper(_get_cloud_sql_connection())
+
         connection_options = {
             "user": Config.MYSQL_USER,
             "password": Config.MYSQL_PASSWORD,

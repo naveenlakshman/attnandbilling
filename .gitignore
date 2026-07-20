@@ -240,5 +240,6 @@ static/certificates/*.*
 gcp-key.json
 .env.docker
 .env.local
+.env.cloudsql
 cloud-sql-proxy.exe
 scratch/production_dump.sql
