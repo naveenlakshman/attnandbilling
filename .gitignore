@@ -1,5 +1,11 @@
 # Environment secrets - never commit
 .env
+.env.*
+!.env.example
+!.env.docker.example
+!.env.mysql.example
+!.env.cloudsql.example
+!.env.production.example
 
 # Ignore local images
 static/lms/images/inline/20260429_043130_1731598994103.jpg
@@ -247,3 +253,7 @@ gcp-key.json
 cloud-sql-proxy.exe
 scratch/production_dump.sql
 uploads/student_documents/doc_391_qualification_7ccad2d0ccd54a78a7080d51c11217a6.pdf
+.env.docker.example
+.env.*.*
+.env.*
+

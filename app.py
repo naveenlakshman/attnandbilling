@@ -96,7 +96,14 @@ def format_ist_datetime(value):
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    Config.validate()
+    if any((Config.PROXY_FIX_X_FOR, Config.PROXY_FIX_X_PROTO, Config.PROXY_FIX_X_HOST)):
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=Config.PROXY_FIX_X_FOR,
+            x_proto=Config.PROXY_FIX_X_PROTO,
+            x_host=Config.PROXY_FIX_X_HOST,
+        )
 
     csrf.init_app(app)
     limiter.init_app(app)
@@ -314,7 +321,25 @@ def create_app():
             response.headers['Access-Control-Allow-Origin'] = '*'
             response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        if app.config["SECURITY_HEADERS_ENABLED"]:
+            response.headers.setdefault("Content-Security-Policy", app.config["CONTENT_SECURITY_POLICY"])
+            response.headers.setdefault("X-Content-Type-Options", "nosniff")
+            response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+            response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+            response.headers.setdefault(
+                "Permissions-Policy",
+                "camera=(), microphone=(), geolocation=(), payment=()",
+            )
+            if request.is_secure:
+                response.headers.setdefault(
+                    "Strict-Transport-Security",
+                    f"max-age={app.config['HSTS_MAX_AGE']}; includeSubDomains",
+                )
         return response
+
+    @app.get("/healthz")
+    def healthz():
+        return {"status": "ok", "environment": app.config["APP_ENV"]}
 
     return app
 

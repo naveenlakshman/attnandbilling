@@ -10,8 +10,11 @@ sqlite_path = os.environ.get("DB_PATH", "instance/database.db")
 mysql_host = os.environ.get("MYSQL_HOST", "127.0.0.1")
 mysql_port = int(os.environ.get("MYSQL_PORT", 3306))
 mysql_user = os.environ.get("MYSQL_USER", "root")
-mysql_password = os.environ.get("MYSQL_PASSWORD", "admin123")
+mysql_password = os.environ.get("MYSQL_PASSWORD")
 mysql_db = os.environ.get("MYSQL_DB", "test_attn_billing")
+
+if not mysql_password:
+    raise RuntimeError("MYSQL_PASSWORD must be set before running this migration")
 
 print("--- Starting SQLite to MySQL Database Migration ---")
 print(f"Source SQLite File: {sqlite_path}")

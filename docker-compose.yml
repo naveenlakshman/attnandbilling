@@ -2,17 +2,19 @@ services:
   local-db:
     image: mysql:8.0
     container_name: attn_billing_local_db
-    environment:
-      MYSQL_ROOT_PASSWORD: admin210499_root
-      MYSQL_DATABASE: attn_billing_testing
-      MYSQL_USER: attn_app
-      MYSQL_PASSWORD: admin210499
+    env_file:
+      - .env.mysql
     ports:
       - "3308:3306"
     volumes:
       - ./scratch/production_dump.sql:/docker-entrypoint-initdb.d/production_dump.sql:ro
       - mysql_data:/var/lib/mysql
     restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "--password=$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   web:
     build: .
@@ -24,8 +26,14 @@ services:
     env_file:
       - .env.docker
     depends_on:
-      - local-db
+      local-db:
+        condition: service_healthy
     restart: always
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   cloud-sql-proxy:
     image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.22.0

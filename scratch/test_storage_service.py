@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from config import Config
 from services.storage import get_storage_service, map_local_path_to_gcs_path
 
-def test_provider(provider_type):
+def run_provider_checks(provider_type):
     print(f"\n================ TESTING PROVIDER: {provider_type.upper()} ================")
     # Temporarily override configuration
     original_provider = Config.STORAGE_PROVIDER
@@ -23,6 +23,7 @@ def test_provider(provider_type):
     test_photo_path = "student_photos/TEST_STUDENT_CODE.jpg"
     test_doc_path = "documents/TEST_DOC_UUID.pdf"
     
+    succeeded = False
     try:
         # Test 1: Upload File
         print(f"1. Uploading test student photo to '{test_photo_path}'...")
@@ -67,6 +68,7 @@ def test_provider(provider_type):
         assert not exists_after_delete, "File must not exist after delete"
         
         print(f"SUCCESS: {provider_type.upper()} provider passed all checks!")
+        succeeded = True
         
     except Exception as e:
         print(f"FAILURE on {provider_type.upper()} provider: {e}")
@@ -81,13 +83,15 @@ def test_provider(provider_type):
             pass
         Config.STORAGE_PROVIDER = original_provider
         services.storage._storage_service = None
+    return succeeded
 
 if __name__ == '__main__':
     # Test local provider
-    test_provider("local")
+    all_passed = run_provider_checks("local")
     
     # Test GCS provider (if environment is set up or CLI is authenticated)
-    if os.environ.get("GCS_BUCKET_NAME") or "gcs" in sys.argv:
-        test_provider("gcs")
+    if "--gcs" in sys.argv[1:]:
+        all_passed = run_provider_checks("gcs") and all_passed
     else:
-        print("\nSkipping GCS provider tests. Run with argument 'gcs' or set GCS_BUCKET_NAME to test GCS.")
+        print("\nSkipping GCS provider tests. Pass --gcs explicitly to enable cloud writes.")
+    raise SystemExit(0 if all_passed else 1)

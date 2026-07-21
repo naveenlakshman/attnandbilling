@@ -42,6 +42,7 @@ Pygments==2.20.0
 pyparsing==3.3.2
 python-dotenv==1.0.1
 requests==2.33.1
+redis[hiredis]>=5.0,<8.0
 rich==13.9.4
 six==1.17.0
 tinycss2==1.5.1

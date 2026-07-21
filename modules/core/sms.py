@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 # Read credentials from environment — set these in your .env file.
 _GATEWAY_URL = "https://api.sms-gate.app/3rdparty/v1/message"
-_GATEWAY_USER = os.environ.get("SMS_GATEWAY_USER", "DP4VDN")
-_GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "qrbwcqfz-gwayf")
+_GATEWAY_USER = os.environ.get("SMS_GATEWAY_USER", "")
+_GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "")
 
 
 def normalize_sms_phone(phone_number: str) -> str:
@@ -50,6 +50,9 @@ def send_sms(phone_number: str, message_text: str) -> dict:
     """
     if not phone_number or not message_text:
         return {"success": False, "error": "phone_number and message_text are required"}
+    if not _GATEWAY_USER or not _GATEWAY_PASSWORD:
+        logger.error("SMS gateway credentials are not configured")
+        return {"success": False, "error": "SMS service is not configured"}
 
     payload = {
         "textMessage": {"text": message_text},
