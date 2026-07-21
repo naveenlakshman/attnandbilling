@@ -6,6 +6,7 @@ import test_assignment_phase0_mysql as baseline
 import test_assignment_authorization_phase2 as phase2
 import test_assignment_pagination_phase5 as phase5
 from db import get_conn
+from modules.lms_admin import routes as lms_admin_routes
 
 
 def run_phase7(fixtures, other_branch, actors):
@@ -59,6 +60,36 @@ def run_phase7(fixtures, other_branch, actors):
     assert inline_pdf.status_code == 200
     assert inline_pdf.mimetype == 'application/pdf'
     assert inline_pdf.data.startswith(b'%PDF-1.4')
+
+    class CloudDocx:
+        def file_exists(self, path): return True
+        def download_file(self, path): return b'PK\x03\x04phase7-docx'
+
+    conn = get_conn()
+    original_name = conn.execute(
+        'SELECT original_filename FROM lms_assignment_submissions WHERE id = ?', (first_id,)
+    ).fetchone()['original_filename']
+    conn.execute(
+        'UPDATE lms_assignment_submissions SET original_filename = ? WHERE id = ?',
+        ('phase7-preview.docx', first_id),
+    )
+    conn.commit()
+    conn.close()
+    try:
+        token = lms_admin_routes._make_submission_preview_token(first_id)
+        with patch('modules.lms_admin.routes.get_storage_service', return_value=CloudDocx()):
+            public_docx = admin.get(f'/lms_admin/submission/public-file?token={token}')
+    finally:
+        conn = get_conn()
+        conn.execute(
+            'UPDATE lms_assignment_submissions SET original_filename = ? WHERE id = ?',
+            (original_name, first_id),
+        )
+        conn.commit()
+        conn.close()
+    assert public_docx.status_code == 200
+    assert public_docx.mimetype == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', public_docx.mimetype
+    assert public_docx.data.startswith(b'PK\x03\x04')
 
     security_headers_enabled = baseline.app.config.get('SECURITY_HEADERS_ENABLED')
     baseline.app.config['SECURITY_HEADERS_ENABLED'] = True

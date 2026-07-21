@@ -8624,7 +8624,7 @@ def preview_submission(submission_id):
 @lms_admin_bp.route('/submission/public-file')
 def preview_submission_public_file():
     """Short-lived signed URL endpoint for Office Online preview fetches."""
-    from flask import send_file, abort, redirect
+    from flask import send_file, abort
 
     sid = _read_submission_preview_token(request.args.get('token'))
     if not sid:
@@ -8648,9 +8648,13 @@ def preview_submission_public_file():
     try:
         storage_service = get_storage_service()
         if storage_service.file_exists(file_path):
-            url = storage_service.generate_public_url(file_path)
-            if url.startswith("http"):
-                return redirect(url)
+            file_bytes = storage_service.download_file(file_path)
+            return send_file(
+                io.BytesIO(file_bytes),
+                as_attachment=False,
+                download_name=orig_name,
+                mimetype=mimetypes.guess_type(orig_name)[0] or 'application/octet-stream',
+            )
     except Exception as e:
         logger.error(f"Error in preview_submission_public_file GCS check: {e}")
 
@@ -8666,7 +8670,12 @@ def preview_submission_public_file():
         else:
             abort(404)
 
-    return send_file(full_path, as_attachment=False, download_name=orig_name)
+    return send_file(
+        full_path,
+        as_attachment=False,
+        download_name=orig_name,
+        mimetype=mimetypes.guess_type(orig_name)[0] or 'application/octet-stream',
+    )
 
 
 @lms_admin_bp.route('/master/assignments/file/<int:assignment_id>')
