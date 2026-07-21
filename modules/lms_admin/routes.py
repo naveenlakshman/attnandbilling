@@ -98,6 +98,21 @@ _MASTER_BRIDGE_CHAPTER_TITLE = 'Master Topic Bridge Chapter'
 _SUBMISSION_PREVIEW_TOKEN_SALT = 'lms-submission-preview'
 _SUBMISSION_PREVIEW_TOKEN_MAX_AGE = 10 * 60
 
+_SUBMISSION_MIME_TYPES = {
+    'doc': 'application/msword',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls': 'application/vnd.ms-excel',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'ppt': 'application/vnd.ms-powerpoint',
+    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'pdf': 'application/pdf',
+}
+
+
+def _submission_mimetype(filename):
+    ext = (filename or '').rsplit('.', 1)[-1].lower() if '.' in (filename or '') else ''
+    return _SUBMISSION_MIME_TYPES.get(ext) or mimetypes.guess_type(filename or '')[0] or 'application/octet-stream'
+
 
 def _current_lms_actor(conn):
     """Return the active admin/staff database identity for this session."""
@@ -8653,7 +8668,7 @@ def preview_submission_public_file():
                 io.BytesIO(file_bytes),
                 as_attachment=False,
                 download_name=orig_name,
-                mimetype=mimetypes.guess_type(orig_name)[0] or 'application/octet-stream',
+                mimetype=_submission_mimetype(orig_name),
             )
     except Exception as e:
         logger.error(f"Error in preview_submission_public_file GCS check: {e}")
@@ -8674,7 +8689,7 @@ def preview_submission_public_file():
         full_path,
         as_attachment=False,
         download_name=orig_name,
-        mimetype=mimetypes.guess_type(orig_name)[0] or 'application/octet-stream',
+        mimetype=_submission_mimetype(orig_name),
     )
 
 
