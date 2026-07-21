@@ -7502,7 +7502,10 @@ def review_queue():
         base_sql = f"""
             SELECT s.id, s.assignment_id, s.student_id, s.original_filename,
                    s.feedback, s.rejection_reason, s.review_status, s.submitted_at,
-                   strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
+                   DATE_FORMAT(
+                       DATE_ADD(s.submitted_at, INTERVAL 330 MINUTE),
+                       '%d-%b-%Y %h:%i %p IST'
+                   ) AS submitted_date,
                    a.title AS assignment_title, mt.title AS topic_title,
                    mc.title AS chapter_title, st.full_name AS student_name,
                    st.student_code,

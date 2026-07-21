@@ -22,6 +22,7 @@ def run_phase6(fixtures, other_branch, actors):
     assert b"Assignment Review Queue" in default_queue.data
     assert b"20" in default_queue.data
     assert b"Page Student 000" in default_queue.data
+    assert b"10-Jul-2026 05:30 PM IST" in default_queue.data
     assert b"Page Student 001" not in default_queue.data
     assert b"Preview" in default_queue.data and b"Review" in default_queue.data
     assert b"Pending by trainer" in default_queue.data

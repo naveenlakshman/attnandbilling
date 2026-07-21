@@ -449,20 +449,20 @@ Status: Complete (local Docker/MySQL verification; production migration required
 
 ## Phase 10 — Full verification and deployment
 
-Status: Pending
+Status: Deployed to production; manual responsive QA and storage-privacy remediation remain
 
 ### Automated coverage
 
-- [ ] Administrator access
-- [ ] Authorized trainer access
-- [ ] Cross-trainer and direct-ID denial
-- [ ] Latest-attempt counts
-- [ ] Rejection and resubmission
-- [ ] Duplicate/concurrent review
-- [ ] Pagination, filtering, and sorting
-- [ ] Score and rubric validation
-- [ ] Completion rules
-- [ ] Preview and download authorization
+- [x] Administrator access
+- [x] Authorized trainer access
+- [x] Cross-trainer and direct-ID denial
+- [x] Latest-attempt counts
+- [x] Rejection and resubmission
+- [x] Duplicate/concurrent review
+- [x] Pagination, filtering, and sorting
+- [x] Score and rubric validation
+- [x] Completion rules
+- [x] Preview and download authorization
 
 ### Manual responsive coverage
 
@@ -470,7 +470,7 @@ Status: Pending
 - [ ] Long titles and filenames
 - [ ] Rich descriptions containing tables
 - [ ] Empty states
-- [ ] Production-sized results
+- [x] Production-sized results (390-assignment/1,061-submission automated fixture)
 
 ### Deployment sequence
 
@@ -485,10 +485,25 @@ Status: Pending
 
 ### Acceptance criteria
 
-- [ ] Docker/MySQL regression suite passes.
-- [ ] Production-like smoke tests pass.
-- [ ] The new Cloud Run revision reports no blocking errors.
-- [ ] Rollback remains available until post-deployment verification completes.
+- [x] Docker/MySQL regression suite passes.
+- [x] Production-like smoke tests pass.
+- [x] The new Cloud Run revision reports no blocking errors.
+- [x] Rollback remains available until post-deployment verification completes.
+
+### Phase 10 deployment evidence
+
+- Final Docker image rebuilt and Phase 0–9 suites passed against local MySQL.
+- Production Cloud SQL schema was inspected before migration: assignment description was already `MEDIUMTEXT`; Phase 3 index and Phase 9 fields/tables were missing.
+- Applied `20260721_lms_assignment_latest_review_index.sql` and `20260721_lms_assignment_grading_rules.sql`; verified 9 assignment columns, 4 submission columns, 3 rubric tables, and the composite index.
+- Cloud SQL Free Trial blocks native backups and managed exports. A logical `mysqldump` backup was produced through Cloud SQL Auth Proxy instead.
+- Verified private backup: `gs://global-it-erp-db-backups/phase10-post-migration-20260721.sql` (17,188,102 bytes); the bucket uses uniform access and public-access prevention.
+- Cloud Build `d0e07401-a791-4f5e-b212-3e72d2608718` succeeded with image digest `sha256:9feec4615e74c7a03ef2914202af94aa58b991936fd92137d154fa5fa84f1275`.
+- Deployed revision `attn-billing-testing-phase10-0721-2006` at zero traffic, then shifted 5% → 25% → 50% → 100%.
+- Production load-balancer smoke checks returned 200 for `/healthz` and `/login`; unauthenticated Review Queue correctly returned 302 to login.
+- Candidate logs show repeated authenticated `/api/sidebar-badges` responses at 200 with warm latency around 19–26 ms and no HTTP 5xx, traceback, PyMySQL, or severity-error entries during rollout.
+- Production now sends 100% traffic to the Phase 10 revision. Previous revision `attn-billing-testing-desc-07211645` is retained for rollback.
+- Open security remediation: application bucket `global-it-erp-storage` currently grants `allUsers` Storage Object Viewer. It was not changed during rollout because current download/Office-preview behavior depends on public object URLs. Move private student/assignment objects to a private bucket or switch all file delivery to signed/authenticated responses before removing that grant.
+- Interactive tablet/mobile visual QA could not be automated in this session; existing responsive CSS and route regressions passed, but the unchecked manual viewport items remain a human release follow-up.
 
 ## Phase completion record
 
@@ -501,7 +516,7 @@ Status: Pending
 | 4 | Visual QA pending |  | Click targets, filtering, context preservation, and regressions passed on 2026-07-21. |
 | 5 | Completed locally | 2026-07-21 | SQL filtering/pagination, allowlist safety, context preservation, and 60-record tests passed. |
 | 6 | Completed locally | 2026-07-21 | Central queue, scope enforcement, workload summaries, pagination, and 60-record tests passed. |
-| 7 | Pending |  |  |
-| 8 | Pending |  |  |
-| 9 | Pending |  |  |
-| 10 | Pending |  |  |
+| 7 | Completed and deployed | 2026-07-21 | Integrated preview/review, filtered navigation, atomic decisions, and Docker regressions passed. |
+| 8 | Completed and deployed | 2026-07-21 | Reviewer identity and staff/student attempt history passed. |
+| 9 | Completed and deployed | 2026-07-21 | Optional grading, deadlines, rubric validation, attempts, and completion rules passed. |
+| 10 | Deployed; follow-ups noted | 2026-07-21 | Cloud SQL migrated, staged Cloud Run rollout reached 100%, smoke/log gates passed; manual responsive QA and public storage remediation remain. |
