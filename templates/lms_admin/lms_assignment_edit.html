@@ -186,9 +186,6 @@
 {% block content %}
 <div class="assignment-edit-page">
   <header class="assignment-edit-header">
-    <a class="assignment-back-link" href="{{ url_for('lms_admin.manage_assignments', master_topic_id=assignment.master_topic_id) }}">
-      Back to Assignments
-    </a>
     <div>
       <h1 class="assignment-edit-title">Edit Assignment</h1>
       <p class="assignment-edit-subtitle">{{ assignment.chapter_title }} - {{ assignment.topic_title }}</p>
@@ -235,6 +232,8 @@
                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png">
         <p class="file-help">PDF, Word, Excel, PowerPoint, or image. Leave empty to keep current file. Max 50 MB.</p>
       </div>
+
+      {% include 'lms_admin/_assignment_grading_fields.html' %}
 
       <div class="assignment-actions">
         <button type="submit" class="btn btn-primary">Save Changes</button>

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Review {{ sub.student_name }} - {{ company.company_short_name }}{% endblock %}
+{% block page_title %}{{ company.company_short_name }} - LMS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .review-detail{--rd-border:#dbe3ee;--rd-muted:#64748b;--rd-text:#0f172a}.review-detail-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}.review-detail-header h1{margin:0 0 4px;font-size:1.55rem;font-weight:800;color:var(--rd-text)}.review-detail-header p{margin:0;color:var(--rd-muted)}
+  .review-nav{display:flex;gap:7px;flex-wrap:wrap}.review-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(320px,.75fr);gap:16px;align-items:start}.review-card{background:#fff;border:1px solid var(--rd-border);border-radius:12px;box-shadow:0 3px 12px rgba(15,23,42,.05);overflow:hidden}.review-card-header{padding:13px 16px;background:#f8fafc;border-bottom:1px solid var(--rd-border);font-weight:800}.review-card-body{padding:16px}
+  .review-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin-bottom:14px}.review-meta div{padding:10px 12px;background:#f8fafc;border-radius:8px}.review-meta small{display:block;color:var(--rd-muted);font-weight:700;text-transform:uppercase;font-size:.65rem}.review-meta strong{display:block;margin-top:3px;color:var(--rd-text);overflow-wrap:anywhere}.instructions{margin-bottom:14px;padding:14px;border-left:4px solid #3b82f6;background:#eff6ff;border-radius:8px}.instructions h2{font-size:.9rem;font-weight:800}.instructions-content{white-space:pre-wrap;overflow-wrap:anywhere;color:#334155}
+  .preview-frame{width:100%;height:66vh;min-height:480px;border:0;background:#eef2f7}.image-preview{display:flex;justify-content:center;padding:16px;background:#eef2f7}.image-preview img{max-width:100%;max-height:66vh;object-fit:contain}.preview-fallback{padding:48px 20px;text-align:center;background:#f8fafc;color:var(--rd-muted)}.decision-panel{position:sticky;top:16px}.status-pill{display:inline-flex;padding:.35rem .65rem;border-radius:999px;font-weight:800;font-size:.75rem}.status-pill.submitted{background:#fff3cd;color:#92400e}.status-pill.accepted{background:#dcfce7;color:#15803d}.status-pill.rejected{background:#fee2e2;color:#b91c1c}.decision-form textarea{min-height:105px}.decision-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.reviewed-copy{padding:12px;border-radius:8px;background:#f8fafc;white-space:pre-wrap;overflow-wrap:anywhere}
+  .attempt-history{margin-top:16px}.attempt-table{width:100%;margin:0}.attempt-table th{font-size:.68rem;text-transform:uppercase;color:#64748b;white-space:nowrap}.attempt-table td{vertical-align:top;font-size:.82rem}.attempt-note{max-width:270px;white-space:pre-wrap;overflow-wrap:anywhere}.attempt-current{font-size:.65rem}.reviewer-summary{padding:10px 12px;border-radius:8px;background:#f8fafc;margin-bottom:14px}.reviewer-summary small{display:block;color:var(--rd-muted);font-weight:700;text-transform:uppercase;font-size:.65rem}.reviewer-summary strong{display:block;margin-top:3px}
+  @media(max-width:991.98px){.review-layout{grid-template-columns:1fr}.decision-panel{position:static}.preview-frame{height:58vh;min-height:400px}.attempt-table,.attempt-table tbody,.attempt-table tr{display:block;width:100%}.attempt-table thead{display:none}.attempt-table tr{padding:12px;border-bottom:1px solid var(--rd-border)}.attempt-table td{display:grid;grid-template-columns:105px minmax(0,1fr);gap:10px;padding:5px 0;border:0}.attempt-table td::before{content:attr(data-label);font-size:.65rem;text-transform:uppercase;color:var(--rd-muted);font-weight:800}}@media(max-width:575.98px){.review-detail-header{display:grid}.review-meta{grid-template-columns:1fr}.review-nav{display:grid;grid-template-columns:1fr 1fr}.review-nav .back{grid-column:1/-1}.decision-actions{grid-template-columns:1fr}.preview-frame{min-height:330px}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="review-detail">
+  <header class="review-detail-header">
+    <div><h1>Review Submission</h1><p>{{ sub.assignment_title }}</p></div>
+    <nav class="review-nav" aria-label="Pending review navigation">
+      <a class="btn btn-sm btn-outline-secondary back" href="{{ url_for('lms_admin.review_queue', **queue_args) }}">Back to Queue</a>
+      {% if previous_id %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.review_submission_detail', submission_id=previous_id, **queue_args) }}">Previous Pending</a>{% else %}<span class="btn btn-sm btn-outline-secondary disabled">Previous Pending</span>{% endif %}
+      {% if next_id %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.review_submission_detail', submission_id=next_id, **queue_args) }}">Next Pending</a>{% else %}<span class="btn btn-sm btn-outline-secondary disabled">Next Pending</span>{% endif %}
+    </nav>
+  </header>
+
+  <div class="review-layout">
+    <main>
+      <section class="review-card mb-3"><div class="review-card-body">
+        <div class="review-meta">
+          <div><small>Student</small><strong>{{ sub.student_name }} ({{ sub.student_code }})</strong></div>
+          <div><small>Submitted</small><strong>{{ sub.submitted_date or 'Not recorded' }}</strong></div>
+          <div><small>Chapter / Topic</small><strong>{{ sub.chapter_title }} · {{ sub.topic_title }}</strong></div>
+          <div><small>File</small><strong>{{ orig_filename }}</strong></div>
+          <div><small>Due date</small><strong>{{ sub.due_at or 'No due date' }}</strong></div>
+          <div><small>Submission timing</small><strong>{{ 'Late' if sub.is_late else 'On time' }}</strong></div>
+        </div>
+        <div class="instructions"><h2>Assignment instructions</h2><div class="instructions-content">{{ sub.assignment_description or 'No instructions were provided for this assignment.' }}</div></div>
+      </div></section>
+      <section class="review-card"><div class="review-card-header d-flex justify-content-between align-items-center"><span>Submission preview</span><a class="btn btn-sm btn-outline-secondary" href="{{ download_url }}">Download file</a></div>
+        {% if preview_type == 'pdf' %}<iframe class="preview-frame" title="PDF submission preview" src="{{ preview_url }}"></iframe>
+        {% elif preview_type == 'image' %}<div class="image-preview"><img src="{{ preview_url }}" alt="Submission preview"></div>
+        {% elif preview_type == 'office' and preview_url %}<iframe class="preview-frame" title="Office submission preview" src="{{ preview_url }}"></iframe>
+        {% elif preview_type == 'office' and is_localhost %}<div class="preview-fallback"><strong>Office preview is unavailable on localhost.</strong><div class="mt-2">Download the file to inspect it. Secure Office preview is enabled when the app runs on public HTTPS.</div></div>
+        {% else %}<div class="preview-fallback"><strong>This file type cannot be previewed safely in the browser.</strong><div class="mt-2">Use the secure download button above.</div></div>{% endif %}
+      </section>
+    </main>
+
+    <aside class="review-card decision-panel"><div class="review-card-header d-flex justify-content-between align-items-center"><span>Decision</span><span class="status-pill {{ sub.review_status }}">{{ sub.review_status|title }}</span></div><div class="review-card-body">
+      {% if pending_position %}<p class="small text-muted">Pending item {{ pending_position }} of {{ pending_total }} in this filtered queue.</p>{% endif %}
+      {% if sub.review_status != 'submitted' %}<div class="reviewer-summary"><small>Reviewed by</small><strong>{{ sub.reviewed_by_name or ('Reviewer account #' ~ sub.reviewed_by if sub.reviewed_by else 'Unknown reviewer (legacy record)') }}</strong><small class="mt-2">Reviewed at</small><strong>{{ sub.reviewed_date or 'Timestamp not recorded' }}</strong></div>{% endif %}
+      {% if sub.is_latest and sub.review_status == 'submitted' %}
+      <form class="decision-form" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="return_queue" value="1"><input type="hidden" name="return_next_id" value="{{ next_id or '' }}">
+        {% for key,value in queue_args.items() %}<input type="hidden" name="return_{{ key }}" value="{{ value }}">{% endfor %}
+        <div class="mb-3"><label class="form-label fw-bold" for="feedback">Feedback</label><textarea id="feedback" name="feedback" class="form-control" maxlength="5000" placeholder="Give the student clear, actionable feedback.">{{ sub.feedback or '' }}</textarea></div>
+        {% if sub.grading_mode in ['numeric', 'numeric_rubric'] %}<div class="mb-3"><label class="form-label fw-bold" for="score">Score (maximum {{ sub.max_score }})</label><input id="score" name="score" type="number" min="0" max="{{ sub.max_score }}" step="0.01" class="form-control" value="{{ sub.score if sub.score is not none else '' }}" required></div>{% endif %}
+        {% if rubric_criteria %}<fieldset class="mb-3"><legend class="fs-6 fw-bold">Rubric</legend>{% for criterion in rubric_criteria %}<div class="border rounded p-2 mb-2"><label class="form-label fw-bold">{{ criterion.criterion_name }} (maximum {{ criterion.max_score }})</label>{% if criterion.description %}<div class="small text-muted mb-1">{{ criterion.description }}</div>{% endif %}<input type="number" name="criterion_{{ criterion.id }}" min="0" max="{{ criterion.max_score }}" step="0.01" class="form-control mb-1" value="{{ criterion.score if criterion.score is not none else '' }}" required><input type="text" name="criterion_comment_{{ criterion.id }}" maxlength="2000" class="form-control" value="{{ criterion.comment or '' }}" placeholder="Criterion comment (optional)"></div>{% endfor %}</fieldset>{% endif %}
+        <div class="mb-3"><label class="form-label fw-bold" for="rejection_reason">Rejection reason</label><textarea id="rejection_reason" name="rejection_reason" class="form-control" maxlength="2000" placeholder="Required only when rejecting."></textarea></div>
+        <div class="mb-3"><label class="form-label fw-bold" for="internal_notes">Internal reviewer notes</label><textarea id="internal_notes" name="internal_reviewer_notes" class="form-control" maxlength="5000" placeholder="Visible only to authorized staff.">{{ sub.internal_reviewer_notes or '' }}</textarea></div>
+        <div class="decision-actions"><button class="btn btn-success" formaction="{{ url_for('lms_admin.accept_submission', submission_id=sub.id) }}" onclick="return confirm('Accept this submission? This final decision will mark the assignment complete.')">Accept</button><button class="btn btn-danger" formnovalidate formaction="{{ url_for('lms_admin.reject_submission', submission_id=sub.id) }}" onclick="return confirm('Reject this submission and allow the student to submit again?')">Reject</button></div>
+      </form>
+      {% else %}
+      <div class="alert alert-info">This submission is read-only because it has already been processed or is no longer the latest attempt.</div>
+      {% if sub.feedback %}<label class="form-label fw-bold">Feedback</label><div class="reviewed-copy">{{ sub.feedback }}</div>{% endif %}
+      {% if sub.rejection_reason %}<label class="form-label fw-bold mt-3">Rejection reason</label><div class="reviewed-copy">{{ sub.rejection_reason }}</div>{% endif %}
+      {% if sub.score is not none %}<label class="form-label fw-bold mt-3">Score</label><div class="reviewed-copy">{{ sub.score }}{% if sub.max_score is not none %} / {{ sub.max_score }}{% endif %}</div>{% endif %}
+      {% if sub.internal_reviewer_notes %}<label class="form-label fw-bold mt-3">Internal notes</label><div class="reviewed-copy">{{ sub.internal_reviewer_notes }}</div>{% endif %}
+      {% endif %}
+    </div></aside>
+  </div>
+
+  <section class="review-card attempt-history" aria-label="Submission attempt history">
+    <div class="review-card-header d-flex justify-content-between align-items-center"><span>Attempt History</span><span class="badge bg-secondary">{{ attempts|length }}</span></div>
+    <div class="table-responsive"><table class="table table-hover attempt-table"><thead><tr><th>Attempt</th><th>Submitted</th><th>File</th><th>Decision</th><th>Reviewer</th><th>Feedback / reason</th><th>Score</th><th>View</th></tr></thead><tbody>
+      {% for attempt in attempts %}<tr>
+        <td data-label="Attempt"><strong>#{{ attempt.attempt_number }}</strong>{% if attempt.is_latest %} <span class="badge bg-primary attempt-current">Latest</span>{% endif %}</td>
+        <td data-label="Submitted">{{ attempt.submitted_date or 'Not recorded' }}</td>
+        <td data-label="File">{{ attempt.original_filename or 'Unnamed file' }}</td>
+        <td data-label="Decision"><span class="status-pill {{ attempt.review_status }}">{{ attempt.review_status|title }}</span>{% if attempt.reviewed_date %}<div class="text-muted small mt-1">{{ attempt.reviewed_date }}</div>{% endif %}</td>
+        <td data-label="Reviewer">{% if attempt.review_status == 'submitted' %}Not reviewed{% else %}{{ attempt.reviewed_by_name or ('Reviewer account #' ~ attempt.reviewed_by if attempt.reviewed_by else 'Unknown reviewer (legacy record)') }}{% endif %}</td>
+        <td data-label="Feedback / reason" class="attempt-note">{% if attempt.feedback %}<strong>Feedback:</strong> {{ attempt.feedback }}{% endif %}{% if attempt.rejection_reason %}<div><strong>Reason:</strong> {{ attempt.rejection_reason }}</div>{% endif %}{% if not attempt.feedback and not attempt.rejection_reason %}—{% endif %}</td>
+        <td data-label="Score">{% if attempt.score is not none %}{{ attempt.score }}{% if sub.max_score is not none %} / {{ sub.max_score }}{% endif %}{% else %}<span class="text-muted">Not scored</span>{% endif %}{% if attempt.is_late %}<div class="text-danger small">Late</div>{% endif %}</td>
+        <td data-label="View"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.review_submission_detail', submission_id=attempt.id, **queue_args) }}">{{ 'Current' if attempt.id == sub.id else 'Preview' }}</a></td>
+      </tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+</div>
+{% endblock %}

@@ -101,20 +101,32 @@
   }
 
   .submission-controls .form-select,
+  .submission-controls .form-control,
   .submission-controls .btn {
     min-height: 38px;
     border-radius: 8px;
     font-size: 0.88rem;
   }
 
+  .submission-search-form {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(120px, 1fr)) auto;
+    gap: 8px;
+    align-items: end;
+  }
+
   .status-filter {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 8px;
   }
 
-  .status-filter button {
+  .status-filter a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: 36px;
     padding: 0.35rem 0.55rem;
     border: 1px solid var(--sub-border);
@@ -123,13 +135,27 @@
     color: #475569;
     font-size: 0.8rem;
     font-weight: 800;
+    text-decoration: none;
   }
 
-  .status-filter button.active,
-  .status-filter button:hover {
+  .status-filter a.active,
+  .status-filter a:hover,
+  .status-filter a:focus-visible {
     border-color: #0d6efd;
     background: #0d6efd;
     color: #fff;
+  }
+
+  .submission-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
   }
 
   .submission-list {
@@ -361,6 +387,9 @@
       padding: 10px;
     }
 
+    .submission-search-form { grid-template-columns: 1fr 1fr; }
+    .submission-search-form > div:first-of-type { grid-column: 1 / -1; }
+
     .submission-controls .form-select,
     .submission-controls .btn,
     .submission-actions .btn,
@@ -375,6 +404,10 @@
     .status-filter {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .submission-search-form { grid-template-columns: 1fr; }
+    .submission-search-form > div:first-of-type { grid-column: auto; }
+    .submission-pagination { align-items: stretch; flex-direction: column; }
 
     .submission-card-main {
       padding: 12px;
@@ -411,16 +444,15 @@
 {% endblock %}
 
 {% block content %}
-{% set total = submissions | length %}
-{% set accepted = submissions | selectattr('review_status','equalto','accepted') | list | length %}
-{% set rejected = submissions | selectattr('review_status','equalto','rejected') | list | length %}
-{% set pending = total - accepted - rejected %}
+{% set total = submission_summary.total %}
+{% set accepted = submission_summary.accepted %}
+{% set rejected = submission_summary.rejected %}
+{% set pending = submission_summary.pending %}
 {% set trainer_id = request.args.get('trainer_id') %}
-{% set status_filter = request.args.get('status_filter', 'all') %}
 
 <div class="submissions-page">
   <header class="submissions-header">
-    <a class="submission-back" href="{{ url_for('lms_admin.manage_assignments', master_topic_id=assignment.master_topic_id) }}">
+    <a class="submission-back" href="{{ url_for('lms_admin.all_assignments', trainer_id=trainer_id, batch_id=selected_batch_id) }}">
       Back to Assignments
     </a>
     <div>
@@ -448,14 +480,60 @@
     </div>
   </section>
 
-  {% if active_batches or submissions %}
+  {% if active_batches or total or search_query or date_from or date_to %}
   <section class="submission-controls" aria-label="Submission filters">
+    <form method="GET" class="submission-search-form">
+      {% if trainer_id %}<input type="hidden" name="trainer_id" value="{{ trainer_id }}">{% endif %}
+      {% if selected_batch_id %}<input type="hidden" name="batch_id" value="{{ selected_batch_id }}">{% endif %}
+      <input type="hidden" name="status_filter" value="{{ status_filter }}">
+      <div>
+        <label class="form-label" for="submissionSearch">Student or file</label>
+        <input id="submissionSearch" type="search" name="q" class="form-control form-control-sm"
+               value="{{ search_query }}" maxlength="100" placeholder="Name, registration number, or filename">
+      </div>
+      <div>
+        <label class="form-label" for="submissionDateFrom">Submitted from</label>
+        <input id="submissionDateFrom" type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+      </div>
+      <div>
+        <label class="form-label" for="submissionDateTo">Submitted to</label>
+        <input id="submissionDateTo" type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+      </div>
+      <div>
+        <label class="form-label" for="submissionSort">Sort</label>
+        <select id="submissionSort" name="sort" class="form-select form-select-sm">
+          <option value="submitted" {{ 'selected' if sort_key == 'submitted' else '' }}>Submitted date</option>
+          <option value="student" {{ 'selected' if sort_key == 'student' else '' }}>Student</option>
+          <option value="status" {{ 'selected' if sort_key == 'status' else '' }}>Status</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="submissionDirection">Direction</label>
+        <select id="submissionDirection" name="direction" class="form-select form-select-sm">
+          <option value="desc" {{ 'selected' if sort_direction == 'desc' else '' }}>Descending</option>
+          <option value="asc" {{ 'selected' if sort_direction == 'asc' else '' }}>Ascending</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="submissionPerPage">Per page</label>
+        <select id="submissionPerPage" name="per_page" class="form-select form-select-sm">
+          {% for size in [25, 50, 100] %}<option value="{{ size }}" {{ 'selected' if pagination.per_page == size else '' }}>{{ size }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-sm btn-primary" type="submit">Apply</button>
+    </form>
     {% if active_batches %}
     <form method="GET">
       {% if trainer_id %}
       <input type="hidden" name="trainer_id" value="{{ trainer_id }}">
       {% endif %}
       <input type="hidden" name="status_filter" value="{{ status_filter }}">
+      <input type="hidden" name="q" value="{{ search_query }}">
+      <input type="hidden" name="date_from" value="{{ date_from }}">
+      <input type="hidden" name="date_to" value="{{ date_to }}">
+      <input type="hidden" name="sort" value="{{ sort_key }}">
+      <input type="hidden" name="direction" value="{{ sort_direction }}">
+      <input type="hidden" name="per_page" value="{{ pagination.per_page }}">
       <label class="form-label" for="batchFilter">Batch</label>
       <select id="batchFilter" name="batch_id" class="form-select form-select-sm" onchange="this.form.submit()">
         <option value="">All Batches</option>
@@ -466,18 +544,20 @@
     </form>
     {% if selected_batch_id %}
     <a class="btn btn-sm btn-outline-secondary"
-       href="{{ url_for('lms_admin.view_submissions', assignment_id=assignment.id, trainer_id=trainer_id, status_filter=status_filter) if trainer_id else url_for('lms_admin.view_submissions', assignment_id=assignment.id, status_filter=status_filter) }}">
+       href="{{ url_for('lms_admin.view_submissions', assignment_id=assignment.id, trainer_id=trainer_id, status_filter=status_filter, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page) }}">
       Clear Batch
     </a>
     {% endif %}
     {% endif %}
 
-    {% if submissions %}
+    {% if total > 0 %}
     <div class="status-filter">
-      <button type="button" class="{{ 'active' if status_filter == 'all' else '' }}" onclick="filterSubs('all', this, true)">All {{ total }}</button>
-      <button type="button" class="{{ 'active' if status_filter == 'submitted' else '' }}" onclick="filterSubs('submitted', this, true)">Pending {{ pending }}</button>
-      <button type="button" class="{{ 'active' if status_filter == 'accepted' else '' }}" onclick="filterSubs('accepted', this, true)">Accepted {{ accepted }}</button>
-      <button type="button" class="{{ 'active' if status_filter == 'rejected' else '' }}" onclick="filterSubs('rejected', this, true)">Rejected {{ rejected }}</button>
+      {% for filter_value, filter_label, filter_count in [('all', 'All', total), ('submitted', 'Pending', pending), ('reviewed', 'Reviewed', accepted + rejected), ('accepted', 'Accepted', accepted), ('rejected', 'Rejected', rejected)] %}
+      <a class="{{ 'active' if status_filter == filter_value else '' }}"
+         href="{{ url_for('lms_admin.view_submissions', assignment_id=assignment.id, trainer_id=trainer_id, batch_id=selected_batch_id, status_filter=filter_value, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page) }}">
+        {{ filter_label }} {{ filter_count }}
+      </a>
+      {% endfor %}
     </div>
     {% endif %}
   </section>
@@ -553,6 +633,13 @@
           <input type="hidden" name="return_trainer_id" value="{{ trainer_id or '' }}">
           <input type="hidden" name="return_batch_id" value="{{ selected_batch_id or '' }}">
           <input type="hidden" name="return_status_filter" value="{{ status_filter }}">
+          <input type="hidden" name="return_q" value="{{ search_query }}">
+          <input type="hidden" name="return_date_from" value="{{ date_from }}">
+          <input type="hidden" name="return_date_to" value="{{ date_to }}">
+          <input type="hidden" name="return_sort" value="{{ sort_key }}">
+          <input type="hidden" name="return_direction" value="{{ sort_direction }}">
+          <input type="hidden" name="return_per_page" value="{{ pagination.per_page }}">
+          <input type="hidden" name="return_page" value="{{ pagination.page }}">
           <div class="mb-2">
             <label class="form-label" for="feedback-{{ sub.id }}">Feedback (optional)</label>
             <textarea id="feedback-{{ sub.id }}" name="feedback" class="form-control form-control-sm" rows="2"
@@ -572,6 +659,13 @@
             <input type="hidden" name="return_trainer_id" value="{{ trainer_id or '' }}">
             <input type="hidden" name="return_batch_id" value="{{ selected_batch_id or '' }}">
             <input type="hidden" name="return_status_filter" value="{{ status_filter }}">
+            <input type="hidden" name="return_q" value="{{ search_query }}">
+            <input type="hidden" name="return_date_from" value="{{ date_from }}">
+            <input type="hidden" name="return_date_to" value="{{ date_to }}">
+            <input type="hidden" name="return_sort" value="{{ sort_key }}">
+            <input type="hidden" name="return_direction" value="{{ sort_direction }}">
+            <input type="hidden" name="return_per_page" value="{{ pagination.per_page }}">
+            <input type="hidden" name="return_page" value="{{ pagination.page }}">
             <div class="mb-2">
               <label class="form-label" for="reason-{{ sub.id }}">Rejection Reason <span class="text-danger">*</span></label>
               <textarea id="reason-{{ sub.id }}" name="rejection_reason" class="form-control form-control-sm" rows="2"
@@ -595,10 +689,22 @@
     </article>
     {% endfor %}
   </div>
+  <nav class="submission-pagination" aria-label="Submission pages">
+    <span class="text-muted small">Showing {{ pagination.start }}–{{ pagination.end }} of {{ pagination.total }} submissions</span>
+    <div class="btn-group" role="group">
+      {% if pagination.page > 1 %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.view_submissions', assignment_id=assignment.id, trainer_id=trainer_id, batch_id=selected_batch_id, status_filter=status_filter, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page, page=pagination.page - 1) }}">Previous</a>
+      {% else %}<span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>{% endif %}
+      <span class="btn btn-sm btn-light disabled" aria-current="page">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+      {% if pagination.page < pagination.total_pages %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.view_submissions', assignment_id=assignment.id, trainer_id=trainer_id, batch_id=selected_batch_id, status_filter=status_filter, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page, page=pagination.page + 1) }}">Next</a>
+      {% else %}<span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>{% endif %}
+    </div>
+  </nav>
   {% else %}
   <div class="empty-submissions">
-    <p class="mb-1 fw-semibold">No submissions{% if selected_batch_id %} for this batch{% endif %}</p>
-    <p class="small mb-0">{% if selected_batch_id %}Try a different batch or clear the filter.{% else %}Students have not submitted anything for this assignment.{% endif %}</p>
+    <p class="mb-1 fw-semibold">No submissions match the selected filters</p>
+    <p class="small mb-0">Try another status, student search, date range, or batch.</p>
   </div>
   {% endif %}
 </div>
@@ -606,49 +712,11 @@
 
 {% block extra_js %}
 <script>
-function updateSubmissionFilterUrl(status) {
-  var url = new URL(window.location.href);
-  if (status === 'all') {
-    url.searchParams.delete('status_filter');
-  } else {
-    url.searchParams.set('status_filter', status);
-  }
-  window.history.replaceState({}, '', url.toString());
-  document.querySelectorAll('input[name="status_filter"], input[name="return_status_filter"]').forEach(function (input) {
-    input.value = status;
-  });
-}
-
-function filterSubs(status, btn, updateUrl) {
-  document.querySelectorAll('.status-filter button').forEach(function (button) {
-    button.classList.remove('active');
-  });
-  if (btn) {
-    btn.classList.add('active');
-  }
-
-  document.querySelectorAll('#subList .submission-card').forEach(function (card) {
-    card.style.display = (status === 'all' || card.dataset.status === status) ? '' : 'none';
-  });
-
-  if (updateUrl) {
-    updateSubmissionFilterUrl(status);
-  }
-}
-
 function toggleRejectPanel(id) {
   var panel = document.getElementById('rejectPanel-' + id);
   if (panel) {
     panel.classList.toggle('show');
   }
 }
-
-document.addEventListener('DOMContentLoaded', function () {
-  var currentFilter = '{{ status_filter }}';
-  var activeButton = document.querySelector('.status-filter button.active');
-  if (currentFilter !== 'all') {
-    filterSubs(currentFilter, activeButton, false);
-  }
-});
 </script>
 {% endblock %}

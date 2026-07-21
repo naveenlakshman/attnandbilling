@@ -30,6 +30,11 @@
         📋 Assignments
       </a>
 
+      <a class="nav-link {{ 'active' if request.endpoint in ['lms_admin.review_queue', 'lms_admin.review_submission_detail'] else '' }}"
+         href="{{ url_for('lms_admin.review_queue') }}">
+        Review Queue
+      </a>
+
       <a class="nav-link {{ 'active' if request.endpoint in ['exams.view_questions', 'exams.manage_questions', 'exams.add_question', 'exams.edit_question', 'exams.update_question', 'exams.delete_question'] else '' }}"
          href="{{ url_for('exams.view_questions') }}">
         Question Bank

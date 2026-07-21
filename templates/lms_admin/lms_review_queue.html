@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Assignment Review Queue - {{ company.company_short_name }}{% endblock %}
+{% block page_title %}{{ company.company_short_name }} - LMS{% endblock %}
+
+{% block extra_css %}
+<style>
+  .review-queue { --rq-border:#e2e8f0; --rq-muted:#64748b; --rq-text:#0f172a; }
+  .queue-header { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:16px; }
+  .queue-header h1 { margin:0 0 4px; color:var(--rq-text); font-size:1.75rem; font-weight:800; }
+  .queue-header p { margin:0; color:var(--rq-muted); }
+  .queue-filter-card, .queue-stat, .queue-list, .queue-pagination { border:0; border-radius:12px; background:#fff; box-shadow:0 3px 12px rgba(15,23,42,.06); }
+  .queue-filter-card { padding:16px; margin-bottom:14px; }
+  .queue-filter-form { display:grid; grid-template-columns:repeat(4,minmax(150px,1fr)); gap:10px; align-items:end; }
+  .queue-filter-form .wide { grid-column:span 2; }
+  .queue-filter-form .form-label { color:#334155; font-size:.78rem; font-weight:800; }
+  .queue-filter-form .form-control, .queue-filter-form .form-select, .queue-filter-form .btn { min-height:40px; }
+  .queue-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:14px; }
+  .queue-stat { display:block; padding:16px; color:inherit; text-decoration:none; border-left:4px solid #94a3b8; }
+  .queue-stat.pending { border-color:#f97316; } .queue-stat.accepted { border-color:#22c55e; }
+  .queue-stat.rejected { border-color:#ef4444; } .queue-stat.all { border-color:#3b82f6; }
+  .queue-stat.active { box-shadow:0 0 0 3px rgba(13,110,253,.18),0 3px 12px rgba(15,23,42,.08); }
+  .queue-stat span { display:block; color:var(--rq-muted); font-size:.78rem; font-weight:700; }
+  .queue-stat strong { display:block; margin-top:5px; color:var(--rq-text); font-size:1.7rem; }
+  .queue-workload { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:14px; }
+  .queue-workload-card { padding:14px 16px; border-radius:12px; background:#fff; box-shadow:0 3px 12px rgba(15,23,42,.06); }
+  .queue-workload-card h2 { margin:0 0 10px; font-size:.9rem; font-weight:800; }
+  .queue-workload-item { display:flex; justify-content:space-between; gap:10px; padding:5px 0; border-top:1px solid #f1f5f9; color:#475569; font-size:.78rem; }
+  .queue-workload-item strong { color:var(--rq-text); }
+  .queue-list { overflow:hidden; }
+  .queue-list-header { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 16px; background:#f8fafc; border-bottom:1px solid var(--rq-border); }
+  .queue-list-header h2 { margin:0; font-size:1.05rem; font-weight:800; }
+  .queue-table { width:100%; table-layout:fixed; margin:0; }
+  .queue-table th { color:#475569; font-size:.7rem; text-transform:uppercase; white-space:nowrap; }
+  .queue-table td { vertical-align:middle; overflow-wrap:anywhere; }
+  .queue-student { font-weight:800; color:var(--rq-text); }
+  .queue-meta { color:var(--rq-muted); font-size:.78rem; }
+  .queue-assignment { font-weight:700; }
+  .queue-context { color:#475569; font-size:.82rem; }
+  .queue-status { display:inline-flex; padding:.28rem .58rem; border-radius:999px; font-size:.72rem; font-weight:800; }
+  .queue-status.submitted { background:#fff3cd; color:#92400e; }
+  .queue-status.accepted { background:#dcfce7; color:#15803d; }
+  .queue-status.rejected { background:#fee2e2; color:#b91c1c; }
+  .queue-actions { display:grid; gap:6px; }
+  .queue-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px; padding:12px 16px; }
+  @media(max-width:991.98px){
+    .queue-filter-form{grid-template-columns:1fr 1fr}.queue-filter-form .wide{grid-column:1/-1}.queue-workload{grid-template-columns:1fr}
+    .queue-table,.queue-table tbody,.queue-table tr{display:block;width:100%}.queue-table thead{display:none}
+    .queue-list{overflow:visible;background:transparent;box-shadow:none}.queue-table tr{margin-bottom:10px;padding:13px;border:1px solid var(--rq-border);border-radius:12px;background:#fff;box-shadow:0 2px 8px rgba(15,23,42,.05)}
+    .queue-table td{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;padding:7px 0!important;border:0!important}.queue-table td::before{content:attr(data-label);color:var(--rq-muted);font-size:.68rem;font-weight:800;text-transform:uppercase}
+    .queue-actions{grid-template-columns:1fr 1fr}
+  }
+  @media(max-width:575.98px){
+    .queue-header{display:grid}.queue-header h1{font-size:1.4rem}.queue-filter-form{grid-template-columns:1fr}.queue-filter-form .wide{grid-column:auto}
+    .queue-stats{grid-template-columns:1fr 1fr}.queue-stat{padding:12px}.queue-stat strong{font-size:1.3rem}
+    .queue-table td{grid-template-columns:88px minmax(0,1fr)}.queue-pagination{align-items:stretch;flex-direction:column}
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="review-queue">
+  <header class="queue-header">
+    <div><h1>Assignment Review Queue</h1><p>Latest student submissions across your authorized batches and programs.</p></div>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.all_assignments') }}">Assignments</a>
+  </header>
+
+  <section class="queue-filter-card">
+    <form method="GET" class="queue-filter-form">
+      <input type="hidden" name="status_filter" value="{{ status_filter }}">
+      <div class="wide"><label class="form-label" for="queueSearch">Search</label><input id="queueSearch" type="search" name="q" maxlength="100" value="{{ search_query }}" class="form-control form-control-sm" placeholder="Student, registration number, assignment, or filename"></div>
+      {% if is_admin %}<div><label class="form-label">Trainer</label><select name="trainer_id" class="form-select form-select-sm"><option value="">All Trainers</option>{% for t in trainers %}<option value="{{ t.id }}" {{ 'selected' if selected_trainer_id == t.id else '' }}>{{ t.full_name }}</option>{% endfor %}</select></div>{% endif %}
+      <div><label class="form-label">Batch</label><select name="batch_id" class="form-select form-select-sm"><option value="">All Active Batches</option>{% for b in active_batches %}<option value="{{ b.id }}" {{ 'selected' if selected_batch_id == b.id else '' }}>{{ b.batch_name }}</option>{% endfor %}</select></div>
+      <div><label class="form-label">Program</label><select name="program_id" class="form-select form-select-sm"><option value="">All Programs</option>{% for p in programs %}<option value="{{ p.id }}" {{ 'selected' if selected_program_id == p.id else '' }}>{{ p.program_name }}{% if p.course_name %} - {{ p.course_name }}{% endif %}</option>{% endfor %}</select></div>
+      <div><label class="form-label">Submitted from</label><input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm"></div>
+      <div><label class="form-label">Submitted to</label><input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm"></div>
+      <div><label class="form-label">Sort</label><select name="sort" class="form-select form-select-sm"><option value="submitted" {{ 'selected' if sort_key == 'submitted' else '' }}>Submitted date</option><option value="student" {{ 'selected' if sort_key == 'student' else '' }}>Student</option><option value="assignment" {{ 'selected' if sort_key == 'assignment' else '' }}>Assignment</option><option value="status" {{ 'selected' if sort_key == 'status' else '' }}>Status</option></select></div>
+      <div><label class="form-label">Direction</label><select name="direction" class="form-select form-select-sm"><option value="asc" {{ 'selected' if sort_direction == 'asc' else '' }}>Oldest/A–Z</option><option value="desc" {{ 'selected' if sort_direction == 'desc' else '' }}>Newest/Z–A</option></select></div>
+      <div><label class="form-label">Per page</label><select name="per_page" class="form-select form-select-sm">{% for size in [25,50,100] %}<option value="{{ size }}" {{ 'selected' if pagination.per_page == size else '' }}>{{ size }}</option>{% endfor %}</select></div>
+      <button class="btn btn-sm btn-primary" type="submit">Apply</button><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.review_queue') }}">Clear</a>
+    </form>
+  </section>
+
+  <section class="queue-stats" aria-label="Review queue summary">
+    {% for value,label,count,css in [('submitted','Pending',queue_summary.pending,'pending'),('reviewed','Reviewed',queue_summary.accepted + queue_summary.rejected,'all'),('accepted','Accepted',queue_summary.accepted,'accepted'),('rejected','Rejected',queue_summary.rejected,'rejected')] %}
+    <a class="queue-stat {{ css }} {{ 'active' if status_filter == value else '' }}" href="{{ url_for('lms_admin.review_queue', trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, status_filter=value, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page) }}"><span>{{ label }}</span><strong>{{ count }}</strong></a>
+    {% endfor %}
+  </section>
+
+  {% if queue_summary.pending > 0 %}
+  <section class="queue-workload" aria-label="Pending workload breakdown">
+    {% for key, title in [('trainers','Pending by trainer'),('batches','Pending by batch'),('programs','Pending by program')] %}
+    <article class="queue-workload-card"><h2>{{ title }}</h2>
+      {% for item in workload[key] %}<div class="queue-workload-item"><span>{{ item.label }}</span><strong>{{ item.pending_count }}</strong></div>{% else %}<div class="text-muted small">No pending workload</div>{% endfor %}
+    </article>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <section class="queue-list">
+    <div class="queue-list-header"><h2>{{ status_filter|title }} submissions</h2><span class="badge bg-secondary">{{ pagination.total }}</span></div>
+    {% if submissions %}
+    <div class="table-responsive"><table class="table table-hover queue-table"><thead><tr><th style="width:20%">Student</th><th style="width:25%">Assignment</th><th style="width:25%">Scope</th><th style="width:14%">Submitted</th><th style="width:8%">Status</th><th style="width:8%">Actions</th></tr></thead><tbody>
+      {% for sub in submissions %}<tr>
+        <td data-label="Student"><div class="queue-student">{{ sub.student_name }}</div><div class="queue-meta">{{ sub.student_code }}</div></td>
+        <td data-label="Assignment"><div class="queue-assignment">{{ sub.assignment_title }}</div><div class="queue-meta">{{ sub.chapter_title }} · {{ sub.topic_title }}</div><div class="queue-meta">{{ sub.original_filename }}</div></td>
+        <td data-label="Scope"><div class="queue-context">{{ sub.program_names or 'Program not mapped' }}</div><div class="queue-meta">{{ sub.batch_names or 'No active batch' }}</div><div class="queue-meta">{{ sub.trainer_names or 'No trainer' }}</div></td>
+        <td data-label="Submitted">{{ sub.submitted_date or 'Not recorded' }}</td>
+        <td data-label="Status"><span class="queue-status {{ sub.review_status or 'submitted' }}">{{ (sub.review_status or 'submitted')|title }}</span></td>
+        <td data-label="Actions"><div class="queue-actions"><a class="btn btn-sm btn-outline-secondary" target="_blank" href="{{ url_for('lms_admin.preview_submission', submission_id=sub.id, trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, status_filter=status_filter, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page, page=pagination.page) }}">Preview</a><a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.review_submission_detail', submission_id=sub.id, trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, status_filter=status_filter, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page, page=pagination.page) }}">Review</a></div></td>
+      </tr>{% endfor %}
+    </tbody></table></div>
+    {% else %}<div class="p-4 text-center text-muted"><strong>No submissions match this queue.</strong><div class="small mt-1">Try another status, trainer, batch, program, search, or date range.</div></div>{% endif %}
+  </section>
+
+  {% if pagination.total > 0 %}<nav class="queue-pagination" aria-label="Review queue pages"><span class="text-muted small">Showing {{ pagination.start }}–{{ pagination.end }} of {{ pagination.total }}</span><div class="btn-group">
+    {% if pagination.page > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.review_queue', trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, status_filter=status_filter, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page, page=pagination.page - 1) }}">Previous</a>{% else %}<span class="btn btn-sm btn-outline-secondary disabled">Previous</span>{% endif %}
+    <span class="btn btn-sm btn-light disabled">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+    {% if pagination.page < pagination.total_pages %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.review_queue', trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, status_filter=status_filter, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page, page=pagination.page + 1) }}">Next</a>{% else %}<span class="btn btn-sm btn-outline-secondary disabled">Next</span>{% endif %}
+  </div></nav>{% endif %}
+</div>
+{% endblock %}

@@ -53,6 +53,20 @@
     align-items: end;
   }
 
+  .dashboard-filter-form .filter-wide { grid-column: span 2; }
+
+  .assignment-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-top: 1px solid var(--asn-border);
+    background: #fff;
+  }
+
+  .assignment-pagination-summary { color: var(--asn-muted); font-size: 0.82rem; }
+
   .dashboard-filter-form .form-label {
     color: #334155;
     font-size: 0.82rem;
@@ -119,9 +133,46 @@
   }
 
   .assignments-table {
+    width: 100%;
+    table-layout: fixed;
     margin-bottom: 0;
     font-size: 0.9rem;
   }
+
+  .stat-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    border-radius: 12px;
+  }
+
+  .stat-link .stat-card {
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+  }
+
+  .stat-link:hover .stat-card,
+  .stat-link:focus-visible .stat-card {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  }
+
+  .stat-link:focus-visible {
+    outline: 3px solid rgba(13, 110, 253, 0.3);
+    outline-offset: 3px;
+  }
+
+  .stat-link.active .stat-card {
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.2), 0 4px 14px rgba(15, 23, 42, 0.1);
+  }
+
+  .stat-card.is-disabled {
+    opacity: 0.62;
+  }
+
+  .assignments-table col.assignment-column { width: 44%; }
+  .assignments-table col.context-column { width: 24%; }
+  .assignments-table col.progress-column { width: 18%; }
+  .assignments-table col.actions-column { width: 14%; }
 
   .assignments-table th {
     color: #475569;
@@ -132,25 +183,101 @@
   }
 
   .assignments-table td {
+    min-width: 0;
     vertical-align: middle;
   }
 
   .assignment-title {
     color: var(--asn-text);
     font-weight: 800;
+    overflow-wrap: anywhere;
   }
 
-  .assignment-mobile-summary {
-    display: none;
+  .assignment-context {
+    color: #334155;
+    overflow-wrap: anywhere;
+  }
+
+  .assignment-context-topic {
+    font-weight: 700;
+  }
+
+  .assignment-context-meta {
+    margin-top: 3px;
+    color: var(--asn-muted);
+    font-size: 0.78rem;
+  }
+
+  .assignment-review-progress {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .assignment-progress-item {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .assignment-progress-link {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+    border-radius: 9px;
+  }
+
+  .assignment-progress-link:hover,
+  .assignment-progress-link:focus-visible {
+    background: #f1f5f9;
+    box-shadow: 0 0 0 2px #f1f5f9;
+  }
+
+  .assignment-progress-link:focus-visible {
+    outline: 2px solid #0d6efd;
+    outline-offset: 2px;
+  }
+
+  .assignment-progress-item.is-disabled {
+    opacity: 0.55;
+  }
+
+  .assignment-progress-label {
+    color: var(--asn-muted);
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
   }
 
   .assignment-desc {
-    max-width: 340px;
+    display: -webkit-box;
+    max-width: 100%;
+    max-height: 3.2em;
+    margin-top: 3px;
     color: var(--asn-muted);
     font-size: 0.78rem;
+    line-height: 1.6;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .assignment-desc * {
+    max-width: 100% !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+  }
+
+  .assignment-desc table {
+    display: block;
+    overflow: hidden;
   }
 
   .badge-sub,
@@ -171,8 +298,30 @@
   .badge-pend { background: #fff3cd; color: #92400e; }
 
   .assignment-actions {
-    display: inline-flex;
-    gap: 8px;
+    display: grid;
+    gap: 6px;
+  }
+
+  .assignment-actions .btn {
+    width: 100%;
+    white-space: nowrap;
+  }
+
+  .assignment-actions-cell {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: #fff;
+    box-shadow: -8px 0 12px -12px rgba(15, 23, 42, 0.55);
+  }
+
+  .assignments-table thead .assignment-actions-cell {
+    z-index: 3;
+    background: var(--asn-soft);
+  }
+
+  .assignments-table tbody tr:hover .assignment-actions-cell {
+    background: #f8fbff;
   }
 
   .empty-state-card {
@@ -195,9 +344,112 @@
       grid-template-columns: 1fr 1fr;
     }
 
+    .dashboard-filter-form .filter-wide { grid-column: span 2; }
+
     .dashboard-filter-form .filter-action {
       grid-column: auto;
     }
+
+    .assignments-card {
+      overflow: visible;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .assignments-card-header {
+      margin-bottom: 10px;
+      border: 1px solid var(--asn-border);
+      border-radius: 12px;
+    }
+
+    .assignments-card .table-responsive {
+      overflow: visible;
+    }
+
+    .assignments-table,
+    .assignments-table tbody,
+    .assignments-table tr {
+      display: block;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .assignments-table colgroup,
+    .assignments-table thead {
+      display: none;
+    }
+
+    .assignments-table tr {
+      margin-bottom: 10px;
+      padding: 14px;
+      border: 1px solid var(--asn-border);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    }
+
+    .assignments-table td {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      gap: 12px;
+      width: 100%;
+      padding: 8px 0 !important;
+      border: 0 !important;
+      text-align: left !important;
+    }
+
+    .assignments-table td::before {
+      content: attr(data-label);
+      color: var(--asn-muted);
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .assignments-table td:first-child {
+      display: block;
+      margin: -14px -14px 4px;
+      padding: 14px !important;
+      border-bottom: 1px solid var(--asn-border) !important;
+      border-radius: 12px 12px 0 0;
+      background: #f8fafc;
+    }
+
+    .assignments-table td:first-child::before {
+      display: none;
+    }
+
+    .assignment-desc {
+      max-height: 3.2em;
+    }
+
+    .assignment-actions-cell {
+      position: static;
+      display: block !important;
+      margin-top: 4px;
+      padding-top: 12px !important;
+      border-top: 1px solid var(--asn-border) !important;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .assignment-actions-cell::before {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .assignment-actions {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .assignment-actions .btn {
+      min-height: 40px;
+      font-weight: 800;
+    }
+
+    .assignment-pagination { align-items: stretch; flex-direction: column; padding: 12px; }
   }
 
   @media (max-width: 575.98px) {
@@ -270,6 +522,8 @@
     .dashboard-filter-form > div:nth-child(3) {
       grid-column: 1 / -1;
     }
+
+    .dashboard-filter-form .filter-wide { grid-column: 1 / -1; }
 
     .dashboard-stat-row {
       --bs-gutter-x: .75rem;
@@ -529,10 +783,11 @@
 {% endblock %}
 
 {% block content %}
-{% set total = assignments | length %}
-{% set total_sub = assignments | sum(attribute='submission_count') %}
-{% set total_rev = assignments | sum(attribute='reviewed_count') %}
-{% set total_pen = total_sub - total_rev %}
+{% set total = assignment_summary.assignments %}
+{% set total_sub = assignment_summary.submissions %}
+{% set total_rev = assignment_summary.reviewed %}
+{% set total_pen = assignment_summary.pending %}
+{% set visible_total = assignments | length %}
 
 <div class="assignments-dashboard">
   <div class="dashboard-header-row">
@@ -545,6 +800,14 @@
 
   <div class="card dashboard-filter-card">
     <form method="GET" class="dashboard-filter-form">
+      {% if review_filter != 'all' %}
+      <input type="hidden" name="review_filter" value="{{ review_filter }}">
+      {% endif %}
+      <div class="filter-wide">
+        <label class="form-label" for="assignmentSearch">Search</label>
+        <input id="assignmentSearch" type="search" name="q" class="form-control form-control-sm"
+               value="{{ search_query }}" maxlength="100" placeholder="Assignment, chapter, or topic">
+      </div>
       <div>
         <label class="form-label">Trainer</label>
         {% if is_admin %}
@@ -584,6 +847,41 @@
         </select>
       </div>
 
+      <div>
+        <label class="form-label" for="assignmentDateFrom">Created from</label>
+        <input id="assignmentDateFrom" type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+      </div>
+      <div>
+        <label class="form-label" for="assignmentDateTo">Created to</label>
+        <input id="assignmentDateTo" type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+      </div>
+      <div>
+        <label class="form-label" for="assignmentSort">Sort by</label>
+        <select id="assignmentSort" name="sort" class="form-select form-select-sm">
+          <option value="context" {{ 'selected' if sort_key == 'context' else '' }}>Course context</option>
+          <option value="title" {{ 'selected' if sort_key == 'title' else '' }}>Assignment title</option>
+          <option value="created" {{ 'selected' if sort_key == 'created' else '' }}>Created date</option>
+          <option value="submissions" {{ 'selected' if sort_key == 'submissions' else '' }}>Submissions</option>
+          <option value="pending" {{ 'selected' if sort_key == 'pending' else '' }}>Pending review</option>
+          <option value="reviewed" {{ 'selected' if sort_key == 'reviewed' else '' }}>Reviewed</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="assignmentDirection">Direction</label>
+        <select id="assignmentDirection" name="direction" class="form-select form-select-sm">
+          <option value="asc" {{ 'selected' if sort_direction == 'asc' else '' }}>Ascending</option>
+          <option value="desc" {{ 'selected' if sort_direction == 'desc' else '' }}>Descending</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="assignmentPerPage">Per page</label>
+        <select id="assignmentPerPage" name="per_page" class="form-select form-select-sm">
+          {% for size in [25, 50, 100] %}
+          <option value="{{ size }}" {{ 'selected' if pagination.per_page == size else '' }}>{{ size }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
       <div class="filter-action">
         <button type="submit" class="btn btn-sm btn-primary w-100">Apply</button>
       </div>
@@ -601,54 +899,91 @@
 
   <div class="row dashboard-stat-row">
     <div class="col-6 col-md-3">
-      <div class="card stat-card accent-blue">
-        <h3>Assignments</h3>
-        <p>{{ total }}</p>
-      </div>
+      <a class="stat-link {{ 'active' if review_filter == 'all' else '' }}"
+         href="{{ url_for('lms_admin.all_assignments', trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page, _anchor='assignments-heading') }}"
+         aria-label="Show all {{ total }} assignments">
+        <div class="card stat-card accent-blue">
+          <h3>Assignments</h3>
+          <p>{{ total }}</p>
+        </div>
+      </a>
     </div>
     <div class="col-6 col-md-3">
-      <div class="card stat-card accent-cyan">
-        <h3>Total Submissions</h3>
-        <p>{{ total_sub }}</p>
+      {% if total_sub > 0 %}
+      <a class="stat-link {{ 'active' if review_filter == 'submissions' else '' }}"
+         href="{{ url_for('lms_admin.review_queue', trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, status_filter='all', q=search_query, date_from=date_from, date_to=date_to) }}"
+         aria-label="Show assignments with submissions">
+        <div class="card stat-card accent-cyan">
+          <h3>Total Submissions</h3>
+          <p>{{ total_sub }}</p>
+        </div>
+      </a>
+      {% else %}
+      <div class="card stat-card accent-cyan is-disabled" aria-label="No submissions">
+        <h3>Total Submissions</h3><p>0</p>
       </div>
+      {% endif %}
     </div>
     <div class="col-6 col-md-3">
-      <div class="card stat-card accent-orange">
-        <h3>Pending Review</h3>
-        <p>{{ total_pen }}</p>
+      {% if total_pen > 0 %}
+      <a class="stat-link {{ 'active' if review_filter == 'pending' else '' }}"
+         href="{{ url_for('lms_admin.review_queue', trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, status_filter='submitted', q=search_query, date_from=date_from, date_to=date_to) }}"
+         aria-label="Show assignments pending review">
+        <div class="card stat-card accent-orange">
+          <h3>Pending Review</h3>
+          <p>{{ total_pen }}</p>
+        </div>
+      </a>
+      {% else %}
+      <div class="card stat-card accent-orange is-disabled" aria-label="No assignments pending review">
+        <h3>Pending Review</h3><p>0</p>
       </div>
+      {% endif %}
     </div>
     <div class="col-6 col-md-3">
-      <div class="card stat-card accent-green">
-        <h3>Reviewed</h3>
-        <p>{{ total_rev }}</p>
+      {% if total_rev > 0 %}
+      <a class="stat-link {{ 'active' if review_filter == 'reviewed' else '' }}"
+         href="{{ url_for('lms_admin.review_queue', trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, status_filter='reviewed', q=search_query, date_from=date_from, date_to=date_to) }}"
+         aria-label="Show assignments with reviewed submissions">
+        <div class="card stat-card accent-green">
+          <h3>Reviewed</h3>
+          <p>{{ total_rev }}</p>
+        </div>
+      </a>
+      {% else %}
+      <div class="card stat-card accent-green is-disabled" aria-label="No reviewed submissions">
+        <h3>Reviewed</h3><p>0</p>
       </div>
+      {% endif %}
     </div>
   </div>
 
   <section class="assignments-card" aria-labelledby="assignments-heading">
     <div class="assignments-card-header">
       <h2 id="assignments-heading">Assignment List</h2>
-      <span class="badge bg-secondary">{{ total }}</span>
+      <span class="badge bg-secondary">{{ pagination.total }}{% if review_filter != 'all' %} of {{ total }}{% endif %}</span>
     </div>
 
     {% if assignments %}
     <div class="table-responsive">
       <table class="table table-hover align-middle assignments-table">
+        <colgroup>
+          <col class="assignment-column">
+          <col class="context-column">
+          <col class="progress-column">
+          <col class="actions-column">
+        </colgroup>
         <thead class="table-light">
           <tr>
             <th>Assignment</th>
-            <th>Chapter / Topic</th>
-            <th>Added</th>
-            <th class="text-center">Submissions</th>
-            <th class="text-center">Reviewed</th>
-            <th class="text-center">Pending</th>
-            <th>Actions</th>
+            <th>Course context</th>
+            <th class="text-center">Review progress</th>
+            <th class="assignment-actions-cell">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for a in assignments %}
-          {% set pending = a.submission_count - a.reviewed_count %}
+          {% set pending = a.pending_count %}
           <tr>
             <td data-label="Assignment">
               <div class="assignment-title">{{ a.title }}</div>
@@ -664,41 +999,56 @@
                 </a>
               </div>
               {% endif %}
-              <div class="assignment-mobile-summary">
-                <div class="assignment-mobile-meta">
-                  <div class="assignment-mobile-topic">{{ a.topic_title }}</div>
-                  <div>{{ a.chapter_title }}</div>
-                  <div>Added {{ a.created_date or 'Not recorded' }}</div>
-                </div>
-                <div class="assignment-mobile-counts">
-                  <div class="assignment-count-tile sub">
-                    <span>Submissions</span>
-                    <strong>{{ a.submission_count }}</strong>
-                  </div>
-                  <div class="assignment-count-tile rev">
-                    <span>Reviewed</span>
-                    <strong>{{ a.reviewed_count }}</strong>
-                  </div>
-                  <div class="assignment-count-tile pen">
-                    <span>Pending</span>
-                    <strong>{{ pending }}</strong>
-                  </div>
-                </div>
+            </td>
+            <td data-label="Course context">
+              <div class="assignment-context">
+                <div class="assignment-context-topic">{{ a.topic_title }}</div>
+                <div>{{ a.chapter_title }}</div>
+                <div class="assignment-context-meta">Added {{ a.created_date or 'Not recorded' }}</div>
               </div>
             </td>
-            <td data-label="Topic" class="assignment-mobile-hide">
-              <div>{{ a.chapter_title }}</div>
-              <div class="text-muted small">{{ a.topic_title }}</div>
-            </td>
-            <td data-label="Added" class="text-muted assignment-mobile-hide">{{ a.created_date }}</td>
-            <td data-label="Submissions" class="text-center assignment-mobile-hide">
-              <span class="badge-sub">{{ a.submission_count }}</span>
-            </td>
-            <td data-label="Reviewed" class="text-center assignment-mobile-hide">
-              <span class="badge-rev">{{ a.reviewed_count }}</span>
-            </td>
-            <td data-label="Pending" class="text-center assignment-mobile-hide">
-              <span class="{{ 'badge-pend' if pending > 0 else 'badge-rev' }}">{{ pending }}</span>
+            <td data-label="Review progress">
+              <div class="assignment-review-progress" aria-label="{{ a.submission_count }} submissions, {{ a.reviewed_count }} reviewed, {{ pending }} pending">
+                <div class="assignment-progress-item {{ 'is-disabled' if a.submission_count == 0 else '' }}">
+                  {% if a.submission_count > 0 %}
+                  <a class="assignment-progress-link"
+                     href="{{ url_for('lms_admin.view_submissions', assignment_id=a.id, trainer_id=selected_trainer_id, batch_id=selected_batch_id, status_filter='all') }}"
+                     aria-label="View all {{ a.submission_count }} submissions for {{ a.title }}">
+                  <span class="badge-sub">{{ a.submission_count }}</span>
+                  <span class="assignment-progress-label">Submitted</span>
+                  </a>
+                  {% else %}
+                  <span class="badge-sub">0</span>
+                  <span class="assignment-progress-label">Submitted</span>
+                  {% endif %}
+                </div>
+                <div class="assignment-progress-item {{ 'is-disabled' if a.reviewed_count == 0 else '' }}">
+                  {% if a.reviewed_count > 0 %}
+                  <a class="assignment-progress-link"
+                     href="{{ url_for('lms_admin.view_submissions', assignment_id=a.id, trainer_id=selected_trainer_id, batch_id=selected_batch_id, status_filter='reviewed') }}"
+                     aria-label="View {{ a.reviewed_count }} reviewed submissions for {{ a.title }}">
+                  <span class="badge-rev">{{ a.reviewed_count }}</span>
+                  <span class="assignment-progress-label">Reviewed</span>
+                  </a>
+                  {% else %}
+                  <span class="badge-rev">0</span>
+                  <span class="assignment-progress-label">Reviewed</span>
+                  {% endif %}
+                </div>
+                <div class="assignment-progress-item {{ 'is-disabled' if pending == 0 else '' }}">
+                  {% if pending > 0 %}
+                  <a class="assignment-progress-link"
+                     href="{{ url_for('lms_admin.view_submissions', assignment_id=a.id, trainer_id=selected_trainer_id, batch_id=selected_batch_id, status_filter='submitted') }}"
+                     aria-label="Review {{ pending }} pending submissions for {{ a.title }}">
+                  <span class="{{ 'badge-pend' if pending > 0 else 'badge-rev' }}">{{ pending }}</span>
+                  <span class="assignment-progress-label">Pending</span>
+                  </a>
+                  {% else %}
+                  <span class="badge-rev">0</span>
+                  <span class="assignment-progress-label">Pending</span>
+                  {% endif %}
+                </div>
+              </div>
             </td>
             <td data-label="Actions" class="assignment-actions-cell">
               <div class="assignment-actions">
@@ -717,9 +1067,36 @@
         </tbody>
       </table>
     </div>
+    <nav class="assignment-pagination" aria-label="Assignment pages">
+      <div class="assignment-pagination-summary">
+        Showing {{ pagination.start }}–{{ pagination.end }} of {{ pagination.total }} assignments
+      </div>
+      <div class="btn-group" role="group" aria-label="Assignment pagination controls">
+        {% if pagination.page > 1 %}
+        <a class="btn btn-sm btn-outline-secondary"
+           href="{{ url_for('lms_admin.all_assignments', trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, review_filter=review_filter, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page, page=pagination.page - 1, _anchor='assignments-heading') }}">Previous</a>
+        {% else %}
+        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Previous</span>
+        {% endif %}
+        <span class="btn btn-sm btn-light disabled" aria-current="page">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+        {% if pagination.page < pagination.total_pages %}
+        <a class="btn btn-sm btn-outline-secondary"
+           href="{{ url_for('lms_admin.all_assignments', trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, review_filter=review_filter, q=search_query, date_from=date_from, date_to=date_to, sort=sort_key, direction=sort_direction, per_page=pagination.per_page, page=pagination.page + 1, _anchor='assignments-heading') }}">Next</a>
+        {% else %}
+        <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">Next</span>
+        {% endif %}
+      </div>
+    </nav>
     {% else %}
     <div class="empty-state-card">
-      {% if selected_batch_id or selected_trainer_id or selected_program_id %}
+      {% if review_filter != 'all' %}
+      <p class="mb-1 fw-semibold">No assignments match this review filter.</p>
+      <p class="small mb-3">There are no {{ review_filter }} records in the selected trainer, batch, or program scope.</p>
+      <a class="btn btn-outline-secondary"
+         href="{{ url_for('lms_admin.all_assignments', trainer_id=selected_trainer_id, batch_id=selected_batch_id, program_id=selected_program_id, _anchor='assignments-heading') }}">
+        Show All Assignments
+      </a>
+      {% elif selected_batch_id or selected_trainer_id or selected_program_id %}
       <p class="mb-1 fw-semibold">No assignments match this filter.</p>
       <p class="small mb-3">No submissions were found for the selected trainer, batch, or program scope.</p>
       <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.all_assignments') }}">Clear Filter</a>

@@ -2369,6 +2369,8 @@ def get_topic_assignments(program_id, master_topic_id):
             return jsonify({'error': 'Access denied'}), 403
         assignments = conn.execute("""
             SELECT id, title, description, original_filename, file_path,
+                   due_at, max_score, passing_score, grading_mode, completion_rule,
+                   allow_late_submission, max_attempts,
                    strftime('%Y-%m-%d', created_at) AS created_at
             FROM   lms_assignments
             WHERE  master_topic_id = ?
@@ -2377,13 +2379,38 @@ def get_topic_assignments(program_id, master_topic_id):
         result = []
         for a in assignments:
             sub = conn.execute("""
-                SELECT id, status, review_status, rejection_reason,
-                       original_filename, feedback,
-                       strftime('%d %b %Y %H:%M', submitted_at) AS submitted_at,
-                       strftime('%d %b %Y %H:%M', reviewed_at)  AS reviewed_at
-                FROM   lms_assignment_submissions
+                SELECT s.id, s.status, s.review_status, s.rejection_reason,
+                       s.original_filename, s.feedback, s.reviewed_by,
+                       s.score, s.is_late,
+                       u.full_name AS reviewed_by_name,
+                       strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_at,
+                       strftime('%d %b %Y %H:%M', s.reviewed_at)  AS reviewed_at
+                FROM   lms_assignment_submissions s
+                LEFT JOIN users u ON u.id = s.reviewed_by
                 WHERE  assignment_id = ? AND student_id = ? AND is_latest = 1
             """, (a['id'], student_id)).fetchone()
+            attempts = conn.execute("""
+                SELECT s.id, s.original_filename, s.feedback, s.rejection_reason,
+                       s.score, s.is_late,
+                       COALESCE(s.review_status, 'submitted') AS review_status,
+                       s.is_latest, u.full_name AS reviewed_by_name,
+                       strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_at,
+                       strftime('%d %b %Y %H:%M', s.reviewed_at) AS reviewed_at,
+                       ROW_NUMBER() OVER (ORDER BY s.submitted_at, s.id) AS attempt_number
+                FROM lms_assignment_submissions s
+                LEFT JOIN users u ON u.id = s.reviewed_by
+                WHERE s.assignment_id = ? AND s.student_id = ?
+                ORDER BY s.submitted_at DESC, s.id DESC
+            """, (a['id'], student_id)).fetchall()
+            submission_data = dict(sub) if sub else None
+            if submission_data and submission_data.get('score') is not None:
+                submission_data['score'] = float(submission_data['score'])
+            attempt_data = []
+            for attempt in attempts:
+                item = dict(attempt)
+                if item.get('score') is not None:
+                    item['score'] = float(item['score'])
+                attempt_data.append(item)
             result.append({
                 'id':                a['id'],
                 'title':             a['title'],
@@ -2391,7 +2418,15 @@ def get_topic_assignments(program_id, master_topic_id):
                 'original_filename': a['original_filename'] or '',
                 'has_file':          bool(a['file_path']),
                 'created_at':        a['created_at'],
-                'submission':        dict(sub) if sub else None,
+                'due_at':            str(a['due_at']) if a['due_at'] else None,
+                'max_score':         float(a['max_score']) if a['max_score'] is not None else None,
+                'passing_score':     float(a['passing_score']) if a['passing_score'] is not None else None,
+                'grading_mode':      a['grading_mode'],
+                'completion_rule':   a['completion_rule'],
+                'allow_late_submission': bool(a['allow_late_submission']),
+                'max_attempts':      a['max_attempts'],
+                'submission':        submission_data,
+                'attempts':          attempt_data,
             })
         return jsonify({'assignments': result})
     finally:
@@ -2409,7 +2444,8 @@ def submit_assignment(assignment_id):
     conn = get_conn()
     try:
         a = conn.execute(
-            "SELECT master_topic_id FROM lms_assignments WHERE id = ?",
+            """SELECT master_topic_id, due_at, allow_late_submission, max_attempts
+               FROM lms_assignments WHERE id = ?""",
             (assignment_id,)
         ).fetchone()
         if not a:
@@ -2444,6 +2480,22 @@ def submit_assignment(assignment_id):
                                 'error': 'Your assignment has been accepted. Re-upload is not allowed.'}), 403
             # rs == 'rejected' — allowed to re-upload
 
+        attempt_count = int(conn.execute(
+            """SELECT COUNT(*) AS n FROM lms_assignment_submissions
+               WHERE assignment_id = ? AND student_id = ?""",
+            (assignment_id, student_id),
+        ).fetchone()['n'])
+        if a['max_attempts'] is not None and attempt_count >= int(a['max_attempts']):
+            return jsonify({'ok': False, 'error': 'Maximum submission attempts reached.'}), 403
+
+        now_dt = datetime.now()
+        is_late = 0
+        if a['due_at']:
+            due_at = a['due_at'] if isinstance(a['due_at'], datetime) else datetime.strptime(str(a['due_at']), '%Y-%m-%d %H:%M:%S')
+            is_late = 1 if now_dt > due_at else 0
+            if is_late and int(a['allow_late_submission'] or 0) != 1:
+                return jsonify({'ok': False, 'error': 'The due date has passed and late submissions are disabled.'}), 403
+
         file_obj = request.files.get('submission_file')
         if not file_obj or not file_obj.filename:
             return jsonify({'ok': False, 'error': 'No file uploaded'}), 400
@@ -2452,7 +2504,7 @@ def submit_assignment(assignment_id):
         if not ok:
             return jsonify({'ok': False, 'error': path_or_err}), 400
 
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now = now_dt.strftime('%Y-%m-%d %H:%M:%S')
 
         # Mark previous submission (if any) as not latest
         if existing:
@@ -2465,12 +2517,13 @@ def submit_assignment(assignment_id):
         conn.execute("""
             INSERT INTO lms_assignment_submissions
                 (assignment_id, student_id, file_path, original_filename,
-                 status, review_status, submitted_at, updated_at, is_latest)
-            VALUES (?, ?, ?, ?, 'submitted', 'submitted', ?, ?, 1)
-        """, (assignment_id, student_id, path_or_err, orig_name, now, now))
+                 status, review_status, submitted_at, updated_at, is_latest, is_late)
+            VALUES (?, ?, ?, ?, 'submitted', 'submitted', ?, ?, 1, ?)
+        """, (assignment_id, student_id, path_or_err, orig_name, now, now, is_late))
         conn.commit()
         return jsonify({'ok': True, 'status': 'submitted', 'review_status': 'submitted',
-                        'submitted_at': now[:16], 'original_filename': orig_name})
+                        'submitted_at': now[:16], 'original_filename': orig_name,
+                        'is_late': bool(is_late), 'attempt_number': attempt_count + 1})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
     finally:

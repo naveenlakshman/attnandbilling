@@ -591,6 +591,8 @@ function _renderAssignments(assignments) {
     // Status badge + assignment download
     html += '<div class="d-flex align-items-center gap-3 flex-wrap mb-2">';
     html += _reviewBadge(reviewStatus);
+    if (a.due_at) html += '<span class="assign-meta">Due ' + _esc(a.due_at) + (a.allow_late_submission ? ' · Late submissions allowed' : '') + '</span>';
+    if (a.max_attempts) html += '<span class="assign-meta">Maximum ' + _esc(a.max_attempts) + ' attempt(s)</span>';
     if (a.has_file) {
       html += '<a class="btn btn-sm btn-outline-primary" href="/student/assignments/file/' + a.id + '">⬇ Download Assignment</a>';
     }
@@ -599,6 +601,8 @@ function _renderAssignments(assignments) {
     // Submission info block
     if (sub) {
       html += '<div class="text-muted mb-1 assign-meta">Submitted ' + _esc(sub.submitted_at) + ' &mdash; ' + _esc(sub.original_filename) + '</div>';
+      if (sub.is_late) html += '<div class="text-danger mb-1 assign-meta">Submitted late</div>';
+      if (sub.score != null) html += '<div class="fw-semibold mb-2">Score: ' + _esc(sub.score) + (a.max_score != null ? ' / ' + _esc(a.max_score) : '') + '</div>';
 
       // Download own submission
       html += '<a class="btn btn-sm btn-outline-secondary mb-2" href="/student/submissions/file/' + _esc(sub.id) + '">⬇ Download My Submission</a>';
@@ -614,13 +618,33 @@ function _renderAssignments(assignments) {
         html += '<div class="assign-feedback"><strong>Staff Feedback:</strong>\n' + _esc(sub.feedback) + '</div>';
       }
       if (sub.reviewed_at) {
-        html += '<div class="text-muted mt-1 mb-2 assign-meta">Reviewed on ' + _esc(sub.reviewed_at) + '</div>';
+        html += '<div class="text-muted mt-1 mb-2 assign-meta">Reviewed by ' + _esc(sub.reviewed_by_name || 'Unknown reviewer') + ' on ' + _esc(sub.reviewed_at) + '</div>';
       }
+    }
+
+    // Read-only attempt history mirrors the staff review history.
+    if (a.attempts && a.attempts.length) {
+      html += '<details class="mt-3"><summary class="fw-semibold">Attempt History (' + a.attempts.length + ')</summary>';
+      html += '<div class="table-responsive mt-2"><table class="table table-sm align-middle"><thead><tr><th>Attempt</th><th>Submitted</th><th>File</th><th>Decision</th><th>Reviewer</th><th>Feedback / reason</th><th>Score</th></tr></thead><tbody>';
+      a.attempts.forEach(function(attempt) {
+        var reviewer = attempt.review_status === 'submitted' ? 'Not reviewed' : (attempt.reviewed_by_name || 'Unknown reviewer');
+        var notes = '';
+        if (attempt.feedback) notes += '<strong>Feedback:</strong> ' + _esc(attempt.feedback);
+        if (attempt.rejection_reason) notes += (notes ? '<br>' : '') + '<strong>Reason:</strong> ' + _esc(attempt.rejection_reason);
+        html += '<tr><td>#' + _esc(attempt.attempt_number) + (attempt.is_latest ? ' <span class="badge bg-primary">Latest</span>' : '') + '</td>';
+        html += '<td>' + _esc(attempt.submitted_at || 'Not recorded') + '</td>';
+        html += '<td><a href="/student/submissions/file/' + _esc(attempt.id) + '">' + _esc(attempt.original_filename || 'Download') + '</a></td>';
+        html += '<td>' + _esc(attempt.review_status || 'submitted') + (attempt.reviewed_at ? '<br><small>' + _esc(attempt.reviewed_at) + '</small>' : '') + '</td>';
+        html += '<td>' + _esc(reviewer) + '</td><td>' + (notes || '&mdash;') + '</td><td>' + (attempt.score != null ? _esc(attempt.score) + (a.max_score != null ? ' / ' + _esc(a.max_score) : '') : '&mdash;') + (attempt.is_late ? '<br><small class="text-danger">Late</small>' : '') + '</td></tr>';
+      });
+      html += '</tbody></table></div></details>';
     }
 
     // Upload form: show only if no submission OR rejected
     html += '<div class="mt-3">';
-    if (!sub || reviewStatus === 'rejected') {
+    var attemptsUsed = a.attempts ? a.attempts.length : 0;
+    var attemptsAvailable = !a.max_attempts || attemptsUsed < a.max_attempts;
+    if ((!sub || reviewStatus === 'rejected') && attemptsAvailable) {
       var label = (!sub) ? '📎 Submit Your Work' : '📎 Re-submit (previous rejected)';
       html += '<label class="assign-upload-label fw-semibold">' + label + '</label>';
       html += '<div class="d-flex align-items-center gap-2 flex-wrap">';
@@ -628,6 +652,8 @@ function _renderAssignments(assignments) {
       html += '<button class="btn-assign-submit" id="assign-btn-' + a.id + '" onclick="submitAssignment(' + a.id + ')">Submit</button>';
       html += '</div>';
       html += '<div class="mt-1 assign-msg" id="assign-msg-' + a.id + '"></div>';
+    } else if ((!sub || reviewStatus === 'rejected') && !attemptsAvailable) {
+      html += '<div class="text-danger assign-info-box">Maximum submission attempts reached. Contact your trainer if you need help.</div>';
     } else if (reviewStatus === 'submitted') {
       html += '<div class="text-muted assign-info-box">⏳ Your assignment has been submitted and is waiting for staff review. Re-upload is not available until reviewed.</div>';
     } else if (reviewStatus === 'accepted' || reviewStatus === 'reviewed') {

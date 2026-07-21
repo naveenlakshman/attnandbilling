@@ -4,6 +4,7 @@ from db import get_conn, log_activity
 from flask import session, redirect, url_for, flash, abort
 from extensions import csrf
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 import re
 import os
@@ -94,6 +95,84 @@ _MASTER_BRIDGE_PROGRAM_NAME = 'LMS Master Bridge (System)'
 _MASTER_BRIDGE_CHAPTER_TITLE = 'Master Topic Bridge Chapter'
 _SUBMISSION_PREVIEW_TOKEN_SALT = 'lms-submission-preview'
 _SUBMISSION_PREVIEW_TOKEN_MAX_AGE = 10 * 60
+
+
+def _current_lms_actor(conn):
+    """Return the active admin/staff database identity for this session."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return None
+    return conn.execute(
+        """
+        SELECT id, role, branch_id, can_view_all_branches
+        FROM users
+        WHERE id = ?
+          AND is_active = 1
+          AND role IN ('admin', 'staff')
+        """,
+        (user_id,),
+    ).fetchone()
+
+
+def _can_access_submission(conn, submission_id):
+    """Authorize one submission without trusting URL/filter scope.
+
+    Global administrators can access all submissions. Branch-scoped
+    administrators are limited to students/batches in their branch. Staff are
+    limited to students in their own active batches.
+    """
+    actor = _current_lms_actor(conn)
+    if not actor:
+        return False
+    if actor['role'] == 'admin' and int(actor['can_view_all_branches'] or 0) == 1:
+        return bool(conn.execute(
+            "SELECT 1 FROM lms_assignment_submissions WHERE id = ?",
+            (submission_id,),
+        ).fetchone())
+    if actor['role'] == 'admin':
+        return bool(conn.execute(
+            """
+            SELECT 1
+            FROM lms_assignment_submissions s
+            JOIN students st ON st.id = s.student_id
+            WHERE s.id = ?
+              AND (
+                    st.branch_id = ?
+                    OR EXISTS (
+                        SELECT 1
+                        FROM student_batches sb
+                        JOIN batches b ON b.id = sb.batch_id
+                        WHERE sb.student_id = s.student_id
+                          AND sb.status = 'active'
+                          AND LOWER(COALESCE(b.status, '')) = 'active'
+                          AND b.branch_id = ?
+                    )
+              )
+            """,
+            (submission_id, actor['branch_id'], actor['branch_id']),
+        ).fetchone())
+    return bool(conn.execute(
+        """
+        SELECT 1
+        FROM lms_assignment_submissions s
+        WHERE s.id = ?
+          AND EXISTS (
+              SELECT 1
+              FROM student_batches sb
+              JOIN batches b ON b.id = sb.batch_id
+              WHERE sb.student_id = s.student_id
+                AND sb.status = 'active'
+                AND LOWER(COALESCE(b.status, '')) = 'active'
+                AND b.trainer_id = ?
+          )
+        """,
+        (submission_id, actor['id']),
+    ).fetchone())
+
+
+def _require_submission_access(conn, submission_id):
+    if not _can_access_submission(conn, submission_id):
+        abort(403)
 
 
 def _submission_preview_serializer():
@@ -6722,6 +6801,159 @@ def _validate_assignment_description(description):
     return True, None
 
 
+_GRADING_MODES = {'accept_reject', 'numeric', 'rubric', 'numeric_rubric'}
+_COMPLETION_RULES = {
+    'accepted_submission', 'score_meets_passing_score',
+    'all_required_assignments_accepted', 'any_required_assignment_accepted',
+    'manual_topic_completion', 'does_not_affect_topic_completion',
+}
+
+
+def _parse_assignment_grading_settings(conn):
+    """Validate optional Phase 9 assignment settings from the current form."""
+    grading_mode = (request.form.get('grading_mode') or 'accept_reject').strip()
+    completion_rule = (request.form.get('completion_rule') or 'accepted_submission').strip()
+    if grading_mode not in _GRADING_MODES:
+        return None, 'Invalid grading mode.'
+    if completion_rule not in _COMPLETION_RULES:
+        return None, 'Invalid completion rule.'
+
+    due_raw = (request.form.get('due_at') or '').strip()
+    due_at = None
+    if due_raw:
+        try:
+            due_at = datetime.strptime(due_raw, '%Y-%m-%dT%H:%M').strftime('%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            return None, 'Due date and time is invalid.'
+
+    def optional_decimal(field, label):
+        raw = (request.form.get(field) or '').strip()
+        if not raw:
+            return None, None
+        try:
+            value = Decimal(raw)
+        except InvalidOperation:
+            return None, f'{label} must be a number.'
+        if value < 0:
+            return None, f'{label} cannot be negative.'
+        return value, None
+
+    max_score, error = optional_decimal('max_score', 'Maximum score')
+    if error: return None, error
+    passing_score, error = optional_decimal('passing_score', 'Passing score')
+    if error: return None, error
+    if grading_mode in {'numeric', 'numeric_rubric'} and (max_score is None or max_score <= 0):
+        return None, 'A positive maximum score is required for numeric grading.'
+
+    rubric_id = request.form.get('rubric_id', type=int)
+    if grading_mode in {'rubric', 'numeric_rubric'}:
+        rubric = conn.execute(
+            'SELECT id FROM lms_rubrics WHERE id = ? AND is_active = 1', (rubric_id,)
+        ).fetchone() if rubric_id else None
+        if not rubric:
+            return None, 'An active rubric is required for rubric grading.'
+        rubric_total = Decimal(str(conn.execute(
+            'SELECT COALESCE(SUM(max_score), 0) AS total FROM lms_rubric_criteria WHERE rubric_id = ?',
+            (rubric_id,),
+        ).fetchone()['total']))
+        if rubric_total <= 0:
+            return None, 'The selected rubric must contain scored criteria.'
+        if max_score is None:
+            max_score = rubric_total
+        elif max_score != rubric_total:
+            return None, f'Maximum score must equal the rubric total ({rubric_total}).'
+    else:
+        rubric_id = None
+
+    if passing_score is not None and max_score is None:
+        return None, 'Set a maximum score before setting a passing score.'
+    if passing_score is not None and passing_score > max_score:
+        return None, 'Passing score cannot exceed the maximum score.'
+    if completion_rule == 'score_meets_passing_score' and passing_score is None:
+        return None, 'A passing score is required for score-based completion.'
+
+    max_attempts_raw = (request.form.get('max_attempts') or '').strip()
+    max_attempts = None
+    if max_attempts_raw:
+        if not max_attempts_raw.isdigit() or not 1 <= int(max_attempts_raw) <= 100:
+            return None, 'Maximum attempts must be between 1 and 100.'
+        max_attempts = int(max_attempts_raw)
+
+    has_phase9_fields = 'grading_mode' in request.form
+    return {
+        'due_at': due_at, 'max_score': max_score, 'passing_score': passing_score,
+        'grading_mode': grading_mode, 'rubric_id': rubric_id,
+        'completion_rule': completion_rule,
+        'allow_late_submission': (1 if not has_phase9_fields else
+                                  (1 if request.form.get('allow_late_submission') == '1' else 0)),
+        'max_attempts': max_attempts,
+        'is_required': (1 if not has_phase9_fields else
+                        (1 if request.form.get('is_required') == '1' else 0)),
+    }, None
+
+
+def _recalculate_assignment_topic_completion(conn, student_id, master_topic_id):
+    """Apply assignment completion rules consistently after every decision."""
+    rows = conn.execute(
+        """SELECT a.id, a.completion_rule, a.passing_score, a.is_required,
+                  COALESCE(s.review_status, 'not_submitted') AS review_status, s.score
+           FROM lms_assignments a
+           LEFT JOIN lms_assignment_submissions s
+             ON s.assignment_id = a.id AND s.student_id = ? AND s.is_latest = 1
+           WHERE a.master_topic_id = ?""",
+        (student_id, master_topic_id),
+    ).fetchall()
+    if not rows or any(row['completion_rule'] == 'manual_topic_completion' for row in rows):
+        return
+
+    applicable = [row for row in rows if row['completion_rule'] != 'does_not_affect_topic_completion']
+    if not applicable:
+        completed = False
+    else:
+        def satisfied(row):
+            if row['completion_rule'] == 'score_meets_passing_score':
+                return (row['review_status'] == 'accepted' and row['score'] is not None
+                        and Decimal(str(row['score'])) >= Decimal(str(row['passing_score'])))
+            return row['review_status'] == 'accepted'
+        required = [row for row in applicable if int(row['is_required'] or 0) == 1]
+        if any(row['completion_rule'] == 'all_required_assignments_accepted' for row in applicable):
+            completed = bool(required) and all(satisfied(row) for row in required)
+        else:
+            candidates = required if any(row['completion_rule'] == 'any_required_assignment_accepted' for row in applicable) else applicable
+            completed = any(satisfied(row) for row in candidates)
+
+    logger.info(
+        "Assignment completion recalculated student=%s topic=%s completed=%s states=%s",
+        student_id, master_topic_id, completed,
+        [(row['id'], row['completion_rule'], row['review_status'], row['score']) for row in rows],
+    )
+
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    programs = conn.execute(
+        """SELECT DISTINCT pc.program_id FROM lms_program_chapters pc
+           JOIN lms_master_topics mt ON mt.master_chapter_id = pc.master_chapter_id
+           JOIN lms_programs lp ON lp.id = pc.program_id
+           WHERE mt.id = ? AND pc.is_visible = 1 AND lp.is_active = 1""",
+        (master_topic_id,),
+    ).fetchall()
+    for program in programs:
+        updated = conn.execute(
+            """UPDATE lms_master_topic_progress
+               SET is_completed = ?, completed_at = ?, updated_at = ?
+               WHERE student_id = ? AND program_id = ? AND master_topic_id = ?""",
+            (1 if completed else 0, now if completed else None, now,
+             student_id, program['program_id'], master_topic_id),
+        )
+        if updated.rowcount == 0:
+            conn.execute(
+                """INSERT INTO lms_master_topic_progress
+                       (student_id, program_id, master_topic_id, is_completed, completed_at, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (student_id, program['program_id'], master_topic_id, 1 if completed else 0,
+                 now if completed else None, now, now),
+            )
+
+
 def _save_assignment_file(file_obj):
     """Save admin-uploaded assignment to instance/uploads/assignments/.
     Returns (ok, unique_filename_or_error, original_name)."""
@@ -6750,21 +6982,25 @@ def _save_assignment_file(file_obj):
 
 
 @lms_admin_bp.route('/assignments')
-@login_required
+@lms_content_manager_required
 def assignments_alias():
     """Mobile bottom-nav friendly alias for the LMS assignment overview."""
     return redirect(url_for('lms_admin.all_assignments'))
 
 
 @lms_admin_bp.route('/master/assignments')
-@login_required
+@lms_content_manager_required
 def all_assignments():
     """Overview of every assignment across all master topics with trainer/batch filters."""
     conn = get_conn()
     try:
-        role = (session.get('role') or '').strip().lower()
+        actor = _current_lms_actor(conn)
+        if not actor:
+            abort(403)
+        role = actor['role']
         is_admin = role == 'admin'
-        current_user_id = session.get('user_id')
+        current_user_id = actor['id']
+        admin_branch_limited = is_admin and int(actor['can_view_all_branches'] or 0) != 1
 
         requested_trainer_id = request.args.get('trainer_id', type=int)
         requested_batch_id = request.args.get('batch_id', type=int)
@@ -6782,8 +7018,10 @@ def all_assignments():
                 SELECT u.id, u.full_name
                 FROM users u
                 WHERE u.role = 'staff' AND u.is_active = 1
+                  AND (? = 0 OR u.branch_id = ?)
                 ORDER BY u.full_name
-                """
+                """,
+                (1 if admin_branch_limited else 0, actor['branch_id'])
             ).fetchall()
         else:
             trainers = conn.execute(
@@ -6794,6 +7032,9 @@ def all_assignments():
                 """,
                 (current_user_id,)
             ).fetchall()
+
+        if selected_trainer_id and selected_trainer_id not in {row['id'] for row in trainers}:
+            selected_trainer_id = None
 
         programs = conn.execute(
             """
@@ -6837,6 +7078,9 @@ def all_assignments():
         # tied to that program's linked master chapters, not batch-program access.
         batch_where = ["LOWER(COALESCE(b.status, '')) = 'active'"]
         batch_params = []
+        if admin_branch_limited:
+            batch_where.append("b.branch_id = ?")
+            batch_params.append(actor['branch_id'])
         if selected_program_id:
             batch_where.append("""
                 EXISTS (
@@ -6872,6 +7116,9 @@ def all_assignments():
         if selected_batch_id:
             valid_batch_where = ["b.id = ?", "LOWER(COALESCE(b.status, '')) = 'active'"]
             valid_batch_params = [selected_batch_id]
+            if admin_branch_limited:
+                valid_batch_where.append("b.branch_id = ?")
+                valid_batch_params.append(actor['branch_id'])
             if selected_program_id:
                 valid_batch_where.append("""
                     EXISTS (
@@ -6903,8 +7150,15 @@ def all_assignments():
             ).fetchone()
             if not valid_batch:
                 selected_batch_id = None
+            elif admin_branch_limited:
+                branch_batch = conn.execute(
+                    "SELECT 1 FROM batches WHERE id = ? AND branch_id = ?",
+                    (selected_batch_id, actor['branch_id'])
+                ).fetchone()
+                if not branch_batch:
+                    selected_batch_id = None
 
-        has_scope_filter = bool(selected_trainer_id or selected_batch_id)
+        has_scope_filter = bool(selected_trainer_id or selected_batch_id or admin_branch_limited)
         program_join = ""
         program_params = []
         if selected_program_id:
@@ -6916,12 +7170,17 @@ def all_assignments():
             """
             program_params.append(selected_program_id)
 
+        cte_sql = ""
+        base_params = []
         if has_scope_filter:
             scope_where = [
                 "sb.status = 'active'",
                 "LOWER(COALESCE(b.status, '')) = 'active'",
             ]
             scope_params = []
+            if admin_branch_limited:
+                scope_where.append("b.branch_id = ?")
+                scope_params.append(actor['branch_id'])
             if selected_trainer_id:
                 scope_where.append("b.trainer_id = ?")
                 scope_params.append(selected_trainer_id)
@@ -6930,70 +7189,204 @@ def all_assignments():
                 scope_params.append(selected_batch_id)
 
             scope_sql = " AND ".join(scope_where)
-            assignments_sql = f"""
+            cte_sql = f"""
                 WITH scoped_submissions AS (
-                    SELECT DISTINCT s.id, s.assignment_id, s.status
+                    SELECT DISTINCT s.id, s.assignment_id,
+                           COALESCE(s.review_status, 'submitted') AS review_status
                     FROM lms_assignment_submissions s
                     JOIN student_batches sb ON sb.student_id = s.student_id
                     JOIN batches b ON b.id = sb.batch_id
-                    WHERE {scope_sql}
+                    WHERE s.is_latest = 1
+                      AND {scope_sql}
                 ),
                 assignment_counts AS (
                     SELECT
                         ss.assignment_id,
                         COUNT(*) AS submission_count,
-                        SUM(CASE WHEN ss.status = 'reviewed' THEN 1 ELSE 0 END) AS reviewed_count
+                        SUM(CASE WHEN ss.review_status IN ('accepted', 'rejected') THEN 1 ELSE 0 END) AS reviewed_count,
+                        SUM(CASE WHEN ss.review_status = 'submitted' THEN 1 ELSE 0 END) AS pending_count
                     FROM scoped_submissions ss
                     GROUP BY ss.assignment_id
                 )
+            """
+            base_sql = f"""
                 SELECT
                     a.id,
                     a.title,
                     a.description,
                     a.original_filename,
                     a.master_topic_id,
+                    a.created_at,
                     mt.title AS topic_title,
                     mc.title AS chapter_title,
                     strftime('%d %b %Y', a.created_at) AS created_date,
                     ac.submission_count,
-                    ac.reviewed_count
+                    ac.reviewed_count,
+                    ac.pending_count
                 FROM lms_assignments a
                 JOIN lms_master_topics mt ON mt.id = a.master_topic_id
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
                 {program_join}
                 JOIN assignment_counts ac ON ac.assignment_id = a.id
-                ORDER BY mc.title, mt.title, a.id
             """
-            assignments = conn.execute(assignments_sql, tuple(scope_params + program_params)).fetchall()
+            base_params = scope_params + program_params
         else:
-            assignments_sql = f"""
+            base_sql = f"""
                 SELECT
                     a.id,
                     a.title,
                     a.description,
                     a.original_filename,
                     a.master_topic_id,
+                    a.created_at,
                     mt.title   AS topic_title,
                     mc.title   AS chapter_title,
                     strftime('%d %b %Y', a.created_at) AS created_date,
                     (SELECT COUNT(*)
                      FROM lms_assignment_submissions s
-                     WHERE s.assignment_id = a.id) AS submission_count,
+                     WHERE s.assignment_id = a.id
+                       AND s.is_latest = 1) AS submission_count,
                     (SELECT COUNT(*)
                      FROM lms_assignment_submissions s
                      WHERE s.assignment_id = a.id
-                       AND s.status = 'reviewed') AS reviewed_count
+                       AND s.is_latest = 1
+                       AND COALESCE(s.review_status, 'submitted') IN ('accepted', 'rejected')) AS reviewed_count,
+                    (SELECT COUNT(*)
+                     FROM lms_assignment_submissions s
+                     WHERE s.assignment_id = a.id
+                       AND s.is_latest = 1
+                       AND COALESCE(s.review_status, 'submitted') = 'submitted') AS pending_count
                 FROM lms_assignments a
                 JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
                 {program_join}
-                ORDER BY mc.title, mt.title, a.id
             """
-            assignments = conn.execute(assignments_sql, tuple(program_params)).fetchall()
+            base_params = program_params
+
+        review_filter = (request.args.get('review_filter') or 'all').strip().lower()
+        if review_filter not in {'all', 'submissions', 'pending', 'reviewed'}:
+            review_filter = 'all'
+
+        search_query = (request.args.get('q') or '').strip()[:100]
+        date_from = (request.args.get('date_from') or '').strip()
+        date_to = (request.args.get('date_to') or '').strip()
+        for value_name, value in (('date_from', date_from), ('date_to', date_to)):
+            if value:
+                try:
+                    datetime.strptime(value, '%Y-%m-%d')
+                except ValueError:
+                    if value_name == 'date_from':
+                        date_from = ''
+                    else:
+                        date_to = ''
+
+        page = max(request.args.get('page', 1, type=int) or 1, 1)
+        per_page = request.args.get('per_page', 25, type=int) or 25
+        if per_page not in {25, 50, 100}:
+            per_page = 25
+        sort_key = (request.args.get('sort') or 'context').strip().lower()
+        sort_direction = (request.args.get('direction') or 'asc').strip().lower()
+        if sort_direction not in {'asc', 'desc'}:
+            sort_direction = 'asc'
+        sort_columns = {
+            'context': 'q.chapter_title, q.topic_title, q.id',
+            'title': 'q.title',
+            'created': 'q.created_at',
+            'submissions': 'q.submission_count',
+            'pending': 'q.pending_count',
+            'reviewed': 'q.reviewed_count',
+        }
+        if sort_key not in sort_columns:
+            sort_key = 'context'
+
+        common_where = ['1 = 1']
+        common_params = []
+        if search_query:
+            like = f"%{search_query}%"
+            common_where.append('(q.title LIKE ? OR q.chapter_title LIKE ? OR q.topic_title LIKE ?)')
+            common_params.extend([like, like, like])
+        if date_from:
+            common_where.append('DATE(q.created_at) >= ?')
+            common_params.append(date_from)
+        if date_to:
+            common_where.append('DATE(q.created_at) <= ?')
+            common_params.append(date_to)
+
+        common_where_sql = ' AND '.join(common_where)
+        summary = conn.execute(
+            f"""{cte_sql}
+                SELECT COUNT(*) AS assignments,
+                       COALESCE(SUM(q.submission_count), 0) AS submissions,
+                       COALESCE(SUM(q.reviewed_count), 0) AS reviewed,
+                       COALESCE(SUM(q.pending_count), 0) AS pending
+                FROM ({base_sql}) q
+                WHERE {common_where_sql}
+            """,
+            tuple(base_params + common_params),
+        ).fetchone()
+        assignment_summary = {
+            'assignments': int(summary['assignments'] or 0),
+            'submissions': int(summary['submissions'] or 0),
+            'reviewed': int(summary['reviewed'] or 0),
+            'pending': int(summary['pending'] or 0),
+        }
+
+        result_where = list(common_where)
+        result_params = list(common_params)
+        if review_filter == 'submissions':
+            result_where.append('q.submission_count > 0')
+        elif review_filter == 'pending':
+            result_where.append('q.pending_count > 0')
+        elif review_filter == 'reviewed':
+            result_where.append('q.reviewed_count > 0')
+        result_where_sql = ' AND '.join(result_where)
+        filtered_total = conn.execute(
+            f"""{cte_sql}
+                SELECT COUNT(*) AS n FROM ({base_sql}) q
+                WHERE {result_where_sql}
+            """,
+            tuple(base_params + result_params),
+        ).fetchone()['n']
+        total_pages = max((int(filtered_total) + per_page - 1) // per_page, 1)
+        page = min(page, total_pages)
+        offset = (page - 1) * per_page
+        direction_sql = 'DESC' if sort_direction == 'desc' else 'ASC'
+        if sort_key == 'context':
+            order_sql = (
+                f"q.chapter_title {direction_sql}, q.topic_title {direction_sql}, q.id {direction_sql}"
+            )
+        else:
+            order_sql = f"{sort_columns[sort_key]} {direction_sql}, q.id DESC"
+        assignments = conn.execute(
+            f"""{cte_sql}
+                SELECT q.* FROM ({base_sql}) q
+                WHERE {result_where_sql}
+                ORDER BY {order_sql}
+                LIMIT ? OFFSET ?
+            """,
+            tuple(base_params + result_params + [per_page, offset]),
+        ).fetchall()
+
+        pagination = {
+            'page': page,
+            'per_page': per_page,
+            'total': int(filtered_total),
+            'total_pages': total_pages,
+            'start': offset + 1 if filtered_total else 0,
+            'end': min(offset + per_page, int(filtered_total)),
+        }
 
         return render_template(
             'lms_admin/lms_all_assignments.html',
             assignments=assignments,
+            assignment_summary=assignment_summary,
+            review_filter=review_filter,
+            search_query=search_query,
+            date_from=date_from,
+            date_to=date_to,
+            sort_key=sort_key,
+            sort_direction=sort_direction,
+            pagination=pagination,
             trainers=trainers,
             active_batches=active_batches,
             programs=programs,
@@ -7006,8 +7399,429 @@ def all_assignments():
         conn.close()
 
 
+@lms_admin_bp.route('/master/reviews')
+@lms_content_manager_required
+def review_queue():
+    """Centralized, authorized queue of latest assignment submissions."""
+    conn = get_conn()
+    try:
+        actor = _current_lms_actor(conn)
+        if not actor:
+            abort(403)
+        is_admin = actor['role'] == 'admin'
+        admin_branch_limited = is_admin and int(actor['can_view_all_branches'] or 0) != 1
+
+        requested_trainer_id = request.args.get('trainer_id', type=int)
+        selected_trainer_id = requested_trainer_id if is_admin else actor['id']
+        selected_batch_id = request.args.get('batch_id', type=int)
+        selected_program_id = request.args.get('program_id', type=int)
+
+        if is_admin:
+            trainers = conn.execute(
+                """SELECT id, full_name FROM users
+                   WHERE role = 'staff' AND is_active = 1
+                     AND (? = 0 OR branch_id = ?)
+                   ORDER BY full_name""",
+                (1 if admin_branch_limited else 0, actor['branch_id']),
+            ).fetchall()
+            if selected_trainer_id and selected_trainer_id not in {row['id'] for row in trainers}:
+                selected_trainer_id = None
+        else:
+            trainers = conn.execute(
+                "SELECT id, full_name FROM users WHERE id = ? AND is_active = 1",
+                (actor['id'],),
+            ).fetchall()
+
+        batch_where = ["LOWER(COALESCE(status, '')) = 'active'"]
+        batch_params = []
+        if selected_trainer_id:
+            batch_where.append('trainer_id = ?')
+            batch_params.append(selected_trainer_id)
+        if admin_branch_limited:
+            batch_where.append('branch_id = ?')
+            batch_params.append(actor['branch_id'])
+        active_batches = conn.execute(
+            f"SELECT id, batch_name FROM batches WHERE {' AND '.join(batch_where)} ORDER BY batch_name",
+            tuple(batch_params),
+        ).fetchall()
+        if selected_batch_id and selected_batch_id not in {row['id'] for row in active_batches}:
+            selected_batch_id = None
+
+        programs = conn.execute(
+            """SELECT lp.id, lp.program_name, c.course_name
+               FROM lms_programs lp
+               LEFT JOIN courses c ON c.id = lp.course_id
+               WHERE lp.is_active = 1 AND lp.is_deleted = 0
+               ORDER BY lp.program_name"""
+        ).fetchall()
+        if selected_program_id and selected_program_id not in {row['id'] for row in programs}:
+            selected_program_id = None
+
+        scope_where = ['s.is_latest = 1']
+        scope_params = []
+        if selected_trainer_id:
+            scope_where.append("""EXISTS (
+                SELECT 1 FROM student_batches sb_scope
+                JOIN batches b_scope ON b_scope.id = sb_scope.batch_id
+                WHERE sb_scope.student_id = s.student_id
+                  AND sb_scope.status = 'active'
+                  AND LOWER(COALESCE(b_scope.status, '')) = 'active'
+                  AND b_scope.trainer_id = ?
+            )""")
+            scope_params.append(selected_trainer_id)
+        if selected_batch_id:
+            scope_where.append("""EXISTS (
+                SELECT 1 FROM student_batches sb_scope
+                JOIN batches b_scope ON b_scope.id = sb_scope.batch_id
+                WHERE sb_scope.student_id = s.student_id
+                  AND sb_scope.status = 'active'
+                  AND LOWER(COALESCE(b_scope.status, '')) = 'active'
+                  AND b_scope.id = ?
+            )""")
+            scope_params.append(selected_batch_id)
+        if admin_branch_limited:
+            scope_where.append("""(
+                st.branch_id = ? OR EXISTS (
+                    SELECT 1 FROM student_batches sb_scope
+                    JOIN batches b_scope ON b_scope.id = sb_scope.batch_id
+                    WHERE sb_scope.student_id = s.student_id
+                      AND sb_scope.status = 'active'
+                      AND LOWER(COALESCE(b_scope.status, '')) = 'active'
+                      AND b_scope.branch_id = ?
+                )
+            )""")
+            scope_params.extend([actor['branch_id'], actor['branch_id']])
+        if selected_program_id:
+            scope_where.append("""EXISTS (
+                SELECT 1 FROM lms_program_chapters pc_scope
+                WHERE pc_scope.master_chapter_id = mt.master_chapter_id
+                  AND pc_scope.program_id = ? AND pc_scope.is_visible = 1
+            )""")
+            scope_params.append(selected_program_id)
+
+        base_sql = f"""
+            SELECT s.id, s.assignment_id, s.student_id, s.original_filename,
+                   s.feedback, s.rejection_reason, s.review_status, s.submitted_at,
+                   strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
+                   a.title AS assignment_title, mt.title AS topic_title,
+                   mc.title AS chapter_title, st.full_name AS student_name,
+                   st.student_code,
+                   (SELECT GROUP_CONCAT(DISTINCT b_names.batch_name ORDER BY b_names.batch_name SEPARATOR ', ')
+                    FROM student_batches sb_names
+                    JOIN batches b_names ON b_names.id = sb_names.batch_id
+                    WHERE sb_names.student_id = s.student_id AND sb_names.status = 'active') AS batch_names,
+                   (SELECT GROUP_CONCAT(DISTINCT u_names.full_name ORDER BY u_names.full_name SEPARATOR ', ')
+                    FROM student_batches sb_names
+                    JOIN batches b_names ON b_names.id = sb_names.batch_id
+                    JOIN users u_names ON u_names.id = b_names.trainer_id
+                    WHERE sb_names.student_id = s.student_id AND sb_names.status = 'active') AS trainer_names,
+                   (SELECT GROUP_CONCAT(DISTINCT lp_names.program_name ORDER BY lp_names.program_name SEPARATOR ', ')
+                    FROM lms_program_chapters pc_names
+                    JOIN lms_programs lp_names ON lp_names.id = pc_names.program_id
+                    WHERE pc_names.master_chapter_id = mt.master_chapter_id
+                      AND pc_names.is_visible = 1 AND lp_names.is_active = 1) AS program_names
+            FROM lms_assignment_submissions s
+            JOIN lms_assignments a ON a.id = s.assignment_id
+            JOIN lms_master_topics mt ON mt.id = a.master_topic_id
+            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            JOIN students st ON st.id = s.student_id
+            WHERE {' AND '.join(scope_where)}
+        """
+
+        status_filter = (request.args.get('status_filter') or 'submitted').strip().lower()
+        if status_filter not in {'all', 'submitted', 'reviewed', 'accepted', 'rejected'}:
+            status_filter = 'submitted'
+        search_query = (request.args.get('q') or '').strip()[:100]
+        date_from = (request.args.get('date_from') or '').strip()
+        date_to = (request.args.get('date_to') or '').strip()
+        for value_name, value in (('date_from', date_from), ('date_to', date_to)):
+            if value:
+                try:
+                    datetime.strptime(value, '%Y-%m-%d')
+                except ValueError:
+                    if value_name == 'date_from': date_from = ''
+                    else: date_to = ''
+        page = max(request.args.get('page', 1, type=int) or 1, 1)
+        per_page = request.args.get('per_page', 25, type=int) or 25
+        if per_page not in {25, 50, 100}: per_page = 25
+        sort_key = (request.args.get('sort') or 'submitted').strip().lower()
+        sort_direction = (request.args.get('direction') or ('asc' if status_filter == 'submitted' else 'desc')).strip().lower()
+        if sort_direction not in {'asc', 'desc'}: sort_direction = 'asc' if status_filter == 'submitted' else 'desc'
+        sort_columns = {'submitted': 'q.submitted_at', 'student': 'q.student_name', 'assignment': 'q.assignment_title', 'status': 'q.review_status'}
+        if sort_key not in sort_columns: sort_key = 'submitted'
+
+        common_where = ['1 = 1']
+        common_params = []
+        if search_query:
+            like = f"%{search_query}%"
+            common_where.append('(q.student_name LIKE ? OR q.student_code LIKE ? OR q.assignment_title LIKE ? OR q.original_filename LIKE ?)')
+            common_params.extend([like, like, like, like])
+        if date_from:
+            common_where.append('DATE(q.submitted_at) >= ?'); common_params.append(date_from)
+        if date_to:
+            common_where.append('DATE(q.submitted_at) <= ?'); common_params.append(date_to)
+        common_where_sql = ' AND '.join(common_where)
+        summary = conn.execute(
+            f"""SELECT COUNT(*) AS total,
+                       COALESCE(SUM(CASE WHEN COALESCE(q.review_status, 'submitted') = 'submitted' THEN 1 ELSE 0 END), 0) AS pending,
+                       COALESCE(SUM(CASE WHEN q.review_status = 'accepted' THEN 1 ELSE 0 END), 0) AS accepted,
+                       COALESCE(SUM(CASE WHEN q.review_status = 'rejected' THEN 1 ELSE 0 END), 0) AS rejected
+                FROM ({base_sql}) q WHERE {common_where_sql}""",
+            tuple(scope_params + common_params),
+        ).fetchone()
+        queue_summary = {key: int(summary[key] or 0) for key in ('total', 'pending', 'accepted', 'rejected')}
+        workload = {}
+        for key, column_name in (
+            ('trainers', 'trainer_names'), ('batches', 'batch_names'), ('programs', 'program_names')
+        ):
+            workload[key] = conn.execute(
+                f"""SELECT COALESCE(NULLIF(q.{column_name}, ''), 'Unassigned') AS label,
+                           COUNT(*) AS pending_count
+                    FROM ({base_sql}) q
+                    WHERE {common_where_sql}
+                      AND COALESCE(q.review_status, 'submitted') = 'submitted'
+                    GROUP BY q.{column_name}
+                    ORDER BY pending_count DESC, label
+                    LIMIT 8""",
+                tuple(scope_params + common_params),
+            ).fetchall()
+
+        result_where = list(common_where)
+        result_params = list(common_params)
+        if status_filter == 'reviewed': result_where.append("q.review_status IN ('accepted', 'rejected')")
+        elif status_filter != 'all':
+            result_where.append("COALESCE(q.review_status, 'submitted') = ?"); result_params.append(status_filter)
+        result_where_sql = ' AND '.join(result_where)
+        filtered_total = int(conn.execute(
+            f"SELECT COUNT(*) AS n FROM ({base_sql}) q WHERE {result_where_sql}",
+            tuple(scope_params + result_params),
+        ).fetchone()['n'])
+        total_pages = max((filtered_total + per_page - 1) // per_page, 1)
+        page = min(page, total_pages)
+        offset = (page - 1) * per_page
+        direction_sql = 'DESC' if sort_direction == 'desc' else 'ASC'
+        submissions = conn.execute(
+            f"""SELECT q.* FROM ({base_sql}) q WHERE {result_where_sql}
+                ORDER BY {sort_columns[sort_key]} {direction_sql}, q.id {direction_sql}
+                LIMIT ? OFFSET ?""",
+            tuple(scope_params + result_params + [per_page, offset]),
+        ).fetchall()
+        pagination = {'page': page, 'per_page': per_page, 'total': filtered_total, 'total_pages': total_pages,
+                      'start': offset + 1 if filtered_total else 0, 'end': min(offset + per_page, filtered_total)}
+
+        return render_template(
+            'lms_admin/lms_review_queue.html', submissions=submissions,
+            queue_summary=queue_summary, trainers=trainers, active_batches=active_batches,
+            programs=programs, selected_trainer_id=selected_trainer_id,
+            selected_batch_id=selected_batch_id, selected_program_id=selected_program_id,
+            status_filter=status_filter, search_query=search_query,
+            date_from=date_from, date_to=date_to, sort_key=sort_key,
+            sort_direction=sort_direction, pagination=pagination, is_admin=is_admin,
+            workload=workload,
+        )
+    finally:
+        conn.close()
+
+
+def _review_queue_return_args(source):
+    """Read and validate queue context from query args or prefixed form fields."""
+    prefix = 'return_' if source is request.form else ''
+    args = {}
+    for key in ('trainer_id', 'batch_id', 'program_id'):
+        value = (source.get(f'{prefix}{key}') or '').strip()
+        if value.isdigit():
+            args[key] = int(value)
+    status_filter = (source.get(f'{prefix}status_filter') or '').strip().lower()
+    if status_filter in {'all', 'submitted', 'reviewed', 'accepted', 'rejected'}:
+        args['status_filter'] = status_filter
+    query = (source.get(f'{prefix}q') or '').strip()[:100]
+    if query:
+        args['q'] = query
+    for key in ('date_from', 'date_to'):
+        value = (source.get(f'{prefix}{key}') or '').strip()
+        try:
+            if value:
+                datetime.strptime(value, '%Y-%m-%d')
+                args[key] = value
+        except ValueError:
+            pass
+    sort = (source.get(f'{prefix}sort') or '').strip().lower()
+    direction = (source.get(f'{prefix}direction') or '').strip().lower()
+    per_page = (source.get(f'{prefix}per_page') or '').strip()
+    page = (source.get(f'{prefix}page') or '').strip()
+    if sort in {'submitted', 'student', 'assignment', 'status'}:
+        args['sort'] = sort
+    if direction in {'asc', 'desc'}:
+        args['direction'] = direction
+    if per_page in {'25', '50', '100'}:
+        args['per_page'] = int(per_page)
+    if page.isdigit() and int(page) > 1:
+        args['page'] = int(page)
+    return args
+
+
+@lms_admin_bp.route('/master/reviews/<int:submission_id>')
+@lms_content_manager_required
+def review_submission_detail(submission_id):
+    """Preview and decide a submission without leaving the authorized queue."""
+    conn = get_conn()
+    try:
+        actor = _current_lms_actor(conn)
+        if not actor:
+            abort(403)
+        _require_submission_access(conn, submission_id)
+        sub = conn.execute(
+            """
+            SELECT s.id, s.assignment_id, s.student_id, s.file_path,
+                   s.original_filename, s.feedback, s.rejection_reason,
+                   s.is_latest, COALESCE(s.review_status, 'submitted') AS review_status,
+                   s.score, s.is_late, s.graded_at, s.internal_reviewer_notes,
+                   s.reviewed_by, reviewer.full_name AS reviewed_by_name,
+                   strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
+                   strftime('%d %b %Y %H:%M', s.reviewed_at) AS reviewed_date,
+                   a.title AS assignment_title, a.description AS assignment_description,
+                   a.due_at, a.max_score, a.passing_score, a.grading_mode,
+                   a.rubric_id, a.completion_rule, a.allow_late_submission,
+                   a.max_attempts, a.is_required,
+                   mt.title AS topic_title, mc.title AS chapter_title,
+                   st.full_name AS student_name, st.student_code
+            FROM lms_assignment_submissions s
+            JOIN lms_assignments a ON a.id = s.assignment_id
+            JOIN lms_master_topics mt ON mt.id = a.master_topic_id
+            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            JOIN students st ON st.id = s.student_id
+            LEFT JOIN users reviewer ON reviewer.id = s.reviewed_by
+            WHERE s.id = ?
+            """,
+            (submission_id,),
+        ).fetchone()
+        if not sub:
+            abort(404)
+
+        attempts = conn.execute(
+            """
+            SELECT s.id, s.original_filename, s.feedback, s.rejection_reason,
+                   s.is_latest, COALESCE(s.review_status, 'submitted') AS review_status,
+                   s.score, s.is_late, s.graded_at,
+                   s.reviewed_by, reviewer.full_name AS reviewed_by_name,
+                   strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
+                   strftime('%d %b %Y %H:%M', s.reviewed_at) AS reviewed_date,
+                   ROW_NUMBER() OVER (ORDER BY s.submitted_at, s.id) AS attempt_number
+            FROM lms_assignment_submissions s
+            LEFT JOIN users reviewer ON reviewer.id = s.reviewed_by
+            WHERE s.assignment_id = ? AND s.student_id = ?
+            ORDER BY s.submitted_at DESC, s.id DESC
+            """,
+            (sub['assignment_id'], sub['student_id']),
+        ).fetchall()
+        rubric_criteria = []
+        if sub['rubric_id']:
+            rubric_criteria = conn.execute(
+                """SELECT rc.id, rc.criterion_name, rc.description, rc.max_score,
+                          rs.score, rs.comment
+                   FROM lms_rubric_criteria rc
+                   LEFT JOIN lms_submission_rubric_scores rs
+                     ON rs.criterion_id = rc.id AND rs.submission_id = ?
+                   WHERE rc.rubric_id = ? ORDER BY rc.display_order, rc.id""",
+                (submission_id, sub['rubric_id']),
+            ).fetchall()
+
+        queue_args = _review_queue_return_args(request.args)
+        is_admin = actor['role'] == 'admin'
+        selected_trainer_id = queue_args.get('trainer_id') if is_admin else actor['id']
+        admin_branch_limited = is_admin and int(actor['can_view_all_branches'] or 0) != 1
+
+        scope_where = ["s.is_latest = 1", "COALESCE(s.review_status, 'submitted') = 'submitted'"]
+        scope_params = []
+        if selected_trainer_id:
+            scope_where.append("""EXISTS (SELECT 1 FROM student_batches sb JOIN batches b ON b.id = sb.batch_id
+                WHERE sb.student_id = s.student_id AND sb.status = 'active'
+                  AND LOWER(COALESCE(b.status, '')) = 'active' AND b.trainer_id = ?)""")
+            scope_params.append(selected_trainer_id)
+        if queue_args.get('batch_id'):
+            scope_where.append("""EXISTS (SELECT 1 FROM student_batches sb JOIN batches b ON b.id = sb.batch_id
+                WHERE sb.student_id = s.student_id AND sb.status = 'active'
+                  AND LOWER(COALESCE(b.status, '')) = 'active' AND b.id = ?)""")
+            scope_params.append(queue_args['batch_id'])
+        if admin_branch_limited:
+            scope_where.append("""(st.branch_id = ? OR EXISTS (SELECT 1 FROM student_batches sb
+                JOIN batches b ON b.id = sb.batch_id WHERE sb.student_id = s.student_id
+                  AND sb.status = 'active' AND LOWER(COALESCE(b.status, '')) = 'active' AND b.branch_id = ?))""")
+            scope_params.extend([actor['branch_id'], actor['branch_id']])
+        if queue_args.get('program_id'):
+            scope_where.append("""EXISTS (SELECT 1 FROM lms_program_chapters pc
+                WHERE pc.master_chapter_id = mt.master_chapter_id
+                  AND pc.program_id = ? AND pc.is_visible = 1)""")
+            scope_params.append(queue_args['program_id'])
+        if queue_args.get('q'):
+            like = f"%{queue_args['q']}%"
+            scope_where.append('(st.full_name LIKE ? OR st.student_code LIKE ? OR a.title LIKE ? OR s.original_filename LIKE ?)')
+            scope_params.extend([like, like, like, like])
+        if queue_args.get('date_from'):
+            scope_where.append('DATE(s.submitted_at) >= ?')
+            scope_params.append(queue_args['date_from'])
+        if queue_args.get('date_to'):
+            scope_where.append('DATE(s.submitted_at) <= ?')
+            scope_params.append(queue_args['date_to'])
+
+        sort_key = queue_args.get('sort', 'submitted')
+        direction = queue_args.get('direction', 'asc')
+        sort_columns = {'submitted': 's.submitted_at', 'student': 'st.full_name',
+                        'assignment': 'a.title', 'status': 's.review_status'}
+        direction_sql = 'DESC' if direction == 'desc' else 'ASC'
+        pending_rows = conn.execute(
+            f"""SELECT s.id FROM lms_assignment_submissions s
+                JOIN lms_assignments a ON a.id = s.assignment_id
+                JOIN lms_master_topics mt ON mt.id = a.master_topic_id
+                JOIN students st ON st.id = s.student_id
+                WHERE {' AND '.join(scope_where)}
+                ORDER BY {sort_columns[sort_key]} {direction_sql}, s.id {direction_sql}""",
+            tuple(scope_params),
+        ).fetchall()
+        pending_ids = [int(row['id']) for row in pending_rows]
+        previous_id = next_id = None
+        if submission_id in pending_ids:
+            position = pending_ids.index(submission_id)
+            if position > 0:
+                previous_id = pending_ids[position - 1]
+            if position + 1 < len(pending_ids):
+                next_id = pending_ids[position + 1]
+
+        orig = sub['original_filename'] or sub['file_path'] or 'submission'
+        ext = orig.rsplit('.', 1)[-1].lower() if '.' in orig else ''
+        image_exts = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        office_exts = {'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'}
+        is_localhost = request.host.startswith(('localhost', '127.', '0.0.0.0'))
+        preview_type = preview_url = None
+        if ext == 'pdf':
+            preview_type = 'pdf'
+            preview_url = url_for('lms_admin.admin_download_submission', submission_id=submission_id, inline=1)
+        elif ext in image_exts:
+            preview_type = 'image'
+            preview_url = url_for('lms_admin.admin_download_submission', submission_id=submission_id, inline=1)
+        elif ext in office_exts:
+            preview_type = 'office'
+            if not is_localhost:
+                token = _make_submission_preview_token(submission_id)
+                public_url = url_for('lms_admin.preview_submission_public_file', token=token, _external=True)
+                preview_url = 'https://view.officeapps.live.com/op/embed.aspx?src=' + quote(public_url, safe='')
+
+        return render_template(
+            'lms_admin/lms_assignment_review_detail.html', sub=sub,
+            queue_args=queue_args, previous_id=previous_id, next_id=next_id,
+            pending_position=(pending_ids.index(submission_id) + 1 if submission_id in pending_ids else None),
+            pending_total=len(pending_ids), preview_type=preview_type,
+            preview_url=preview_url, download_url=url_for('lms_admin.admin_download_submission', submission_id=submission_id),
+            is_localhost=is_localhost, office_exts=office_exts, orig_filename=orig,
+            attempts=attempts,
+            rubric_criteria=rubric_criteria,
+        )
+    finally:
+        conn.close()
+
+
 @lms_admin_bp.route('/master/topic/<int:master_topic_id>/assignments', methods=['GET', 'POST'])
-@login_required
+@lms_content_manager_required
 def manage_assignments(master_topic_id):
     conn = get_conn()
     try:
@@ -7035,6 +7849,11 @@ def manage_assignments(master_topic_id):
                 flash(description_error, 'danger')
                 return redirect(url_for('lms_admin.manage_assignments', master_topic_id=master_topic_id))
 
+            grading, grading_error = _parse_assignment_grading_settings(conn)
+            if grading_error:
+                flash(grading_error, 'danger')
+                return redirect(url_for('lms_admin.manage_assignments', master_topic_id=master_topic_id))
+
             file_path = None
             orig_name = None
             if file_obj and file_obj.filename:
@@ -7048,10 +7867,15 @@ def manage_assignments(master_topic_id):
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             conn.execute("""
                 INSERT INTO lms_assignments
-                    (master_topic_id, title, description, file_path, original_filename, uploaded_by, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (master_topic_id, title, description, file_path, original_filename, uploaded_by, created_at, updated_at,
+                     due_at, max_score, passing_score, grading_mode, rubric_id, completion_rule,
+                     allow_late_submission, max_attempts, is_required)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (master_topic_id, title, description or None,
-                  file_path, orig_name, session.get('user_id'), now, now))
+                  file_path, orig_name, session.get('user_id'), now, now,
+                  grading['due_at'], grading['max_score'], grading['passing_score'],
+                  grading['grading_mode'], grading['rubric_id'], grading['completion_rule'],
+                  grading['allow_late_submission'], grading['max_attempts'], grading['is_required']))
             conn.commit()
             log_activity(
                 user_id=session['user_id'], branch_id=session.get('branch_id'),
@@ -7064,27 +7888,40 @@ def manage_assignments(master_topic_id):
         assignments = conn.execute("""
             SELECT a.id, a.title, a.description, a.original_filename, a.file_path,
                    strftime('%d %b %Y', a.created_at) AS created_date,
-                   (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id) AS submission_count,
-                   (SELECT COUNT(*) FROM lms_assignment_submissions s WHERE s.assignment_id = a.id AND s.status = 'reviewed') AS reviewed_count
+                   (SELECT COUNT(*) FROM lms_assignment_submissions s
+                    WHERE s.assignment_id = a.id AND s.is_latest = 1) AS submission_count,
+                   (SELECT COUNT(*) FROM lms_assignment_submissions s
+                    WHERE s.assignment_id = a.id AND s.is_latest = 1
+                      AND COALESCE(s.review_status, 'submitted') IN ('accepted', 'rejected')) AS reviewed_count,
+                   (SELECT COUNT(*) FROM lms_assignment_submissions s
+                    WHERE s.assignment_id = a.id AND s.is_latest = 1
+                      AND COALESCE(s.review_status, 'submitted') = 'submitted') AS pending_count
             FROM   lms_assignments a
             WHERE  a.master_topic_id = ?
             ORDER  BY a.created_at
         """, (master_topic_id,)).fetchall()
 
+        rubrics = conn.execute(
+            "SELECT id, name FROM lms_rubrics WHERE is_active = 1 ORDER BY name"
+        ).fetchall()
+
         return render_template('lms_admin/lms_assignments.html',
-                               topic=topic, assignments=assignments)
+                               topic=topic, assignments=assignments, rubrics=rubrics)
     finally:
         conn.close()
 
 
 @lms_admin_bp.route('/master/assignments/<int:assignment_id>/edit', methods=['GET', 'POST'])
-@login_required
+@lms_content_manager_required
 def edit_assignment(assignment_id):
     conn = get_conn()
     try:
         assignment = conn.execute("""
             SELECT a.id, a.master_topic_id, a.title, a.description,
                    a.file_path, a.original_filename,
+                   a.due_at, a.max_score, a.passing_score, a.grading_mode,
+                   a.rubric_id, a.completion_rule, a.allow_late_submission,
+                   a.max_attempts, a.is_required,
                    mt.title AS topic_title,
                    mc.id AS chapter_id, mc.title AS chapter_title
             FROM   lms_assignments a
@@ -7110,6 +7947,11 @@ def edit_assignment(assignment_id):
                 flash(description_error, 'danger')
                 return redirect(url_for('lms_admin.edit_assignment', assignment_id=assignment_id))
 
+            grading, grading_error = _parse_assignment_grading_settings(conn)
+            if grading_error:
+                flash(grading_error, 'danger')
+                return redirect(url_for('lms_admin.edit_assignment', assignment_id=assignment_id))
+
             file_path = assignment['file_path']
             orig_name = assignment['original_filename']
             if file_obj and file_obj.filename:
@@ -7128,7 +7970,10 @@ def edit_assignment(assignment_id):
                        file_path = ?,
                        original_filename = ?,
                        uploaded_by = ?,
-                       updated_at = ?
+                       updated_at = ?,
+                       due_at = ?, max_score = ?, passing_score = ?, grading_mode = ?,
+                       rubric_id = ?, completion_rule = ?, allow_late_submission = ?,
+                       max_attempts = ?, is_required = ?
                 WHERE  id = ?
             """, (
                 title,
@@ -7137,6 +7982,9 @@ def edit_assignment(assignment_id):
                 orig_name,
                 session.get('user_id'),
                 now,
+                grading['due_at'], grading['max_score'], grading['passing_score'],
+                grading['grading_mode'], grading['rubric_id'], grading['completion_rule'],
+                grading['allow_late_submission'], grading['max_attempts'], grading['is_required'],
                 assignment_id,
             ))
             conn.commit()
@@ -7148,13 +7996,16 @@ def edit_assignment(assignment_id):
             flash('Assignment updated.', 'success')
             return redirect(url_for('lms_admin.manage_assignments', master_topic_id=assignment['master_topic_id']))
 
-        return render_template('lms_admin/lms_assignment_edit.html', assignment=assignment)
+        rubrics = conn.execute(
+            "SELECT id, name FROM lms_rubrics WHERE is_active = 1 ORDER BY name"
+        ).fetchall()
+        return render_template('lms_admin/lms_assignment_edit.html', assignment=assignment, rubrics=rubrics)
     finally:
         conn.close()
 
 
 @lms_admin_bp.route('/master/assignments/<int:assignment_id>/delete', methods=['POST'])
-@login_required
+@lms_content_manager_required
 def delete_assignment(assignment_id):
     conn = get_conn()
     try:
@@ -7179,7 +8030,7 @@ def delete_assignment(assignment_id):
 
 
 @lms_admin_bp.route('/master/assignments/<int:assignment_id>/submissions')
-@login_required
+@lms_content_manager_required
 def view_submissions(assignment_id):
     conn = get_conn()
     try:
@@ -7193,9 +8044,13 @@ def view_submissions(assignment_id):
             flash('Assignment not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
 
-        role = (session.get('role') or '').strip().lower()
+        actor = _current_lms_actor(conn)
+        if not actor:
+            abort(403)
+        role = actor['role']
         is_admin = role == 'admin'
-        current_user_id = session.get('user_id')
+        current_user_id = actor['id']
+        admin_branch_limited = is_admin and int(actor['can_view_all_branches'] or 0) != 1
 
         requested_trainer_id = request.args.get('trainer_id', type=int)
         selected_trainer_id = requested_trainer_id if is_admin else current_user_id
@@ -7208,9 +8063,10 @@ def view_submissions(assignment_id):
                 FROM batches
                 WHERE trainer_id = ?
                   AND LOWER(COALESCE(status, '')) = 'active'
+                  AND (? = 0 OR branch_id = ?)
                 ORDER BY batch_name
                 """,
-                (selected_trainer_id,)
+                (selected_trainer_id, 1 if admin_branch_limited else 0, actor['branch_id'])
             ).fetchall()
         else:
             active_batches = conn.execute(
@@ -7218,8 +8074,10 @@ def view_submissions(assignment_id):
                 SELECT id, batch_name
                 FROM batches
                 WHERE LOWER(COALESCE(status, '')) = 'active'
+                  AND (? = 0 OR branch_id = ?)
                 ORDER BY batch_name
-                """
+                """,
+                (1 if admin_branch_limited else 0, actor['branch_id'])
             ).fetchall()
 
         if selected_batch_id:
@@ -7244,7 +8102,7 @@ def view_submissions(assignment_id):
             if not valid_batch:
                 selected_batch_id = None
 
-        if selected_trainer_id or selected_batch_id:
+        if selected_trainer_id or selected_batch_id or admin_branch_limited:
             where_clauses = [
                 "s.assignment_id = ?",
                 "s.is_latest = 1",
@@ -7258,8 +8116,11 @@ def view_submissions(assignment_id):
             if selected_batch_id:
                 where_clauses.append("sb.batch_id = ?")
                 params.append(selected_batch_id)
+            if admin_branch_limited:
+                where_clauses.append("(st.branch_id = ? OR b.branch_id = ?)")
+                params.extend([actor['branch_id'], actor['branch_id']])
 
-            submissions = conn.execute(f"""
+            submissions_base_sql = f"""
                 SELECT DISTINCT
                        s.id, s.student_id, s.original_filename, s.feedback,
                        s.status, s.review_status, s.rejection_reason,
@@ -7272,59 +8133,259 @@ def view_submissions(assignment_id):
                 JOIN   student_batches sb ON sb.student_id = s.student_id
                 JOIN   batches b ON b.id = sb.batch_id
                 WHERE  {' AND '.join(where_clauses)}
-                ORDER  BY s.submitted_at DESC
-            """, tuple(params)).fetchall()
+            """
+            submissions_base_params = params
         else:
-            submissions = conn.execute("""
+            submissions_base_sql = """
                 SELECT s.id, s.student_id, s.original_filename, s.feedback,
                        s.status, s.review_status, s.rejection_reason,
+                       s.submitted_at,
                        strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
                        strftime('%d %b %Y %H:%M', s.reviewed_at)  AS reviewed_date,
                        st.full_name AS student_name, st.student_code
                 FROM   lms_assignment_submissions s
                 JOIN   students st ON st.id = s.student_id
                 WHERE  s.assignment_id = ? AND s.is_latest = 1
-                ORDER  BY s.submitted_at DESC
-            """, (assignment_id,)).fetchall()
+            """
+            submissions_base_params = [assignment_id]
+
+        status_filter = (request.args.get('status_filter') or 'all').strip().lower()
+        if status_filter not in {'all', 'submitted', 'reviewed', 'accepted', 'rejected'}:
+            status_filter = 'all'
+        search_query = (request.args.get('q') or '').strip()[:100]
+        date_from = (request.args.get('date_from') or '').strip()
+        date_to = (request.args.get('date_to') or '').strip()
+        for value_name, value in (('date_from', date_from), ('date_to', date_to)):
+            if value:
+                try:
+                    datetime.strptime(value, '%Y-%m-%d')
+                except ValueError:
+                    if value_name == 'date_from':
+                        date_from = ''
+                    else:
+                        date_to = ''
+        page = max(request.args.get('page', 1, type=int) or 1, 1)
+        per_page = request.args.get('per_page', 25, type=int) or 25
+        if per_page not in {25, 50, 100}:
+            per_page = 25
+        sort_key = (request.args.get('sort') or 'submitted').strip().lower()
+        sort_direction = (request.args.get('direction') or 'desc').strip().lower()
+        if sort_direction not in {'asc', 'desc'}:
+            sort_direction = 'desc'
+        submission_sort_columns = {
+            'submitted': 'q.submitted_at',
+            'student': 'q.student_name',
+            'status': 'q.review_status',
+        }
+        if sort_key not in submission_sort_columns:
+            sort_key = 'submitted'
+
+        common_where = ['1 = 1']
+        common_params = []
+        if search_query:
+            like = f"%{search_query}%"
+            common_where.append('(q.student_name LIKE ? OR q.student_code LIKE ? OR q.original_filename LIKE ?)')
+            common_params.extend([like, like, like])
+        if date_from:
+            common_where.append('DATE(q.submitted_at) >= ?')
+            common_params.append(date_from)
+        if date_to:
+            common_where.append('DATE(q.submitted_at) <= ?')
+            common_params.append(date_to)
+        common_where_sql = ' AND '.join(common_where)
+
+        summary = conn.execute(
+            f"""SELECT COUNT(*) AS total,
+                       COALESCE(SUM(CASE WHEN COALESCE(q.review_status, 'submitted') = 'submitted' THEN 1 ELSE 0 END), 0) AS pending,
+                       COALESCE(SUM(CASE WHEN q.review_status = 'accepted' THEN 1 ELSE 0 END), 0) AS accepted,
+                       COALESCE(SUM(CASE WHEN q.review_status = 'rejected' THEN 1 ELSE 0 END), 0) AS rejected
+                FROM ({submissions_base_sql}) q
+                WHERE {common_where_sql}
+            """,
+            tuple(submissions_base_params + common_params),
+        ).fetchone()
+        submission_summary = {key: int(summary[key] or 0) for key in ('total', 'pending', 'accepted', 'rejected')}
+
+        result_where = list(common_where)
+        result_params = list(common_params)
+        if status_filter == 'reviewed':
+            result_where.append("q.review_status IN ('accepted', 'rejected')")
+        elif status_filter != 'all':
+            result_where.append("COALESCE(q.review_status, 'submitted') = ?")
+            result_params.append(status_filter)
+        result_where_sql = ' AND '.join(result_where)
+        filtered_total = conn.execute(
+            f"SELECT COUNT(*) AS n FROM ({submissions_base_sql}) q WHERE {result_where_sql}",
+            tuple(submissions_base_params + result_params),
+        ).fetchone()['n']
+        total_pages = max((int(filtered_total) + per_page - 1) // per_page, 1)
+        page = min(page, total_pages)
+        offset = (page - 1) * per_page
+        direction_sql = 'DESC' if sort_direction == 'desc' else 'ASC'
+        submissions = conn.execute(
+            f"""SELECT q.* FROM ({submissions_base_sql}) q
+                WHERE {result_where_sql}
+                ORDER BY {submission_sort_columns[sort_key]} {direction_sql}, q.id DESC
+                LIMIT ? OFFSET ?
+            """,
+            tuple(submissions_base_params + result_params + [per_page, offset]),
+        ).fetchall()
+        pagination = {
+            'page': page, 'per_page': per_page, 'total': int(filtered_total),
+            'total_pages': total_pages,
+            'start': offset + 1 if filtered_total else 0,
+            'end': min(offset + per_page, int(filtered_total)),
+        }
 
         return render_template('lms_admin/lms_assignment_submissions.html',
                                assignment=a, submissions=submissions,
                                active_batches=active_batches,
-                               selected_batch_id=selected_batch_id)
+                               selected_batch_id=selected_batch_id,
+                               status_filter=status_filter,
+                               submission_summary=submission_summary,
+                               search_query=search_query,
+                               date_from=date_from, date_to=date_to,
+                               sort_key=sort_key, sort_direction=sort_direction,
+                               pagination=pagination)
     finally:
         conn.close()
 
 
+def _parse_submission_grade(conn, submission, require_grade):
+    """Validate a numeric/rubric grade entirely on the server."""
+    mode = submission['grading_mode'] or 'accept_reject'
+    max_score = Decimal(str(submission['max_score'])) if submission['max_score'] is not None else None
+    score_raw = (request.form.get('score') or '').strip()
+    score = None
+    if score_raw:
+        try:
+            score = Decimal(score_raw)
+        except InvalidOperation:
+            return None, None, 'Score must be a number.'
+        if score < 0 or (max_score is not None and score > max_score):
+            return None, None, f'Score must be between 0 and {max_score}.'
+
+    rubric_scores = []
+    if mode in {'rubric', 'numeric_rubric'}:
+        criteria = conn.execute(
+            "SELECT id, criterion_name, max_score FROM lms_rubric_criteria WHERE rubric_id = ? ORDER BY display_order, id",
+            (submission['rubric_id'],),
+        ).fetchall()
+        if require_grade and not criteria:
+            return None, None, 'The configured rubric has no criteria.'
+        rubric_total = Decimal('0')
+        for criterion in criteria:
+            raw = (request.form.get(f"criterion_{criterion['id']}") or '').strip()
+            if not raw:
+                if require_grade:
+                    return None, None, f"Score is required for rubric criterion: {criterion['criterion_name']}."
+                continue
+            try:
+                value = Decimal(raw)
+            except InvalidOperation:
+                return None, None, f"Invalid score for rubric criterion: {criterion['criterion_name']}."
+            criterion_max = Decimal(str(criterion['max_score']))
+            if value < 0 or value > criterion_max:
+                return None, None, f"{criterion['criterion_name']} must be between 0 and {criterion_max}."
+            rubric_total += value
+            rubric_scores.append((criterion['id'], value,
+                                  (request.form.get(f"criterion_comment_{criterion['id']}") or '').strip()[:2000]))
+        if require_grade:
+            if mode == 'rubric':
+                score = rubric_total
+            elif score is None:
+                return None, None, 'Overall score is required for numeric plus rubric grading.'
+            elif score != rubric_total:
+                return None, None, 'Overall score must equal the total rubric score.'
+
+    if require_grade and mode == 'numeric' and score is None:
+        return None, None, 'Score is required for numeric grading.'
+    if require_grade and submission['completion_rule'] == 'score_meets_passing_score':
+        passing = Decimal(str(submission['passing_score']))
+        if score is None or score < passing:
+            return None, None, f'An accepted submission must meet the passing score of {passing}. Reject it to allow resubmission.'
+    return score, rubric_scores, None
+
+
+def _save_submission_rubric_scores(conn, submission_id, rubric_scores, now):
+    for criterion_id, score, comment in rubric_scores:
+        conn.execute(
+            """INSERT INTO lms_submission_rubric_scores
+                   (submission_id, criterion_id, score, comment, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(submission_id, criterion_id)
+               DO UPDATE SET score = ?, comment = ?, updated_at = ?""",
+            (submission_id, criterion_id, score, comment or None, now, now,
+             score, comment or None, now),
+        )
+
+
 @lms_admin_bp.route('/master/submissions/<int:submission_id>/review', methods=['POST'])
-@login_required
+@lms_content_manager_required
 def review_submission(submission_id):
     """Legacy route — kept for backward compat, redirects to accept."""
     return accept_submission(submission_id)
 
 
 @lms_admin_bp.route('/master/submissions/<int:submission_id>/accept', methods=['POST'])
-@login_required
+@lms_content_manager_required
 def accept_submission(submission_id):
-    def _submission_review_redirect(assignment_id):
+    def _submission_review_redirect(assignment_id, completed=False):
         args = {}
         trainer_id = (request.form.get('return_trainer_id') or '').strip()
         batch_id = (request.form.get('return_batch_id') or '').strip()
+        program_id = (request.form.get('return_program_id') or '').strip()
         status_filter = (request.form.get('return_status_filter') or '').strip()
         if trainer_id.isdigit():
             args['trainer_id'] = trainer_id
         if batch_id.isdigit():
             args['batch_id'] = batch_id
-        if status_filter in {'submitted', 'accepted', 'rejected'}:
+        if program_id.isdigit():
+            args['program_id'] = program_id
+        if status_filter in {'submitted', 'reviewed', 'accepted', 'rejected'}:
             args['status_filter'] = status_filter
+        q = (request.form.get('return_q') or '').strip()[:100]
+        if q:
+            args['q'] = q
+        for key in ('date_from', 'date_to'):
+            value = (request.form.get(f'return_{key}') or '').strip()
+            try:
+                if value:
+                    datetime.strptime(value, '%Y-%m-%d')
+                    args[key] = value
+            except ValueError:
+                pass
+        sort = (request.form.get('return_sort') or '').strip()
+        direction = (request.form.get('return_direction') or '').strip()
+        per_page = (request.form.get('return_per_page') or '').strip()
+        page = (request.form.get('return_page') or '').strip()
+        if sort in {'submitted', 'student', 'assignment', 'status'}:
+            args['sort'] = sort
+        if direction in {'asc', 'desc'}:
+            args['direction'] = direction
+        if per_page in {'25', '50', '100'}:
+            args['per_page'] = per_page
+        if page.isdigit() and int(page) > 1:
+            args['page'] = page
+        if request.form.get('return_queue') == '1':
+            next_id = (request.form.get('return_next_id') or '').strip()
+            if completed and next_id.isdigit():
+                return redirect(url_for('lms_admin.review_submission_detail', submission_id=int(next_id), **args))
+            if completed:
+                return redirect(url_for('lms_admin.review_queue', **args))
+            return redirect(url_for('lms_admin.review_submission_detail', submission_id=submission_id, **args))
         return redirect(url_for('lms_admin.view_submissions', assignment_id=assignment_id, **args))
 
     conn = get_conn()
     try:
+        _require_submission_access(conn, submission_id)
         sub = conn.execute(
             """
             SELECT s.assignment_id,
                    s.student_id,
                    a.master_topic_id,
+                   a.grading_mode, a.max_score, a.passing_score,
+                   a.rubric_id, a.completion_rule,
                    is_latest,
                    COALESCE(review_status, 'submitted') AS review_status
             FROM lms_assignment_submissions s
@@ -7340,87 +8401,113 @@ def accept_submission(submission_id):
             flash('Only the latest pending submission can be accepted/rejected.', 'warning')
             return _submission_review_redirect(sub['assignment_id'])
         feedback = request.form.get('feedback', '').strip()
+        internal_notes = request.form.get('internal_reviewer_notes', '').strip()[:5000]
+        score, rubric_scores, grade_error = _parse_submission_grade(conn, sub, require_grade=True)
+        if grade_error:
+            flash(grade_error, 'danger')
+            return _submission_review_redirect(sub['assignment_id'])
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute("""
             UPDATE lms_assignment_submissions
             SET    feedback      = ?,
                    status        = 'reviewed',
                    review_status = 'accepted',
+                   score          = ?,
+                   graded_at      = ?,
+                   internal_reviewer_notes = ?,
                    reviewed_by   = ?,
                    reviewed_at   = ?,
                    updated_at    = ?
             WHERE  id = ?
               AND  is_latest = 1
               AND  COALESCE(review_status, 'submitted') = 'submitted'
-        """, (feedback or None, session.get('user_id'), now, now, submission_id))
+        """, (feedback or None, score, now if score is not None else None,
+              internal_notes or None, session.get('user_id'), now, now, submission_id))
         if cur.rowcount == 0:
             flash('Submission can no longer be reviewed (already processed or replaced).', 'warning')
             return _submission_review_redirect(sub['assignment_id'])
 
-        # Accepted assignments should permanently complete the linked topic in all related active programs.
-        conn.execute(
-            """
-                INSERT INTO lms_master_topic_progress (
-                    student_id, program_id, master_topic_id, is_completed, completed_at, created_at, updated_at
-                )
-                SELECT DISTINCT
-                    ?,
-                    pc.program_id,
-                    ?,
-                    1,
-                    datetime('now'),
-                    datetime('now'),
-                    datetime('now')
-                FROM lms_program_chapters pc
-                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
-                JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
-                JOIN lms_programs lp ON lp.id = pc.program_id
-                WHERE mt.id = ?
-                  AND pc.is_visible = 1
-                  AND mc.status = 'active'
-                  AND mt.status = 'active'
-                  AND lp.is_active = 1
-                ON CONFLICT(student_id, program_id, master_topic_id)
-                DO UPDATE SET
-                    is_completed = 1,
-                    completed_at = datetime('now'),
-                    updated_at = datetime('now')
-            """,
-            (sub['student_id'], sub['master_topic_id'], sub['master_topic_id'])
-        )
+        _save_submission_rubric_scores(conn, submission_id, rubric_scores, now)
+        _recalculate_assignment_topic_completion(conn, sub['student_id'], sub['master_topic_id'])
 
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='accept',
+            module_name='lms_assignment_submissions',
+            record_id=submission_id,
+            description=f"Accepted assignment submission {submission_id}",
+            conn=conn,
+        )
         conn.commit()
         flash('Assignment accepted and feedback saved.', 'success')
-        return _submission_review_redirect(sub['assignment_id'])
+        return _submission_review_redirect(sub['assignment_id'], completed=True)
     finally:
         conn.close()
 
 
 @lms_admin_bp.route('/master/submissions/<int:submission_id>/reject', methods=['POST'])
-@login_required
+@lms_content_manager_required
 def reject_submission(submission_id):
-    def _submission_review_redirect(assignment_id):
+    def _submission_review_redirect(assignment_id, completed=False):
         args = {}
         trainer_id = (request.form.get('return_trainer_id') or '').strip()
         batch_id = (request.form.get('return_batch_id') or '').strip()
+        program_id = (request.form.get('return_program_id') or '').strip()
         status_filter = (request.form.get('return_status_filter') or '').strip()
         if trainer_id.isdigit():
             args['trainer_id'] = trainer_id
         if batch_id.isdigit():
             args['batch_id'] = batch_id
-        if status_filter in {'submitted', 'accepted', 'rejected'}:
+        if program_id.isdigit():
+            args['program_id'] = program_id
+        if status_filter in {'submitted', 'reviewed', 'accepted', 'rejected'}:
             args['status_filter'] = status_filter
+        q = (request.form.get('return_q') or '').strip()[:100]
+        if q:
+            args['q'] = q
+        for key in ('date_from', 'date_to'):
+            value = (request.form.get(f'return_{key}') or '').strip()
+            try:
+                if value:
+                    datetime.strptime(value, '%Y-%m-%d')
+                    args[key] = value
+            except ValueError:
+                pass
+        sort = (request.form.get('return_sort') or '').strip()
+        direction = (request.form.get('return_direction') or '').strip()
+        per_page = (request.form.get('return_per_page') or '').strip()
+        page = (request.form.get('return_page') or '').strip()
+        if sort in {'submitted', 'student', 'assignment', 'status'}:
+            args['sort'] = sort
+        if direction in {'asc', 'desc'}:
+            args['direction'] = direction
+        if per_page in {'25', '50', '100'}:
+            args['per_page'] = per_page
+        if page.isdigit() and int(page) > 1:
+            args['page'] = page
+        if request.form.get('return_queue') == '1':
+            next_id = (request.form.get('return_next_id') or '').strip()
+            if completed and next_id.isdigit():
+                return redirect(url_for('lms_admin.review_submission_detail', submission_id=int(next_id), **args))
+            if completed:
+                return redirect(url_for('lms_admin.review_queue', **args))
+            return redirect(url_for('lms_admin.review_submission_detail', submission_id=submission_id, **args))
         return redirect(url_for('lms_admin.view_submissions', assignment_id=assignment_id, **args))
 
     conn = get_conn()
     try:
+        _require_submission_access(conn, submission_id)
         sub = conn.execute(
             """
-            SELECT assignment_id,
-                   is_latest,
-                   COALESCE(review_status, 'submitted') AS review_status
-            FROM lms_assignment_submissions
-            WHERE id = ?
+            SELECT s.assignment_id, s.student_id, a.master_topic_id,
+                   a.grading_mode, a.max_score, a.passing_score,
+                   a.rubric_id, a.completion_rule,
+                   s.is_latest,
+                   COALESCE(s.review_status, 'submitted') AS review_status
+            FROM lms_assignment_submissions s
+            JOIN lms_assignments a ON a.id = s.assignment_id
+            WHERE s.id = ?
             """,
             (submission_id,)
         ).fetchone()
@@ -7432,8 +8519,13 @@ def reject_submission(submission_id):
             return _submission_review_redirect(sub['assignment_id'])
         rejection_reason = request.form.get('rejection_reason', '').strip()
         feedback = request.form.get('feedback', '').strip()
+        internal_notes = request.form.get('internal_reviewer_notes', '').strip()[:5000]
         if not rejection_reason:
             flash('Please provide a rejection reason.', 'danger')
+            return _submission_review_redirect(sub['assignment_id'])
+        score, rubric_scores, grade_error = _parse_submission_grade(conn, sub, require_grade=False)
+        if grade_error:
+            flash(grade_error, 'danger')
             return _submission_review_redirect(sub['assignment_id'])
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute("""
@@ -7442,28 +8534,45 @@ def reject_submission(submission_id):
                    rejection_reason = ?,
                    status           = 'reviewed',
                    review_status    = 'rejected',
+                   score            = ?,
+                   graded_at        = ?,
+                   internal_reviewer_notes = ?,
                    reviewed_by      = ?,
                    reviewed_at      = ?,
                    updated_at       = ?
             WHERE  id = ?
               AND  is_latest = 1
               AND  COALESCE(review_status, 'submitted') = 'submitted'
-        """, (feedback or None, rejection_reason, session.get('user_id'), now, now, submission_id))
+        """, (feedback or None, rejection_reason, score,
+              now if score is not None else None, internal_notes or None,
+              session.get('user_id'), now, now, submission_id))
         if cur.rowcount == 0:
             flash('Submission can no longer be reviewed (already processed or replaced).', 'warning')
             return _submission_review_redirect(sub['assignment_id'])
+        _save_submission_rubric_scores(conn, submission_id, rubric_scores, now)
+        _recalculate_assignment_topic_completion(conn, sub['student_id'], sub['master_topic_id'])
+        log_activity(
+            user_id=session['user_id'],
+            branch_id=session.get('branch_id'),
+            action_type='reject',
+            module_name='lms_assignment_submissions',
+            record_id=submission_id,
+            description=f"Rejected assignment submission {submission_id}",
+            conn=conn,
+        )
         conn.commit()
         flash('Assignment rejected. Student can now re-upload.', 'warning')
-        return _submission_review_redirect(sub['assignment_id'])
+        return _submission_review_redirect(sub['assignment_id'], completed=True)
     finally:
         conn.close()
 
 
 @lms_admin_bp.route('/submission/<int:submission_id>/preview')
-@login_required
+@lms_content_manager_required
 def preview_submission(submission_id):
     conn = get_conn()
     try:
+        _require_submission_access(conn, submission_id)
         sub = conn.execute("""
             SELECT s.id, s.file_path, s.original_filename, s.review_status,
                    strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
@@ -7476,13 +8585,6 @@ def preview_submission(submission_id):
         """, (submission_id,)).fetchone()
         if not sub:
             abort(404)
-        base_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
-        )
-        full_path = os.path.join(base_dir, sub['file_path'])
-        if not os.path.isfile(full_path):
-            flash('Submission file not found on server.', 'danger')
-            return redirect(url_for('lms_admin.view_submissions', assignment_id=sub['assignment_id']))
         orig = sub['original_filename'] or sub['file_path']
         ext  = orig.rsplit('.', 1)[-1].lower() if '.' in orig else ''
         download_url = url_for('lms_admin.admin_download_submission',
@@ -7508,7 +8610,8 @@ def preview_submission(submission_id):
                                sub=sub, ext=ext, preview_type=preview_type,
                                preview_url=preview_url, download_url=download_url,
                                is_localhost=is_localhost, office_exts=office_exts,
-                               orig_filename=orig)
+                               orig_filename=orig,
+                               queue_args=_review_queue_return_args(request.args))
     finally:
         conn.close()
 
@@ -7562,7 +8665,7 @@ def preview_submission_public_file():
 
 
 @lms_admin_bp.route('/master/assignments/file/<int:assignment_id>')
-@login_required
+@lms_content_manager_required
 def admin_download_assignment(assignment_id):
     from flask import send_file, abort, redirect
     conn = get_conn()
@@ -7602,11 +8705,12 @@ def admin_download_assignment(assignment_id):
 
 
 @lms_admin_bp.route('/master/submissions/file/<int:submission_id>')
-@login_required
+@lms_content_manager_required
 def admin_download_submission(submission_id):
     from flask import send_file, abort, redirect
     conn = get_conn()
     try:
+        _require_submission_access(conn, submission_id)
         sub = conn.execute(
             "SELECT file_path, original_filename FROM lms_assignment_submissions WHERE id = ?",
             (submission_id,)
