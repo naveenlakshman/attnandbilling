@@ -49,3 +49,14 @@ The Phase 9 migration is additive, so the previous application revision remains 
 
 - Complete manual tablet/mobile viewport QA.
 - Replace public GCS delivery for student/assignment files with private signed or authenticated delivery, then remove `allUsers: roles/storage.objectViewer` from `global-it-erp-storage`.
+
+## IST date-format follow-up deployment
+
+- Revision: `attn-billing-testing-ist-0721-2025`
+- Image tag: `ist-date-20260721-2025`
+- Digest: `sha256:12e32679a146b2a72fc4ae36d0cfb05b2b030fd689095abf72fbc85ef14a5e38`
+- Cloud Build: `abb2a175-fbf4-4ddd-b350-8e81bd0576e6`
+- Traffic rollout: 0% → 5% → 25% → 50% → 100%
+- Result: Review Queue submission times are converted from UTC to IST and displayed as `dd-mmm-yyyy hh:mm AM/PM IST`.
+- Smoke checks and authenticated production requests returned HTTP 200; no HTTP 5xx, traceback, or PyMySQL errors were detected.
+- Rollback revision retained: `attn-billing-testing-phase10-0721-2006`.
