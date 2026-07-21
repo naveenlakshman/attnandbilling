@@ -10,6 +10,8 @@ import re
 import os
 import json
 import sqlite3
+import io
+import mimetypes
 from urllib.parse import quote
 import bleach
 from bleach.css_sanitizer import CSSSanitizer
@@ -8725,9 +8727,20 @@ def admin_download_submission(submission_id):
     finally:
         conn.close()
 
+    inline = request.args.get('inline') == '1'
+    mimetype = ('application/pdf' if (orig_name or '').lower().endswith('.pdf')
+                else mimetypes.guess_type(orig_name or '')[0])
     try:
         storage_service = get_storage_service()
         if storage_service.file_exists(file_path):
+            if inline:
+                file_bytes = storage_service.download_file(file_path)
+                return send_file(
+                    io.BytesIO(file_bytes),
+                    as_attachment=False,
+                    download_name=orig_name,
+                    mimetype=mimetype or 'application/octet-stream',
+                )
             url = storage_service.generate_public_url(file_path)
             if url.startswith("http"):
                 return redirect(url)
@@ -8746,8 +8759,6 @@ def admin_download_submission(submission_id):
         else:
             abort(404)
     # Default stays as attachment for normal downloads. Preview iframe uses ?inline=1.
-    inline = request.args.get('inline') == '1'
-    mimetype = 'application/pdf' if (orig_name or '').lower().endswith('.pdf') else None
     return send_file(
         full_path,
         as_attachment=not inline,

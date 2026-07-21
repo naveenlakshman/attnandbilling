@@ -1,5 +1,7 @@
 """Phase 7 integrated preview-and-review screen regressions."""
 
+from unittest.mock import patch
+
 import test_assignment_phase0_mysql as baseline
 import test_assignment_authorization_phase2 as phase2
 import test_assignment_pagination_phase5 as phase5
@@ -47,6 +49,16 @@ def run_phase7(fixtures, other_branch, actors):
     assert preview.data.count(b'Back to Review Queue') == 2
     assert f'program_id={fixtures["program"]}'.encode() in preview.data
     assert b'Back to Submissions' not in preview.data
+
+    class CloudPdf:
+        def file_exists(self, path): return True
+        def download_file(self, path): return b'%PDF-1.4\nphase7\n%%EOF'
+
+    with patch('modules.lms_admin.routes.get_storage_service', return_value=CloudPdf()):
+        inline_pdf = admin.get(f'/lms_admin/master/submissions/file/{first_id}?inline=1')
+    assert inline_pdf.status_code == 200
+    assert inline_pdf.mimetype == 'application/pdf'
+    assert inline_pdf.data.startswith(b'%PDF-1.4')
 
     assert trainer_a.get(f'/lms_admin/master/reviews/{first_id}').status_code == 200
     assert trainer_b.get(f'/lms_admin/master/reviews/{first_id}').status_code == 403
