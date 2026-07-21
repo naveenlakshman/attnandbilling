@@ -60,6 +60,15 @@ def run_phase7(fixtures, other_branch, actors):
     assert inline_pdf.mimetype == 'application/pdf'
     assert inline_pdf.data.startswith(b'%PDF-1.4')
 
+    security_headers_enabled = baseline.app.config.get('SECURITY_HEADERS_ENABLED')
+    baseline.app.config['SECURITY_HEADERS_ENABLED'] = True
+    try:
+        csp_response = admin.get(f'/lms_admin/master/reviews/{first_id}')
+    finally:
+        baseline.app.config['SECURITY_HEADERS_ENABLED'] = security_headers_enabled
+    preview_csp = csp_response.headers.get('Content-Security-Policy', '')
+    assert "frame-src 'self' https://view.officeapps.live.com https://*.officeapps.live.com" in preview_csp
+
     assert trainer_a.get(f'/lms_admin/master/reviews/{first_id}').status_code == 200
     assert trainer_b.get(f'/lms_admin/master/reviews/{first_id}').status_code == 403
 
