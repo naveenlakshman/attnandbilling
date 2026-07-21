@@ -6708,6 +6708,18 @@ def api_programs_for_course(course_id):
 
 _ASSIGNMENT_ALLOWED_EXTS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png'}
 _ASSIGNMENT_MAX_BYTES     = 50 * 1024 * 1024   # 50 MB
+_ASSIGNMENT_DESCRIPTION_MAX_BYTES = 500 * 1024  # 500 KB of UTF-8/HTML
+
+
+def _validate_assignment_description(description):
+    """Validate rich-text assignment instructions using the stored UTF-8 byte size."""
+    size = len((description or '').encode('utf-8'))
+    if size > _ASSIGNMENT_DESCRIPTION_MAX_BYTES:
+        return False, (
+            f'Description is too large ({size / 1024:.1f} KB). '
+            'Maximum allowed size is 500 KB.'
+        )
+    return True, None
 
 
 def _save_assignment_file(file_obj):
@@ -7018,6 +7030,11 @@ def manage_assignments(master_topic_id):
                 flash('Title is required.', 'danger')
                 return redirect(url_for('lms_admin.manage_assignments', master_topic_id=master_topic_id))
 
+            description_ok, description_error = _validate_assignment_description(description)
+            if not description_ok:
+                flash(description_error, 'danger')
+                return redirect(url_for('lms_admin.manage_assignments', master_topic_id=master_topic_id))
+
             file_path = None
             orig_name = None
             if file_obj and file_obj.filename:
@@ -7086,6 +7103,11 @@ def edit_assignment(assignment_id):
 
             if not title:
                 flash('Title is required.', 'danger')
+                return redirect(url_for('lms_admin.edit_assignment', assignment_id=assignment_id))
+
+            description_ok, description_error = _validate_assignment_description(description)
+            if not description_ok:
+                flash(description_error, 'danger')
                 return redirect(url_for('lms_admin.edit_assignment', assignment_id=assignment_id))
 
             file_path = assignment['file_path']

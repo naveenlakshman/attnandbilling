@@ -209,6 +209,7 @@
         <label class="form-label" for="assignmentDescription">Description / Instructions</label>
         <textarea id="assignmentDescription" name="description" class="form-control" rows="3"
                   placeholder="Instructions for the student">{{ assignment.description or '' }}</textarea>
+        <div id="assignmentDescriptionError" class="form-text text-danger d-none" role="alert"></div>
       </div>
 
       <div>
@@ -281,9 +282,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
   var forms = document.querySelectorAll('form');
   forms.forEach(function(form) {
-    form.addEventListener('submit', function () {
+    form.addEventListener('submit', function (event) {
       if (window.tinymce) {
         tinymce.triggerSave();
+      }
+      var field = document.getElementById('assignmentDescription');
+      var error = document.getElementById('assignmentDescriptionError');
+      var byteSize = new TextEncoder().encode(field ? field.value : '').length;
+      if (byteSize > 500 * 1024) {
+        event.preventDefault();
+        error.textContent = 'Description is too large (' + (byteSize / 1024).toFixed(1) + ' KB). Maximum allowed size is 500 KB.';
+        error.classList.remove('d-none');
+        error.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (error) {
+        error.classList.add('d-none');
       }
     });
   });

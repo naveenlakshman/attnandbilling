@@ -49,7 +49,7 @@ steps:
       - --timeout=120
       - --max-instances=1
       - --set-env-vars=APP_ENV=production,DEBUG_MODE=false,SESSION_COOKIE_SECURE=true,SESSION_COOKIE_NAME=session,SECURITY_HEADERS_ENABLED=true,PROXY_FIX_X_FOR=1,PROXY_FIX_X_PROTO=1,PROXY_FIX_X_HOST=1,DB_TYPE=mysql,DB_CONNECTION_MODE=direct,MYSQL_HOST=127.0.0.1,MYSQL_PORT=3306,MYSQL_USER=attn_app,MYSQL_DB=attn_billing_testing,MYSQL_UNIX_SOCKET=/cloudsql/${_CLOUD_SQL_INSTANCE},STORAGE_PROVIDER=gcs,GCS_BUCKET_NAME=global-it-erp-storage,RATELIMIT_STORAGE_URI=redis://${_REDIS_HOST}:6379/0
-      - --set-secrets=SECRET_KEY=attn-billing-secret-key:1,MYSQL_PASSWORD=attn-billing-mysql-password:1,GOOGLE_AI_API_KEY=attn-billing-google-ai-key:1,GOOGLE_MAPS_API_KEY=attn-billing-google-maps-key:1,TINYMCE_API_KEY=attn-billing-tinymce-key:1
+      - --set-secrets=SECRET_KEY=attn-billing-secret-key:1,MYSQL_PASSWORD=attn-billing-mysql-password:1,GOOGLE_AI_API_KEY=attn-billing-google-ai-key:1,GOOGLE_MAPS_API_KEY=attn-billing-google-maps-key:1,TINYMCE_API_KEY=attn-billing-tinymce-key:1,SMS_GATEWAY_USER=attn-billing-sms-user:1,SMS_GATEWAY_PASSWORD=attn-billing-sms-password:1
 
 images:
   - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
