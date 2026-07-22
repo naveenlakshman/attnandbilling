@@ -596,7 +596,14 @@ def _master_curriculum_sidebar(conn, program_id, student_id):
                 mt.topic_order,
                 mt.master_chapter_id AS chapter_id,
                 CASE
-                    WHEN mp.is_completed = 1 THEN 1
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM lms_master_topic_progress mp
+                        WHERE mp.master_topic_id = mt.id
+                          AND mp.student_id = ?
+                          AND mp.program_id = ?
+                          AND mp.is_completed = 1
+                    ) THEN 1
                     WHEN EXISTS (
                         SELECT 1
                         FROM lms_assignments a
@@ -616,10 +623,6 @@ def _master_curriculum_sidebar(conn, program_id, student_id):
             FROM lms_program_chapters pc
             JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
             JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
-            LEFT JOIN lms_master_topic_progress mp
-                ON mp.master_topic_id = mt.id
-               AND mp.student_id = ?
-               AND mp.program_id = ?
             WHERE pc.program_id = ?
               AND pc.is_visible = 1
               AND mc.status = 'active'
