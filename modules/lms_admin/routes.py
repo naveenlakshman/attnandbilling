@@ -845,20 +845,50 @@ def exit_demo():
 @lms_admin_bp.route('/dashboard', methods=['GET'])
 @login_required
 def dashboard():
-    """LMS Admin Dashboard - Phase 1: LMS Structure Setup"""
+    """LMS content workspace for administrators and staff."""
     conn = get_conn()
     try:
         cur = conn.cursor()
         
         # Get counts for dashboard metrics
-        cur.execute("SELECT COUNT(*) as count FROM lms_programs")
+        cur.execute("SELECT COUNT(*) as count FROM lms_programs WHERE is_deleted = 0 AND slug != ?", (_MASTER_BRIDGE_PROGRAM_SLUG,))
         total_programs = cur.fetchone()['count']
         
-        cur.execute("SELECT COUNT(*) as count FROM lms_chapters")
+        cur.execute("SELECT COUNT(*) as count FROM lms_master_chapters WHERE status = 'active'")
         total_chapters = cur.fetchone()['count']
         
-        cur.execute("SELECT COUNT(*) as count FROM lms_topics")
+        cur.execute("SELECT COUNT(*) as count FROM lms_master_topics WHERE status = 'active'")
         total_topics = cur.fetchone()['count']
+
+        cur.execute("""
+            SELECT COUNT(*) AS count
+            FROM lms_master_topics mt
+            WHERE mt.status = 'active'
+              AND NOT EXISTS (
+                  SELECT 1 FROM lms_topic_contents ltc
+                  WHERE ltc.master_topic_id = mt.id
+                    AND ltc.content_mode IN ('pdf', 'rich_text', 'interactive_image')
+              )
+        """)
+        topics_missing_lesson = cur.fetchone()['count']
+
+        cur.execute("""
+            SELECT COUNT(*) AS count
+            FROM lms_master_chapters mc
+            WHERE mc.status = 'active'
+              AND NOT EXISTS (
+                  SELECT 1 FROM lms_program_chapters pc
+                  WHERE pc.master_chapter_id = mc.id
+              )
+        """)
+        unlinked_chapters = cur.fetchone()['count']
+
+        cur.execute("""
+            SELECT COUNT(*) AS count
+            FROM lms_programs
+            WHERE is_deleted = 0 AND slug != ? AND is_published = 0
+        """, (_MASTER_BRIDGE_PROGRAM_SLUG,))
+        draft_programs = cur.fetchone()['count']
         
         cur.execute("SELECT COUNT(*) as count FROM lms_mock_tests")
         total_tests = cur.fetchone()['count']
@@ -891,6 +921,9 @@ def dashboard():
             'total_programs': total_programs,
             'total_chapters': total_chapters,
             'total_topics': total_topics,
+            'topics_missing_lesson': topics_missing_lesson,
+            'unlinked_chapters': unlinked_chapters,
+            'draft_programs': draft_programs,
             'total_tests': total_tests,
             'pending_final_exam_applications': pending_final_exam_applications,
             'recent_activity': recent_activity
@@ -1585,6 +1618,21 @@ def list_master_topic_contents(master_topic_id):
             """,
             (master_topic_id,)
         ).fetchone()['count']
+        preview_program = cur.execute(
+            """
+                SELECT lp.id, lp.program_name
+                FROM lms_program_chapters pc
+                JOIN lms_programs lp ON lp.id = pc.program_id
+                WHERE pc.master_chapter_id = ?
+                  AND pc.is_visible = 1
+                  AND lp.is_active = 1
+                  AND lp.is_deleted = 0
+                  AND lp.slug != ?
+                ORDER BY lp.program_name, lp.id
+                LIMIT 1
+            """,
+            (topic['master_chapter_id'], _MASTER_BRIDGE_PROGRAM_SLUG)
+        ).fetchone()
         # Topic-to-topic navigation within the same master chapter.
         prev_topic = cur.execute(
             """
@@ -1635,6 +1683,7 @@ def list_master_topic_contents(master_topic_id):
             'video_content': video_content,
             'lesson_content': lesson_content,
             'assignment_count': assignment_count,
+            'preview_program': preview_program,
             'prev_topic': prev_topic,
             'next_topic': next_topic,
         }

@@ -154,6 +154,25 @@
     line-height: 1.4;
   }
 
+  .readiness-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 12px;
+    padding: 13px 15px;
+    border: 1px solid var(--topic-border);
+    border-radius: 10px;
+    background: #fff;
+  }
+
+  .readiness-copy strong { display: block; color: var(--topic-text); }
+  .readiness-copy span { color: var(--topic-muted); font-size: .82rem; }
+  .readiness-slots { display: flex; flex-wrap: wrap; gap: 7px; }
+  .readiness-pill { padding: 5px 9px; border-radius: 999px; background: #fee2e2; color: #b91c1c; font-size: .72rem; font-weight: 800; }
+  .readiness-pill.ready { background: #dcfce7; color: #15803d; }
+  .readiness-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+
   @media (max-width: 767.98px) {
     .topic-content-page {
       margin-top: -2px;
@@ -209,6 +228,8 @@
       display: grid;
       gap: 10px;
     }
+    .readiness-panel { display: grid; }
+    .readiness-actions { display: grid; grid-template-columns: 1fr; }
 
     .slot-action-row {
       display: grid;
@@ -265,6 +286,27 @@
       </nav>
     </div>
   </header>
+
+  {% set configured_slots = (1 if data.video_content else 0) + (1 if data.lesson_content else 0) + (1 if data.assignment_count else 0) %}
+  <section class="readiness-panel" aria-label="Topic readiness">
+    <div class="readiness-copy">
+      <strong>{% if data.lesson_content %}Topic is ready for student preview{% else %}Lesson content is still required{% endif %}</strong>
+      <span>{{ configured_slots }} of 3 content slots configured. Video and assignments are optional unless required by your program design.</span>
+      <div class="readiness-slots mt-2">
+        <span class="readiness-pill {{ 'ready' if data.video_content else '' }}">Video {{ 'ready' if data.video_content else 'missing' }}</span>
+        <span class="readiness-pill {{ 'ready' if data.lesson_content else '' }}">Lesson {{ 'ready' if data.lesson_content else 'missing' }}</span>
+        <span class="readiness-pill {{ 'ready' if data.assignment_count else '' }}">Assignment {{ 'ready' if data.assignment_count else 'missing' }}</span>
+      </div>
+    </div>
+    <div class="readiness-actions">
+      {% if data.preview_program %}
+      <a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="{{ url_for('lms_admin.preview_program_master_topic', program_id=data.preview_program.id, master_topic_id=data.topic.id) }}">Preview in {{ data.preview_program.program_name|truncate(24) }}</a>
+      {% else %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.list_programs') }}">Attach to Program</a>
+      {% endif %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.master_topic_edit', master_topic_id=data.topic.id) }}">Topic Settings</a>
+    </div>
+  </section>
 
   <div class="slot-list">
     <section class="slot-card" aria-labelledby="video-slot-title">

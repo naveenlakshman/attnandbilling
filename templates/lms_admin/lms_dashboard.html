@@ -182,10 +182,66 @@
     color: #475569;
   }
 
+  .authoring-flow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 15px;
+    border: 1px solid var(--lms-border);
+    border-radius: 10px;
+    background: #fff;
+  }
+
+  .flow-step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    margin-bottom: 10px;
+    border-radius: 50%;
+    background: #eaf2ff;
+    color: #0d6efd;
+    font-weight: 800;
+  }
+
+  .flow-step h3 { margin: 0 0 6px; font-size: .98rem; font-weight: 800; }
+  .flow-step p { flex: 1; margin: 0 0 12px; color: var(--lms-muted); font-size: .84rem; line-height: 1.4; }
+  .flow-step .btn { width: 100%; font-weight: 700; }
+
+  .workspace-alerts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .workspace-alert {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 15px;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    background: #fffbeb;
+  }
+
+  .workspace-alert strong { display: block; color: #92400e; }
+  .workspace-alert span { color: #78716c; font-size: .82rem; }
+
   @media (max-width: 991.98px) {
     .dashboard-action-grid {
       grid-template-columns: 1fr;
     }
+    .authoring-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
   @media (max-width: 575.98px) {
@@ -248,6 +304,10 @@
       font-size: 0.85rem;
     }
 
+    .authoring-flow,
+    .workspace-alerts { grid-template-columns: 1fr; }
+    .authoring-flow { padding: 12px; }
+
     .dashboard-section-header {
       padding: 12px 14px;
     }
@@ -305,38 +365,56 @@
 
 {% block content %}
 <div class="lms-dashboard-page">
-  <h2 class="dashboard-page-title">Dashboard</h2>
-  <p class="dashboard-page-subtitle">Overview of LMS content, assignments, and recent admin activity.</p>
+  <h2 class="dashboard-page-title">LMS Content Workspace</h2>
+  <p class="dashboard-page-subtitle">Create reusable lessons, assemble programs, verify the student experience, and monitor learning activity.</p>
 
   <div class="row lms-stat-row">
     <div class="col-6 col-md-3">
       <div class="stat-card accent-blue">
-        <h3>Total Programs</h3>
+        <h3>Active Programs</h3>
         <p>{{ metrics.total_programs }}</p>
       </div>
     </div>
 
     <div class="col-6 col-md-3">
       <div class="stat-card accent-violet">
-        <h3>Total Chapters</h3>
+        <h3>Library Chapters</h3>
         <p>{{ metrics.total_chapters }}</p>
       </div>
     </div>
 
     <div class="col-6 col-md-3">
       <div class="stat-card accent-green">
-        <h3>Total Topics</h3>
+        <h3>Library Topics</h3>
         <p>{{ metrics.total_topics }}</p>
       </div>
     </div>
 
     <div class="col-6 col-md-3">
       <div class="stat-card accent-orange">
-        <h3>Total Mock Tests</h3>
-        <p>{{ metrics.total_tests }}</p>
+        <h3>Topics Missing Lesson</h3>
+        <p>{{ metrics.topics_missing_lesson }}</p>
       </div>
     </div>
   </div>
+
+  {% if metrics.topics_missing_lesson or metrics.unlinked_chapters or metrics.draft_programs %}
+  <div class="workspace-alerts" aria-label="Content tasks">
+    {% if metrics.topics_missing_lesson %}<div class="workspace-alert"><div><strong>{{ metrics.topics_missing_lesson }} topic{{ '' if metrics.topics_missing_lesson == 1 else 's' }} need lesson content</strong><span>Add a PDF, rich-text lesson, or interactive image.</span></div><a class="btn btn-sm btn-outline-warning" href="{{ url_for('lms_admin.list_master_chapters') }}">Review</a></div>{% endif %}
+    {% if metrics.unlinked_chapters %}<div class="workspace-alert"><div><strong>{{ metrics.unlinked_chapters }} reusable chapter{{ '' if metrics.unlinked_chapters == 1 else 's' }} not used</strong><span>Attach completed chapters to a program when ready.</span></div><a class="btn btn-sm btn-outline-warning" href="{{ url_for('lms_admin.list_master_chapters', usage='unused') }}">Review</a></div>{% endif %}
+    {% if metrics.draft_programs %}<div class="workspace-alert"><div><strong>{{ metrics.draft_programs }} draft program{{ '' if metrics.draft_programs == 1 else 's' }}</strong><span>Preview the content structure before publishing.</span></div><a class="btn btn-sm btn-outline-warning" href="{{ url_for('lms_admin.list_programs') }}">Review</a></div>{% endif %}
+  </div>
+  {% endif %}
+
+  <section class="dashboard-section-card" aria-labelledby="content-workflow-heading">
+    <div class="dashboard-section-header"><h2 id="content-workflow-heading">Content Authoring Workflow</h2><span class="badge bg-primary">4 steps</span></div>
+    <div class="authoring-flow">
+      <article class="flow-step"><span class="flow-step-number">1</span><h3>Build reusable content</h3><p>Create chapters and topics once. Add video, lesson material, and assignments in the Master Library.</p><a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.list_master_chapters') }}">Open Master Library</a></article>
+      <article class="flow-step"><span class="flow-step-number">2</span><h3>Assemble a program</h3><p>Attach reusable chapters, set their order and visibility, and avoid duplicating lesson content.</p><a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.list_programs') }}">Open Programs</a></article>
+      <article class="flow-step"><span class="flow-step-number">3</span><h3>Map and publish</h3><p>Connect programs to billing courses and publish only after the content structure is complete.</p>{% if session.get('role') == 'admin' %}<a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.list_course_mappings') }}">Course Mapping</a>{% else %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.list_programs') }}">Check Program Status</a>{% endif %}</article>
+      <article class="flow-step"><span class="flow-step-number">4</span><h3>Verify and monitor</h3><p>Preview the student experience, then track progress, assignments, and review work.</p><a class="btn btn-sm btn-primary" href="{{ url_for('lms_admin.progress_dashboard') }}">Student Progress</a></article>
+    </div>
+  </section>
 
   <div class="dashboard-action-grid">
     <a class="quick-card" href="{{ url_for('lms_admin.progress_dashboard') }}">
@@ -400,7 +478,7 @@
                 </span>
               </td>
               <td data-label="Date">
-                <span class="text-muted">{{ activity.created_at }}</span>
+                <span class="text-muted">{{ activity.created_at|format_ist_datetime('%d-%b-%Y %I:%M %p') if activity.created_at else '-' }}</span>
               </td>
             </tr>
             {% endfor %}
@@ -412,13 +490,5 @@
     {% endif %}
   </section>
 
-  <section class="dashboard-section-card" aria-labelledby="quick-start-heading">
-    <div class="dashboard-section-header">
-      <h2 id="quick-start-heading">Quick Start</h2>
-    </div>
-    <div class="quick-start-body">
-      <p><strong>LMS structure setup:</strong> programs, chapters, topics, and reusable content are available for admin setup.</p>
-    </div>
-  </section>
 </div>
 {% endblock %}
