@@ -176,6 +176,23 @@
 
                         <input type="hidden" name="display_order" value="1">
 
+                        <div class="mb-3">
+                            <label for="change_note" class="form-label">Change note</label>
+                            <input type="text" class="form-control" id="change_note" name="change_note" maxlength="500"
+                                   placeholder="Briefly explain what changed and why">
+                            <small class="text-muted">Saved with the immutable revision history.</small>
+                        </div>
+
+                        {% if content %}
+                        <div class="form-check mb-3 p-3 border rounded bg-light">
+                            <input class="form-check-input" type="checkbox" value="1" id="submit_for_approval" name="submit_for_approval">
+                            <label class="form-check-label" for="submit_for_approval">
+                                Submit this revision for admin approval
+                            </label>
+                            <div class="small text-muted mt-1">When selected, students keep seeing the current version until an admin approves this revision.</div>
+                        </div>
+                        {% endif %}
+
                         <!-- Actions -->
                         <div class="d-flex gap-2">
                             <button type="submit" class="btn btn-primary btn-lg">
@@ -183,6 +200,7 @@
                             </button>
                             <a href="{{ back_url }}"
                                class="btn btn-outline-secondary btn-lg">Cancel</a>
+                            {% if content %}<a href="{{ url_for('lms_admin.content_history', content_id=content.id) }}" class="btn btn-outline-secondary btn-lg">History</a>{% endif %}
                         </div>
                     </form>
 

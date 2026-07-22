@@ -1109,6 +1109,27 @@ def init_db():
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_content_revisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content_id INTEGER NOT NULL,
+            master_topic_id INTEGER,
+            revision_no INTEGER NOT NULL,
+            action_type TEXT NOT NULL,
+            approval_status TEXT NOT NULL DEFAULT 'approved',
+            snapshot_json TEXT NOT NULL,
+            change_note TEXT,
+            created_by INTEGER,
+            created_at TEXT NOT NULL,
+            reviewed_by INTEGER,
+            reviewed_at TEXT,
+            review_note TEXT,
+            UNIQUE(content_id, revision_no)
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_content_revision_topic ON lms_content_revisions(master_topic_id, created_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_content_revision_approval ON lms_content_revisions(approval_status, created_at)")
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_program_resources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             program_id INTEGER NOT NULL,

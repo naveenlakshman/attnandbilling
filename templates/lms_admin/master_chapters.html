@@ -277,11 +277,7 @@
   }
 </style>
 {% endblock %}
-
 {% block content %}
-{% set active_count = chapters|selectattr('status', 'equalto', 'active')|list|length %}
-{% set archived_count = chapters|selectattr('status', 'equalto', 'archived')|list|length %}
-
 <div class="master-library">
   <div class="library-header">
     <div class="library-title">
@@ -291,35 +287,49 @@
     <a class="btn btn-primary library-new" href="{{ url_for('lms_admin.master_chapter_new') }}">New</a>
   </div>
 
-  {% if chapters %}
   <div class="library-summary" aria-label="Master chapter summary">
-    <span class="summary-chip"><span>{{ chapters|length }}</span> total</span>
-    <span class="summary-chip"><span>{{ active_count }}</span> active</span>
-    {% if archived_count %}
-    <span class="summary-chip"><span>{{ archived_count }}</span> archived</span>
-    {% endif %}
+    <span class="summary-chip"><span>{{ pagination.total }}</span> matching</span>
+    <span class="summary-chip">Showing <span>{{ pagination.start }}–{{ pagination.end }}</span></span>
   </div>
 
-  <div class="library-toolbar">
-    <input type="search" id="chapterSearch" placeholder="Search chapters" autocomplete="off">
-    <select id="chapterStatusFilter" aria-label="Filter by status">
-      <option value="active">Active chapters</option>
-      <option value="all">All statuses</option>
-      <option value="archived">Archived only</option>
+  <form class="library-toolbar" method="GET" action="{{ url_for('lms_admin.list_master_chapters') }}">
+    <input type="search" name="q" value="{{ filters.q }}" placeholder="Search chapters" autocomplete="off">
+    <select name="status" aria-label="Filter by status">
+      <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Active chapters</option>
+      <option value="all" {% if filters.status == 'all' %}selected{% endif %}>All statuses</option>
+      <option value="archived" {% if filters.status == 'archived' %}selected{% endif %}>Archived only</option>
     </select>
-    <select id="chapterUseFilter" aria-label="Filter by program usage">
-      <option value="all">All usage</option>
-      <option value="used">Used in programs</option>
-      <option value="unused">Not used yet</option>
+    <select name="usage" aria-label="Filter by program usage">
+      <option value="all" {% if filters.usage == 'all' %}selected{% endif %}>All usage</option>
+      <option value="used" {% if filters.usage == 'used' %}selected{% endif %}>Used in programs</option>
+      <option value="unused" {% if filters.usage == 'unused' %}selected{% endif %}>Not used yet</option>
     </select>
-    <select id="chapterProgramFilter" aria-label="Filter by program">
-      <option value="all">All programs</option>
+    <select name="program" aria-label="Filter by program">
+      <option value="">All programs</option>
       {% for program in programs %}
-      <option value="{{ program.id }}">{{ program.program_name }}</option>
+      <option value="{{ program.id }}" {% if filters.program == program.id|string %}selected{% endif %}>{{ program.program_name }}</option>
       {% endfor %}
     </select>
-  </div>
+    <select name="per_page" aria-label="Results per page">
+      {% for size in [12, 20, 50, 100] %}<option value="{{ size }}" {% if filters.per_page == size %}selected{% endif %}>{{ size }} per page</option>{% endfor %}
+    </select>
+    <button class="btn btn-primary" type="submit">Apply</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.list_master_chapters') }}">Clear</a>
+  </form>
 
+  {% if chapters %}
+  <form id="bulkChapterForm" method="POST" action="{{ url_for('lms_admin.bulk_master_chapters') }}" class="d-flex gap-2 align-items-center flex-wrap mb-3 p-2 border rounded bg-light">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <strong class="small">Selected chapters:</strong>
+    <select class="form-select form-select-sm" name="program_id" style="max-width:280px;">
+      <option value="">Choose program to attach</option>
+      {% for program in programs %}<option value="{{ program.id }}">{{ program.program_name }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-sm btn-primary" type="submit" name="bulk_action" value="attach">Attach to program</button>
+    {% if session.get('role') == 'admin' %}
+    <button class="btn btn-sm btn-outline-danger" type="submit" name="bulk_action" value="archive" onclick="return confirm('Archive selected chapters that are not used by published programs?');">Archive safely</button>
+    {% endif %}
+  </form>
   <div class="chapter-grid" id="chapterGrid">
     {% for chapter in chapters %}
     {% set linked_program_count = chapter.linked_program_count or 0 %}
@@ -330,7 +340,7 @@
       data-used="{{ 'used' if linked_program_count else 'unused' }}"
       data-program-ids=",{{ chapter.linked_program_ids or '' }},">
       <div class="chapter-head">
-        <h3 class="chapter-title">{{ chapter.title }}</h3>
+        <h3 class="chapter-title"><input form="bulkChapterForm" class="form-check-input me-2" type="checkbox" name="chapter_ids" value="{{ chapter.id }}" aria-label="Select {{ chapter.title }}">{{ chapter.title }}</h3>
         {% if chapter.status == 'active' %}
         <span class="status-pill status-active">Active</span>
         {% else %}
@@ -376,241 +386,22 @@
     {% endfor %}
   </div>
 
-  <div class="library-empty-search" id="chapterSearchEmpty">
-    No chapters match your filters.
+  {% if pagination.total_pages > 1 %}
+  <div class="d-flex justify-content-between align-items-center mt-3 gap-2 flex-wrap">
+    <span class="text-muted small">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+    <div class="d-flex gap-2">
+      {% if pagination.page > 1 %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_chapters', q=filters.q, status=filters.status, usage=filters.usage, program=filters.program, per_page=filters.per_page, page=pagination.page-1) }}">Previous</a>{% endif %}
+      {% if pagination.page < pagination.total_pages %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_chapters', q=filters.q, status=filters.status, usage=filters.usage, program=filters.program, per_page=filters.per_page, page=pagination.page+1) }}">Next</a>{% endif %}
+    </div>
   </div>
-
-  <div class="show-more-wrap" id="showMoreWrap">
-    <button type="button" class="btn btn-outline-primary" id="showMoreChapters">Show more</button>
-  </div>
+  {% endif %}
   {% else %}
   <div class="library-empty">
-    <h3 class="h5">No master chapters yet</h3>
-    <p>Start by creating reusable chapters like MS Excel.</p>
-    <a class="btn btn-primary" href="{{ url_for('lms_admin.master_chapter_new') }}">Create First Master Chapter</a>
+    <h3 class="h5">No chapters match these filters</h3>
+    <p>Clear the filters or create a reusable chapter.</p>
+    <a class="btn btn-outline-primary" href="{{ url_for('lms_admin.list_master_chapters') }}">Clear filters</a>
   </div>
   {% endif %}
 </div>
 {% endblock %}
-
-{% block extra_js %}
-<script>
-(function () {
-  var search = document.getElementById('chapterSearch');
-  var statusFilter = document.getElementById('chapterStatusFilter');
-  var useFilter = document.getElementById('chapterUseFilter');
-  var programFilter = document.getElementById('chapterProgramFilter');
-  var empty = document.getElementById('chapterSearchEmpty');
-  var showMoreWrap = document.getElementById('showMoreWrap');
-  var showMoreBtn = document.getElementById('showMoreChapters');
-  var cards = Array.from(document.querySelectorAll('.chapter-card'));
-  var topicsLinks = Array.from(document.querySelectorAll('.chapter-topics-link'));
-  var visibleLimit = 12;
-  var storageKey = 'lmsMasterChapterFilters';
-  var defaultFilters = {
-    q: '',
-    status: 'active',
-    usage: 'all',
-    program: 'all'
-  };
-
-  if (!cards.length) {
-    return;
-  }
-
-  function hasOption(select, value) {
-    return !!select && Array.from(select.options).some(function (option) {
-      return option.value === value;
-    });
-  }
-
-  function readStoredFilters() {
-    try {
-      return JSON.parse(sessionStorage.getItem(storageKey) || '{}');
-    } catch (err) {
-      return {};
-    }
-  }
-
-  function readUrlFilters() {
-    var params = new URLSearchParams(window.location.search);
-    var hasFilters = ['q', 'status', 'usage', 'program'].some(function (key) {
-      return params.has(key);
-    });
-
-    if (!hasFilters) {
-      return null;
-    }
-
-    return {
-      q: params.get('q') || '',
-      status: params.get('status') || defaultFilters.status,
-      usage: params.get('usage') || defaultFilters.usage,
-      program: params.get('program') || defaultFilters.program
-    };
-  }
-
-  function normalizeFilters(filters) {
-    filters = Object.assign({}, defaultFilters, filters || {});
-    filters.q = String(filters.q || '');
-    filters.status = hasOption(statusFilter, filters.status) ? filters.status : defaultFilters.status;
-    filters.usage = hasOption(useFilter, filters.usage) ? filters.usage : defaultFilters.usage;
-    filters.program = hasOption(programFilter, filters.program) ? filters.program : defaultFilters.program;
-    return filters;
-  }
-
-  function getCurrentFilters() {
-    return normalizeFilters({
-      q: search ? search.value.trim() : '',
-      status: statusFilter ? statusFilter.value : defaultFilters.status,
-      usage: useFilter ? useFilter.value : defaultFilters.usage,
-      program: programFilter ? programFilter.value : defaultFilters.program
-    });
-  }
-
-  function setControls(filters) {
-    if (search) {
-      search.value = filters.q;
-    }
-    if (statusFilter) {
-      statusFilter.value = filters.status;
-    }
-    if (useFilter) {
-      useFilter.value = filters.usage;
-    }
-    if (programFilter) {
-      programFilter.value = filters.program;
-    }
-  }
-
-  function writeStoredFilters(filters) {
-    try {
-      sessionStorage.setItem(storageKey, JSON.stringify(filters));
-    } catch (err) {
-      // Filtering still works if browser storage is unavailable.
-    }
-  }
-
-  function filterParams(filters) {
-    var params = new URLSearchParams();
-    if (filters.q) {
-      params.set('q', filters.q);
-    }
-    if (filters.status !== defaultFilters.status) {
-      params.set('status', filters.status);
-    }
-    if (filters.usage !== defaultFilters.usage) {
-      params.set('usage', filters.usage);
-    }
-    if (filters.program !== defaultFilters.program) {
-      params.set('program', filters.program);
-    }
-    return params;
-  }
-
-  function syncFilterUrl(filters) {
-    var params = filterParams(filters);
-    var nextUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-    window.history.replaceState(null, '', nextUrl);
-  }
-
-  function updateTopicLinks(filters) {
-    var params = filterParams(filters);
-
-    topicsLinks.forEach(function (link) {
-      var url = new URL(link.dataset.baseHref || link.getAttribute('href'), window.location.origin);
-      url.search = params.toString();
-      link.href = url.pathname + url.search;
-    });
-  }
-
-  function syncFilterState(filters) {
-    writeStoredFilters(filters);
-    syncFilterUrl(filters);
-    updateTopicLinks(filters);
-  }
-
-  function initializeFilters() {
-    var filters = normalizeFilters(readUrlFilters() || readStoredFilters());
-    setControls(filters);
-    syncFilterState(filters);
-  }
-
-  function matchesFilters(card, filters) {
-    var query = filters.q.toLowerCase();
-    var status = filters.status;
-    var usage = filters.usage;
-    var program = filters.program;
-    var haystack = card.dataset.chapterSearch || '';
-
-    if (query && haystack.indexOf(query) === -1) {
-      return false;
-    }
-
-    if (status !== 'all' && card.dataset.status !== status) {
-      return false;
-    }
-
-    if (usage !== 'all' && card.dataset.used !== usage) {
-      return false;
-    }
-
-    if (program !== 'all' && (card.dataset.programIds || ',').indexOf(',' + program + ',') === -1) {
-      return false;
-    }
-
-    return true;
-  }
-
-  function applyFilters(resetLimit) {
-    var filters = getCurrentFilters();
-    var matched = cards.filter(function (card) {
-      return matchesFilters(card, filters);
-    });
-    if (resetLimit) {
-      visibleLimit = 12;
-    }
-
-    cards.forEach(function (card) {
-      card.hidden = true;
-    });
-
-    matched.slice(0, visibleLimit).forEach(function (card) {
-      card.hidden = false;
-    });
-
-    if (empty) {
-      empty.style.display = matched.length ? 'none' : 'block';
-    }
-
-    if (showMoreWrap) {
-      showMoreWrap.hidden = matched.length <= visibleLimit;
-    }
-
-    syncFilterState(filters);
-  }
-
-  [search, statusFilter, useFilter, programFilter].forEach(function (control) {
-    if (!control) {
-      return;
-    }
-    control.addEventListener('input', function () {
-      applyFilters(true);
-    });
-    control.addEventListener('change', function () {
-      applyFilters(true);
-    });
-  });
-
-  if (showMoreBtn) {
-    showMoreBtn.addEventListener('click', function () {
-      visibleLimit += 12;
-      applyFilters(false);
-    });
-  }
-
-  initializeFilters();
-  applyFilters(true);
-})();
-</script>
-{% endblock %}
+{# Server-rendered filtering intentionally requires no page JavaScript. #}

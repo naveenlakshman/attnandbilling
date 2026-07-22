@@ -36,28 +36,47 @@
 - Replaced the stale compatibility warning with current workflow guidance.
 - Formatted recent LMS activity using the shared IST formatter.
 
+## Phase 2 — Publishing readiness (completed locally)
+
+- Added a reusable server-side readiness service for program publishing decisions.
+- Required an active course, a visible chapter, active topics in every visible chapter, and lesson content for every active topic.
+- Made every new program start safely as a draft.
+- Enforced readiness on the backend even if a publish request bypasses the browser UI.
+- Added an actionable QA checklist, links to topics missing lessons, and a “Preview as student” entry point.
+- Added MySQL regression coverage for blocked and successful publishing paths.
+
 ## Recommended next phases
 
-### Phase 2 — Publishing readiness
+### Phase 3 — Library scale (completed locally)
 
-- Add a server-side readiness service shared by dashboard, program, and topic pages.
-- Block or warn on publishing when visible chapters have no active topics or topics have no lesson.
-- Add a program QA checklist and “Preview as student” entry point.
+- Replaced browser-only filtering with MySQL-backed chapter and topic search, filtering, and pagination.
+- Added chapter filters for status, used/unused state, and linked program.
+- Added topic filters for status, missing lesson, missing assignment, and lesson-ready content.
+- Added guarded bulk chapter attachment with duplicate and archived-item handling.
+- Added guarded bulk chapter/topic archive actions that protect content used by published programs.
+- Added bulk show/hide and move-to-top/bottom controls for linked program chapters.
+- Disabled full-list drag ordering while filters or pagination are active to prevent partial-list data loss.
+- Added MySQL regression coverage for filtering, pagination, bulk actions, permissions, and safeguards.
 
-### Phase 3 — Library scale
+### Phase 4 — Editorial governance (completed locally)
 
-- Add server-side search, filters, and pagination for chapters and topics.
-- Filter by missing lesson, missing assignment, unused chapter, status, and program.
-- Add bulk archive, attach, visibility, and ordering operations with safeguards.
+- Added immutable content revisions with change notes and complete content snapshots.
+- Added optional “Submit for admin approval” editing that leaves the current student version unchanged.
+- Added a centralized admin Editorial Review Queue with approve and reject decisions.
+- Added stale-revision protection so an older pending edit cannot overwrite newer approved work.
+- Added revision history and administrator rollback, recorded as a new auditable revision.
+- Preserved historical uploaded files so file-based lesson revisions remain recoverable.
+- Added author, last editor, pending-review state, reviewer identity, and IST timestamps.
+- Added a reproducible MySQL migration and SQLite development schema.
+- Added MySQL regression coverage for revisions, approval, rejection, stale reviews, rollback, and identity.
 
-### Phase 4 — Editorial governance
+### Phase 5 — Legacy retirement (completed locally)
 
-- Add draft/published content revisions, change notes, and rollback.
-- Add optional reviewer approval before publishing.
-- Show author, last editor, and IST timestamps consistently.
-
-### Phase 5 — Legacy retirement
-
-- Finish migrating remaining program-owned chapters/topics.
-- Remove obsolete legacy create/edit paths after data verification.
-- Keep redirects for bookmarked legacy URLs during a deprecation window.
+- Fixed the migration dashboard to detect partially migrated chapters and untagged content, not only completely unmapped chapters.
+- Made chapter migration resumable and idempotent: it repairs mapped content, migrates only missing topics, reuses the existing master chapter, and avoids duplicate program links.
+- Migrated the final local gap: 8 topics and 4 content rows in CCOM Module 5; local verification now reports zero unmapped topics and zero untagged content.
+- Retired direct legacy chapter/topic/content writes while retaining compatibility redirects for bookmarked URLs.
+- Added the canonical `/lms_admin/legacy-migration` route while retaining the former rollout URL during the deprecation window.
+- Corrected MySQL behavior so the application does not attempt an invalid SQLite backup; MySQL migration remains non-destructive and retains all source rows.
+- Added a reusable SQL retirement verification script and MySQL regression coverage for partial migration, repair, idempotency, redirects, and write retirement.
+- Retained legacy tables as read-only compatibility storage because master content still uses the legacy `topic_id` bridge; table removal requires a separate schema transition.

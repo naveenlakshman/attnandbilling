@@ -673,6 +673,59 @@
   </div>
 </div>
 
+{% set readiness = summary.publishing_readiness %}
+<div class="section-card" style="margin-bottom:20px; border-left:4px solid {{ '#198754' if readiness.is_ready else '#f0ad4e' }};">
+  <div class="section-header">
+    <div>
+      <h3 class="section-title">Publishing Readiness</h3>
+      <div style="font-size:13px; color:#6c757d; margin-top:4px;">
+        {{ 'All required checks passed.' if readiness.is_ready else 'Keep this program as a draft until the blocking items are complete.' }}
+      </div>
+    </div>
+    <span class="status-badge {{ 'status-published' if readiness.is_ready else 'status-draft' }}">
+      {{ 'Ready' if readiness.is_ready else 'Not ready' }}
+    </span>
+  </div>
+  <div class="section-content">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:10px;">
+      {% for check in readiness.checks %}
+      <div style="padding:12px; border:1px solid #dee2e6; border-radius:8px; background:#fff; display:flex; gap:10px;">
+        <span style="font-weight:700; color:{{ '#198754' if check.passed else '#b76e00' }};">{{ '✓' if check.passed else '!' }}</span>
+        <div>
+          <div style="font-weight:700; font-size:13px;">{{ check.label }}</div>
+          <div style="color:#6c757d; font-size:12px; margin-top:3px;">{{ check.detail }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if readiness.missing_lessons %}
+    <div style="margin-top:14px; padding:12px; background:#fff8e1; border-radius:8px;">
+      <strong style="font-size:13px;">Topics needing lesson content</strong>
+      <div style="margin-top:7px; display:flex; flex-wrap:wrap; gap:8px;">
+        {% for topic in readiness.missing_lessons[:8] %}
+        <a href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) }}" style="font-size:12px;">{{ topic.chapter_title }} · {{ topic.title }}</a>
+        {% endfor %}
+        {% if readiness.missing_lessons|length > 8 %}
+        <span style="font-size:12px; color:#6c757d;">+{{ readiness.missing_lessons|length - 8 }} more</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:14px;">
+      {% if readiness.preview_topic_id %}
+      <a class="btn btn-outline-primary" href="{{ url_for('lms_admin.preview_program_master_topic', program_id=summary.program.id, master_topic_id=readiness.preview_topic_id) }}">Preview as student</a>
+      {% endif %}
+      {% if session.get('role') == 'admin' %}
+      <a class="btn btn-primary" href="{{ url_for('lms_admin.program_edit', program_id=summary.program.id) }}">
+        {{ 'Publishing settings' if readiness.is_ready else 'Resolve readiness items' }}
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
 <!-- Metrics Grid -->
 <div class="metrics-grid">
   <div class="metric-card chapters">

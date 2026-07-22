@@ -24,6 +24,7 @@
          href="{{ url_for('lms_admin.list_master_chapters') }}">
         🧩 Master Library
       </a>
+      {% if session.get('role') == 'admin' %}<a class="nav-link {{ 'active' if request.endpoint in ['lms_admin.editorial_review_queue', 'lms_admin.content_history'] else '' }}" href="{{ url_for('lms_admin.editorial_review_queue') }}">Editorial Reviews</a>{% endif %}
 
       <a class="nav-link {{ 'active' if request.endpoint in ['lms_admin.all_assignments', 'lms_admin.manage_assignments', 'lms_admin.view_submissions', 'lms_admin.review_submission'] else '' }}"
          href="{{ url_for('lms_admin.all_assignments') }}">

@@ -324,9 +324,12 @@
           <div class="min-w-0">
             <div class="slot-content-title">{{ data.video_content.content_title }}</div>
             <div class="slot-content-meta">{{ data.video_content.external_url }}</div>
+            <div class="slot-content-meta">Author: {{ data.video_content.editorial.author_name }} · Last edited: {{ data.video_content.editorial.editor_name }}{% if data.video_content.editorial.updated_at %} · {{ data.video_content.editorial.updated_at|format_ist_datetime('%d-%b-%Y %I:%M %p') }}{% endif %}</div>
+            {% if data.video_content.editorial.pending_count %}<span class="badge bg-warning text-dark">{{ data.video_content.editorial.pending_count }} pending review</span>{% endif %}
           </div>
           <div class="slot-action-row">
             <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.content_edit', content_id=data.video_content.id) }}">Edit</a>
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.content_history', content_id=data.video_content.id) }}">History</a>
             {% if session.get('role') == 'admin' %}
             <form method="POST" action="{{ url_for('lms_admin.delete_content', content_id=data.video_content.id) }}" onsubmit="return confirm('Remove this content?');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -357,9 +360,12 @@
           <div class="min-w-0">
             <div class="slot-content-title">{{ data.lesson_content.content_title }}</div>
             <div class="slot-content-meta">Type: {{ data.lesson_content.content_mode }}</div>
+            <div class="slot-content-meta">Author: {{ data.lesson_content.editorial.author_name }} · Last edited: {{ data.lesson_content.editorial.editor_name }}{% if data.lesson_content.editorial.updated_at %} · {{ data.lesson_content.editorial.updated_at|format_ist_datetime('%d-%b-%Y %I:%M %p') }}{% endif %}</div>
+            {% if data.lesson_content.editorial.pending_count %}<span class="badge bg-warning text-dark">{{ data.lesson_content.editorial.pending_count }} pending review</span>{% endif %}
           </div>
           <div class="slot-action-row">
             <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lms_admin.content_edit', content_id=data.lesson_content.id) }}">Edit</a>
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.content_history', content_id=data.lesson_content.id) }}">History</a>
             {% if session.get('role') == 'admin' %}
             <form method="POST" action="{{ url_for('lms_admin.delete_content', content_id=data.lesson_content.id) }}" onsubmit="return confirm('Remove this content?');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

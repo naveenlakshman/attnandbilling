@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Content Revision History{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+    <div>
+      <a href="{{ url_for('lms_admin.list_master_topic_contents', master_topic_id=topic.id) if topic else url_for('lms_admin.list_master_chapters') }}">Back to content</a>
+      <h1 class="h3 mt-2 mb-1">Revision History</h1>
+      <p class="text-muted mb-0">{{ content.content_title if content else 'Removed content' }}{% if topic %} · {{ topic.chapter_title }} · {{ topic.title }}{% endif %}</p>
+    </div>
+    {% if content %}<a class="btn btn-primary" href="{{ url_for('lms_admin.content_edit', content_id=content.id) }}">Edit current version</a>{% endif %}
+  </div>
+
+  <div class="alert alert-info">Revisions are immutable. Pending revisions do not affect students until approved.</div>
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light"><tr><th>Revision</th><th>Change</th><th>Author</th><th>Date &amp; time</th><th>Status</th><th>Review</th><th>Actions</th></tr></thead>
+        <tbody>
+        {% for revision in revisions %}
+          <tr>
+            <td>#{{ revision.revision_no }}</td>
+            <td><strong>{{ revision.action_type|title }}</strong><div class="small text-muted">{{ revision.change_note or 'No change note provided.' }}</div></td>
+            <td>{{ revision.created_by_name or 'System / legacy' }}</td>
+            <td>{{ revision.created_at|format_ist_datetime('%d-%b-%Y %I:%M %p') }}</td>
+            <td><span class="badge {% if revision.approval_status == 'approved' %}bg-success{% elif revision.approval_status == 'pending' %}bg-warning text-dark{% elif revision.approval_status == 'rejected' %}bg-danger{% else %}bg-secondary{% endif %}">{{ revision.approval_status|title }}</span></td>
+            <td class="small">{% if revision.reviewed_by_name %}{{ revision.reviewed_by_name }}<br>{{ revision.reviewed_at|format_ist_datetime('%d-%b-%Y %I:%M %p') }}{% endif %}{% if revision.review_note %}<div class="text-muted">{{ revision.review_note }}</div>{% endif %}</td>
+            <td>
+              {% if session.get('role') == 'admin' and content %}
+                {% if revision.approval_status == 'pending' %}
+                <form method="POST" action="{{ url_for('lms_admin.content_revision_action', content_id=content.id, revision_id=revision.id, action='approve') }}" class="mb-1">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-success w-100">Approve</button>
+                </form>
+                <form method="POST" action="{{ url_for('lms_admin.content_revision_action', content_id=content.id, revision_id=revision.id, action='reject') }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger w-100">Reject</button>
+                </form>
+                {% elif revision.approval_status == 'approved' and not loop.first %}
+                <form method="POST" action="{{ url_for('lms_admin.content_revision_action', content_id=content.id, revision_id=revision.id, action='rollback') }}" onsubmit="return confirm('Restore this historical version as a new revision?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="review_note" value="Rollback requested from revision history."><button class="btn btn-sm btn-outline-primary">Rollback</button>
+                </form>
+                {% endif %}
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" class="text-center py-5 text-muted">No revisions recorded.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

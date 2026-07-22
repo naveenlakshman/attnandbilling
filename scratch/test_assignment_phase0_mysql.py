@@ -354,6 +354,13 @@ def cleanup():
         )
         conn.execute("DELETE FROM lms_master_topic_progress WHERE master_topic_id IN (SELECT id FROM lms_master_topics WHERE title LIKE ?)", (f"{PREFIX}%",))
         conn.execute("DELETE FROM lms_assignments WHERE title LIKE ?", (f"{PREFIX}%",))
+        conn.execute(
+            "DELETE FROM lms_master_topic_bridge WHERE master_topic_id IN "
+            "(SELECT id FROM lms_master_topics WHERE title LIKE ?) OR legacy_topic_id IN "
+            "(SELECT id FROM lms_topics WHERE topic_title LIKE ?)",
+            (f"{PREFIX}%", f"[MASTER BRIDGE] {PREFIX}%"),
+        )
+        conn.execute("DELETE FROM lms_topics WHERE topic_title LIKE ?", (f"[MASTER BRIDGE] {PREFIX}%",))
         conn.execute("DELETE FROM lms_student_program_access WHERE program_id IN (SELECT id FROM lms_programs WHERE slug = ?)", (f"phase0-{TOKEN}",))
         conn.execute("DELETE FROM lms_program_chapters WHERE program_id IN (SELECT id FROM lms_programs WHERE slug = ?)", (f"phase0-{TOKEN}",))
         conn.execute("DELETE FROM lms_programs WHERE slug = ?", (f"phase0-{TOKEN}",))

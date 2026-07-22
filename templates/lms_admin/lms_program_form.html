@@ -397,6 +397,20 @@
       <div class="form-section">
         <div class="form-section-title">📊 Publishing</div>
 
+        {% if program and publishing_readiness %}
+        <div style="margin-bottom:16px; padding:14px; border:1px solid {{ '#badbcc' if publishing_readiness.is_ready else '#ffecb5' }}; border-radius:8px; background:{{ '#d1e7dd' if publishing_readiness.is_ready else '#fff3cd' }};">
+          <strong>{{ 'Ready to publish' if publishing_readiness.is_ready else 'Publishing checks need attention' }}</strong>
+          <div style="margin-top:10px; display:grid; gap:7px;">
+            {% for check in publishing_readiness.checks %}
+            <div style="display:flex; gap:8px; align-items:flex-start; font-size:13px;">
+              <span aria-hidden="true">{{ '✓' if check.passed else '!' }}</span>
+              <span><strong>{{ check.label }}</strong> — {{ check.detail }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
         <!-- Publish Status -->
         <div class="checkbox-group">
           <input 
@@ -405,11 +419,18 @@
             id="isPublished"
             value="1"
             {% if program and program.is_published %}checked{% endif %}
+            {% if not program or (publishing_readiness and not publishing_readiness.is_ready) %}disabled{% endif %}
           >
           <label for="isPublished">Publish this program (visible to students)</label>
         </div>
         <div class="form-text" style="margin-left: 28px; margin-top: -8px;">
-          Uncheck to keep as draft until you've added all chapters and topics.
+          {% if not program %}
+            New programs start as drafts. Create it, add chapters and lessons, then publish it.
+          {% elif publishing_readiness and not publishing_readiness.is_ready %}
+            Complete every readiness check before publishing. This is also enforced by the server.
+          {% else %}
+            Uncheck to remove the program from student view.
+          {% endif %}
         </div>
       </div>
 

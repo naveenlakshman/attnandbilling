@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Legacy Migration{% endblock %}
-{% block page_title %}Legacy Migration{% endblock %}
+{% block title %}Legacy Retirement{% endblock %}
+{% block page_title %}Legacy Retirement{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-3">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-      <h2 class="h4 mb-1">Legacy Migration</h2>
-      <p class="text-muted mb-0">Select unmigrated legacy chapters and migrate in controlled batches with backup.</p>
+      <h2 class="h4 mb-1">Legacy Retirement</h2>
+      <p class="text-muted mb-0">Complete or repair legacy chapters in resumable, non-destructive batches.</p>
     </div>
     <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.dashboard') }}">Back to Dashboard</a>
   </div>
@@ -38,7 +38,7 @@
                 <th style="width: 50px;"></th>
                 <th style="width: 90px;">Order</th>
                 <th>Chapter</th>
-                <th style="width: 120px;">Topics</th>
+                <th style="width: 220px;">Migration coverage</th>
               </tr>
             </thead>
             <tbody>
@@ -49,7 +49,7 @@
                 </td>
                 <td>{{ ch.chapter_order }}</td>
                 <td>{{ ch.chapter_title }}</td>
-                <td>{{ ch.topic_count }}</td>
+                <td>{{ ch.mapped_topic_count }}/{{ ch.topic_count }} topics mapped{% if ch.untagged_content_count %}<br><span class="text-warning">{{ ch.untagged_content_count }} content row(s) need repair</span>{% endif %}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -58,7 +58,7 @@
 
         <div class="d-flex justify-content-between align-items-center mt-2 action-group">
           <div class="small text-muted">
-            A backup snapshot is created before migration. Legacy data remains intact.
+            Legacy source rows remain intact. Re-running migration repairs partial mappings without duplicating content.
           </div>
           <button class="btn btn-primary" type="submit" onclick="return confirm('Migrate selected legacy chapters to the Master Library?');">
             Migrate Selected Chapters

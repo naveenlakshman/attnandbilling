@@ -453,6 +453,7 @@
 {% endblock %}
 
 {% block content %}
+{% set reorder_enabled = (not is_program_context|default(false)) and session.get('role') in ['admin', 'staff'] and topics and pagination.total_pages == 1 and not filters.q and filters.status == 'all' and filters.readiness == 'all' %}
 <div class="master-topics-page">
 
   <div class="master-topics-header">
@@ -486,7 +487,7 @@
     </div>
 
     <div class="master-actions">
-      {% if not is_program_context|default(false) and session.get('role') in ['admin', 'staff'] and topics %}
+      {% if reorder_enabled %}
       <form id="saveMasterOrderForm" method="POST" action="{{ url_for('lms_admin.reorder_master_topics', master_chapter_id=chapter.id) }}" class="order-actions">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" id="masterTopicOrdersPayload" name="topic_orders" value="">
@@ -497,10 +498,26 @@
       {% endif %}
     </div>
 
-    {% if topics %}
-    <div class="master-topic-search">
-      <input type="search" id="masterTopicSearch" placeholder="Search topics" autocomplete="off">
-    </div>
+    {% if not is_program_context|default(false) %}
+    <form class="master-topic-search d-flex gap-2 flex-wrap" method="GET">
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="Search topics" autocomplete="off">
+      <select class="form-select" name="status" aria-label="Topic status">
+        <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Active topics</option>
+        <option value="all" {% if filters.status == 'all' %}selected{% endif %}>All statuses</option>
+        <option value="archived" {% if filters.status == 'archived' %}selected{% endif %}>Archived topics</option>
+      </select>
+      <select class="form-select" name="readiness" aria-label="Content readiness">
+        <option value="all" {% if filters.readiness == 'all' %}selected{% endif %}>All content</option>
+        <option value="missing_lesson" {% if filters.readiness == 'missing_lesson' %}selected{% endif %}>Missing lesson</option>
+        <option value="missing_assignment" {% if filters.readiness == 'missing_assignment' %}selected{% endif %}>Missing assignment</option>
+        <option value="ready" {% if filters.readiness == 'ready' %}selected{% endif %}>Lesson ready</option>
+      </select>
+      <select class="form-select" name="per_page" aria-label="Results per page">
+        {% for size in [25, 50, 100] %}<option value="{{ size }}" {% if filters.per_page == size %}selected{% endif %}>{{ size }} per page</option>{% endfor %}
+      </select>
+      <button class="btn btn-primary" type="submit">Apply</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id) }}">Clear</a>
+    </form>
     {% endif %}
   </div>
 
@@ -511,6 +528,13 @@
   {% endif %}
 
   {% if topics %}
+  {% if not is_program_context|default(false) and session.get('role') == 'admin' %}
+  <form id="bulkTopicForm" method="POST" action="{{ url_for('lms_admin.bulk_master_topics', master_chapter_id=chapter.id) }}" class="d-flex gap-2 align-items-center flex-wrap mb-2 p-2 border rounded bg-light">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <strong class="small">Selected topics:</strong>
+    <button class="btn btn-sm btn-outline-danger" type="submit" name="bulk_action" value="archive" onclick="return confirm('Archive selected topics that are not visible in published programs?');">Archive safely</button>
+  </form>
+  {% endif %}
   <div class="card shadow-sm master-topics-card">
     <div class="table-responsive">
       <table class="table table-hover mb-0 align-middle master-topics-table">
@@ -526,10 +550,13 @@
         </thead>
         <tbody>
           {% for topic in topics %}
-          {% set can_manage = (not is_program_context|default(false)) and session.get('role') in ['admin', 'staff'] %}
+          {% set can_manage = reorder_enabled %}
           {% set content_search = (' video' if topic.has_video_content else '') ~ (' lesson pdf rich text' if topic.has_lesson_content else '') ~ (' assignment' if topic.assignment_count else '') %}
           <tr id="master-topic-{{ topic.id }}" class="master-topic-row" data-topic-id="{{ topic.id }}" data-topic-search="{{ (topic.title ~ ' ' ~ (topic.short_description or '') ~ ' ' ~ topic.status ~ content_search)|lower }}" {% if can_manage %}draggable="true"{% endif %}>
-            <td class="drag-cell">{% if can_manage %}<span class="drag-handle" title="Drag to reorder">↕</span>{% endif %}</td>
+            <td class="drag-cell">
+              {% if not is_program_context|default(false) and session.get('role') == 'admin' %}<input form="bulkTopicForm" class="form-check-input" type="checkbox" name="topic_ids" value="{{ topic.id }}" aria-label="Select {{ topic.title }}">{% endif %}
+              {% if can_manage %}<span class="drag-handle" title="Drag to reorder">↕</span>{% endif %}
+            </td>
             <td class="topic-order-cell" data-label="Order">
               <input type="number" class="form-control form-control-sm topic-order-input" min="1" value="{{ topic.topic_order }}" {% if not can_manage %}readonly{% endif %}>
             </td>
@@ -600,9 +627,15 @@
       </table>
     </div>
   </div>
-  <div class="master-topic-empty-search" id="masterTopicSearchEmpty">
-    No topics match your search.
+  {% if not is_program_context|default(false) and pagination.total_pages > 1 %}
+  <div class="d-flex justify-content-between align-items-center mt-3 gap-2 flex-wrap">
+    <span class="text-muted small">Showing {{ pagination.start }}–{{ pagination.end }} of {{ pagination.total }} · Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+    <div class="d-flex gap-2">
+      {% if pagination.page > 1 %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id, q=filters.q, status=filters.status, readiness=filters.readiness, per_page=filters.per_page, page=pagination.page-1) }}">Previous</a>{% endif %}
+      {% if pagination.page < pagination.total_pages %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.list_master_topics', master_chapter_id=chapter.id, q=filters.q, status=filters.status, readiness=filters.readiness, per_page=filters.per_page, page=pagination.page+1) }}">Next</a>{% endif %}
+    </div>
   </div>
+  {% endif %}
   {% else %}
   <div class="card shadow-sm">
     <div class="card-body text-center py-5">
@@ -619,39 +652,7 @@
   {% endif %}
 </div>
 
-{% if topics %}
-<script>
-  (function initMasterTopicSearch() {
-    const input = document.getElementById('masterTopicSearch');
-    const empty = document.getElementById('masterTopicSearchEmpty');
-    const rows = Array.from(document.querySelectorAll('.master-topic-row'));
-
-    if (!input || !rows.length) {
-      return;
-    }
-
-    input.addEventListener('input', function () {
-      const query = input.value.trim().toLowerCase();
-      let visible = 0;
-
-      rows.forEach(function (row) {
-        const haystack = row.dataset.topicSearch || '';
-        const match = !query || haystack.indexOf(query) !== -1;
-        row.hidden = !match;
-        if (match) {
-          visible += 1;
-        }
-      });
-
-      if (empty) {
-        empty.style.display = visible ? 'none' : 'block';
-      }
-    });
-  })();
-</script>
-{% endif %}
-
-{% if not is_program_context|default(false) and session.get('role') in ['admin', 'staff'] and topics %}
+{% if reorder_enabled %}
 <script>
   (function initMasterTopicReorder() {
     const tbody = document.querySelector('table tbody');

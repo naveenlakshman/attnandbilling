@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Editorial Review Queue{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+    <div><h1 class="h3 mb-1">Editorial Review Queue</h1><p class="text-muted mb-0">Approve content changes before they become visible to students.</p></div>
+    <span class="badge bg-warning text-dark fs-6">{{ revisions|length }} pending</span>
+  </div>
+  <div class="card shadow-sm"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
+    <thead class="table-light"><tr><th>Content</th><th>Submitted by</th><th>Change note</th><th>Submitted</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for revision in revisions %}
+      <tr>
+        <td><strong>{{ revision.live_content_title or 'Content item #' ~ revision.content_id }}</strong><div class="small text-muted">{{ revision.chapter_title or 'Unknown chapter' }} · {{ revision.topic_title or 'Unknown topic' }} · Revision {{ revision.revision_no }}</div></td>
+        <td>{{ revision.created_by_name or 'System / legacy' }}</td>
+        <td>{{ revision.change_note or 'No change note provided.' }}</td>
+        <td>{{ revision.created_at|format_ist_datetime('%d-%b-%Y %I:%M %p') }}</td>
+        <td><div class="d-flex gap-2 flex-wrap">
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('lms_admin.content_history', content_id=revision.content_id) }}">Review history</a>
+          <form method="POST" action="{{ url_for('lms_admin.content_revision_action', content_id=revision.content_id, revision_id=revision.id, action='approve') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-success">Approve</button></form>
+          <form method="POST" action="{{ url_for('lms_admin.content_revision_action', content_id=revision.content_id, revision_id=revision.id, action='reject') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-outline-danger">Reject</button></form>
+        </div></td>
+      </tr>
+    {% else %}<tr><td colspan="5" class="text-center py-5"><strong>No revisions waiting for review</strong><div class="text-muted mt-1">Submitted revisions will appear here.</div></td></tr>{% endfor %}
+    </tbody>
+  </table></div></div>
+</div>
+{% endblock %}

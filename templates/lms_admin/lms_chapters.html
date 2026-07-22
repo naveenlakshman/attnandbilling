@@ -681,9 +681,20 @@
 <h3 class="section-label">Linked Master Chapters</h3>
 <div class="chapters-table-card">
   {% if data.linked_master_chapters %}
+  {% if can_manage_content %}
+  <form id="bulkProgramChapters" method="POST" action="{{ url_for('lms_admin.bulk_program_master_chapters', program_id=data.program.id) }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px;border-bottom:1px solid #e5e7eb;background:#f8fafc;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <strong style="font-size:13px;">Selected:</strong>
+    <button class="btn btn-sm btn-outline-success" name="bulk_action" value="show" type="submit">Show</button>
+    <button class="btn btn-sm btn-outline-secondary" name="bulk_action" value="hide" type="submit">Hide</button>
+    <button class="btn btn-sm btn-outline-primary" name="bulk_action" value="move_top" type="submit">Move to top</button>
+    <button class="btn btn-sm btn-outline-primary" name="bulk_action" value="move_bottom" type="submit">Move to bottom</button>
+  </form>
+  {% endif %}
   <table class="chapters-table">
     <thead>
       <tr>
+        {% if can_manage_content %}<th style="width:42px;"><span class="visually-hidden">Select</span></th>{% endif %}
         <th style="width: 150px;">Order</th>
         <th>Chapter Title</th>
         <th style="width: 100px;">Topics</th>
@@ -694,6 +705,7 @@
     <tbody>
       {% for link in data.linked_master_chapters %}
       <tr class="chapter-row" data-search="{{ ((link.custom_title if link.custom_title else link.master_title) ~ ' ' ~ (link.description or '') ~ ' shared')|lower }}">
+        {% if can_manage_content %}<td><input form="bulkProgramChapters" class="form-check-input" type="checkbox" name="link_ids" value="{{ link.link_id }}" aria-label="Select {{ link.custom_title if link.custom_title else link.master_title }}"></td>{% endif %}
         <td data-label="Order">
           {% if can_manage_content %}
           <form method="POST" action="{{ url_for('lms_admin.reorder_program_master_chapters', program_id=data.program.id) }}" class="reorder-inline">
