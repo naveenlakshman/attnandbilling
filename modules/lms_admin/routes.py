@@ -106,12 +106,25 @@ _SUBMISSION_MIME_TYPES = {
     'ppt': 'application/vnd.ms-powerpoint',
     'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     'pdf': 'application/pdf',
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
 }
 
 
 def _submission_mimetype(filename):
     ext = (filename or '').rsplit('.', 1)[-1].lower() if '.' in (filename or '') else ''
     return _SUBMISSION_MIME_TYPES.get(ext) or mimetypes.guess_type(filename or '')[0] or 'application/octet-stream'
+
+
+def _submission_storage_candidates(file_path):
+    """Return canonical and legacy object paths for a submitted assignment file."""
+    normalized = (file_path or '').replace('\\', '/').lstrip('/')
+    if normalized and '/' not in normalized:
+        return [f'documents/{normalized}', normalized]
+    return [normalized] if normalized else []
 
 
 def _current_lms_actor(conn):
@@ -8662,14 +8675,15 @@ def preview_submission_public_file():
 
     try:
         storage_service = get_storage_service()
-        if storage_service.file_exists(file_path):
-            file_bytes = storage_service.download_file(file_path)
-            return send_file(
-                io.BytesIO(file_bytes),
-                as_attachment=False,
-                download_name=orig_name,
-                mimetype=_submission_mimetype(orig_name),
-            )
+        for storage_path in _submission_storage_candidates(file_path):
+            if storage_service.file_exists(storage_path):
+                file_bytes = storage_service.download_file(storage_path)
+                return send_file(
+                    io.BytesIO(file_bytes),
+                    as_attachment=False,
+                    download_name=orig_name,
+                    mimetype=_submission_mimetype(orig_name),
+                )
     except Exception as e:
         logger.error(f"Error in preview_submission_public_file GCS check: {e}")
 
@@ -8752,22 +8766,22 @@ def admin_download_submission(submission_id):
         conn.close()
 
     inline = request.args.get('inline') == '1'
-    mimetype = ('application/pdf' if (orig_name or '').lower().endswith('.pdf')
-                else mimetypes.guess_type(orig_name or '')[0])
+    mimetype = _submission_mimetype(orig_name)
     try:
         storage_service = get_storage_service()
-        if storage_service.file_exists(file_path):
-            if inline:
-                file_bytes = storage_service.download_file(file_path)
-                return send_file(
-                    io.BytesIO(file_bytes),
-                    as_attachment=False,
-                    download_name=orig_name,
-                    mimetype=mimetype or 'application/octet-stream',
-                )
-            url = storage_service.generate_public_url(file_path)
-            if url.startswith("http"):
-                return redirect(url)
+        for storage_path in _submission_storage_candidates(file_path):
+            if storage_service.file_exists(storage_path):
+                if inline:
+                    file_bytes = storage_service.download_file(storage_path)
+                    return send_file(
+                        io.BytesIO(file_bytes),
+                        as_attachment=False,
+                        download_name=orig_name,
+                        mimetype=mimetype,
+                    )
+                url = storage_service.generate_public_url(storage_path)
+                if url.startswith("http"):
+                    return redirect(url)
     except Exception as e:
         logger.error(f"Error in admin_download_submission GCS check: {e}")
 

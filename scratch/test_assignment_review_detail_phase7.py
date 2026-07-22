@@ -91,6 +91,38 @@ def run_phase7(fixtures, other_branch, actors):
     assert public_docx.mimetype == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', public_docx.mimetype
     assert public_docx.data.startswith(b'PK\x03\x04')
 
+    class LegacyCloudImage:
+        def file_exists(self, path): return path == 'documents/legacy-submission.jpeg'
+        def download_file(self, path):
+            assert path == 'documents/legacy-submission.jpeg'
+            return b'\xff\xd8\xffphase7-jpeg'
+
+    conn = get_conn()
+    saved_file = conn.execute(
+        'SELECT file_path, original_filename FROM lms_assignment_submissions WHERE id = ?',
+        (first_id,),
+    ).fetchone()
+    conn.execute(
+        'UPDATE lms_assignment_submissions SET file_path = ?, original_filename = ? WHERE id = ?',
+        ('legacy-submission.jpeg', 'Student image.jpeg', first_id),
+    )
+    conn.commit()
+    conn.close()
+    try:
+        with patch('modules.lms_admin.routes.get_storage_service', return_value=LegacyCloudImage()):
+            inline_image = admin.get(f'/lms_admin/master/submissions/file/{first_id}?inline=1')
+    finally:
+        conn = get_conn()
+        conn.execute(
+            'UPDATE lms_assignment_submissions SET file_path = ?, original_filename = ? WHERE id = ?',
+            (saved_file['file_path'], saved_file['original_filename'], first_id),
+        )
+        conn.commit()
+        conn.close()
+    assert inline_image.status_code == 200
+    assert inline_image.mimetype == 'image/jpeg'
+    assert inline_image.data.startswith(b'\xff\xd8\xff')
+
     security_headers_enabled = baseline.app.config.get('SECURITY_HEADERS_ENABLED')
     baseline.app.config['SECURITY_HEADERS_ENABLED'] = True
     try:
