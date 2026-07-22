@@ -7710,8 +7710,7 @@ def review_submission_detail(submission_id):
                    s.is_latest, COALESCE(s.review_status, 'submitted') AS review_status,
                    s.score, s.is_late, s.graded_at, s.internal_reviewer_notes,
                    s.reviewed_by, reviewer.full_name AS reviewed_by_name,
-                   strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
-                   strftime('%d %b %Y %H:%M', s.reviewed_at) AS reviewed_date,
+                   s.submitted_at, s.reviewed_at,
                    a.title AS assignment_title, a.description AS assignment_description,
                    a.due_at, a.max_score, a.passing_score, a.grading_mode,
                    a.rubric_id, a.completion_rule, a.allow_late_submission,
@@ -7737,8 +7736,7 @@ def review_submission_detail(submission_id):
                    s.is_latest, COALESCE(s.review_status, 'submitted') AS review_status,
                    s.score, s.is_late, s.graded_at,
                    s.reviewed_by, reviewer.full_name AS reviewed_by_name,
-                   strftime('%d %b %Y %H:%M', s.submitted_at) AS submitted_date,
-                   strftime('%d %b %Y %H:%M', s.reviewed_at) AS reviewed_date,
+                   s.submitted_at, s.reviewed_at,
                    ROW_NUMBER() OVER (ORDER BY s.submitted_at, s.id) AS attempt_number
             FROM lms_assignment_submissions s
             LEFT JOIN users reviewer ON reviewer.id = s.reviewed_by

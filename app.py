@@ -53,8 +53,8 @@ def to_ist_time(value):
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
-def format_ist_datetime(value):
-    """Jinja2 filter: convert stored UTC-like datetime to IST dd-mm-yyyy hh:mm AM/PM."""
+def format_ist_datetime(value, output_format=None):
+    """Convert a stored UTC datetime to IST with an optional strftime format."""
     if not value:
         return ""
 
@@ -80,18 +80,13 @@ def format_ist_datetime(value):
     if not parsed:
         return raw
 
-    if parsed.tzinfo:
-        parsed = parsed.astimezone(IST)
-    elif len(raw) > 10:
-        import time
-        server_offset_seconds = time.localtime().tm_gmtoff
-        adjustment_seconds = 19800 - server_offset_seconds
-        parsed = parsed + timedelta(seconds=adjustment_seconds)
-
     if len(raw) <= 10:
-        return parsed.strftime("%d-%m-%Y")
+        return parsed.strftime(output_format or "%d-%m-%Y")
 
-    return parsed.strftime("%d-%m-%Y %I:%M %p")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    parsed = parsed.astimezone(IST)
+    return parsed.strftime(output_format or "%d-%m-%Y %I:%M %p")
 
 def create_app():
     app = Flask(__name__)

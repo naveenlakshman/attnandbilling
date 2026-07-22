@@ -30,7 +30,7 @@
       <section class="review-card mb-3"><div class="review-card-body">
         <div class="review-meta">
           <div><small>Student</small><strong>{{ sub.student_name }} ({{ sub.student_code }})</strong></div>
-          <div><small>Submitted</small><strong>{{ sub.submitted_date or 'Not recorded' }}</strong></div>
+          <div><small>Submitted</small><strong>{{ sub.submitted_at|format_ist_datetime('%d-%b-%Y %I:%M %p') if sub.submitted_at else 'Not recorded' }}</strong></div>
           <div><small>Chapter / Topic</small><strong>{{ sub.chapter_title }} · {{ sub.topic_title }}</strong></div>
           <div><small>File</small><strong>{{ orig_filename }}</strong></div>
           <div><small>Due date</small><strong>{{ sub.due_at or 'No due date' }}</strong></div>
@@ -49,7 +49,7 @@
 
     <aside class="review-card decision-panel"><div class="review-card-header d-flex justify-content-between align-items-center"><span>Decision</span><span class="status-pill {{ sub.review_status }}">{{ sub.review_status|title }}</span></div><div class="review-card-body">
       {% if pending_position %}<p class="small text-muted">Pending item {{ pending_position }} of {{ pending_total }} in this filtered queue.</p>{% endif %}
-      {% if sub.review_status != 'submitted' %}<div class="reviewer-summary"><small>Reviewed by</small><strong>{{ sub.reviewed_by_name or ('Reviewer account #' ~ sub.reviewed_by if sub.reviewed_by else 'Unknown reviewer (legacy record)') }}</strong><small class="mt-2">Reviewed at</small><strong>{{ sub.reviewed_date or 'Timestamp not recorded' }}</strong></div>{% endif %}
+      {% if sub.review_status != 'submitted' %}<div class="reviewer-summary"><small>Reviewed by</small><strong>{{ sub.reviewed_by_name or ('Reviewer account #' ~ sub.reviewed_by if sub.reviewed_by else 'Unknown reviewer (legacy record)') }}</strong><small class="mt-2">Reviewed at</small><strong>{{ sub.reviewed_at|format_ist_datetime('%d-%b-%Y %I:%M %p') if sub.reviewed_at else 'Timestamp not recorded' }}</strong></div>{% endif %}
       {% if sub.is_latest and sub.review_status == 'submitted' %}
       <form class="decision-form" method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="return_queue" value="1"><input type="hidden" name="return_next_id" value="{{ next_id or '' }}">
@@ -76,9 +76,9 @@
     <div class="table-responsive"><table class="table table-hover attempt-table"><thead><tr><th>Attempt</th><th>Submitted</th><th>File</th><th>Decision</th><th>Reviewer</th><th>Feedback / reason</th><th>Score</th><th>View</th></tr></thead><tbody>
       {% for attempt in attempts %}<tr>
         <td data-label="Attempt"><strong>#{{ attempt.attempt_number }}</strong>{% if attempt.is_latest %} <span class="badge bg-primary attempt-current">Latest</span>{% endif %}</td>
-        <td data-label="Submitted">{{ attempt.submitted_date or 'Not recorded' }}</td>
+        <td data-label="Submitted">{{ attempt.submitted_at|format_ist_datetime('%d-%b-%Y %I:%M %p') if attempt.submitted_at else 'Not recorded' }}</td>
         <td data-label="File">{{ attempt.original_filename or 'Unnamed file' }}</td>
-        <td data-label="Decision"><span class="status-pill {{ attempt.review_status }}">{{ attempt.review_status|title }}</span>{% if attempt.reviewed_date %}<div class="text-muted small mt-1">{{ attempt.reviewed_date }}</div>{% endif %}</td>
+        <td data-label="Decision"><span class="status-pill {{ attempt.review_status }}">{{ attempt.review_status|title }}</span>{% if attempt.reviewed_at %}<div class="text-muted small mt-1">{{ attempt.reviewed_at|format_ist_datetime('%d-%b-%Y %I:%M %p') }}</div>{% endif %}</td>
         <td data-label="Reviewer">{% if attempt.review_status == 'submitted' %}Not reviewed{% else %}{{ attempt.reviewed_by_name or ('Reviewer account #' ~ attempt.reviewed_by if attempt.reviewed_by else 'Unknown reviewer (legacy record)') }}{% endif %}</td>
         <td data-label="Feedback / reason" class="attempt-note">{% if attempt.feedback %}<strong>Feedback:</strong> {{ attempt.feedback }}{% endif %}{% if attempt.rejection_reason %}<div><strong>Reason:</strong> {{ attempt.rejection_reason }}</div>{% endif %}{% if not attempt.feedback and not attempt.rejection_reason %}—{% endif %}</td>
         <td data-label="Score">{% if attempt.score is not none %}{{ attempt.score }}{% if sub.max_score is not none %} / {{ sub.max_score }}{% endif %}{% else %}<span class="text-muted">Not scored</span>{% endif %}{% if attempt.is_late %}<div class="text-danger small">Late</div>{% endif %}</td>

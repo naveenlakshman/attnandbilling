@@ -11,6 +11,10 @@ from modules.lms_admin import routes as lms_admin_routes
 
 def run_phase7(fixtures, other_branch, actors):
     baseline.app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
+    ist_filter = baseline.app.jinja_env.filters['format_ist_datetime']
+    assert ist_filter('2026-06-15 00:00:00', '%d-%b-%Y %I:%M %p') == '15-Jun-2026 05:30 AM'
+    assert ist_filter('2026-06-15T00:00:00+00:00', '%d-%b-%Y %I:%M %p') == '15-Jun-2026 05:30 AM'
+    assert ist_filter('2026-06-15') == '15-06-2026'
     users = fixtures['users']
     admin = baseline.session_client({'user_id': users['admin'], 'role': 'admin', 'branch_id': fixtures['branch']})
     trainer_a = baseline.session_client({'user_id': users['trainer_a'], 'role': 'staff', 'branch_id': fixtures['branch']})
@@ -41,6 +45,8 @@ def run_phase7(fixtures, other_branch, actors):
     assert b'Accept' in detail.data and b'Reject' in detail.data
     assert f'/lms_admin/master/reviews/{next_id}'.encode() in detail.data
     assert b'program_id=' + str(fixtures['program']).encode() in detail.data
+    assert detail.data.count(b'10-Jul-2026 05:30 PM') >= 2
+    assert b'12:July' not in detail.data
 
     # The legacy Preview tab must render even when the object is only in cloud
     # storage and is absent from the rebuilt container's ephemeral filesystem.
