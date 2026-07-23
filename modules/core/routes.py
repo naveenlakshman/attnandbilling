@@ -635,7 +635,7 @@ def users():
             b.branch_name
         FROM users u
         LEFT JOIN branches b ON u.branch_id = b.id
-        WHERE u.institute_id = ?
+        WHERE u.institute_id = ? AND u.platform_role IS NULL
         ORDER BY u.id DESC
     """, (institute_id,))
     users_list = cur.fetchall()
@@ -756,7 +756,7 @@ def user_edit(user_id):
     cur = conn.cursor()
 
     cur.execute(
-        "SELECT * FROM users WHERE id = ? AND institute_id = ?",
+        "SELECT * FROM users WHERE id = ? AND institute_id = ? AND platform_role IS NULL",
         (user_id, institute_id),
     )
     user = cur.fetchone()
@@ -882,7 +882,7 @@ def user_toggle_status(user_id):
     cur = conn.cursor()
 
     cur.execute(
-        "SELECT * FROM users WHERE id = ? AND institute_id = ?",
+        "SELECT * FROM users WHERE id = ? AND institute_id = ? AND platform_role IS NULL",
         (user_id, institute_id),
     )
     user = cur.fetchone()

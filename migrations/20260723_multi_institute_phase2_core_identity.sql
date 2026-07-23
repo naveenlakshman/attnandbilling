@@ -46,19 +46,6 @@ DEALLOCATE PREPARE p2_stmt;
 UPDATE branches SET institute_id = 1 WHERE institute_id IS NULL;
 UPDATE users SET institute_id = 1 WHERE institute_id IS NULL;
 
--- The original system owner becomes the first platform owner. This is
--- deterministic on the existing database and can be reassigned later.
-UPDATE users
-SET platform_role = 'platform_owner'
-WHERE id = (
-    SELECT owner_id FROM (
-        SELECT MIN(id) AS owner_id
-        FROM users
-        WHERE role = 'admin' AND is_active = 1
-    ) AS first_owner
-)
-  AND platform_role IS NULL;
-
 SET @p2_branch_institute_not_null = IF(
     EXISTS(
         SELECT 1 FROM information_schema.COLUMNS

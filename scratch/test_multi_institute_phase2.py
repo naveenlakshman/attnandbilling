@@ -16,14 +16,24 @@ HOST = f"{SLUG}.localhost"
 
 
 def owner_client():
+    conn = get_conn()
+    try:
+        owner = conn.execute(
+            """SELECT id, username, institute_id FROM users
+               WHERE platform_role = 'platform_owner' AND is_active = 1
+               ORDER BY id LIMIT 1"""
+        ).fetchone()
+        assert owner, "Provision a dedicated platform owner before running Phase 2 tests."
+    finally:
+        conn.close()
     client = app.test_client()
     with client.session_transaction(base_url="https://www.globaliterp.com") as s:
         s.update(
-            user_id=1,
-            username="phase2-owner",
+            user_id=owner["id"],
+            username=owner["username"],
             role="admin",
             platform_role="platform_owner",
-            institute_id=1,
+            institute_id=owner["institute_id"],
             can_view_all_branches=1,
         )
     return client
@@ -65,6 +75,37 @@ def verify_schema():
     finally:
         conn.close()
     print("phase2_schema_and_backfill=OK")
+
+
+def verify_platform_role_separation():
+    conn = get_conn()
+    try:
+        institute_admin = conn.execute(
+            """SELECT u.id, u.username, u.institute_id
+               FROM users u
+               JOIN institute_memberships im
+                 ON im.user_id = u.id AND im.institute_id = u.institute_id
+               WHERE u.platform_role IS NULL
+                 AND im.membership_role = 'institute_admin'
+                 AND u.is_active = 1 AND im.is_active = 1
+               ORDER BY u.id LIMIT 1"""
+        ).fetchone()
+        assert institute_admin
+    finally:
+        conn.close()
+
+    client = tenant_client(
+        institute_admin["institute_id"],
+        institute_admin["id"],
+        "www.globaliterp.com",
+    )
+    denied = client.get("/platform/institutes", base_url="https://www.globaliterp.com")
+    assert denied.status_code == 403
+    users_page = client.get("/users", base_url="https://www.globaliterp.com")
+    assert users_page.status_code == 200
+    assert b"platform_owner" not in users_page.data
+    print("phase2_institute_admin_cannot_manage_platform=OK")
+    print("phase2_platform_identity_hidden_from_tenant_user_crud=OK")
 
 
 def create_tenant():
@@ -258,6 +299,7 @@ if __name__ == "__main__":
     try:
         app.config.update(TESTING=True, WTF_CSRF_ENABLED=False, TENANT_RESOLUTION_MODE="observe")
         verify_schema()
+        verify_platform_role_separation()
         tenant_id = create_tenant()
         branch_id, admin_id = verify_platform_crud(tenant_id)
         verify_isolation(tenant_id, admin_id)
