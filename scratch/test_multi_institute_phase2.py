@@ -99,6 +99,9 @@ def verify_platform_role_separation():
         institute_admin["id"],
         "www.globaliterp.com",
     )
+    # A signed session issued before a role revocation must not retain access.
+    with client.session_transaction(base_url="https://www.globaliterp.com") as s:
+        s["platform_role"] = "platform_owner"
     denied = client.get("/platform/institutes", base_url="https://www.globaliterp.com")
     assert denied.status_code == 403
     users_page = client.get("/users", base_url="https://www.globaliterp.com")

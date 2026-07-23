@@ -1,5 +1,6 @@
 from functools import wraps
 from flask import abort, session, redirect, url_for, flash
+from db import get_conn
 
 def login_required(route_function):
     @wraps(route_function)
@@ -33,7 +34,18 @@ def platform_owner_required(route_function):
             flash("Please login first.", "warning")
             return redirect(url_for("core.login"))
 
-        if session.get("platform_role") != "platform_owner":
+        conn = get_conn()
+        try:
+            owner = conn.execute(
+                """SELECT id FROM users
+                   WHERE id = ? AND platform_role = 'platform_owner' AND is_active = 1""",
+                (session["user_id"],),
+            ).fetchone()
+        finally:
+            conn.close()
+
+        if not owner:
+            session.pop("platform_role", None)
             abort(403)
 
         return route_function(*args, **kwargs)
