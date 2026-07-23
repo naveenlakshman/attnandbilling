@@ -137,12 +137,12 @@ def create_tenant():
         ).fetchone()
         assert institute
         institute_id = institute["id"]
-        conn.execute(
-            """UPDATE institute_domains SET status = 'active', verified_at = NOW()
+        domain = conn.execute(
+            """SELECT status, verified_at FROM institute_domains
                WHERE institute_id = ? AND hostname = ?""",
             (institute_id, HOST),
-        )
-        conn.commit()
+        ).fetchone()
+        assert domain["status"] == "active" and domain["verified_at"]
         return institute_id
     finally:
         conn.close()

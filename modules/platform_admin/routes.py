@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from flask import abort, flash, redirect, render_template, request, session, url_for
+from flask import abort, current_app, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import generate_password_hash
 
 from db import get_conn
@@ -18,6 +18,16 @@ _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 def _now():
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _domain_activation(hostname):
+    """Automatically verify only loopback hostnames outside production."""
+    is_local = (
+        hostname
+        and (hostname == "localhost" or hostname.endswith(".localhost"))
+        and current_app.config.get("APP_ENV") != "production"
+    )
+    return ("active", _now()) if is_local else ("pending", None)
 
 
 def _institute_or_404(conn, institute_id):
@@ -157,14 +167,18 @@ def institute_new():
             (institute_id, now, now),
         )
         if values["hostname"]:
+            domain_status, verified_at = _domain_activation(values["hostname"])
             cur.execute(
                 """
                 INSERT INTO institute_domains (
                     institute_id, hostname, domain_type, is_primary, status,
                     verified_at, created_at, updated_at
-                ) VALUES (?, ?, 'custom', 1, 'pending', NULL, ?, ?)
+                ) VALUES (?, ?, 'custom', 1, ?, ?, ?, ?)
                 """,
-                (institute_id, values["hostname"], now, now),
+                (
+                    institute_id, values["hostname"], domain_status,
+                    verified_at, now, now,
+                ),
             )
         conn.commit()
         clear_tenant_cache()
@@ -280,18 +294,17 @@ def institute_edit(institute_id):
             ),
         )
         if values["hostname"]:
+            domain_status, verified_at = _domain_activation(values["hostname"])
             if primary_domain:
                 conn.execute(
                     """
                     UPDATE institute_domains
-                    SET hostname = ?, status = CASE WHEN hostname = ? THEN status ELSE 'pending' END,
-                        verified_at = CASE WHEN hostname = ? THEN verified_at ELSE NULL END,
-                        updated_at = ?
+                    SET hostname = ?, status = ?, verified_at = ?, updated_at = ?
                     WHERE id = ? AND institute_id = ?
                     """,
                     (
-                        values["hostname"], values["hostname"], values["hostname"],
-                        now, primary_domain["id"], institute_id,
+                        values["hostname"], domain_status, verified_at, now,
+                        primary_domain["id"], institute_id,
                     ),
                 )
             else:
@@ -299,10 +312,13 @@ def institute_edit(institute_id):
                     """
                     INSERT INTO institute_domains (
                         institute_id, hostname, domain_type, is_primary, status,
-                        created_at, updated_at
-                    ) VALUES (?, ?, 'custom', 1, 'pending', ?, ?)
+                        verified_at, created_at, updated_at
+                    ) VALUES (?, ?, 'custom', 1, ?, ?, ?, ?)
                     """,
-                    (institute_id, values["hostname"], now, now),
+                    (
+                        institute_id, values["hostname"], domain_status,
+                        verified_at, now, now,
+                    ),
                 )
         conn.commit()
         clear_tenant_cache()
