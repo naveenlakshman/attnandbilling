@@ -95,6 +95,27 @@ def login():
 @core_bp.route("/dashboard")
 @login_required
 def dashboard():
+    institute_id = get_current_institute_id(default=1)
+    if institute_id != 1:
+        conn = get_conn()
+        try:
+            branch_count = conn.execute(
+                "SELECT COUNT(*) AS n FROM branches WHERE institute_id = ? AND is_active = 1",
+                (institute_id,),
+            ).fetchone()["n"]
+            user_count = conn.execute(
+                """SELECT COUNT(*) AS n FROM users
+                   WHERE institute_id = ? AND platform_role IS NULL AND is_active = 1""",
+                (institute_id,),
+            ).fetchone()["n"]
+        finally:
+            conn.close()
+        return render_template(
+            "core/tenant_foundation_dashboard.html",
+            branch_count=branch_count,
+            user_count=user_count,
+        )
+
     # Staff users get their own dedicated dashboard
     if session.get("role") == "staff":
         return _staff_dashboard()

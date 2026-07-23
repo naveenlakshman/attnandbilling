@@ -394,7 +394,27 @@ def get_company_profile(institute_id=None):
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM company_profile WHERE id = 1")
+        if cache_key != 1:
+            cur.execute(
+                """
+                SELECT i.id, COALESCE(b.display_name, i.name) AS company_name,
+                       COALESCE(b.short_name, i.short_name) AS company_short_name,
+                       COALESCE(b.tagline, 'ERP System') AS tagline,
+                       COALESCE(b.address, '') AS address,
+                       COALESCE(b.phone, '') AS phone,
+                       COALESCE(b.email, '') AS email,
+                       COALESCE(b.website, '') AS website,
+                       NULL AS logo_filename,
+                       COALESCE(b.registration_number, '') AS reg_number,
+                       b.updated_at
+                FROM institutes i
+                LEFT JOIN institute_branding b ON b.institute_id = i.id
+                WHERE i.id = ?
+                """,
+                (cache_key,),
+            )
+        else:
+            cur.execute("SELECT * FROM company_profile WHERE id = 1")
         row = cur.fetchone()
         if row:
             result = dict(row)

@@ -125,6 +125,35 @@ def create_app():
     app.register_blueprint(certificates_bp)
     init_tenant_context(app)
 
+    secondary_tenant_safe_endpoints = {
+        "core.home",
+        "core.login",
+        "core.logout",
+        "core.dashboard",
+        "core.users",
+        "core.user_new",
+        "core.user_edit",
+        "core.user_toggle_status",
+        "core.branches",
+        "core.branch_new",
+        "core.branch_edit",
+        "core.branch_toggle_status",
+        "healthz",
+        "static",
+    }
+
+    @app.before_request
+    def contain_unmigrated_secondary_tenant_modules():
+        """Prevent secondary tenants from reading legacy Global IT tables."""
+        from services.tenant_context import get_current_institute_id
+
+        institute_id = get_current_institute_id()
+        if institute_id in (None, 1):
+            return None
+        if request.endpoint in secondary_tenant_safe_endpoints:
+            return None
+        abort(403)
+
     # Register storage_url global in Jinja templates
     def storage_url(path):
         if not path:

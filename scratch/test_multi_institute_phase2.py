@@ -239,6 +239,13 @@ def verify_isolation(institute_id, user_id):
     assert branches.status_code == 200
     assert f"Main {TOKEN}".encode() in branches.data
     assert f"Global duplicate {TOKEN}".encode() not in branches.data
+    dashboard = client.get("/dashboard", base_url=f"https://{HOST}")
+    assert dashboard.status_code == 200
+    assert b"Phase 2 setup mode" in dashboard.data
+    assert f"Phase 2 Institute {TOKEN}".encode() in dashboard.data
+    assert b"REVENUE" not in dashboard.data.upper()
+    blocked_students = client.get("/billing/students", base_url=f"https://{HOST}")
+    assert blocked_students.status_code == 403
     foreign_edit = client.post(
         f"/branches/{global_branch}/edit",
         base_url=f"https://{HOST}",
@@ -261,6 +268,8 @@ def verify_isolation(institute_id, user_id):
     assert global_login.status_code == 302
     print("phase2_duplicate_codes_and_usernames_per_tenant=OK")
     print("phase2_hostname_scoped_login=OK")
+    print("phase2_legacy_global_modules_contained=OK")
+    print("phase2_tenant_branding_context=OK")
     print("phase2_branch_direct_object_isolation=OK")
     print("phase2_platform_owner_authorization=OK")
 

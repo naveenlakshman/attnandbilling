@@ -18,6 +18,7 @@
     <span class="nav-text">Dashboard</span>
   </a>
 
+  {% if session.get('institute_id', 1)|int == 1 %}
   <!-- Leads Section -->
   <div class="erp-module" data-module="Leads">
     <button class="erp-module-toggle {{ 'active' if admissions_active else '' }}"
@@ -209,6 +210,7 @@
     </div>
   </div>
 
+  {% endif %}
   <!-- Administration Section -->
   <div class="erp-module" data-module="admin">
     <button class="erp-module-toggle {{ 'active' if admin_active else '' }}"
@@ -231,8 +233,10 @@
           <a class="nav-link {{ 'active' if ep in ['core.users', 'core.user_new', 'core.user_edit'] else '' }}" href="{{ url_for('core.users') }}">Users</a>
           <a class="nav-link {{ 'active' if ep in ['core.branches', 'core.branch_new', 'core.branch_edit'] else '' }}" href="{{ url_for('core.branches') }}">Branches</a>
         {% endif %}
-        <a class="nav-link {{ 'active' if ep == 'core.company_profile' else '' }}" href="{{ url_for('core.company_profile') }}">Company Profile</a>
-        {% if is_admin %}
+        {% if session.get('institute_id', 1)|int == 1 %}
+          <a class="nav-link {{ 'active' if ep == 'core.company_profile' else '' }}" href="{{ url_for('core.company_profile') }}">Company Profile</a>
+        {% endif %}
+        {% if is_admin and session.get('institute_id', 1)|int == 1 %}
           <a class="nav-link {{ 'active' if ep and ep.startswith('assets.') else '' }}" href="{{ url_for('assets.list_assets') }}">Assets</a>
           <a class="nav-link {{ 'active' if ep and ep.startswith('import_export.') else '' }}" href="{{ url_for('import_export.import_export_dashboard') }}">Export Data</a>
         {% endif %}
