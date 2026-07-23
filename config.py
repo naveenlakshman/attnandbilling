@@ -94,6 +94,11 @@ class Config:
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     RATELIMIT_DEFAULT = os.environ.get("RATELIMIT_DEFAULT", "")
 
+    # Multi-institute foundation. Observe mode resolves and records tenant
+    # context while retaining current single-institute compatibility.
+    TENANT_RESOLUTION_MODE = os.environ.get("TENANT_RESOLUTION_MODE", "observe").strip().lower()
+    TENANT_STRICT_EXEMPT_ENDPOINTS = {"healthz", "static"}
+
     # App debug mode
     DEBUG_MODE = _env_bool("DEBUG_MODE", default=False)
 

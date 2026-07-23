@@ -19,6 +19,7 @@ from modules.exams.routes import exams_bp
 from modules.students import students_bp
 from modules.website import website_bp
 from modules.core.utils import login_required
+from services.tenant_context import init_tenant_context
 from datetime import datetime, timedelta, timezone
 
 def format_datetime(value):
@@ -120,6 +121,7 @@ def create_app():
     app.register_blueprint(students_bp)
     from modules.certificates.routes import certificates_bp
     app.register_blueprint(certificates_bp)
+    init_tenant_context(app)
 
     # Register storage_url global in Jinja templates
     def storage_url(path):

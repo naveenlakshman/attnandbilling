@@ -11,6 +11,7 @@ logger = logging.getLogger("app.core")
 
 from .sms import send_sms
 from extensions import public_auth_limit
+from services.tenant_context import get_current_institute_id
 
 core_bp = Blueprint("core", __name__)
 
@@ -55,6 +56,22 @@ def login():
             session["role"] = user["role"]
             session["branch_id"] = user["branch_id"]
             session["can_view_all_branches"] = user["can_view_all_branches"]
+            session["institute_id"] = get_current_institute_id(default=1)
+
+            membership_conn = get_conn()
+            try:
+                membership = membership_conn.execute(
+                    """SELECT membership_role FROM institute_memberships
+                       WHERE institute_id = ? AND user_id = ? AND is_active = 1
+                       LIMIT 1""",
+                    (session["institute_id"], user["id"]),
+                ).fetchone()
+                session["membership_role"] = (
+                    membership["membership_role"] if membership
+                    else ("institute_admin" if user["role"] == "admin" else user["role"])
+                )
+            finally:
+                membership_conn.close()
 
             flash("Login successful.", "success")
             return redirect(url_for("core.dashboard"))

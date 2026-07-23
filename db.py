@@ -375,14 +375,22 @@ def get_conn():
     return conn
 
 
-_company_cache = {"data": None, "ts": 0}
+_company_cache = {}
 
 
-def get_company_profile():
+def get_company_profile(institute_id=None):
     """Return company profile, cached for 5 minutes to avoid a DB hit on every request."""
     global _company_cache
-    if _company_cache["data"] is not None and (time.time() - _company_cache["ts"]) < 300:
-        return _company_cache["data"]
+    if institute_id is None:
+        try:
+            from services.tenant_context import get_current_institute_id
+            institute_id = get_current_institute_id(default=1)
+        except Exception:
+            institute_id = 1
+    cache_key = int(institute_id or 1)
+    cached = _company_cache.get(cache_key)
+    if cached and (time.time() - cached["ts"]) < 300:
+        return cached["data"]
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -404,22 +412,23 @@ def get_company_profile():
                 "reg_number": "",
                 "updated_at": None,
             }
-        _company_cache["data"] = result
-        _company_cache["ts"] = time.time()
+        _company_cache[cache_key] = {"data": result, "ts": time.time()}
         return result
     finally:
         conn.close()
 
 
-def clear_company_cache():
+def clear_company_cache(institute_id=None):
     """Call this after saving company profile so the cache refreshes immediately."""
     global _company_cache
-    _company_cache["data"] = None
-    _company_cache["ts"] = 0
+    if institute_id is None:
+        _company_cache.clear()
+    else:
+        _company_cache.pop(int(institute_id), None)
 
 
 
-def log_activity(user_id, branch_id, action_type, module_name, record_id, description, conn=None):
+def log_activity(user_id, branch_id, action_type, module_name, record_id, description, conn=None, institute_id=None):
     """
     Insert an activity log entry.
     Pass an existing `conn` to reuse it (caller must commit).
@@ -429,10 +438,17 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
     if _own_conn:
         conn = get_conn()
     try:
+        if institute_id is None:
+            try:
+                from services.tenant_context import get_current_institute_id
+                institute_id = get_current_institute_id(default=1)
+            except Exception:
+                institute_id = 1
         cur = conn.cursor()
         now = datetime.now().isoformat(timespec="seconds")
         cur.execute("""
             INSERT INTO activity_logs (
+                institute_id,
                 user_id,
                 branch_id,
                 action_type,
@@ -441,8 +457,9 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
                 description,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            institute_id,
             user_id,
             branch_id,
             action_type,
@@ -901,6 +918,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS activity_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER,
             user_id INTEGER,
             branch_id INTEGER,
             action_type TEXT NOT NULL,
@@ -909,7 +927,8 @@ def init_db():
             description TEXT NOT NULL,
             created_at TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id),
-            FOREIGN KEY (branch_id) REFERENCES branches(id)
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id)
         )
     """)
 
@@ -1732,6 +1751,137 @@ def init_db():
     except:
         pass
 
+    # ---------- MULTI-INSTITUTE PHASE 1 FOUNDATION ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institutes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            short_name TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'active',
+            timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+            locale TEXT NOT NULL DEFAULT 'en-IN',
+            currency_code TEXT NOT NULL DEFAULT 'INR',
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_domains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
+            hostname TEXT NOT NULL UNIQUE,
+            domain_type TEXT NOT NULL DEFAULT 'platform',
+            is_primary INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',
+            verified_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_branding (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            short_name TEXT,
+            tagline TEXT,
+            logo_path TEXT,
+            favicon_path TEXT,
+            primary_color TEXT NOT NULL DEFAULT '#2563EB',
+            secondary_color TEXT NOT NULL DEFAULT '#16A34A',
+            address TEXT,
+            phone TEXT,
+            email TEXT,
+            website TEXT,
+            registration_number TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL UNIQUE,
+            invoice_prefix TEXT NOT NULL DEFAULT 'INV',
+            receipt_prefix TEXT NOT NULL DEFAULT 'RCP',
+            student_prefix TEXT NOT NULL DEFAULT 'STU',
+            certificate_prefix TEXT NOT NULL DEFAULT 'CERT',
+            date_format TEXT NOT NULL DEFAULT 'DD-MMM-YYYY',
+            settings_json TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_integrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
+            integration_type TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'inactive',
+            secret_reference TEXT,
+            configuration_json TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE (institute_id, integration_type),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            membership_role TEXT NOT NULL DEFAULT 'staff',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE (institute_id, user_id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_migration_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER,
+            migration_key TEXT NOT NULL,
+            status TEXT NOT NULL,
+            checkpoint_json TEXT,
+            started_by INTEGER,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            error_message TEXT,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE SET NULL,
+            FOREIGN KEY (started_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_security_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER,
+            user_id INTEGER,
+            student_id INTEGER,
+            event_type TEXT NOT NULL,
+            request_host TEXT,
+            request_path TEXT,
+            details_json TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE SET NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL
+        )
+    """)
+    add_column_if_not_exists(cur, "activity_logs", "institute_id", "INTEGER")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_institute_created ON activity_logs(institute_id, created_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_institute_domains_institute ON institute_domains(institute_id, status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_institute_memberships_user ON institute_memberships(user_id, is_active)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_tenant_security_audit_institute ON tenant_security_audit(institute_id, created_at)")
+
     # ---------- DEFAULT COMPANY PROFILE ----------
     cur.execute("SELECT id FROM company_profile WHERE id = 1")
     if not cur.fetchone():
@@ -1824,6 +1974,46 @@ def init_db():
 
     cur.execute("UPDATE students SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
     cur.execute("UPDATE invoices SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+
+    cur.execute("""
+        INSERT OR IGNORE INTO institutes (
+            id, name, short_name, slug, status, timezone, locale,
+            currency_code, created_at, updated_at
+        ) VALUES (1, 'Global IT Education', 'Global IT', 'global-it-education',
+                  'active', 'Asia/Kolkata', 'en-IN', 'INR', ?, ?)
+    """, (now, now))
+    for hostname, is_primary in (("www.globaliterp.com", 1), ("globaliterp.com", 0)):
+        cur.execute("""
+            INSERT OR IGNORE INTO institute_domains (
+                institute_id, hostname, domain_type, is_primary, status,
+                verified_at, created_at
+            ) VALUES (1, ?, 'custom', ?, 'active', ?, ?)
+        """, (hostname, is_primary, now, now))
+    cur.execute("""
+        INSERT OR IGNORE INTO institute_branding (
+            institute_id, display_name, short_name, tagline, logo_path, address,
+            phone, email, website, registration_number, created_at, updated_at
+        )
+        SELECT 1, company_name, company_short_name, tagline, logo_filename, address,
+               phone, email, website, reg_number, ?, ?
+        FROM company_profile WHERE id = 1
+    """, (now, now))
+    cur.execute("""
+        INSERT OR IGNORE INTO institute_settings (
+            institute_id, invoice_prefix, receipt_prefix, student_prefix,
+            certificate_prefix, date_format, created_at, updated_at
+        ) VALUES (1, 'GIT/B', 'GIT', 'STU', 'GIT', 'DD-MMM-YYYY', ?, ?)
+    """, (now, now))
+    cur.execute("""
+        INSERT OR IGNORE INTO institute_memberships (
+            institute_id, user_id, membership_role, is_active, created_at, updated_at
+        )
+        SELECT 1, id,
+               CASE WHEN role = 'admin' THEN 'institute_admin' ELSE role END,
+               is_active, ?, ?
+        FROM users
+    """, (now, now))
+    cur.execute("UPDATE activity_logs SET institute_id = 1 WHERE institute_id IS NULL")
 
     # ---------- DEFAULT EXPENSE CATEGORIES ----------
     default_categories = [

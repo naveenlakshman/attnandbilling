@@ -13,6 +13,7 @@ import uuid
 from db import get_conn
 from extensions import limiter, public_auth_limit
 from services.storage import get_storage_service
+from services.tenant_context import get_current_institute_id
 import logging
 from . import students_bp
 
@@ -30,6 +31,7 @@ def _clear_student_session():
     session.pop('student_session_mode', None)
     session.pop('student_force_password_change', None)
     session.pop('demo_mode', None)
+    session.pop('institute_id', None)
 
 
 def _is_mobile_app_request():
@@ -68,6 +70,7 @@ def _mark_student_logged_in(student, mode='lab'):
     session['student_id'] = student['id']
     session['student_name'] = student['full_name']
     session['student_code'] = student['student_code']
+    session['institute_id'] = get_current_institute_id(default=1)
     session['student_login_at'] = int(datetime.utcnow().timestamp())
     session['student_session_mode'] = mode
     session['student_force_password_change'] = (
@@ -79,6 +82,7 @@ def _set_student_mobile_cookie(response, student):
     token = _student_mobile_serializer().dumps({
         'student_id': student['id'],
         'student_code': student['student_code'],
+        'institute_id': get_current_institute_id(default=1),
         'password_fingerprint': _password_fingerprint(student['password_hash']),
     })
     response.set_cookie(
@@ -115,6 +119,11 @@ def _restore_mobile_student_session():
             max_age=_student_mobile_max_age(),
         )
     except (BadSignature, SignatureExpired):
+        return False
+
+    current_institute_id = get_current_institute_id(default=1)
+    token_institute_id = payload.get('institute_id')
+    if token_institute_id is not None and int(token_institute_id) != int(current_institute_id):
         return False
 
     conn = get_conn()
