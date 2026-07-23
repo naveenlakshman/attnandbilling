@@ -86,6 +86,11 @@
 {% endblock %}
 
 {% block content %}
+{% if platform_institute %}
+<div class="alert alert-light border">
+    Branch belongs to <strong>{{ platform_institute.name }}</strong>.
+</div>
+{% endif %}
 <div class="form-container">
     <div class="form-card">
         <form method="post">
@@ -140,7 +145,7 @@
                     <i class="fas fa-save"></i> 
                     {% if mode == 'create' %}Create Branch{% else %}Update Branch{% endif %}
                 </button>
-                <a href="{{ url_for('core.branches') }}" class="btn-secondary">
+                <a href="{{ cancel_url or url_for('core.branches') }}" class="btn-secondary">
                     <i class="fas fa-arrow-left"></i> Cancel
                 </a>
             </div>

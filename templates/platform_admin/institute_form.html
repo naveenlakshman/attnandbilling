@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if institute else 'Add' }} Institute{% endblock %}
+{% block page_title %}{{ 'Edit Institute' if institute else 'Create Institute' }}{% endblock %}
+{% block content %}
+{% set source = branding or {} %}
+<div class="container-fluid">
+  <form method="post" class="card border-0 shadow-sm p-4">
+    <h4>Institute identity</h4>
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label">Name *</label><input class="form-control" name="name" required value="{{ request.form.get('name', institute.name if institute else '') }}"></div>
+      <div class="col-md-3"><label class="form-label">Short name *</label><input class="form-control" name="short_name" required value="{{ request.form.get('short_name', institute.short_name if institute else '') }}"></div>
+      <div class="col-md-3"><label class="form-label">Slug *</label><input class="form-control" name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" value="{{ request.form.get('slug', institute.slug if institute else '') }}"></div>
+      <div class="col-md-6"><label class="form-label">Primary hostname</label><input class="form-control" name="hostname" placeholder="institute.example.com" value="{{ request.form.get('hostname', primary_domain.hostname if primary_domain is defined and primary_domain else '') }}"><div class="form-text">New or changed domains remain pending until verified.</div></div>
+      <div class="col-md-2"><label class="form-label">Timezone</label><input class="form-control" name="timezone" value="{{ request.form.get('timezone', institute.timezone if institute else 'Asia/Kolkata') }}"></div>
+      <div class="col-md-2"><label class="form-label">Locale</label><input class="form-control" name="locale" value="{{ request.form.get('locale', institute.locale if institute else 'en-IN') }}"></div>
+      <div class="col-md-2"><label class="form-label">Currency</label><input class="form-control" name="currency_code" maxlength="3" value="{{ request.form.get('currency_code', institute.currency_code if institute else 'INR') }}"></div>
+    </div>
+    <hr class="my-4"><h4>Branding and contact</h4>
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label">Tagline</label><input class="form-control" name="tagline" value="{{ request.form.get('tagline', source.tagline or '') }}"></div>
+      <div class="col-md-3"><label class="form-label">Primary color</label><input class="form-control form-control-color w-100" type="color" name="primary_color" value="{{ request.form.get('primary_color', source.primary_color or '#2563EB') }}"></div>
+      <div class="col-md-3"><label class="form-label">Secondary color</label><input class="form-control form-control-color w-100" type="color" name="secondary_color" value="{{ request.form.get('secondary_color', source.secondary_color or '#16A34A') }}"></div>
+      <div class="col-md-4"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{ request.form.get('email', source.email or '') }}"></div>
+      <div class="col-md-4"><label class="form-label">Phone</label><input class="form-control" name="phone" value="{{ request.form.get('phone', source.phone or '') }}"></div>
+      <div class="col-md-4"><label class="form-label">Website</label><input class="form-control" name="website" value="{{ request.form.get('website', source.website or '') }}"></div>
+    </div>
+    <div class="d-flex gap-2 mt-4">
+      <button class="btn btn-primary" type="submit">{{ 'Save changes' if institute else 'Create institute' }}</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('platform_admin.institute_detail', institute_id=institute.id) if institute else url_for('platform_admin.institutes') }}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

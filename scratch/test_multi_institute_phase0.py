@@ -98,12 +98,17 @@ def characterize_known_gaps():
             print("KNOWN_GAP_DETECTED=no_institutes_table_or_tenant_columns")
         else:
             assert institute_table == 1
-            assert tenant_column_tables == {
+            foundation_tables = {
                 "activity_logs", "institute_domains", "institute_branding",
                 "institute_settings", "institute_integrations",
                 "institute_memberships", "tenant_migration_runs",
                 "tenant_security_audit",
             }
+            assert foundation_tables <= tenant_column_tables
+            if {"branches", "users"} <= tenant_column_tables:
+                print("PHASE2_CORE_IDENTITY_DETECTED=branches_and_users_are_tenant_owned")
+                return
+            assert tenant_column_tables == foundation_tables
             print("PHASE1_FOUNDATION_DETECTED=institutes_and_activity_context")
 
         now = "2026-07-22T00:00:00"

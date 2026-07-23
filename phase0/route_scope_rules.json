@@ -7,7 +7,7 @@
     "tenant_staff": "Authenticated institute staff route.",
     "tenant_student": "Authenticated student route.",
     "tenant_mixed_legacy": "Blueprint currently mixes staff and student routes and must be split during migration.",
-    "platform_owner": "Privileged SaaS control-plane route; none exists in the current application."
+    "platform_owner": "Privileged SaaS control-plane route restricted to the platform owner."
   },
   "exact_endpoint_rules": {
     "healthz": "public_platform",
@@ -41,7 +41,8 @@
     "lms_admin": "tenant_staff",
     "students": "tenant_student",
     "certificates": "tenant_mixed_legacy",
-    "exams": "tenant_mixed_legacy"
+    "exams": "tenant_mixed_legacy",
+    "platform_admin": "platform_owner"
   },
   "notes": [
     "Exact endpoint rules take precedence over blueprint rules.",

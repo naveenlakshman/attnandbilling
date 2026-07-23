@@ -41,10 +41,21 @@ def login():
 
         conn = get_conn()
         cur = conn.cursor()
+        current_institute_id = get_current_institute_id(default=1)
         cur.execute("""
-            SELECT * FROM users
-            WHERE username = ? AND is_active = 1
-        """, (username,))
+            SELECT u.*
+            FROM users u
+            LEFT JOIN institute_memberships im
+              ON im.user_id = u.id
+             AND im.institute_id = ?
+             AND im.is_active = 1
+            WHERE u.username = ?
+              AND u.is_active = 1
+              AND u.institute_id = ?
+              AND im.id IS NOT NULL
+            ORDER BY u.id
+            LIMIT 1
+        """, (current_institute_id, username, current_institute_id))
         user = cur.fetchone()
         conn.close()
 
@@ -54,9 +65,10 @@ def login():
             session["full_name"] = user["full_name"]
             session["username"] = user["username"]
             session["role"] = user["role"]
+            session["platform_role"] = user.get("platform_role")
             session["branch_id"] = user["branch_id"]
             session["can_view_all_branches"] = user["can_view_all_branches"]
-            session["institute_id"] = get_current_institute_id(default=1)
+            session["institute_id"] = user["institute_id"]
 
             membership_conn = get_conn()
             try:
@@ -613,6 +625,7 @@ def sidebar_badges():
 @login_required
 @admin_required
 def users():
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
@@ -622,8 +635,9 @@ def users():
             b.branch_name
         FROM users u
         LEFT JOIN branches b ON u.branch_id = b.id
+        WHERE u.institute_id = ?
         ORDER BY u.id DESC
-    """)
+    """, (institute_id,))
     users_list = cur.fetchall()
 
     conn.close()
@@ -634,6 +648,7 @@ def users():
 @login_required
 @admin_required
 def user_new():
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
@@ -655,7 +670,20 @@ def user_new():
             conn.close()
             return redirect(url_for("core.user_new"))
 
-        cur.execute("SELECT id FROM users WHERE username = ?", (username,))
+        if branch_id:
+            cur.execute(
+                "SELECT id FROM branches WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (branch_id, institute_id),
+            )
+            if not cur.fetchone():
+                flash("The selected branch is not available in this institute.", "danger")
+                conn.close()
+                return redirect(url_for("core.user_new"))
+
+        cur.execute(
+            "SELECT id FROM users WHERE institute_id = ? AND username = ?",
+            (institute_id, username),
+        )
         existing_user = cur.fetchone()
         if existing_user:
             flash("Username already exists.", "danger")
@@ -666,6 +694,7 @@ def user_new():
 
         cur.execute("""
             INSERT INTO users (
+                institute_id,
                 full_name,
                 username,
                 password_hash,
@@ -675,8 +704,9 @@ def user_new():
                 is_active,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            institute_id,
             full_name,
             username,
             generate_password_hash(password),
@@ -685,6 +715,18 @@ def user_new():
             can_view_all_branches,
             1,
             now
+        ))
+        user_id = cur.lastrowid
+        cur.execute("""
+            INSERT INTO institute_memberships (
+                institute_id, user_id, membership_role, is_active, created_at, updated_at
+            ) VALUES (?, ?, ?, 1, ?, ?)
+        """, (
+            institute_id,
+            user_id,
+            "institute_admin" if role == "admin" else "staff",
+            now,
+            now,
         ))
 
         conn.commit()
@@ -696,9 +738,9 @@ def user_new():
     cur.execute("""
         SELECT id, branch_name
         FROM branches
-        WHERE is_active = 1
+        WHERE institute_id = ? AND is_active = 1
         ORDER BY branch_name
-    """)
+    """, (institute_id,))
     branches = cur.fetchall()
 
     conn.close()
@@ -709,10 +751,14 @@ def user_new():
 @login_required
 @admin_required
 def user_edit(user_id):
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    cur.execute(
+        "SELECT * FROM users WHERE id = ? AND institute_id = ?",
+        (user_id, institute_id),
+    )
     user = cur.fetchone()
 
     if not user:
@@ -738,7 +784,20 @@ def user_edit(user_id):
             conn.close()
             return redirect(url_for("core.user_edit", user_id=user_id))
 
-        cur.execute("SELECT id FROM users WHERE username = ? AND id != ?", (username, user_id))
+        if branch_id:
+            cur.execute(
+                "SELECT id FROM branches WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (branch_id, institute_id),
+            )
+            if not cur.fetchone():
+                flash("The selected branch is not available in this institute.", "danger")
+                conn.close()
+                return redirect(url_for("core.user_edit", user_id=user_id))
+
+        cur.execute(
+            "SELECT id FROM users WHERE institute_id = ? AND username = ? AND id != ?",
+            (institute_id, username, user_id),
+        )
         existing_user = cur.fetchone()
         if existing_user:
             flash("Username already exists.", "danger")
@@ -782,6 +841,16 @@ def user_edit(user_id):
                 user_id
             ))
 
+        cur.execute("""
+            UPDATE institute_memberships
+            SET membership_role = ?, is_active = 1, updated_at = ?
+            WHERE institute_id = ? AND user_id = ?
+        """, (
+            "institute_admin" if role == "admin" else "staff",
+            datetime.now().isoformat(timespec="seconds"),
+            institute_id,
+            user_id,
+        ))
         conn.commit()
         conn.close()
 
@@ -791,9 +860,9 @@ def user_edit(user_id):
     cur.execute("""
         SELECT id, branch_name
         FROM branches
-        WHERE is_active = 1
+        WHERE institute_id = ? AND is_active = 1
         ORDER BY branch_name
-    """)
+    """, (institute_id,))
     branches = cur.fetchall()
 
     conn.close()
@@ -804,6 +873,7 @@ def user_edit(user_id):
 @login_required
 @admin_required
 def user_toggle_status(user_id):
+    institute_id = int(session["institute_id"])
     if user_id == session.get("user_id"):
         flash("You cannot deactivate your own account.", "danger")
         return redirect(url_for("core.users"))
@@ -811,7 +881,10 @@ def user_toggle_status(user_id):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    cur.execute(
+        "SELECT * FROM users WHERE id = ? AND institute_id = ?",
+        (user_id, institute_id),
+    )
     user = cur.fetchone()
 
     if not user:
@@ -824,8 +897,18 @@ def user_toggle_status(user_id):
     cur.execute("""
         UPDATE users
         SET is_active = ?
-        WHERE id = ?
-    """, (new_status, user_id))
+        WHERE id = ? AND institute_id = ?
+    """, (new_status, user_id, institute_id))
+    cur.execute("""
+        UPDATE institute_memberships
+        SET is_active = ?, updated_at = ?
+        WHERE institute_id = ? AND user_id = ?
+    """, (
+        new_status,
+        datetime.now().isoformat(timespec="seconds"),
+        institute_id,
+        user_id,
+    ))
 
     conn.commit()
     conn.close()
@@ -845,13 +928,15 @@ def user_toggle_status(user_id):
 @admin_required
 def branches():
     """List all branches"""
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
     cur.execute("""
         SELECT * FROM branches
+        WHERE institute_id = ?
         ORDER BY branch_name DESC
-    """)
+    """, (institute_id,))
     branches_list = cur.fetchall()
 
     conn.close()
@@ -863,6 +948,7 @@ def branches():
 @admin_required
 def branch_new():
     """Create new branch"""
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
@@ -885,7 +971,11 @@ def branch_new():
             conn.close()
             return redirect(url_for("core.branch_new"))
 
-        cur.execute("SELECT id FROM branches WHERE branch_name = ? OR branch_code = ?", (branch_name, branch_code))
+        cur.execute(
+            """SELECT id FROM branches
+               WHERE institute_id = ? AND (branch_name = ? OR branch_code = ?)""",
+            (institute_id, branch_name, branch_code),
+        )
         existing_branch = cur.fetchone()
         if existing_branch:
             flash("Branch name or code already exists.", "danger")
@@ -895,9 +985,13 @@ def branch_new():
         now = datetime.now().isoformat(timespec="seconds")
 
         cur.execute("""
-            INSERT INTO branches (branch_name, branch_code, address, is_active, no_of_computers, opening_time, closing_time, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO branches (
+                institute_id, branch_name, branch_code, address, is_active,
+                no_of_computers, opening_time, closing_time, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            institute_id,
             branch_name,
             branch_code,
             address,
@@ -923,10 +1017,14 @@ def branch_new():
 @admin_required
 def branch_edit(branch_id):
     """Edit branch"""
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM branches WHERE id = ?", (branch_id,))
+    cur.execute(
+        "SELECT * FROM branches WHERE id = ? AND institute_id = ?",
+        (branch_id, institute_id),
+    )
     branch = cur.fetchone()
 
     if not branch:
@@ -953,8 +1051,13 @@ def branch_edit(branch_id):
             conn.close()
             return redirect(url_for("core.branch_edit", branch_id=branch_id))
 
-        cur.execute("SELECT id FROM branches WHERE (branch_name = ? OR branch_code = ?) AND id != ?", 
-                   (branch_name, branch_code, branch_id))
+        cur.execute(
+            """SELECT id FROM branches
+               WHERE institute_id = ?
+                 AND (branch_name = ? OR branch_code = ?)
+                 AND id != ?""",
+            (institute_id, branch_name, branch_code, branch_id),
+        )
         existing_branch = cur.fetchone()
         if existing_branch:
             flash("Branch name or code already exists.", "danger")
@@ -969,7 +1072,7 @@ def branch_edit(branch_id):
                 no_of_computers = ?,
                 opening_time = ?,
                 closing_time = ?
-            WHERE id = ?
+            WHERE id = ? AND institute_id = ?
         """, (
             branch_name,
             branch_code,
@@ -977,7 +1080,8 @@ def branch_edit(branch_id):
             no_of_computers,
             opening_time,
             closing_time,
-            branch_id
+            branch_id,
+            institute_id,
         ))
 
         conn.commit()
@@ -995,10 +1099,14 @@ def branch_edit(branch_id):
 @admin_required
 def branch_toggle_status(branch_id):
     """Toggle branch active/inactive status"""
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM branches WHERE id = ?", (branch_id,))
+    cur.execute(
+        "SELECT * FROM branches WHERE id = ? AND institute_id = ?",
+        (branch_id, institute_id),
+    )
     branch = cur.fetchone()
 
     if not branch:
@@ -1011,8 +1119,8 @@ def branch_toggle_status(branch_id):
     cur.execute("""
         UPDATE branches
         SET is_active = ?
-        WHERE id = ?
-    """, (new_status, branch_id))
+        WHERE id = ? AND institute_id = ?
+    """, (new_status, branch_id, institute_id))
 
     conn.commit()
     conn.close()

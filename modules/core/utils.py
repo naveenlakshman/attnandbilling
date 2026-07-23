@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import session, redirect, url_for, flash
+from flask import abort, session, redirect, url_for, flash
 
 def login_required(route_function):
     @wraps(route_function)
@@ -20,6 +20,21 @@ def admin_required(route_function):
         if session.get("role") != "admin":
             flash("Access denied.", "danger")
             return redirect(url_for("core.dashboard"))
+
+        return route_function(*args, **kwargs)
+    return wrapper
+
+
+def platform_owner_required(route_function):
+    """Restrict platform-wide tenant administration to platform owners."""
+    @wraps(route_function)
+    def wrapper(*args, **kwargs):
+        if "user_id" not in session:
+            flash("Please login first.", "warning")
+            return redirect(url_for("core.login"))
+
+        if session.get("platform_role") != "platform_owner":
+            abort(403)
 
         return route_function(*args, **kwargs)
     return wrapper

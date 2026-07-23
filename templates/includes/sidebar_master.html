@@ -7,7 +7,7 @@
 {% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') or ep.startswith('certificates.') %}
 {% set finance_active = (ep.startswith('billing.') and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
 {% set reports_active = ep.startswith('reports.') or ep == 'leads.reports' or ep in ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
-{% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.')) %}
+{% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.') or ep.startswith('platform_admin.')) %}
 
 <div class="erp-master-nav accordion accordion-flush" id="erpSidebarAccordion">
   
@@ -37,6 +37,11 @@
          class="accordion-collapse collapse {{ 'show' if admissions_active else '' }}"
          data-bs-parent="#erpSidebarAccordion">
       <div class="erp-module-menu">
+        {% if session.get('platform_role') == 'platform_owner' %}
+          <div class="erp-subsection">Platform</div>
+          <a class="nav-link {{ 'active' if ep.startswith('platform_admin.') else '' }}" href="{{ url_for('platform_admin.institutes') }}">Institutes</a>
+          <div class="erp-subsection">Current Institute</div>
+        {% endif %}
         <a class="nav-link {{ 'active' if ep == 'leads.dashboard' else '' }}" href="{{ url_for('leads.dashboard') }}">Leads Dashboard</a>
         <a class="nav-link {{ 'active' if ep in ['leads.leads_list', 'leads.lead_detail', 'leads.lead_edit'] and request.args.get('status_filter') != 'converted' else '' }}" href="{{ url_for('leads.leads_list') }}">Leads</a>
         <a class="nav-link {{ 'active' if ep == 'leads.lead_create' else '' }}" href="{{ url_for('leads.lead_create') }}">Add Lead</a>

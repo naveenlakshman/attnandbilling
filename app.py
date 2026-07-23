@@ -18,6 +18,7 @@ from modules.lms_admin import lms_admin_bp
 from modules.exams.routes import exams_bp
 from modules.students import students_bp
 from modules.website import website_bp
+from modules.platform_admin import platform_admin_bp
 from modules.core.utils import login_required
 from services.tenant_context import init_tenant_context
 from datetime import datetime, timedelta, timezone
@@ -119,6 +120,7 @@ def create_app():
     app.register_blueprint(lms_admin_bp)
     app.register_blueprint(exams_bp)
     app.register_blueprint(students_bp)
+    app.register_blueprint(platform_admin_bp)
     from modules.certificates.routes import certificates_bp
     app.register_blueprint(certificates_bp)
     init_tenant_context(app)

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if user else 'Add' }} Administrator{% endblock %}
+{% block page_title %}Institute Administrator{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="card border-0 shadow-sm p-4" style="max-width:760px">
+    <h3>{{ 'Edit' if user else 'Add' }} administrator</h3><p class="text-muted">{{ institute.name }}</p>
+    <form method="post">
+      <div class="mb-3"><label class="form-label">Full name *</label><input class="form-control" name="full_name" required value="{{ request.form.get('full_name', user.full_name if user else '') }}"></div>
+      <div class="mb-3"><label class="form-label">Username *</label><input class="form-control" name="username" required value="{{ request.form.get('username', user.username if user else '') }}"></div>
+      <div class="mb-3"><label class="form-label">Password {{ '' if not user else '(leave blank to keep current password)' }}</label><input class="form-control" type="password" name="password" {{ 'required' if not user else '' }} autocomplete="new-password"></div>
+      <div class="mb-3"><label class="form-label">Primary branch</label><select class="form-select" name="branch_id"><option value="">All branches</option>{% for branch in branches %}<option value="{{ branch.id }}" {{ 'selected' if request.form.get('branch_id', user.branch_id|string if user and user.branch_id else '') == branch.id|string else '' }}>{{ branch.branch_name }}</option>{% endfor %}</select></div>
+      <div class="d-flex gap-2"><button class="btn btn-primary">{{ 'Save changes' if user else 'Create administrator' }}</button><a class="btn btn-outline-secondary" href="{{ url_for('platform_admin.institute_detail', institute_id=institute.id) }}">Cancel</a></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

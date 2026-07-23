@@ -520,11 +520,14 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS branches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            branch_name TEXT NOT NULL UNIQUE,
-            branch_code TEXT NOT NULL UNIQUE,
+            institute_id INTEGER NOT NULL DEFAULT 1,
+            branch_name TEXT NOT NULL,
+            branch_code TEXT NOT NULL,
             address TEXT,
             is_active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            UNIQUE (institute_id, branch_name),
+            UNIQUE (institute_id, branch_code)
         )
     """)
 
@@ -532,17 +535,20 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             full_name TEXT NOT NULL,
-            username TEXT NOT NULL UNIQUE,
+            username TEXT NOT NULL,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('admin', 'staff')),
+            platform_role TEXT,
             phone TEXT,
             branch_id INTEGER,
             can_view_all_branches INTEGER NOT NULL DEFAULT 1,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            FOREIGN KEY (branch_id) REFERENCES branches(id)
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            UNIQUE (institute_id, username)
         )
     """)
 
@@ -1877,7 +1883,15 @@ def init_db():
         )
     """)
     add_column_if_not_exists(cur, "activity_logs", "institute_id", "INTEGER")
+    add_column_if_not_exists(cur, "branches", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "users", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "users", "platform_role", "TEXT")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_institute_created ON activity_logs(institute_id, created_at)")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_branches_institute_code ON branches(institute_id, branch_code)")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_branches_institute_name ON branches(institute_id, branch_name)")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_institute_username ON users(institute_id, username)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_branches_institute_active ON branches(institute_id, is_active)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_users_institute_active ON users(institute_id, is_active)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_institute_domains_institute ON institute_domains(institute_id, status)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_institute_memberships_user ON institute_memberships(user_id, is_active)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_tenant_security_audit_institute ON tenant_security_audit(institute_id, created_at)")
@@ -1971,6 +1985,8 @@ def init_db():
     # ---------- BACKFILL OLD DATA ----------
     cur.execute("UPDATE users SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
     cur.execute("UPDATE users SET can_view_all_branches = 1 WHERE can_view_all_branches IS NULL")
+    cur.execute("UPDATE branches SET institute_id = 1 WHERE institute_id IS NULL")
+    cur.execute("UPDATE users SET institute_id = 1 WHERE institute_id IS NULL")
 
     cur.execute("UPDATE students SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
     cur.execute("UPDATE invoices SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
@@ -2013,6 +2029,17 @@ def init_db():
                is_active, ?, ?
         FROM users
     """, (now, now))
+    cur.execute("""
+        UPDATE users
+        SET platform_role = 'platform_owner'
+        WHERE id = (
+            SELECT id FROM users
+            WHERE role = 'admin' AND is_active = 1
+            ORDER BY id
+            LIMIT 1
+        )
+          AND platform_role IS NULL
+    """)
     cur.execute("UPDATE activity_logs SET institute_id = 1 WHERE institute_id IS NULL")
 
     # ---------- DEFAULT EXPENSE CATEGORIES ----------

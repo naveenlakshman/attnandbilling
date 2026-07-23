@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ institute.name }} - Platform Administration{% endblock %}
+{% block page_title %}Institute Administration{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-start mb-4">
+    <div><a href="{{ url_for('platform_admin.institutes') }}" class="small">← All institutes</a><h2 class="mt-2 mb-1">{{ institute.name }}</h2><div class="text-muted">{{ institute.slug }} · {{ institute.timezone }} · {{ institute.currency_code }}</div></div>
+    <div class="d-flex gap-2"><a class="btn btn-outline-primary" href="{{ url_for('platform_admin.institute_edit', institute_id=institute.id) }}">Edit settings</a><form method="post" action="{{ url_for('platform_admin.institute_toggle_status', institute_id=institute.id) }}"><button class="btn btn-outline-{{ 'danger' if institute.status == 'active' else 'success' }}" onclick="return confirm('Change this institute status?')">{{ 'Deactivate' if institute.status == 'active' else 'Activate' }}</button></form></div>
+  </div>
+  <div class="row g-3 mb-4">
+    <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Status</span><strong class="fs-5">{{ institute.status|title }}</strong></div></div>
+    <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Brand</span><strong class="fs-5">{{ branding.display_name if branding else institute.name }}</strong><span>{{ branding.tagline if branding else '' }}</span></div></div>
+    <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Primary domain</span><strong class="fs-6">{{ domains[0].hostname if domains else 'Not configured' }}</strong><span>{{ domains[0].status|title if domains else '' }}</span></div></div>
+  </div>
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center"><h4 class="mb-0">Branches</h4><a class="btn btn-sm btn-primary" href="{{ url_for('platform_admin.institute_branch_new', institute_id=institute.id) }}">Add branch</a></div>
+    <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Name</th><th>Code</th><th>Address</th><th>Status</th><th></th></tr></thead><tbody>
+    {% for branch in branches %}<tr><td><strong>{{ branch.branch_name }}</strong></td><td>{{ branch.branch_code }}</td><td>{{ branch.address or '—' }}</td><td>{{ 'Active' if branch.is_active else 'Inactive' }}</td><td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('platform_admin.institute_branch_edit', institute_id=institute.id, branch_id=branch.id) }}">Edit</a> <form class="d-inline" method="post" action="{{ url_for('platform_admin.institute_branch_toggle', institute_id=institute.id, branch_id=branch.id) }}"><button class="btn btn-sm btn-outline-secondary">{{ 'Deactivate' if branch.is_active else 'Activate' }}</button></form></td></tr>
+    {% else %}<tr><td colspan="5" class="text-center text-muted py-4">No branches yet.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center"><h4 class="mb-0">Administrators</h4><a class="btn btn-sm btn-primary" href="{{ url_for('platform_admin.institute_admin_new', institute_id=institute.id) }}">Add administrator</a></div>
+    <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Name</th><th>Username</th><th>Branch</th><th>Status</th><th></th></tr></thead><tbody>
+    {% for admin in admins %}<tr><td><strong>{{ admin.full_name }}</strong></td><td>{{ admin.username }}</td><td>{{ admin.branch_name or 'All branches' }}</td><td>{{ 'Active' if admin.is_active and admin.membership_active else 'Inactive' }}</td><td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('platform_admin.institute_admin_edit', institute_id=institute.id, user_id=admin.id) }}">Edit</a> <form class="d-inline" method="post" action="{{ url_for('platform_admin.institute_admin_toggle', institute_id=institute.id, user_id=admin.id) }}"><button class="btn btn-sm btn-outline-secondary">{{ 'Deactivate' if admin.is_active else 'Activate' }}</button></form></td></tr>
+    {% else %}<tr><td colspan="5" class="text-center text-muted py-4">No institute administrators yet.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+</div>
+{% endblock %}
