@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-07-22",
+  "scopes": {
+    "public_platform": "Platform health/static infrastructure that contains no tenant business data.",
+    "public_tenant": "Unauthenticated route whose content or write must be bound to the resolved institute.",
+    "tenant_staff": "Authenticated institute staff route.",
+    "tenant_student": "Authenticated student route.",
+    "tenant_mixed_legacy": "Blueprint currently mixes staff and student routes and must be split during migration.",
+    "platform_owner": "Privileged SaaS control-plane route; none exists in the current application."
+  },
+  "exact_endpoint_rules": {
+    "healthz": "public_platform",
+    "static": "public_platform",
+    "serve_fallback_company_logo": "public_tenant",
+    "serve_fallback_lms_images": "public_tenant",
+    "serve_fallback_certificate_templates": "tenant_mixed_legacy",
+    "serve_fallback_student_photos": "tenant_mixed_legacy",
+    "serve_fallback_student_signatures": "tenant_mixed_legacy",
+    "serve_fallback_student_documents": "tenant_mixed_legacy",
+    "serve_leave_doc": "tenant_mixed_legacy",
+    "serve_content": "tenant_mixed_legacy",
+    "core.home": "public_tenant",
+    "core.login": "public_tenant",
+    "students.login": "public_tenant",
+    "students.logout": "tenant_student",
+    "certificates.verify": "public_tenant",
+    "billing.receipt_public_download": "public_tenant",
+    "billing.invoice_public_download": "public_tenant"
+  },
+  "blueprint_rules": {
+    "website": "public_tenant",
+    "core": "tenant_staff",
+    "leads": "tenant_staff",
+    "billing": "tenant_staff",
+    "attendance": "tenant_staff",
+    "reports": "tenant_staff",
+    "import_export": "tenant_staff",
+    "assets": "tenant_staff",
+    "baddebt": "tenant_staff",
+    "lms_admin": "tenant_staff",
+    "students": "tenant_student",
+    "certificates": "tenant_mixed_legacy",
+    "exams": "tenant_mixed_legacy"
+  },
+  "notes": [
+    "Exact endpoint rules take precedence over blueprint rules.",
+    "tenant_mixed_legacy is a declared Phase 0 risk, not an authorization design for production multi-tenancy.",
+    "Every Flask URL rule must resolve to exactly one non-empty scope during the Phase 0 test."
+  ]
+}

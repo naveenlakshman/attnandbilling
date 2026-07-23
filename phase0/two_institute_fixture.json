@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "purpose": "Synthetic identifiers intentionally overlap so tests detect accidental global uniqueness and cross-institute lookup.",
+  "institutes": [
+    {
+      "fixture_key": "tenant_a",
+      "name": "Phase Zero Academy A",
+      "slug": "phase-zero-a",
+      "host": "phase-zero-a.localhost",
+      "branch": {"name": "Main Branch", "code": "MAIN"},
+      "admin": {"username": "admin", "display_name": "Institute Admin"},
+      "student": {"student_code": "STU-0001", "display_name": "Test Student"},
+      "course": {"name": "Digital Foundations", "slug": "digital-foundations"},
+      "invoice_no": "INV-0001",
+      "receipt_no": "RCP-0001",
+      "certificate_no": "CERT-0001",
+      "storage_filename": "identity-document.pdf"
+    },
+    {
+      "fixture_key": "tenant_b",
+      "name": "Phase Zero Academy B",
+      "slug": "phase-zero-b",
+      "host": "phase-zero-b.localhost",
+      "branch": {"name": "Main Branch", "code": "MAIN"},
+      "admin": {"username": "admin", "display_name": "Institute Admin"},
+      "student": {"student_code": "STU-0001", "display_name": "Test Student"},
+      "course": {"name": "Digital Foundations", "slug": "digital-foundations"},
+      "invoice_no": "INV-0001",
+      "receipt_no": "RCP-0001",
+      "certificate_no": "CERT-0001",
+      "storage_filename": "identity-document.pdf"
+    }
+  ],
+  "required_overlaps": [
+    "branch.name",
+    "branch.code",
+    "admin.username",
+    "student.student_code",
+    "course.name",
+    "course.slug",
+    "invoice_no",
+    "receipt_no",
+    "certificate_no",
+    "storage_filename"
+  ]
+}
