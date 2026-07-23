@@ -6,6 +6,21 @@ from config import Config
 
 logger = logging.getLogger("app.storage")
 
+
+_TENANT_PATH_RE = re.compile(r"^tenants/([1-9][0-9]*)/(.+)$")
+
+
+def parse_tenant_storage_path(path):
+    normalized = (path or "").replace("\\", "/").lstrip("/")
+    match = _TENANT_PATH_RE.fullmatch(normalized)
+    if not match:
+        return None, normalized
+    relative = match.group(2)
+    if any(part in {"", ".", ".."} for part in relative.split("/")):
+        return None, normalized
+    return int(match.group(1)), relative
+
+
 def map_local_path_to_gcs_path(path):
     """
     Compatibility helper: Maps a local file path (e.g. static/... or uploads/...)
@@ -15,7 +30,10 @@ def map_local_path_to_gcs_path(path):
         return ""
     
     # Normalize backslashes to forward slashes
-    path = path.replace("\\", "/")
+    path = path.replace("\\", "/").lstrip("/")
+    tenant_id, tenant_relative = parse_tenant_storage_path(path)
+    if tenant_id is not None:
+        return f"tenants/{tenant_id}/{tenant_relative}"
     
     if "student_photos/" in path:
         filename = path.split("student_photos/")[-1]
@@ -71,6 +89,43 @@ def map_local_path_to_gcs_path(path):
 
     return path
 
+
+def tenant_storage_path(path, institute_id=None):
+    """Return the canonical object key for the current institute.
+
+    Institute 1 retains legacy object keys during migration. Every secondary
+    institute is always namespaced, and an already namespaced key is preserved.
+    """
+    canonical = map_local_path_to_gcs_path(path)
+    existing_tenant_id, _ = parse_tenant_storage_path(canonical)
+    if existing_tenant_id is not None:
+        try:
+            from flask import has_request_context, session
+            from services.tenant_context import get_current_institute_id
+
+            current_id = get_current_institute_id()
+            is_platform_owner = (
+                has_request_context()
+                and session.get("platform_role") == "platform_owner"
+            )
+            if (
+                current_id is not None
+                and current_id != existing_tenant_id
+                and not is_platform_owner
+            ):
+                raise PermissionError("Cross-institute storage access denied.")
+        except RuntimeError:
+            pass
+        return canonical
+    if institute_id is None:
+        try:
+            from services.tenant_context import get_current_institute_id
+            institute_id = get_current_institute_id(default=1)
+        except Exception:
+            institute_id = 1
+    institute_id = int(institute_id or 1)
+    return canonical if institute_id == 1 else f"tenants/{institute_id}/{canonical}"
+
 class LocalStorageProvider:
     """Fallback storage provider for local development."""
     def __init__(self):
@@ -79,7 +134,10 @@ class LocalStorageProvider:
     def _resolve_local_path(self, destination_path):
         # Map destination path back to a local storage location
         # e.g., student_photos/filename.jpg -> static/images/student_photos/filename.jpg
-        destination_path = map_local_path_to_gcs_path(destination_path)
+        destination_path = tenant_storage_path(destination_path)
+        tenant_id, _ = parse_tenant_storage_path(destination_path)
+        if tenant_id is not None:
+            return os.path.join(self.base_dir, "uploads", *destination_path.split("/"))
         
         if destination_path.startswith("student_photos/"):
             filename = destination_path.split("student_photos/")[-1]
@@ -117,7 +175,7 @@ class LocalStorageProvider:
             file_data.seek(0)
             file_data.save(local_path)
             
-        return map_local_path_to_gcs_path(destination_path)
+        return tenant_storage_path(destination_path)
 
     def delete_file(self, destination_path):
         logger.info(f"LocalDelete: {destination_path}")
@@ -134,7 +192,10 @@ class LocalStorageProvider:
 
     def generate_public_url(self, destination_path):
         # For local, serve from the application's static/uploads mount
-        destination_path = map_local_path_to_gcs_path(destination_path)
+        destination_path = tenant_storage_path(destination_path)
+        tenant_id, _ = parse_tenant_storage_path(destination_path)
+        if tenant_id is not None:
+            return f"/tenant-files/{destination_path}"
         
         if destination_path.startswith("student_photos/"):
             filename = destination_path.split("student_photos/")[-1]
@@ -172,7 +233,7 @@ class GCSStorageProvider:
 
     def upload_file(self, file_data, destination_path, content_type=None):
         logger.info(f"GCSUpload: {destination_path}")
-        gcs_path = map_local_path_to_gcs_path(destination_path)
+        gcs_path = tenant_storage_path(destination_path)
         blob = self.bucket.blob(gcs_path)
 
         if isinstance(file_data, str) and (file_data.startswith("data:") or "," in file_data):
@@ -196,7 +257,7 @@ class GCSStorageProvider:
 
     def delete_file(self, destination_path):
         logger.info(f"GCSDelete: {destination_path}")
-        gcs_path = map_local_path_to_gcs_path(destination_path)
+        gcs_path = tenant_storage_path(destination_path)
         blob = self.bucket.blob(gcs_path)
         try:
             blob.delete()
@@ -205,17 +266,20 @@ class GCSStorageProvider:
             logger.debug(f"Failed to delete GCS object {gcs_path}: {e}")
 
     def file_exists(self, destination_path):
-        gcs_path = map_local_path_to_gcs_path(destination_path)
+        gcs_path = tenant_storage_path(destination_path)
         blob = self.bucket.blob(gcs_path)
         return blob.exists()
 
     def generate_public_url(self, destination_path):
-        gcs_path = map_local_path_to_gcs_path(destination_path)
-        # Standard GCS public URL format
+        gcs_path = tenant_storage_path(destination_path)
+        tenant_id, _ = parse_tenant_storage_path(gcs_path)
+        if tenant_id is not None:
+            return f"/tenant-files/{gcs_path}"
+        # Legacy Global IT compatibility until its stored objects are migrated.
         return f"https://storage.googleapis.com/{self.bucket_name}/{gcs_path}"
 
     def download_file(self, destination_path):
-        gcs_path = map_local_path_to_gcs_path(destination_path)
+        gcs_path = tenant_storage_path(destination_path)
         blob = self.bucket.blob(gcs_path)
         return blob.download_as_bytes()
 

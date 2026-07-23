@@ -405,6 +405,10 @@ def get_company_profile(institute_id=None):
                        COALESCE(b.email, '') AS email,
                        COALESCE(b.website, '') AS website,
                        NULL AS logo_filename,
+                       b.logo_path,
+                       b.favicon_path,
+                       b.primary_color,
+                       b.secondary_color,
                        COALESCE(b.registration_number, '') AS reg_number,
                        b.updated_at
                 FROM institutes i

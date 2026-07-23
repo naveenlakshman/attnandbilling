@@ -1,6 +1,8 @@
 import os
+import mimetypes
+from io import BytesIO
 
-from flask import Flask, send_from_directory, session, abort, redirect, url_for, request
+from flask import Flask, send_file, send_from_directory, session, abort, redirect, url_for, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 from extensions import csrf, limiter
 from config import Config
@@ -138,8 +140,10 @@ def create_app():
         "core.branch_new",
         "core.branch_edit",
         "core.branch_toggle_status",
+        "core.tenant_branding",
         "healthz",
         "static",
+        "tenant_file",
     }
 
     @app.before_request
@@ -149,6 +153,8 @@ def create_app():
 
         institute_id = get_current_institute_id()
         if institute_id in (None, 1):
+            return None
+        if app.config.get("TESTING") and request.path.startswith("/__phase"):
             return None
         if request.endpoint in secondary_tenant_safe_endpoints:
             return None
@@ -165,6 +171,53 @@ def create_app():
             return f"/static/{path}"
             
     app.jinja_env.globals['storage_url'] = storage_url
+
+    @app.get("/tenant-files/<path:object_path>")
+    def tenant_file(object_path):
+        from services.storage import parse_tenant_storage_path
+        from services.tenant_context import get_current_institute_id
+
+        tenant_id, relative_path = parse_tenant_storage_path(object_path)
+        if tenant_id is None:
+            abort(404)
+        is_public_branding = relative_path.startswith("branding/")
+        current_institute_id = get_current_institute_id()
+        platform_owner = False
+        if is_public_branding and session.get("platform_role") == "platform_owner":
+            conn = get_conn()
+            try:
+                platform_owner = bool(
+                    conn.execute(
+                        """SELECT id FROM users
+                           WHERE id = ? AND platform_role = 'platform_owner'
+                             AND is_active = 1""",
+                        (session.get("user_id"),),
+                    ).fetchone()
+                )
+            finally:
+                conn.close()
+        if current_institute_id != tenant_id and not platform_owner:
+            abort(404)
+        authenticated_tenant = session.get("institute_id") or session.get(
+            "student_institute_id"
+        )
+        if (not is_public_branding or authenticated_tenant is not None) and not platform_owner:
+            if int(authenticated_tenant or 0) != tenant_id:
+                abort(404)
+        storage_service = get_storage_service()
+        canonical_path = f"tenants/{tenant_id}/{relative_path}"
+        if not storage_service.file_exists(canonical_path):
+            abort(404)
+        data = storage_service.download_file(canonical_path)
+        filename = os.path.basename(relative_path)
+        mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        return send_file(
+            BytesIO(data),
+            mimetype=mime_type,
+            download_name=filename,
+            as_attachment=request.args.get("download") == "1",
+            max_age=300 if is_public_branding else 0,
+        )
 
     # Backward compatibility fallback routes to redirect old static file URLs to GCS
     def redirect_with_query(url):

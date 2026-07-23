@@ -12,6 +12,7 @@
   "exact_endpoint_rules": {
     "healthz": "public_platform",
     "static": "public_platform",
+    "tenant_file": "public_tenant",
     "serve_fallback_company_logo": "public_tenant",
     "serve_fallback_lms_images": "public_tenant",
     "serve_fallback_certificate_templates": "tenant_mixed_legacy",

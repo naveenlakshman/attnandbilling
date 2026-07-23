@@ -93,7 +93,7 @@ def verify_schema_and_seed():
         ).fetchall()
         assert {row["hostname"] for row in domains} >= {"globaliterp.com", "www.globaliterp.com"}
         membership_count = conn.execute(
-            "SELECT COUNT(*) AS n FROM institute_memberships WHERE institute_id = 1"
+            "SELECT COUNT(*) AS n FROM institute_memberships"
         ).fetchone()["n"]
         user_count = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
         assert membership_count == user_count
@@ -225,10 +225,10 @@ def verify_company_cache_compatibility(institute_id):
     clear_company_cache()
     global_profile = get_company_profile(1)
     second_profile = get_company_profile(institute_id)
-    assert global_profile["company_name"] == second_profile["company_name"]
     assert global_profile["company_name"] == "Global IT Education"
+    assert second_profile["company_name"] == f"Phase 1 Institute {TOKEN}"
     clear_company_cache(institute_id)
-    print("phase1_company_cache_is_tenant_keyed_without_branding_change=OK")
+    print("phase1_company_cache_is_tenant_keyed_with_phase3_branding=OK")
 
 
 def cleanup(institute_id):

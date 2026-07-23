@@ -235,6 +235,8 @@
         {% endif %}
         {% if session.get('institute_id', 1)|int == 1 %}
           <a class="nav-link {{ 'active' if ep == 'core.company_profile' else '' }}" href="{{ url_for('core.company_profile') }}">Company Profile</a>
+        {% else %}
+          <a class="nav-link {{ 'active' if ep == 'core.tenant_branding' else '' }}" href="{{ url_for('core.tenant_branding') }}">Branding</a>
         {% endif %}
         {% if is_admin and session.get('institute_id', 1)|int == 1 %}
           <a class="nav-link {{ 'active' if ep and ep.startswith('assets.') else '' }}" href="{{ url_for('assets.list_assets') }}">Assets</a>

@@ -594,6 +594,22 @@ Use `EXPLAIN` against realistic tenant sizes before dropping previous indexes.
 
 **Exit gate:** two domains render different brands; files cannot be read/replaced/deleted across tenants; public bucket access can be removed.
 
+**Completed locally — 23 July 2026.** Evidence:
+
+- Secondary institutes render their own name, tagline, contact details, colors, logo and favicon on login and authenticated layouts.
+- Institute administrators can update only their own branding; the platform owner retains cross-institute branding controls.
+- `.localhost` tenant domains activate automatically only outside production. Other new or changed domains remain pending.
+- Secondary-tenant object keys are automatically stored under `tenants/{institute_id}/...`; Global IT retains its legacy paths until its production object migration is scheduled.
+- Tenant files are delivered through an institute-checked application route. Branding is public only on the matching tenant hostname; other files require an authenticated matching-institute session.
+- Cross-institute storage reads, replacements and deletes are rejected in the storage layer, including attempts using a known object key.
+- Brand images are restricted to PNG/JPG/WEBP/ICO and 2 MB.
+- `scratch/test_multi_institute_phase3.py` verifies distinct domain branding, institute-admin self-service, same-name object isolation, authenticated delivery, cross-tenant denial and Global IT path compatibility.
+- Phase 2 and Phase 3 MySQL suites pass against local Docker. Production and staging remain unchanged.
+
+The public Global IT bucket policy cannot be removed until existing production
+objects are copied to private tenant-prefixed keys and all stored Global IT paths
+have been reconciled during a controlled deployment.
+
 ### Phase 4 — CRM and student identity
 
 - scope leads, follow-ups, students, documents, admission and portal authentication;

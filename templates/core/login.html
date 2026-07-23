@@ -4,6 +4,12 @@
 
 {% block content %}
 <div class="card shadow-sm p-4 login-card">
+    {% if company.logo_path or company.logo_filename %}
+    <div class="text-center mb-3">
+      <img src="{{ storage_url(company.logo_path) if company.logo_path else url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+           alt="{{ company.company_name }}" style="max-height:72px;max-width:240px">
+    </div>
+    {% endif %}
     <h3 class="text-center mb-1">{{ company.company_short_name }}</h3>
     <p class="text-center text-muted mb-4">Login to your account</p>
 

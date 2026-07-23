@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Blueprint, abort, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
 import os
@@ -1159,6 +1159,87 @@ def branch_toggle_status(branch_id):
 COMPANY_LOGO_DIR = os.path.join('static', 'images', 'company_logo')
 ALLOWED_LOGO_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.svg', '.webp'}
 MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+@core_bp.route("/institute/branding", methods=["GET", "POST"])
+@login_required
+@admin_required
+def tenant_branding():
+    """Allow an institute administrator to manage only its own brand."""
+    institute_id = int(session["institute_id"])
+    if institute_id == 1:
+        return redirect(url_for("core.company_profile"))
+    conn = get_conn()
+    try:
+        institute = conn.execute(
+            "SELECT * FROM institutes WHERE id = ? AND status = 'active'",
+            (institute_id,),
+        ).fetchone()
+        branding = conn.execute(
+            "SELECT * FROM institute_branding WHERE institute_id = ?",
+            (institute_id,),
+        ).fetchone()
+        if not institute or not branding:
+            abort(404)
+        if request.method == "GET":
+            return render_template(
+                "core/tenant_branding.html",
+                institute=institute,
+                branding=branding,
+            )
+
+        display_name = request.form.get("display_name", "").strip()
+        short_name = request.form.get("short_name", "").strip()
+        if not display_name or not short_name:
+            flash("Display name and short name are required.", "danger")
+            return redirect(url_for("core.tenant_branding"))
+        from modules.platform_admin.routes import _save_brand_file
+
+        try:
+            logo_path = _save_brand_file(
+                institute_id, "logo", "logos", branding["logo_path"]
+            )
+            favicon_path = _save_brand_file(
+                institute_id, "favicon", "favicons", branding["favicon_path"]
+            )
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("core.tenant_branding"))
+        conn.execute(
+            """
+            UPDATE institute_branding
+            SET display_name = ?, short_name = ?, tagline = ?, primary_color = ?,
+                secondary_color = ?, address = ?, phone = ?, email = ?, website = ?,
+                registration_number = ?, logo_path = ?, favicon_path = ?,
+                updated_at = ?
+            WHERE institute_id = ?
+            """,
+            (
+                display_name,
+                short_name,
+                request.form.get("tagline", "").strip(),
+                request.form.get("primary_color", "#2563EB").strip(),
+                request.form.get("secondary_color", "#16A34A").strip(),
+                request.form.get("address", "").strip(),
+                request.form.get("phone", "").strip(),
+                request.form.get("email", "").strip(),
+                request.form.get("website", "").strip(),
+                request.form.get("registration_number", "").strip(),
+                logo_path,
+                favicon_path,
+                datetime.now().isoformat(timespec="seconds"),
+                institute_id,
+            ),
+        )
+        conn.commit()
+        clear_company_cache(institute_id)
+        flash("Institute branding updated.", "success")
+        return redirect(url_for("core.tenant_branding"))
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 @core_bp.route("/company-profile", methods=["GET", "POST"])

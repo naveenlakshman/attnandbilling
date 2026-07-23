@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import datetime
 
 from flask import abort, current_app, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import generate_password_hash
+from werkzeug.utils import secure_filename
 
-from db import get_conn
+from db import clear_company_cache, get_conn
+from services.storage import get_storage_service
 from modules.core.utils import login_required, platform_owner_required
 from services.tenant_context import clear_tenant_cache, normalize_hostname
 
@@ -14,6 +17,8 @@ from . import platform_admin_bp
 
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_BRAND_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".ico"}
+_MAX_BRAND_IMAGE_BYTES = 2 * 1024 * 1024
 
 
 def _now():
@@ -28,6 +33,30 @@ def _domain_activation(hostname):
         and current_app.config.get("APP_ENV") != "production"
     )
     return ("active", _now()) if is_local else ("pending", None)
+
+
+def _save_brand_file(institute_id, field_name, category, old_path=None):
+    uploaded = request.files.get(field_name)
+    if not uploaded or not uploaded.filename:
+        return old_path
+    safe_name = secure_filename(uploaded.filename)
+    extension = "." + safe_name.rsplit(".", 1)[-1].lower() if "." in safe_name else ""
+    if extension not in _BRAND_IMAGE_EXTENSIONS:
+        raise ValueError("Brand images must be PNG, JPG, WEBP, or ICO files.")
+    payload = uploaded.read(_MAX_BRAND_IMAGE_BYTES + 1)
+    if len(payload) > _MAX_BRAND_IMAGE_BYTES:
+        raise ValueError("Brand images must be 2 MB or smaller.")
+    destination = (
+        f"tenants/{int(institute_id)}/branding/{category}/"
+        f"{uuid.uuid4().hex}{extension}"
+    )
+    storage = get_storage_service()
+    stored_path = storage.upload_file(
+        payload,
+        destination,
+        content_type=uploaded.content_type,
+    )
+    return stored_path
 
 
 def _institute_or_404(conn, institute_id):
@@ -157,6 +186,22 @@ def institute_new():
                 values["phone"], values["website"], now, now,
             ),
         )
+        try:
+            logo_path = _save_brand_file(institute_id, "logo", "logos")
+            favicon_path = _save_brand_file(institute_id, "favicon", "favicons")
+        except ValueError as exc:
+            conn.rollback()
+            flash(str(exc), "danger")
+            return render_template(
+                "platform_admin/institute_form.html",
+                institute=None,
+                branding=request.form,
+            )
+        cur.execute(
+            """UPDATE institute_branding SET logo_path = ?, favicon_path = ?
+               WHERE institute_id = ?""",
+            (logo_path, favicon_path, institute_id),
+        )
         cur.execute(
             """
             INSERT INTO institute_settings (
@@ -182,6 +227,7 @@ def institute_new():
             )
         conn.commit()
         clear_tenant_cache()
+        clear_company_cache(institute_id)
         flash("Institute created. Add its first branch and administrator next.", "success")
         return redirect(url_for("platform_admin.institute_detail", institute_id=institute_id))
     except Exception:
@@ -267,6 +313,19 @@ def institute_edit(institute_id):
             flash(error, "danger")
             return redirect(url_for("platform_admin.institute_edit", institute_id=institute_id))
         now = _now()
+        try:
+            logo_path = _save_brand_file(
+                institute_id, "logo", "logos", branding["logo_path"] if branding else None
+            )
+            favicon_path = _save_brand_file(
+                institute_id,
+                "favicon",
+                "favicons",
+                branding["favicon_path"] if branding else None,
+            )
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("platform_admin.institute_edit", institute_id=institute_id))
         conn.execute(
             """
             UPDATE institutes
@@ -284,13 +343,15 @@ def institute_edit(institute_id):
             """
             UPDATE institute_branding
             SET display_name = ?, short_name = ?, tagline = ?, primary_color = ?,
-                secondary_color = ?, email = ?, phone = ?, website = ?, updated_at = ?
+                secondary_color = ?, email = ?, phone = ?, website = ?,
+                logo_path = ?, favicon_path = ?, updated_at = ?
             WHERE institute_id = ?
             """,
             (
                 values["name"], values["short_name"], values["tagline"],
                 values["primary_color"], values["secondary_color"], values["email"],
-                values["phone"], values["website"], now, institute_id,
+                values["phone"], values["website"], logo_path, favicon_path,
+                now, institute_id,
             ),
         )
         if values["hostname"]:
@@ -322,6 +383,7 @@ def institute_edit(institute_id):
                 )
         conn.commit()
         clear_tenant_cache()
+        clear_company_cache(institute_id)
         flash("Institute settings updated.", "success")
         return redirect(url_for("platform_admin.institute_detail", institute_id=institute_id))
     except Exception:

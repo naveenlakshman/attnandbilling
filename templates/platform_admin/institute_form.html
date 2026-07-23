@@ -4,7 +4,7 @@
 {% block content %}
 {% set source = branding or {} %}
 <div class="container-fluid">
-  <form method="post" class="card border-0 shadow-sm p-4">
+  <form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm p-4">
     <h4>Institute identity</h4>
     <div class="row g-3">
       <div class="col-md-6"><label class="form-label">Name *</label><input class="form-control" name="name" required value="{{ request.form.get('name', institute.name if institute else '') }}"></div>
@@ -20,6 +20,16 @@
       <div class="col-md-6"><label class="form-label">Tagline</label><input class="form-control" name="tagline" value="{{ request.form.get('tagline', source.tagline or '') }}"></div>
       <div class="col-md-3"><label class="form-label">Primary color</label><input class="form-control form-control-color w-100" type="color" name="primary_color" value="{{ request.form.get('primary_color', source.primary_color or '#2563EB') }}"></div>
       <div class="col-md-3"><label class="form-label">Secondary color</label><input class="form-control form-control-color w-100" type="color" name="secondary_color" value="{{ request.form.get('secondary_color', source.secondary_color or '#16A34A') }}"></div>
+      <div class="col-md-6">
+        <label class="form-label">Logo</label>
+        <input class="form-control" type="file" name="logo" accept=".png,.jpg,.jpeg,.webp">
+        {% if source.logo_path %}<div class="mt-2"><img src="{{ storage_url(source.logo_path) }}" alt="Current logo" style="max-height:70px;max-width:220px"></div>{% endif %}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Favicon</label>
+        <input class="form-control" type="file" name="favicon" accept=".png,.ico">
+        {% if source.favicon_path %}<div class="form-text">A favicon is already configured.</div>{% endif %}
+      </div>
       <div class="col-md-4"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{ request.form.get('email', source.email or '') }}"></div>
       <div class="col-md-4"><label class="form-label">Phone</label><input class="form-control" name="phone" value="{{ request.form.get('phone', source.phone or '') }}"></div>
       <div class="col-md-4"><label class="form-label">Website</label><input class="form-control" name="website" value="{{ request.form.get('website', source.website or '') }}"></div>

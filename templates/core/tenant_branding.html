@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Branding - {{ company.company_name }}{% endblock %}
+{% block page_title %}Institute Branding{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <form method="post" enctype="multipart/form-data" class="card border-0 shadow-sm p-4">
+    <h3 class="mb-1">Branding</h3>
+    <p class="text-muted">Changes apply only to {{ institute.name }}.</p>
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label">Display name *</label><input class="form-control" name="display_name" required value="{{ branding.display_name }}"></div>
+      <div class="col-md-3"><label class="form-label">Short name *</label><input class="form-control" name="short_name" required value="{{ branding.short_name or institute.short_name }}"></div>
+      <div class="col-md-3"><label class="form-label">Tagline</label><input class="form-control" name="tagline" value="{{ branding.tagline or '' }}"></div>
+      <div class="col-md-3"><label class="form-label">Primary color</label><input class="form-control form-control-color w-100" type="color" name="primary_color" value="{{ branding.primary_color }}"></div>
+      <div class="col-md-3"><label class="form-label">Secondary color</label><input class="form-control form-control-color w-100" type="color" name="secondary_color" value="{{ branding.secondary_color }}"></div>
+      <div class="col-md-3"><label class="form-label">Logo</label><input class="form-control" type="file" name="logo" accept=".png,.jpg,.jpeg,.webp">{% if branding.logo_path %}<img class="mt-2" src="{{ storage_url(branding.logo_path) }}" alt="Logo" style="max-height:70px;max-width:220px">{% endif %}</div>
+      <div class="col-md-3"><label class="form-label">Favicon</label><input class="form-control" type="file" name="favicon" accept=".png,.ico"></div>
+      <div class="col-md-6"><label class="form-label">Address</label><textarea class="form-control" name="address" rows="2">{{ branding.address or '' }}</textarea></div>
+      <div class="col-md-3"><label class="form-label">Phone</label><input class="form-control" name="phone" value="{{ branding.phone or '' }}"></div>
+      <div class="col-md-3"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{ branding.email or '' }}"></div>
+      <div class="col-md-6"><label class="form-label">Website</label><input class="form-control" name="website" value="{{ branding.website or '' }}"></div>
+      <div class="col-md-6"><label class="form-label">Registration number</label><input class="form-control" name="registration_number" value="{{ branding.registration_number or '' }}"></div>
+    </div>
+    <div class="mt-4"><button class="btn btn-primary">Save branding</button></div>
+  </form>
+</div>
+{% endblock %}
