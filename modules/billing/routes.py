@@ -2595,14 +2595,35 @@ def student_new():
             WHERE institute_id = ?
         """, (current_inst,))
         inst_settings = cur.fetchone()
-        
-        # For Primary Tenant (Global IT), if student_prefix is not set or empty, preserve pure numeric continuation (e.g. 1516720 -> 1516721)
-        if inst_settings and inst_settings.get("student_prefix") is not None:
-            stu_prefix = inst_settings["student_prefix"].strip()
-        else:
-            stu_prefix = "" if current_inst == 1 else "STU"
+        raw_prefix = inst_settings.get("student_prefix") if inst_settings and inst_settings.get("student_prefix") is not None else None
 
-        if stu_prefix:
+        if current_inst == 1:
+            # Global IT Education (Primary Tenant): Default to empty prefix for numeric continuation
+            stu_prefix = raw_prefix.strip() if raw_prefix is not None else ""
+            if stu_prefix:
+                cur.execute("""
+                    SELECT MAX(CAST(REGEXP_REPLACE(student_code, '[^0-9]', '') AS UNSIGNED)) AS max_seq
+                    FROM students
+                    WHERE institute_id = 1 AND student_code LIKE ?
+                """, (f"{stu_prefix}%",))
+                max_row = cur.fetchone()
+                next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else 1
+                student_code = f"{stu_prefix}{next_seq:03d}"
+            else:
+                # Continuation of legacy numeric range (1516720 -> 1516721)
+                cur.execute("""
+                    SELECT MAX(CAST(student_code AS UNSIGNED)) AS max_seq
+                    FROM students
+                    WHERE institute_id = 1 AND student_code REGEXP '^[0-9]+$'
+                """)
+                max_row = cur.fetchone()
+                max_val = max_row["max_seq"] if max_row and max_row["max_seq"] else 1515000
+                if max_val < 1515000:
+                    max_val = 1515000
+                student_code = str(max_val + 1)
+        else:
+            # Secondary Tenants (institute_id != 1): Default to 'STU' prefix, start sequence from 1
+            stu_prefix = raw_prefix.strip() if (raw_prefix is not None and raw_prefix.strip()) else "STU"
             cur.execute("""
                 SELECT MAX(CAST(REGEXP_REPLACE(student_code, '[^0-9]', '') AS UNSIGNED)) AS max_seq
                 FROM students
@@ -2611,17 +2632,6 @@ def student_new():
             max_row = cur.fetchone()
             next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else 1
             student_code = f"{stu_prefix}{next_seq:03d}"
-        else:
-            cur.execute("""
-                SELECT MAX(CAST(student_code AS UNSIGNED)) AS max_seq
-                FROM students
-                WHERE institute_id = ? AND student_code REGEXP '^[0-9]+$'
-            """, (current_inst,))
-            max_row = cur.fetchone()
-            max_val = max_row["max_seq"] if max_row and max_row["max_seq"] else 1515000
-            if max_val < 1515000:
-                max_val = 1515000
-            student_code = str(max_val + 1)
 
         # Save photo if provided
         photo_filename = None
@@ -2632,6 +2642,7 @@ def student_new():
 
         cur.execute("""
             INSERT INTO students (
+                institute_id,
                 student_code,
                 full_name,
                 phone,
@@ -2676,8 +2687,9 @@ def student_new():
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            current_inst,
             student_code,
             full_name,
             phone,
@@ -2748,11 +2760,11 @@ def student_new():
             lead_edu = _edu_map.get(education_level, "")
             cur.execute(
                 """INSERT INTO leads
-                       (name, phone, gender, education_status, lead_location,
+                       (institute_id, name, phone, gender, education_status, lead_location,
                         stage, status, lead_source, conversion_date, branch_id,
                         assigned_to_id, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, 'Converted', 'converted', 'Walk-in', ?, ?, ?, ?, ?)""",
-                (full_name, phone, gender, lead_edu, student_location, now[:10], branch_id,
+                   VALUES (?, ?, ?, ?, ?, ?, 'Converted', 'converted', 'Walk-in', ?, ?, ?, ?, ?)""",
+                (current_inst, full_name, phone, gender, lead_edu, student_location, now[:10], branch_id,
                  session["user_id"], now, now)
             )
             new_lead_id = cur.lastrowid

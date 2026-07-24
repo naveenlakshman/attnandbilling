@@ -37,12 +37,10 @@ print('INVOICE 485 ACCESS (OTHER TENANT): Has "not found":', 'not found' in r_in
 r_stu_other = s.get('http://localhost:8080/billing/student/1516718', headers={'Host': 'test2.localhost'}, allow_redirects=True)
 print('STUDENT 1516718 ACCESS (OTHER TENANT): Has "not found":', 'not found' in r_stu_other.text.lower())
 
-# 5. Check Global IT student registration number continuation
-s_git = requests.Session()
-s_git.post('http://localhost:8080/login', data={'username': 'naveen', 'password': 'password123'})
-r_global_stu = s_git.get('http://localhost:8080/billing/students')
-print('GLOBAL IT STUDENTS GET:', r_global_stu.status_code)
-print('Has 1516721 (continued registration number):', '1516721' in r_global_stu.text)
+# 5. Check converted leads list on test2.localhost
+r_test2_leads = s.get('http://localhost:8080/leads/list?status_filter=converted', headers={'Host': 'test2.localhost'})
+print('TEST2 CONVERTED LEADS GET:', r_test2_leads.status_code)
+print('Has lshdksjhd lead:', 'lshdksjhd' in r_test2_leads.text)
 
 # 6. Check /leads/followups isolation for test2.localhost
 r_fol = s.get('http://localhost:8080/leads/followups', headers={'Host': 'test2.localhost'})
