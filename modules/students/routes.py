@@ -131,9 +131,9 @@ def _restore_mobile_student_session():
         student = conn.execute(
             """
             SELECT * FROM students
-            WHERE id = ? AND student_code = ? AND status != 'dropped' AND portal_enabled = 1
+            WHERE id = ? AND student_code = ? AND status != 'dropped' AND portal_enabled = 1 AND institute_id = ?
             """,
-            (payload.get('student_id'), payload.get('student_code')),
+            (payload.get('student_id'), payload.get('student_code'), current_institute_id),
         ).fetchone()
     finally:
         conn.close()
@@ -213,6 +213,12 @@ def student_login_required(f):
     def decorated(*args, **kwargs):
         if 'student_id' not in session and not _restore_mobile_student_session():
             flash('Please log in to access the student portal.', 'warning')
+            return redirect(url_for('students.login'))
+
+        current_institute_id = get_current_institute_id(default=1)
+        if session.get('institute_id') and int(session.get('institute_id')) != int(current_institute_id):
+            _clear_student_session()
+            flash('Invalid session for this institute domain.', 'warning')
             return redirect(url_for('students.login'))
 
         if session.get('student_session_mode') != 'mobile_app':
@@ -671,9 +677,10 @@ def login():
 
         conn = get_conn()
         try:
+            current_institute_id = get_current_institute_id(default=1)
             student = conn.execute(
-                "SELECT * FROM students WHERE student_code = ? AND status != 'dropped' AND portal_enabled = 1",
-                (student_code,)
+                "SELECT * FROM students WHERE student_code = ? AND status != 'dropped' AND portal_enabled = 1 AND institute_id = ?",
+                (student_code, current_institute_id)
             ).fetchone()
         finally:
             conn.close()

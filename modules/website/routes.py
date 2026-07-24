@@ -103,17 +103,21 @@ def enquire():
     # Auto-assign website leads to Chaithra (user id=2)
     WEBSITE_DEFAULT_OWNER_ID = 2
 
+    from services.tenant_context import get_current_institute_id
+    current_inst = get_current_institute_id(default=1)
+
     conn = get_conn()
     try:
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO leads (
+                institute_id,
                 name, phone, email, interested_courses,
                 lead_source, stage, status, notes,
                 assigned_to_id,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'Website', 'New Lead', 'active', ?, ?, ?, ?)
-        """, (name, phone, email or None, interested_course or None,
+            ) VALUES (?, ?, ?, ?, ?, 'Website', 'New Lead', 'active', ?, ?, ?, ?)
+        """, (current_inst, name, phone, email or None, interested_course or None,
               notes, WEBSITE_DEFAULT_OWNER_ID, now, now))
         conn.commit()
     finally:

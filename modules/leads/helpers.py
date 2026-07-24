@@ -22,6 +22,9 @@ def get_lead_or_404_with_access(conn, lead_id: int, session_obj, include_deleted
         (None, "not_found") when lead doesn't exist for requested deleted scope
         (None, "forbidden") when user lacks permission
     """
+    from services.tenant_context import get_current_institute_id
+
+    current_institute_id = get_current_institute_id(default=1)
     cur = conn.cursor()
 
     if include_deleted:
@@ -31,6 +34,10 @@ def get_lead_or_404_with_access(conn, lead_id: int, session_obj, include_deleted
 
     lead = cur.fetchone()
     if not lead:
+        return None, "not_found"
+
+    lead_inst = lead["institute_id"] if "institute_id" in lead.keys() else 1
+    if int(lead_inst or 1) != int(current_institute_id):
         return None, "not_found"
 
     if not can_access_lead(

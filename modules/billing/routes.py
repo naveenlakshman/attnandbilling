@@ -13,6 +13,7 @@ import csv
 import os
 import base64
 from services.storage import get_storage_service
+from services.tenant_context import get_current_institute_id
 
 logger = logging.getLogger("app.billing")
 
@@ -641,7 +642,12 @@ def save_student_photo(photo_data, student_code):
         
         # Decode and save to storage
         photo_bytes = base64.b64decode(photo_data)
-        dest_path = f"student_photos/{student_code}.jpg"
+        from services.tenant_context import get_current_institute_id
+        current_inst = get_current_institute_id(default=1)
+        if int(current_inst) == 1:
+            dest_path = f"student_photos/{student_code}.jpg"
+        else:
+            dest_path = f"tenants/{current_inst}/student_photos/{student_code}.jpg"
         
         storage_service = get_storage_service()
         storage_service.upload_file(photo_bytes, dest_path, content_type="image/jpeg")
@@ -1156,6 +1162,8 @@ def students():
     status_filter = request.args.get("status", "").strip()
     batch_filter = request.args.get("batch", "").strip()
 
+    current_inst = get_current_institute_id(default=1)
+
     # Get student statistics
     cur.execute("""
         SELECT 
@@ -1164,7 +1172,8 @@ def students():
             SUM(CASE WHEN status = 'dropped' THEN 1 ELSE 0 END) AS dropped_count,
             COUNT(*) AS total_count
         FROM students
-    """)
+        WHERE institute_id = ?
+    """, (current_inst,))
     stats = cur.fetchone()
 
     # Get branch-wise student statistics
@@ -1178,11 +1187,11 @@ def students():
             SUM(CASE WHEN students.status = 'dropped' THEN 1 ELSE 0 END) AS dropped_count,
             COUNT(students.id) AS total_count
         FROM branches
-        LEFT JOIN students ON branches.id = students.branch_id
-        WHERE branches.is_active = 1
+        LEFT JOIN students ON branches.id = students.branch_id AND students.institute_id = ?
+        WHERE branches.is_active = 1 AND branches.institute_id = ?
         GROUP BY branches.id, branches.branch_name, branches.branch_code
         ORDER BY branches.branch_name
-    """)
+    """, (current_inst, current_inst))
     branch_stats = cur.fetchall()
 
     import math
@@ -1213,9 +1222,9 @@ def students():
         FROM students
         LEFT JOIN branches
             ON students.branch_id = branches.id
-        WHERE 1=1
+        WHERE students.institute_id = ?
     """
-    params = []
+    params = [current_inst]
 
     # Search filter
     if search_query:
@@ -1361,9 +1370,9 @@ def students():
     cur.execute("""
         SELECT id, branch_name, branch_code
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     branches = cur.fetchall()
 
     # All batches for filter dropdown
@@ -1404,6 +1413,7 @@ def student_batch_progress_monitor():
     conn = get_conn()
     cur = conn.cursor()
 
+    current_inst = get_current_institute_id(default=1)
     current_user_id = session.get("user_id")
     session_role = (session.get("role") or "").strip().lower()
 
@@ -1419,8 +1429,8 @@ def student_batch_progress_monitor():
     is_admin = role == "admin"
 
     cur.execute(
-        "SELECT COUNT(*) AS cnt FROM batches WHERE trainer_id = ? AND status IN ('active', 'completed')",
-        (current_user_id,)
+        "SELECT COUNT(*) AS cnt FROM batches b JOIN branches br ON br.id = b.branch_id WHERE b.trainer_id = ? AND b.status IN ('active', 'completed') AND br.institute_id = ?",
+        (current_user_id, current_inst)
     )
     trainer_batch_count = cur.fetchone()["cnt"] or 0
     trainer_scoped = (not is_admin) and trainer_batch_count > 0 and not can_view_all
@@ -1443,8 +1453,8 @@ def student_batch_progress_monitor():
     if trainer_scoped:
         filters["trainer_id"] = str(current_user_id)
 
-    branch_dropdown_sql = "SELECT id, branch_name FROM branches WHERE is_active = 1"
-    branch_dropdown_params = []
+    branch_dropdown_sql = "SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ?"
+    branch_dropdown_params = [current_inst]
     if (not is_admin) and (not can_view_all) and user_branch_id:
         branch_dropdown_sql += " AND id = ?"
         branch_dropdown_params.append(user_branch_id)
@@ -1462,9 +1472,10 @@ def student_batch_progress_monitor():
         SELECT DISTINCT u.id, u.full_name
         FROM users u
         JOIN batches b ON b.trainer_id = u.id
-        WHERE u.is_active = 1 AND b.status IN ('active', 'completed')
+        JOIN branches br ON br.id = b.branch_id
+        WHERE u.is_active = 1 AND b.status IN ('active', 'completed') AND br.institute_id = ?
     """
-    trainer_dropdown_params = []
+    trainer_dropdown_params = [current_inst]
     if trainer_scoped:
         trainer_dropdown_sql += " AND u.id = ?"
         trainer_dropdown_params.append(current_user_id)
@@ -1479,9 +1490,9 @@ def student_batch_progress_monitor():
         FROM batches b
         LEFT JOIN courses c ON c.id = b.course_id
         LEFT JOIN branches br ON br.id = b.branch_id
-        WHERE b.status IN ('active', 'completed')
+        WHERE b.status IN ('active', 'completed') AND br.institute_id = ?
     """
-    batch_dropdown_params = []
+    batch_dropdown_params = [current_inst]
     if filters["branch_id"].isdigit():
         batch_dropdown_sql += " AND b.branch_id = ?"
         batch_dropdown_params.append(int(filters["branch_id"]))
@@ -1505,8 +1516,8 @@ def student_batch_progress_monitor():
           AND mtx.status = 'active'
     )"""
 
-    where_clauses = ["sb.status IN ('active', 'completed')", "b.status IN ('active', 'completed')"]
-    params = []
+    where_clauses = ["sb.status IN ('active', 'completed')", "b.status IN ('active', 'completed')", "s.institute_id = ?"]
+    params = [current_inst]
 
     if filters["course_id"].isdigit():
         where_clauses.append("c.id = ?")
@@ -1932,6 +1943,7 @@ def student_batch_progress_monitor():
 
 
 def _build_institute_day_overview(cur, filters, user, role):
+    current_inst = get_current_institute_id(default=1)
     selected_date = datetime.strptime(filters["date"], "%Y-%m-%d").date()
     now_dt = _ist_now()
     today = now_dt.date()
@@ -1945,9 +1957,9 @@ def _build_institute_day_overview(cur, filters, user, role):
     branch_sql = """
         SELECT id, branch_name, no_of_computers, opening_time, closing_time
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
     """
-    branch_params = []
+    branch_params = [current_inst]
     if (not is_admin) and (not can_view_all) and user_branch_id:
         branch_sql += " AND id = ?"
         branch_params.append(user_branch_id)
@@ -1965,10 +1977,12 @@ def _build_institute_day_overview(cur, filters, user, role):
         SELECT DISTINCT u.id, COALESCE(NULLIF(TRIM(u.full_name), ''), u.username) AS full_name
         FROM users u
         JOIN batches b ON b.trainer_id = u.id
+        JOIN branches br ON br.id = b.branch_id
         WHERE u.is_active = 1
           AND b.status = 'active'
+          AND br.institute_id = ?
     """
-    trainer_params = []
+    trainer_params = [current_inst]
     if (not is_admin) and (not can_view_all) and user_branch_id:
         trainer_sql += " AND b.branch_id = ?"
         trainer_params.append(user_branch_id)
@@ -2084,9 +2098,10 @@ def _build_institute_day_overview(cur, filters, user, role):
              AND ar.batch_id = sb.batch_id
              AND ar.attendance_date = ?
             WHERE sb.status = 'active'
+              AND s.institute_id = ?
               AND sb.batch_id IN ({placeholders})
             ORDER BY s.full_name
-        """, [filters["date"], *batch_ids]).fetchall()
+        """, [filters["date"], current_inst, *batch_ids]).fetchall()
 
         seen_batch_students = set()
         for row in student_rows:
@@ -2571,29 +2586,47 @@ def student_new():
 
 
 
-        cur.execute("""
-            SELECT student_code
-            FROM students
-            ORDER BY CAST(student_code AS INTEGER) DESC
-            LIMIT 1
-        """)
-        result = cur.fetchone()
+        current_inst = get_current_institute_id(default=1)
 
-        if result and result["student_code"]:
-            try:
-                max_reg = int(result["student_code"])
-                next_reg_no = max_reg + 1
-            except (ValueError, TypeError):
-                max_reg = 1515000
-                next_reg_no = max_reg + 1
+        # Get tenant student prefix from institute_settings
+        cur.execute("""
+            SELECT student_prefix
+            FROM institute_settings
+            WHERE institute_id = ?
+        """, (current_inst,))
+        inst_settings = cur.fetchone()
+        
+        # For Primary Tenant (Global IT), if student_prefix is not set or empty, preserve pure numeric continuation (e.g. 1516720 -> 1516721)
+        if inst_settings and inst_settings.get("student_prefix") is not None:
+            stu_prefix = inst_settings["student_prefix"].strip()
         else:
-            max_reg = 1515000
-            next_reg_no = max_reg + 1
+            stu_prefix = "" if current_inst == 1 else "STU"
+
+        if stu_prefix:
+            cur.execute("""
+                SELECT MAX(CAST(REGEXP_REPLACE(student_code, '[^0-9]', '') AS UNSIGNED)) AS max_seq
+                FROM students
+                WHERE institute_id = ? AND student_code LIKE ?
+            """, (current_inst, f"{stu_prefix}%"))
+            max_row = cur.fetchone()
+            next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else 1
+            student_code = f"{stu_prefix}{next_seq:03d}"
+        else:
+            cur.execute("""
+                SELECT MAX(CAST(student_code AS UNSIGNED)) AS max_seq
+                FROM students
+                WHERE institute_id = ? AND student_code REGEXP '^[0-9]+$'
+            """, (current_inst,))
+            max_row = cur.fetchone()
+            max_val = max_row["max_seq"] if max_row and max_row["max_seq"] else 1515000
+            if max_val < 1515000:
+                max_val = 1515000
+            student_code = str(max_val + 1)
 
         # Save photo if provided
         photo_filename = None
         if photo_data:
-            photo_filename = save_student_photo(photo_data, str(next_reg_no))
+            photo_filename = save_student_photo(photo_data, student_code)
 
         now = datetime.now().isoformat(timespec="seconds")
 
@@ -2645,7 +2678,7 @@ def student_new():
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            str(next_reg_no),
+            student_code,
             full_name,
             phone,
             gender,
@@ -2736,7 +2769,7 @@ def student_new():
             action_type="create",
             module_name="students",
             record_id=student_id,
-            description=f"Created student {full_name} (Reg No: {next_reg_no})"
+            description=f"Created student {full_name} (Reg No: {student_code})"
         )
 
         if form_lead_id:
@@ -2746,7 +2779,7 @@ def student_new():
                 action_type="lead_converted",
                 module_name="leads",
                 record_id=form_lead_id,
-                description=f"Lead converted on {now[:10]} - Student: {full_name} (Reg No: {next_reg_no})",
+                description=f"Lead converted on {now[:10]} - Student: {full_name} (Reg No: {student_code})",
             )
 
         # Send welcome SMS with registration number
@@ -2754,7 +2787,7 @@ def student_new():
             sms_phone = "+91" + phone  # phone is already validated 10-digit
             sms_message = (
                 f"Welcome to Global IT Education, {full_name}! "
-                f"Your Registration Number is {next_reg_no}. "
+                f"Your Registration Number is {student_code}. "
                 "Keep this number safe for future reference."
             )
             send_sms(sms_phone, sms_message)
@@ -2769,9 +2802,9 @@ def student_new():
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (get_current_institute_id(default=1),))
     branches = cur.fetchall()
 
     # Pre-fill from a lead if ?from_lead=<id> is provided
@@ -2779,8 +2812,8 @@ def student_new():
     from_lead_raw = request.args.get("from_lead", "").strip()
     if from_lead_raw.isdigit():
         cur.execute(
-            "SELECT * FROM leads WHERE id = ? AND is_deleted = 0",
-            (int(from_lead_raw),)
+            "SELECT * FROM leads WHERE id = ? AND is_deleted = 0 AND institute_id = ?",
+            (int(from_lead_raw), get_current_institute_id(default=1))
         )
         prefill_lead = cur.fetchone()
 
@@ -2808,8 +2841,8 @@ def student_edit(student_id):
     cur.execute("""
         SELECT *
         FROM students
-        WHERE id = ?
-    """, (student_id,))
+        WHERE id = ? AND institute_id = ?
+    """, (student_id, get_current_institute_id(default=1)))
     student = cur.fetchone()
 
     if not student:
@@ -3449,8 +3482,8 @@ def student_profile(student_id):
         FROM students
         LEFT JOIN branches
             ON students.branch_id = branches.id
-        WHERE students.id = ?
-    """, (student_id,))
+        WHERE students.id = ? AND students.institute_id = ?
+    """, (student_id, get_current_institute_id(default=1)))
     student = cur.fetchone()
 
     if not student:
@@ -4349,6 +4382,7 @@ def invoices():
     conn = get_conn()
     cur = conn.cursor()
 
+    current_inst = get_current_institute_id(default=1)
     today = datetime.now().date().isoformat()
     current_year = datetime.now().year
     current_month = datetime.now().month
@@ -4368,11 +4402,13 @@ def invoices():
                 WHERE receipts.invoice_id = invoices.id
             ), 0)) as outstanding_amount
         FROM invoices
-        WHERE DATE(invoices.invoice_date) = ?
-    """, (today,))
+        JOIN students s ON invoices.student_id = s.id
+        WHERE substr(invoices.invoice_date, 1, 10) = ?
+          AND s.institute_id = ?
+    """, (today, current_inst))
     today_stats = cur.fetchone()
 
-    # MONTH STATS - Using invoice_date instead of created_at
+    # MONTH STATS
     cur.execute("""
         SELECT 
             COUNT(*) as total_invoices,
@@ -4386,8 +4422,10 @@ def invoices():
                 WHERE receipts.invoice_id = invoices.id
             ), 0)) as outstanding_amount
         FROM invoices
-        WHERE strftime('%Y-%m', invoices.invoice_date) = ?
-    """, (f"{current_year}-{current_month:02d}",))
+        JOIN students s ON invoices.student_id = s.id
+        WHERE substr(invoices.invoice_date, 1, 7) = ?
+          AND s.institute_id = ?
+    """, (f"{current_year}-{current_month:02d}", current_inst))
     month_stats = cur.fetchone()
 
     # OVERALL STATS
@@ -4404,7 +4442,9 @@ def invoices():
                 WHERE receipts.invoice_id = invoices.id
             ), 0)) as all_outstanding_amount
         FROM invoices
-    """)
+        JOIN students s ON invoices.student_id = s.id
+        WHERE s.institute_id = ?
+    """, (current_inst,))
     overall_stats = cur.fetchone()
 
     query = """
@@ -4426,16 +4466,18 @@ def invoices():
         ON invoices.branch_id = branches.id
     LEFT JOIN receipts
         ON receipts.invoice_id = invoices.id
+    WHERE students.institute_id = ?
     """
 
-    params = []
+    params = [current_inst]
 
     if search:
         query += """
-        WHERE
+        AND (
             invoices.invoice_no LIKE ?
             OR students.full_name LIKE ?
             OR students.student_code LIKE ?
+        )
         """
         like = f"%{search}%"
         params.extend([like, like, like])
@@ -4488,8 +4530,8 @@ def invoice_view(invoice_id):
         FROM invoices
         JOIN students ON invoices.student_id = students.id
         LEFT JOIN branches ON invoices.branch_id = branches.id
-        WHERE invoices.id = ?
-    """, (invoice_id,))
+        WHERE invoices.id = ? AND students.institute_id = ?
+    """, (invoice_id, get_current_institute_id(default=1)))
     invoice = cur.fetchone()
 
     if not invoice:
@@ -4631,8 +4673,8 @@ def invoice_print(invoice_id):
         FROM invoices
         JOIN students ON invoices.student_id = students.id
         LEFT JOIN branches ON invoices.branch_id = branches.id
-        WHERE invoices.id = ?
-    """, (invoice_id,))
+        WHERE invoices.id = ? AND students.institute_id = ?
+    """, (invoice_id, get_current_institute_id(default=1)))
     invoice = cur.fetchone()
 
     if not invoice:
@@ -4737,10 +4779,12 @@ def installment_edit(installment_id):
 
         # Get current installment details
         cur.execute("""
-            SELECT id, invoice_id, amount_paid
-            FROM installment_plans
-            WHERE id = ?
-        """, (installment_id,))
+            SELECT ip.id, ip.invoice_id, ip.amount_paid
+            FROM installment_plans ip
+            JOIN invoices i ON ip.invoice_id = i.id
+            JOIN students s ON i.student_id = s.id
+            WHERE ip.id = ? AND s.institute_id = ?
+        """, (installment_id, get_current_institute_id(default=1)))
         installment = cur.fetchone()
 
         if not installment:
@@ -4901,8 +4945,21 @@ def invoice_new():
             branch_id = student["branch_id"]
 
             if not branch_id:
-                flash("Selected student does not have a branch assigned.", "danger")
-                return redirect(url_for("billing.invoice_new"))
+                current_inst = get_current_institute_id(default=1)
+                cur.execute(
+                    "SELECT id FROM branches WHERE institute_id = ? AND is_active = 1 LIMIT 1",
+                    (current_inst,)
+                )
+                fallback_branch = cur.fetchone()
+                if fallback_branch:
+                    branch_id = fallback_branch["id"]
+                    cur.execute(
+                        "UPDATE students SET branch_id = ? WHERE id = ?",
+                        (branch_id, student_id)
+                    )
+                else:
+                    flash("Selected student does not have a branch assigned.", "danger")
+                    return redirect(url_for("billing.invoice_new"))
 
             now = datetime.now().isoformat(timespec="seconds")
 
@@ -4966,11 +5023,14 @@ def invoice_new():
             # Invalidate the token now that all validations have passed
             session.pop("invoice_form_token", None)
 
+            current_inst = get_current_institute_id(default=1)
+
             cur.execute("""
                 INSERT INTO invoices (
                     invoice_no,
                     student_id,
                     branch_id,
+                    institute_id,
                     invoice_date,
                     subtotal,
                     discount_type,
@@ -4984,11 +5044,12 @@ def invoice_new():
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 "TEMP",
                 student_id,
                 branch_id,
+                current_inst,
                 invoice_date,
                 subtotal,
                 "none",
@@ -5005,31 +5066,25 @@ def invoice_new():
 
             invoice_id = cur.lastrowid
 
+            # Get tenant numbering prefix from institute_settings
             cur.execute("""
-                SELECT invoice_no
-                FROM invoices
-                WHERE invoice_no NOT LIKE 'INV-%'
-                  AND invoice_no NOT LIKE 'TEMP'
-                ORDER BY invoice_no DESC
-                LIMIT 1
-            """)
-            result = cur.fetchone()
+                SELECT invoice_prefix
+                FROM institute_settings
+                WHERE institute_id = ?
+            """, (current_inst,))
+            inst_settings = cur.fetchone()
+            inv_prefix = (inst_settings["invoice_prefix"] if inst_settings and inst_settings["invoice_prefix"] else ("MEI/B/" if current_inst == 16 else "GIT/B/")).strip()
+            if not inv_prefix.endswith('/'):
+                inv_prefix += '/'
 
-            if result and result["invoice_no"]:
-                existing_no = result["invoice_no"]
-                try:
-                    parts = existing_no.split("/")
-                    if len(parts) >= 2:
-                        numeric_part = int(parts[-1])
-                        prefix = "/".join(parts[:-1])
-                        next_number = numeric_part + 1
-                        invoice_no = f"{prefix}/{next_number}"
-                    else:
-                        invoice_no = f"GIT/B/{invoice_id}"
-                except (ValueError, IndexError, TypeError):
-                    invoice_no = f"GIT/B/{invoice_id}"
-            else:
-                invoice_no = f"GIT/B/{invoice_id}"
+            cur.execute("""
+                SELECT MAX(CAST(SUBSTRING_INDEX(invoice_no, '/', -1) AS UNSIGNED)) AS max_seq
+                FROM invoices
+                WHERE institute_id = ? AND invoice_no LIKE ?
+            """, (current_inst, f"{inv_prefix}%"))
+            max_row = cur.fetchone()
+            next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else invoice_id
+            invoice_no = f"{inv_prefix}{next_seq}"
 
             cur.execute("""
                 UPDATE invoices
@@ -5214,12 +5269,15 @@ def invoice_new():
     conn = get_conn()
     cur = conn.cursor()
 
+    current_inst = get_current_institute_id(default=1)
+
     cur.execute("""
         SELECT students.*, branches.branch_name
         FROM students
         LEFT JOIN branches ON students.branch_id = branches.id
+        WHERE students.institute_id = ?
         ORDER BY students.full_name ASC
-    """)
+    """, (current_inst,))
     students = cur.fetchall()
 
     cur.execute("""
@@ -5284,8 +5342,8 @@ def invoice_edit(invoice_id):
             ON invoices.student_id = students.id
         LEFT JOIN branches
             ON invoices.branch_id = branches.id
-        WHERE invoices.id = ?
-    """, (invoice_id,))
+        WHERE invoices.id = ? AND students.institute_id = ?
+    """, (invoice_id, get_current_institute_id(default=1)))
     invoice = cur.fetchone()
 
     if not invoice:
@@ -5683,8 +5741,9 @@ def invoice_edit(invoice_id):
     cur.execute("""
         SELECT *
         FROM students
+        WHERE institute_id = ?
         ORDER BY student_code ASC
-    """)
+    """, (get_current_institute_id(default=1),))
     students = cur.fetchall()
 
     conn.close()
@@ -5725,7 +5784,7 @@ def receipts():
     conn = get_conn()
     cur = conn.cursor()
 
-    # Get today's date and month range
+    current_inst = get_current_institute_id(default=1)
     today = datetime.now().date()
     first_day_of_month = today.replace(day=1)
 
@@ -5740,30 +5799,36 @@ def receipts():
     cur.execute("""
         SELECT
             COUNT(*) AS total_receipts,
-            IFNULL(SUM(amount_received), 0) AS total_amount,
-            SUM(CASE WHEN payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
-            SUM(CASE WHEN payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
-            IFNULL(SUM(CASE WHEN payment_mode = 'cash' THEN amount_received ELSE 0 END), 0) AS cash_amount,
-            IFNULL(SUM(CASE WHEN payment_mode = 'upi' THEN amount_received ELSE 0 END), 0) AS upi_amount,
-            IFNULL(AVG(amount_received), 0) AS avg_amount
+            IFNULL(SUM(receipts.amount_received), 0) AS total_amount,
+            SUM(CASE WHEN receipts.payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
+            SUM(CASE WHEN receipts.payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
+            IFNULL(SUM(CASE WHEN receipts.payment_mode = 'cash' THEN receipts.amount_received ELSE 0 END), 0) AS cash_amount,
+            IFNULL(SUM(CASE WHEN receipts.payment_mode = 'upi' THEN receipts.amount_received ELSE 0 END), 0) AS upi_amount,
+            IFNULL(AVG(receipts.amount_received), 0) AS avg_amount
         FROM receipts
-        WHERE parse_date(receipt_date) = ?
-    """, [stats_date.isoformat()])
+        JOIN invoices i ON receipts.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE parse_date(receipts.receipt_date) = ?
+          AND s.institute_id = ?
+    """, [stats_date.isoformat(), current_inst])
     date_stats = cur.fetchone()
 
     # This month's statistics
     cur.execute("""
         SELECT
             COUNT(*) AS total_receipts,
-            IFNULL(SUM(amount_received), 0) AS total_amount,
-            SUM(CASE WHEN payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
-            SUM(CASE WHEN payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
-            IFNULL(SUM(CASE WHEN payment_mode = 'cash' THEN amount_received ELSE 0 END), 0) AS cash_amount,
-            IFNULL(SUM(CASE WHEN payment_mode = 'upi' THEN amount_received ELSE 0 END), 0) AS upi_amount,
-            IFNULL(AVG(amount_received), 0) AS avg_amount
+            IFNULL(SUM(receipts.amount_received), 0) AS total_amount,
+            SUM(CASE WHEN receipts.payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
+            SUM(CASE WHEN receipts.payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
+            IFNULL(SUM(CASE WHEN receipts.payment_mode = 'cash' THEN receipts.amount_received ELSE 0 END), 0) AS cash_amount,
+            IFNULL(SUM(CASE WHEN receipts.payment_mode = 'upi' THEN receipts.amount_received ELSE 0 END), 0) AS upi_amount,
+            IFNULL(AVG(receipts.amount_received), 0) AS avg_amount
         FROM receipts
-        WHERE parse_date(receipt_date) >= ? AND parse_date(receipt_date) <= ?
-    """, [first_day_of_month.isoformat(), today.isoformat()])
+        JOIN invoices i ON receipts.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE parse_date(receipts.receipt_date) >= ? AND parse_date(receipts.receipt_date) <= ?
+          AND s.institute_id = ?
+    """, [first_day_of_month.isoformat(), today.isoformat(), current_inst])
     month_stats = cur.fetchone()
 
     query = """
@@ -5787,17 +5852,19 @@ def receipts():
         ON invoices.student_id = students.id
     LEFT JOIN users
         ON receipts.created_by = users.id
+    WHERE students.institute_id = ?
     """
 
-    params = []
+    params = [current_inst]
 
     if search:
         query += """
-        WHERE
+        AND (
             receipts.receipt_no LIKE ?
             OR invoices.invoice_no LIKE ?
             OR students.full_name LIKE ?
             OR students.student_code LIKE ?
+        )
         """
         like = f"%{search}%"
         params.extend([like, like, like, like])
@@ -5880,10 +5947,13 @@ def receipt_new():
             # Temporary receipt number
             temp_receipt_no = f"TEMP_{uuid.uuid4().hex[:8]}"
 
+            current_inst = get_current_institute_id(default=1)
+
             cur.execute("""
                 INSERT INTO receipts (
                     receipt_no,
                     invoice_id,
+                    institute_id,
                     receipt_date,
                     amount_received,
                     payment_mode,
@@ -5891,10 +5961,11 @@ def receipt_new():
                     created_by,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 temp_receipt_no,
                 invoice_id,
+                current_inst,
                 receipt_date,
                 amount_received,
                 payment_mode,
@@ -5905,8 +5976,25 @@ def receipt_new():
 
             receipt_id = cur.lastrowid
 
-            # Final receipt number - Keep GIT/ prefix for receipts
-            receipt_no = f"GIT/{receipt_id}"
+            # Get tenant receipt numbering prefix from institute_settings
+            cur.execute("""
+                SELECT receipt_prefix
+                FROM institute_settings
+                WHERE institute_id = ?
+            """, (current_inst,))
+            inst_settings = cur.fetchone()
+            rec_prefix = (inst_settings["receipt_prefix"] if inst_settings and inst_settings["receipt_prefix"] else ("MEI/" if current_inst == 16 else "GIT/")).strip()
+            if not rec_prefix.endswith('/'):
+                rec_prefix += '/'
+
+            cur.execute("""
+                SELECT MAX(CAST(SUBSTRING_INDEX(receipt_no, '/', -1) AS UNSIGNED)) AS max_seq
+                FROM receipts
+                WHERE institute_id = ? AND receipt_no LIKE ?
+            """, (current_inst, f"{rec_prefix}%"))
+            max_row = cur.fetchone()
+            next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else receipt_id
+            receipt_no = f"{rec_prefix}{next_seq}"
 
             cur.execute("""
                 UPDATE receipts
@@ -6128,8 +6216,8 @@ def receipt_edit(receipt_id):
             ON receipts.invoice_id = invoices.id
         JOIN students
             ON invoices.student_id = students.id
-        WHERE receipts.id = ?
-    """, (receipt_id,))
+        WHERE receipts.id = ? AND students.institute_id = ?
+    """, (receipt_id, get_current_institute_id(default=1)))
     receipt = cur.fetchone()
 
     if not receipt:
@@ -7261,6 +7349,8 @@ def expenses():
     conn = get_conn()
     cur = conn.cursor()
 
+    current_inst = get_current_institute_id(default=1)
+
     cur.execute("""
         SELECT
             expenses.*,
@@ -7274,14 +7364,16 @@ def expenses():
             ON expenses.category_id = expense_categories.id
         LEFT JOIN users
             ON expenses.created_by = users.id
+        WHERE expenses.institute_id = ?
         ORDER BY expenses.expense_date DESC, expenses.id DESC
-    """)
+    """, (current_inst,))
     expenses = cur.fetchall()
 
     cur.execute("""
         SELECT IFNULL(SUM(amount), 0) AS total_expense
         FROM expenses
-    """)
+        WHERE institute_id = ?
+    """, (current_inst,))
     total_expense = float(cur.fetchone()["total_expense"] or 0)
 
     conn.close()
@@ -7297,6 +7389,8 @@ def expenses():
 def expense_new():
     conn = get_conn()
     cur = conn.cursor()
+
+    current_inst = get_current_institute_id(default=1)
 
     if request.method == "POST":
         try:
@@ -7331,10 +7425,11 @@ def expense_new():
                     reference_no,
                     notes,
                     created_by,
+                    institute_id,
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 expense_date,
                 branch_id,
@@ -7345,6 +7440,7 @@ def expense_new():
                 reference_no,
                 notes,
                 session.get("user_id"),
+                current_inst,
                 now,
                 now
             ))
@@ -7377,17 +7473,17 @@ def expense_new():
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     branches = cur.fetchall()
 
     cur.execute("""
         SELECT *
         FROM expense_categories
-        WHERE is_active = 1
+        WHERE is_active = 1 AND (institute_id = ? OR institute_id = 1)
         ORDER BY category_name
-    """)
+    """, (current_inst,))
     categories = cur.fetchall()
 
     conn.close()

@@ -152,6 +152,32 @@
       <div class="form-text">Shown on bill of supply / invoice print. Leave blank if not applicable.</div>
     </div>
 
+    <div class="section-heading">Document Numbering Prefixes</div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Invoice Number Prefix</label>
+        <input type="text" class="form-control" name="invoice_prefix"
+               value="{{ inst_settings.invoice_prefix if inst_settings and inst_settings.invoice_prefix else '' }}" maxlength="50"
+               placeholder="e.g. MEI/B/">
+        <div class="form-text">Prefix used for new invoices (e.g. MEI/B/1).</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Receipt Number Prefix</label>
+        <input type="text" class="form-control" name="receipt_prefix"
+               value="{{ inst_settings.receipt_prefix if inst_settings and inst_settings.receipt_prefix else '' }}" maxlength="50"
+               placeholder="e.g. MEI/">
+        <div class="form-text">Prefix used for new receipts (e.g. MEI/1).</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Student Code Prefix</label>
+        <input type="text" class="form-control" name="student_prefix"
+               value="{{ inst_settings.student_prefix if inst_settings and inst_settings.student_prefix else '' }}" maxlength="50"
+               placeholder="e.g. STU">
+        <div class="form-text">Prefix used for new student codes (e.g. STU001).</div>
+      </div>
+    </div>
+
     <div class="d-flex gap-2 mt-4">
       <button type="submit" class="btn btn-primary">💾 Save Company Profile</button>
       <a href="{{ url_for('core.dashboard') }}" class="btn btn-outline-secondary">Cancel</a>

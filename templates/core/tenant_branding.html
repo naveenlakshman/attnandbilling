@@ -19,6 +19,9 @@
       <div class="col-md-3"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{ branding.email or '' }}"></div>
       <div class="col-md-6"><label class="form-label">Website</label><input class="form-control" name="website" value="{{ branding.website or '' }}"></div>
       <div class="col-md-6"><label class="form-label">Registration number</label><input class="form-control" name="registration_number" value="{{ branding.registration_number or '' }}"></div>
+      <div class="col-md-4"><label class="form-label fw-semibold">Invoice Number Prefix</label><input class="form-control" name="invoice_prefix" value="{{ inst_settings.invoice_prefix if inst_settings and inst_settings.invoice_prefix else '' }}" placeholder="e.g. MEI/B/"><div class="form-text">Prefix used for new invoices (e.g. MEI/B/1).</div></div>
+      <div class="col-md-4"><label class="form-label fw-semibold">Receipt Number Prefix</label><input class="form-control" name="receipt_prefix" value="{{ inst_settings.receipt_prefix if inst_settings and inst_settings.receipt_prefix else '' }}" placeholder="e.g. MEI/"><div class="form-text">Prefix used for new receipts (e.g. MEI/1).</div></div>
+      <div class="col-md-4"><label class="form-label fw-semibold">Student Code Prefix</label><input class="form-control" name="student_prefix" value="{{ inst_settings.student_prefix if inst_settings and inst_settings.student_prefix else '' }}" placeholder="e.g. STU"><div class="form-text">Prefix used for new student codes (e.g. STU001).</div></div>
     </div>
     <div class="mt-4"><button class="btn btn-primary">Save branding</button></div>
   </form>

@@ -158,6 +158,8 @@ def create_app():
             return None
         if request.endpoint in secondary_tenant_safe_endpoints:
             return None
+        if request.endpoint and (request.endpoint.startswith("leads.") or request.endpoint.startswith("students.") or request.endpoint.startswith("website.") or request.endpoint.startswith("billing.")):
+            return None
         abort(403)
 
     # Register storage_url global in Jinja templates

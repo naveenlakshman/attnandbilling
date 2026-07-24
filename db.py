@@ -580,6 +580,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS leads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             name TEXT NOT NULL,
             phone TEXT NOT NULL,
             whatsapp TEXT,
@@ -607,7 +608,8 @@ def init_db():
             assigned_to_id INTEGER,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            FOREIGN KEY (assigned_to_id) REFERENCES users(id)
+            FOREIGN KEY (assigned_to_id) REFERENCES users(id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id)
         )
     """)
 
@@ -615,6 +617,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS followups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             lead_id INTEGER NOT NULL,
             user_id INTEGER,
             method TEXT,
@@ -623,7 +626,8 @@ def init_db():
             next_followup_date TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES users(id)
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id)
         )
     """)
 
@@ -631,7 +635,8 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_code TEXT NOT NULL UNIQUE,
+            institute_id INTEGER NOT NULL DEFAULT 1,
+            student_code TEXT NOT NULL,
             full_name TEXT NOT NULL,
             phone TEXT NOT NULL,
             email TEXT,
@@ -665,7 +670,9 @@ def init_db():
             degree_percentage TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            FOREIGN KEY (branch_id) REFERENCES branches(id)
+            UNIQUE(institute_id, student_code),
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id)
         )
     """)
 
@@ -1555,6 +1562,13 @@ def init_db():
     """)
 
     # ---------- SAFE MIGRATIONS ----------
+    add_column_if_not_exists(cur, "leads", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "followups", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "students", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "student_uploaded_documents", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "student_profile_update_requests", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "student_notes", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+
     add_column_if_not_exists(cur, "users", "phone", "TEXT")
     add_column_if_not_exists(cur, "users", "branch_id", "INTEGER")
     add_column_if_not_exists(cur, "users", "can_view_all_branches", "INTEGER NOT NULL DEFAULT 1")
@@ -2559,23 +2573,26 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS student_uploaded_documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             student_id INTEGER NOT NULL,
             category TEXT NOT NULL CHECK(category IN ('qualification', 'identity', 'address')),
             document_type TEXT NOT NULL,
             file_path TEXT NOT NULL,
             uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(institute_id) REFERENCES institutes(id),
             FOREIGN KEY(student_id) REFERENCES students(id)
         )
     """)
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_student_uploaded_documents_student
-        ON student_uploaded_documents(student_id, category)
+        ON student_uploaded_documents(institute_id, student_id, category)
     """)
 
     # Create student_profile_update_requests table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS student_profile_update_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             student_id INTEGER NOT NULL,
             requested_data TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED')),
@@ -2583,6 +2600,7 @@ def init_db():
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             processed_by INTEGER,
             processed_at TEXT,
+            FOREIGN KEY(institute_id) REFERENCES institutes(id),
             FOREIGN KEY(student_id) REFERENCES students(id)
         )
     """)

@@ -1083,6 +1083,10 @@ def branch_edit(branch_id):
         if existing_branch:
             flash("Branch name or code already exists.", "danger")
             conn.close()
+        existing_branch = cur.fetchone()
+        if existing_branch:
+            flash("Branch name or code already exists.", "danger")
+            conn.close()
             return redirect(url_for("core.branch_edit", branch_id=branch_id))
 
         cur.execute("""
@@ -1179,6 +1183,11 @@ def tenant_branding():
             "SELECT * FROM institute_branding WHERE institute_id = ?",
             (institute_id,),
         ).fetchone()
+        inst_settings = conn.execute(
+            "SELECT invoice_prefix, receipt_prefix, student_prefix FROM institute_settings WHERE institute_id = ?",
+            (institute_id,),
+        ).fetchone() or {}
+
         if not institute or not branding:
             abort(404)
         if request.method == "GET":
@@ -1186,10 +1195,15 @@ def tenant_branding():
                 "core/tenant_branding.html",
                 institute=institute,
                 branding=branding,
+                inst_settings=inst_settings,
             )
 
         display_name = request.form.get("display_name", "").strip()
         short_name = request.form.get("short_name", "").strip()
+        invoice_prefix = request.form.get("invoice_prefix", "").strip()
+        receipt_prefix = request.form.get("receipt_prefix", "").strip()
+        student_prefix = request.form.get("student_prefix", "").strip()
+
         if not display_name or not short_name:
             flash("Display name and short name are required.", "danger")
             return redirect(url_for("core.tenant_branding"))
@@ -1205,6 +1219,20 @@ def tenant_branding():
         except ValueError as exc:
             flash(str(exc), "danger")
             return redirect(url_for("core.tenant_branding"))
+        
+        now = datetime.now().isoformat(timespec="seconds")
+
+        if invoice_prefix or receipt_prefix or student_prefix:
+            conn.execute("""
+                INSERT INTO institute_settings (institute_id, invoice_prefix, receipt_prefix, student_prefix, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    invoice_prefix = VALUES(invoice_prefix),
+                    receipt_prefix = VALUES(receipt_prefix),
+                    student_prefix = VALUES(student_prefix),
+                    updated_at = VALUES(updated_at)
+            """, (institute_id, invoice_prefix, receipt_prefix, student_prefix, now))
+
         conn.execute(
             """
             UPDATE institute_branding
@@ -1227,7 +1255,7 @@ def tenant_branding():
                 request.form.get("registration_number", "").strip(),
                 logo_path,
                 favicon_path,
-                datetime.now().isoformat(timespec="seconds"),
+                now,
                 institute_id,
             ),
         )
@@ -1248,6 +1276,7 @@ def tenant_branding():
 def company_profile():
     """View and edit company profile (global white-label settings)."""
     profile = get_company_profile()
+    current_inst = get_current_institute_id(default=1)
 
     if request.method == "POST":
         company_name = request.form.get("company_name", "").strip()
@@ -1258,6 +1287,9 @@ def company_profile():
         email = request.form.get("email", "").strip()
         website = request.form.get("website", "").strip()
         reg_number = request.form.get("reg_number", "").strip()
+        invoice_prefix = request.form.get("invoice_prefix", "").strip()
+        receipt_prefix = request.form.get("receipt_prefix", "").strip()
+        student_prefix = request.form.get("student_prefix", "").strip()
 
         if not company_name or not company_short_name:
             flash("Company name and short name are required.", "danger")
@@ -1290,22 +1322,34 @@ def company_profile():
         now = datetime.now().isoformat(timespec="seconds")
         conn = get_conn()
         cur = conn.cursor()
+
+        if invoice_prefix or receipt_prefix or student_prefix:
+            cur.execute("""
+                INSERT INTO institute_settings (institute_id, invoice_prefix, receipt_prefix, student_prefix, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    invoice_prefix = VALUES(invoice_prefix),
+                    receipt_prefix = VALUES(receipt_prefix),
+                    student_prefix = VALUES(student_prefix),
+                    updated_at = VALUES(updated_at)
+            """, (current_inst, invoice_prefix, receipt_prefix, student_prefix, now))
+
         cur.execute("""
             INSERT INTO company_profile
                 (id, company_name, company_short_name, tagline, address, phone,
                  email, website, logo_filename, reg_number, updated_at)
             VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                company_name = excluded.company_name,
-                company_short_name = excluded.company_short_name,
-                tagline = excluded.tagline,
-                address = excluded.address,
-                phone = excluded.phone,
-                email = excluded.email,
-                website = excluded.website,
-                logo_filename = excluded.logo_filename,
-                reg_number = excluded.reg_number,
-                updated_at = excluded.updated_at
+            ON DUPLICATE KEY UPDATE
+                company_name = VALUES(company_name),
+                company_short_name = VALUES(company_short_name),
+                tagline = VALUES(tagline),
+                address = VALUES(address),
+                phone = VALUES(phone),
+                email = VALUES(email),
+                website = VALUES(website),
+                logo_filename = VALUES(logo_filename),
+                reg_number = VALUES(reg_number),
+                updated_at = VALUES(updated_at)
         """, (
             company_name, company_short_name, tagline, address,
             phone, email, website, logo_filename, reg_number, now
@@ -1316,8 +1360,13 @@ def company_profile():
         flash("Company profile updated successfully.", "success")
         return redirect(url_for("core.company_profile"))
 
-    return render_template("core/company_profile.html", profile=profile)
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT invoice_prefix, receipt_prefix, student_prefix FROM institute_settings WHERE institute_id = ?", (current_inst,))
+    inst_settings = cur.fetchone() or {}
+    conn.close()
 
+    return render_template("core/company_profile.html", profile=profile, inst_settings=inst_settings)
 
 @core_bp.route("/company-profile/remove-logo", methods=["POST"])
 @login_required

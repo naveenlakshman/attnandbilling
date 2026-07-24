@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 from flask import Blueprint, render_template, session, flash, redirect, url_for, request, jsonify
 from db import get_conn, log_activity
 from modules.core.utils import login_required
+from services.tenant_context import get_current_institute_id
 from modules.leads import ai_helper
 from modules.leads import services as lead_services
 from modules.leads.helpers import get_lead_or_404_with_access
@@ -211,12 +212,13 @@ def _to_int_or_none(value):
 def _load_active_branches():
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
     cur.execute("""
         SELECT id, branch_name, branch_code
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -252,12 +254,15 @@ def dashboard():
     user_id = session.get("user_id")
     role = session.get("role")
 
-    # Admin sees all leads, staff sees only assigned leads
-    assigned_filter_sql = ""
-    assigned_params = []
+    # Admin sees all leads for current tenant, staff sees only assigned leads
+    current_inst = get_current_institute_id(default=1)
+    assigned_filter_sql = " AND institute_id = ? "
+    assigned_alias_filter_sql = " AND l.institute_id = ? "
+    assigned_params = [current_inst]
 
     if role != "admin":
-        assigned_filter_sql = " AND assigned_to_id = ? "
+        assigned_filter_sql += " AND assigned_to_id = ? "
+        assigned_alias_filter_sql += " AND l.assigned_to_id = ? "
         assigned_params.append(user_id)
 
     # New leads today
@@ -289,7 +294,7 @@ def dashboard():
           AND l.is_deleted = 0
           AND l.next_followup_date IS NOT NULL
           AND l.next_followup_date <= ?
-          {assigned_filter_sql}
+          {assigned_alias_filter_sql}
         ORDER BY l.next_followup_date ASC, l.lead_score DESC
         LIMIT 50
     """, [today_str] + assigned_params)
@@ -315,7 +320,7 @@ def dashboard():
         WHERE l.status = 'active'
           AND l.is_deleted = 0
           AND l.lead_score >= 60
-          {assigned_filter_sql}
+          {assigned_alias_filter_sql}
         ORDER BY l.lead_score DESC, l.updated_at DESC
         LIMIT 25
     """, assigned_params)
@@ -340,7 +345,7 @@ def dashboard():
           AND l.status = 'active'
           AND substr(l.created_at, 1, 10) = ?
           AND (l.last_contact_date IS NULL OR l.last_contact_date = '')
-          {assigned_filter_sql}
+          {assigned_alias_filter_sql}
         ORDER BY l.created_at DESC
         LIMIT 5
     """, [today_str] + assigned_params)
@@ -493,13 +498,14 @@ def dashboard():
     team_stats = None
     if role == "admin":
         team_stats = []
+        current_inst = get_current_institute_id(default=1)
 
         cur.execute("""
             SELECT id, full_name, username
             FROM users
-            WHERE role = 'staff' AND is_active = 1
+            WHERE is_active = 1 AND institute_id = ?
             ORDER BY full_name
-        """)
+        """, (current_inst,))
         staff_users = cur.fetchall()
 
         for staff in staff_users:
@@ -508,7 +514,8 @@ def dashboard():
                 FROM leads
                 WHERE assigned_to_id = ?
                   AND is_deleted = 0
-            """, (staff["id"],))
+                  AND institute_id = ?
+            """, (staff["id"], current_inst))
             c_total = cur.fetchone()["cnt"]
 
             cur.execute("""
@@ -517,7 +524,8 @@ def dashboard():
                 WHERE assigned_to_id = ?
                   AND status = 'converted'
                   AND is_deleted = 0
-            """, (staff["id"],))
+                  AND institute_id = ?
+            """, (staff["id"], current_inst))
             c_converted = cur.fetchone()["cnt"]
 
             c_rate = round((c_converted / c_total * 100), 1) if c_total > 0 else 0
@@ -634,9 +642,10 @@ def lead_create():
         if not _phone_error:
             _conn_dup = get_conn()
             _cur_dup = _conn_dup.cursor()
+            current_inst = get_current_institute_id(default=1)
             _dup_lead = _cur_dup.execute(
-                "SELECT id FROM leads WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND phone = ? AND COALESCE(is_deleted, 0) = 0",
-                (name, phone)
+                "SELECT id FROM leads WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND phone = ? AND COALESCE(is_deleted, 0) = 0 AND institute_id = ?",
+                (name, phone, current_inst)
             ).fetchone()
             _conn_dup.close()
             if _dup_lead:
@@ -676,6 +685,7 @@ def lead_create():
 
         cur.execute("""
             INSERT INTO leads (
+                institute_id,
                 name,
                 phone,
                 whatsapp,
@@ -704,8 +714,9 @@ def lead_create():
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            get_current_institute_id(default=1),
             name,
             phone,
             whatsapp,
@@ -821,9 +832,9 @@ def lead_detail(lead_id):
     cur.execute("""
         SELECT id, full_name, username
         FROM users
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY full_name
-    """)
+    """, (get_current_institute_id(default=1),))
     all_users = cur.fetchall()
 
     # Followups timeline
@@ -971,14 +982,15 @@ def leads_list():
     current_user_id = session.get("user_id")
     current_user_role = session.get("role")
 
+    current_inst = get_current_institute_id(default=1)
     # Base query
     query = """
         SELECT l.*, u.full_name AS owner_name, u.username AS owner_username
         FROM leads l
         LEFT JOIN users u ON l.assigned_to_id = u.id
-        WHERE l.is_deleted = 0
+        WHERE l.is_deleted = 0 AND l.institute_id = ?
     """
-    params = []
+    params = [current_inst]
 
     # Role-based filter
     if current_user_role != "admin":
@@ -1066,20 +1078,20 @@ def leads_list():
         leads = [lead for lead in leads if lead.get("temperature") == temperature]
 
     # Users (for admin filter dropdown)
-    cur.execute("SELECT id, full_name, username FROM users ORDER BY full_name")
+    cur.execute("SELECT id, full_name, username FROM users WHERE institute_id = ? ORDER BY full_name", (current_inst,))
     all_users = cur.fetchall()
 
     # Calculate metrics with role-aware scope
     today = date.today()
     month_str = today.strftime("%Y-%m")
 
-    metrics_filter_sql = ""
-    metrics_params = []
+    metrics_filter_sql = " AND institute_id = ?"
+    metrics_params = [current_inst]
     if current_user_role != "admin" or my_leads == "1":
-        metrics_filter_sql = " AND assigned_to_id = ?"
+        metrics_filter_sql += " AND assigned_to_id = ?"
         metrics_params.append(current_user_id)
     elif user_id:
-        metrics_filter_sql = " AND assigned_to_id = ?"
+        metrics_filter_sql += " AND assigned_to_id = ?"
         metrics_params.append(user_id)
 
     cur.execute(f"SELECT COUNT(*) FROM leads WHERE is_deleted = 0 {metrics_filter_sql}", metrics_params)
@@ -1110,20 +1122,22 @@ def leads_list():
         SELECT DISTINCT interested_courses
         FROM leads
         WHERE is_deleted = 0
+          AND institute_id = ?
           AND interested_courses IS NOT NULL
           AND TRIM(interested_courses) != ''
         ORDER BY interested_courses
-    """)
+    """, (current_inst,))
     course_options = [row["interested_courses"] for row in cur.fetchall()]
 
     cur.execute("""
         SELECT DISTINCT lost_reason
         FROM leads
         WHERE is_deleted = 0
+          AND institute_id = ?
           AND lost_reason IS NOT NULL
           AND TRIM(lost_reason) != ''
         ORDER BY lost_reason
-    """)
+    """, (current_inst,))
     lost_reason_options = [row["lost_reason"] for row in cur.fetchall()]
 
     branch_options = _load_active_branches() if current_user_role == "admin" else []
@@ -1631,6 +1645,7 @@ def followups_today():
     conn = get_conn()
     cur = conn.cursor()
 
+    current_inst = get_current_institute_id(default=1)
     today_date = date.today()
     today = today_date.strftime("%Y-%m-%d")
     tomorrow = (today_date + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -1658,8 +1673,9 @@ def followups_today():
         WHERE l.status = 'active'
           AND l.is_deleted = 0
           AND l.next_followup_date IS NOT NULL
+          AND l.institute_id = ?
     """
-    params = []
+    params = [current_inst]
 
     # Counselors see only their own leads
     if current_user_role != "admin":
@@ -1733,6 +1749,7 @@ def followups_today():
         LEFT JOIN users u ON l.assigned_to_id = u.id
         WHERE substr(f.created_at, 1, 10) = ?
           AND l.is_deleted = 0
+          AND l.institute_id = ?
           AND NOT EXISTS (
               SELECT 1
               FROM followups f2
@@ -1744,7 +1761,7 @@ def followups_today():
                 )
           )
     """
-    completed_params = [today]
+    completed_params = [today, current_inst]
 
     if current_user_role != "admin":
         completed_query += " AND l.assigned_to_id = ?"
@@ -1767,14 +1784,13 @@ def followups_today():
         item["followup_created_at_display"] = _format_ist_datetime(item.get("followup_created_at"))
         completed_items.append(item)
 
-    # Admin dropdown users
     if current_user_role == "admin":
         cur.execute("""
             SELECT id, full_name, username
             FROM users
-            WHERE is_active = 1
+            WHERE is_active = 1 AND institute_id = ?
             ORDER BY full_name
-        """)
+        """, (current_inst,))
         all_users = cur.fetchall()
     else:
         all_users = []
@@ -1944,6 +1960,7 @@ def pipeline():
     conn = get_conn()
     cur = conn.cursor()
 
+    current_inst = get_current_institute_id(default=1)
     selected_user_id = request.args.get("user_id", "").strip()
     current_user_id = session.get("user_id")
     current_user_role = session.get("role")
@@ -1953,8 +1970,9 @@ def pipeline():
         cur.execute("""
             SELECT id, full_name, username
             FROM users
+            WHERE institute_id = ?
             ORDER BY full_name
-        """)
+        """, (current_inst,))
         all_users = cur.fetchall()
     else:
         all_users = []
@@ -1971,8 +1989,9 @@ def pipeline():
             LEFT JOIN users u ON l.assigned_to_id = u.id
             WHERE l.is_deleted = 0
               AND l.stage = ?
+              AND l.institute_id = ?
         """
-        params = [st]
+        params = [st, current_inst]
 
         if current_user_role != "admin":
             query += " AND l.assigned_to_id = ?"
@@ -2025,13 +2044,14 @@ def reports():
     conn = get_conn()
     cur = conn.cursor()
 
+    current_inst = get_current_institute_id(default=1)
     user_id_filter = request.args.get("user_id", "").strip()
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
 
     # Build WHERE conditions
-    where_clauses = ["l.is_deleted = 0"]
-    params = []
+    where_clauses = ["l.is_deleted = 0", "l.institute_id = ?"]
+    params = [current_inst]
 
     if user_id_filter:
         try:
