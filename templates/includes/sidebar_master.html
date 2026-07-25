@@ -92,7 +92,6 @@
     </div>
   </div>
 
-  {% if session.get('institute_id', 1)|int == 1 %}
   <!-- LMS Section -->
   <div class="erp-module" data-module="lms">
     <button class="erp-module-toggle {{ 'active' if lms_active else '' }}"
@@ -195,11 +194,11 @@
          class="accordion-collapse collapse {{ 'show' if reports_active else '' }}"
          data-bs-parent="#erpSidebarAccordion">
       <div class="erp-module-menu">
-        <a class="nav-link {{ 'active' if ep == 'reports.daily_report' else '' }}" href="{{ url_for('reports.daily_report') }}">Daily Report</a>
+        <a class="nav-link {{ 'active' if ep == 'attendance.daily_report' else '' }}" href="{{ url_for('attendance.daily_report') }}">Daily Report</a>
         <a class="nav-link {{ 'active' if ep == 'leads.reports' else '' }}" href="{{ url_for('leads.reports') }}">Lead Report</a>
         <a class="nav-link {{ 'active' if ep == 'reports.dashboard' else '' }}" href="{{ url_for('reports.dashboard') }}">Analytics</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.daily_report' else '' }}" href="{{ url_for('attendance.daily_report') }}">Attendance Daily Report</a>
-        <a class="nav-link {{ 'active' if ep == 'reports.attendance_monthly_report' else '' }}" href="{{ url_for('reports.attendance_monthly_report') }}">Attendance Monthly Summary</a>
+        <a class="nav-link {{ 'active' if ep == 'attendance.monthly_summary' else '' }}" href="{{ url_for('attendance.monthly_summary') }}">Attendance Monthly Summary</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.defaulters' else '' }}" href="{{ url_for('attendance.defaulters') }}">Defaulters</a>
         <a class="nav-link {{ 'active' if ep == 'reports.lms_attendance_gap' else '' }}" href="{{ url_for('reports.lms_attendance_gap') }}">LMS vs Attendance Defaulters</a>
         {% if is_admin %}
@@ -210,7 +209,6 @@
     </div>
   </div>
 
-  {% endif %}
   <!-- Administration Section -->
   <div class="erp-module" data-module="admin">
     <button class="erp-module-toggle {{ 'active' if admin_active else '' }}"
@@ -238,7 +236,7 @@
         {% else %}
           <a class="nav-link {{ 'active' if ep == 'core.tenant_branding' else '' }}" href="{{ url_for('core.tenant_branding') }}">Branding</a>
         {% endif %}
-        {% if is_admin and session.get('institute_id', 1)|int == 1 %}
+        {% if is_admin %}
           <a class="nav-link {{ 'active' if ep and ep.startswith('assets.') else '' }}" href="{{ url_for('assets.list_assets') }}">Assets</a>
           <a class="nav-link {{ 'active' if ep and ep.startswith('import_export.') else '' }}" href="{{ url_for('import_export.import_export_dashboard') }}">Export Data</a>
         {% endif %}

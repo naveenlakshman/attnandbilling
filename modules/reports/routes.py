@@ -7,43 +7,29 @@ from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta, timezone
+from services.tenant_context import get_current_institute_id
 
 reports_bp = Blueprint("reports", __name__)
 
 
 def parse_date(date_str):
-    """
-    Parse date in multiple formats: DD-MM-YYYY or YYYY-MM-DD
-    Returns date in YYYY-MM-DD format for database storage
-    """
     if not date_str:
         return None
-    
     date_str = date_str.strip()
-    
-    # Try YYYY-MM-DD format first
     try:
-        parsed = datetime.strptime(date_str, "%Y-%m-%d")
-        return parsed.strftime("%Y-%m-%d")
+        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y-%m-%d")
     except ValueError:
         pass
-    
-    # Try DD-MM-YYYY format
     try:
-        parsed = datetime.strptime(date_str, "%d-%m-%Y")
-        return parsed.strftime("%Y-%m-%d")
+        return datetime.strptime(date_str, "%d-%m-%Y").strftime("%Y-%m-%d")
     except ValueError:
         pass
-    
-    # Try DD/MM/YYYY format
     try:
-        parsed = datetime.strptime(date_str, "%d/%m/%Y")
-        return parsed.strftime("%Y-%m-%d")
+        return datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m-%d")
     except ValueError:
         pass
-    
-    # If all fail, return None indicating invalid format
     return None
+
 
 @reports_bp.route("/")
 @login_required
@@ -52,10 +38,8 @@ def dashboard():
     """Analytics and Reports Dashboard"""
     conn = get_conn()
     cur = conn.cursor()
-    
-    # Get record counts for each table
+    current_inst = get_current_institute_id(default=1)
     stats = {}
-    
     tables = [
         ("branches", "Branches"),
         ("users", "Users"),
@@ -74,7 +58,16 @@ def dashboard():
     
     for table_name, display_name in tables:
         try:
-            cur.execute(f"SELECT COUNT(*) as count FROM {table_name}")
+            if table_name in ("branches", "expenses", "invoices", "leads", "receipts", "students", "installment_plans", "activity_logs", "expense_categories"):
+                cur.execute(f"SELECT COUNT(*) as count FROM {table_name} WHERE institute_id = ?", (current_inst,))
+            elif table_name == "invoice_items":
+                cur.execute("SELECT COUNT(*) as count FROM invoice_items ii JOIN invoices inv ON inv.id = ii.invoice_id WHERE inv.institute_id = ?", (current_inst,))
+            elif table_name == "followups":
+                cur.execute("SELECT COUNT(*) as count FROM followups f JOIN leads l ON l.id = f.lead_id WHERE l.institute_id = ?", (current_inst,))
+            elif table_name == "users":
+                cur.execute("SELECT COUNT(*) as count FROM users WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?)", (current_inst,))
+            else:
+                cur.execute(f"SELECT COUNT(*) as count FROM {table_name}")
             result = cur.fetchone()
             stats[table_name] = {
                 "name": display_name,
@@ -88,65 +81,7 @@ def dashboard():
             }
     
     conn.close()
-    
     return render_template("reports/dashboard.html", stats=stats)
-
-
-@reports_bp.route("/daily")
-@login_required
-def daily_report():
-    """Daily consolidated report: Leads, Invoices, Receipts, Attendance"""
-    IST = timezone(timedelta(hours=5, minutes=30))
-    today_default = datetime.now(IST).strftime("%Y-%m-%d")
-
-    report_date = request.args.get("date", today_default).strip()
-    # Validate date
-    try:
-        datetime.strptime(report_date, "%Y-%m-%d")
-    except ValueError:
-        report_date = today_default
-
-    conn = get_conn()
-    cur = conn.cursor()
-
-    # ── Branches ──────────────────────────────────────────────────
-    cur.execute("SELECT id, branch_name, branch_code FROM branches WHERE is_active = 1 ORDER BY branch_name")
-    branches = cur.fetchall()
-
-    # Branch selection
-    can_view_all = session.get("can_view_all_branches", False) or session.get("role") == "admin"
-    user_branch_id = session.get("branch_id")
-    branch_param = request.args.get("branch_id", "").strip()
-    if can_view_all:
-        if branch_param in ("", "all") or not branch_param:
-            selected_branch_id = None
-        else:
-            selected_branch_id = int(branch_param) if branch_param.isdigit() else None
-    else:
-        selected_branch_id = user_branch_id
-
-    # ── 1. Today's Leads (global – no branch_id on leads table) ──
-    cur.execute("""
-        SELECT l.id, l.name, l.phone, l.lead_source, l.stage, l.status, l.created_at,
-               u.full_name AS owner_name
-        FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
-        WHERE substr(l.created_at, 1, 10) = ? AND l.is_deleted = 0
-        ORDER BY l.created_at DESC
-    """, (report_date,))
-    new_leads = cur.fetchall()
-
-    # ── 2. Today's Followups due ──────────────────────────────────
-    cur.execute("""
-        SELECT l.id, l.name, l.phone, l.stage, l.status, l.next_followup_date,
-               u.full_name AS owner_name
-        FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
-        WHERE l.next_followup_date = ? AND l.is_deleted = 0
-          AND l.status NOT IN ('converted', 'lost', 'not_interested')
-        ORDER BY l.name
-    """, (report_date,))
-    followups_due = cur.fetchall()
 
     # ── 2a. Overdue Followups (past due, not yet done today) ─────
     cur.execute("""
@@ -1484,8 +1419,6 @@ def attendance_calendar_settings():
 @admin_required
 def export_csv(table_name):
     """Export any table to CSV"""
-    
-    # Allowed tables for export
     allowed_tables = {
         "activity_logs": "activity_logs",
         "branches": "branches",
@@ -1510,8 +1443,18 @@ def export_csv(table_name):
     cur = conn.cursor()
     
     try:
-        # Get all data from the table
-        cur.execute(f"SELECT * FROM {allowed_tables[table_name]}")
+        current_inst = get_current_institute_id(default=1)
+        tbl = allowed_tables[table_name]
+        if tbl in ("branches", "expenses", "invoices", "leads", "receipts", "students", "installment_plans", "activity_logs", "expense_categories"):
+            cur.execute(f"SELECT * FROM {tbl} WHERE institute_id = ?", (current_inst,))
+        elif tbl == "invoice_items":
+            cur.execute("SELECT ii.* FROM invoice_items ii JOIN invoices inv ON inv.id = ii.invoice_id WHERE inv.institute_id = ?", (current_inst,))
+        elif tbl == "followups":
+            cur.execute("SELECT f.* FROM followups f JOIN leads l ON l.id = f.lead_id WHERE l.institute_id = ?", (current_inst,))
+        elif tbl == "users":
+            cur.execute("SELECT * FROM users WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?) OR id = ?", (current_inst, session.get("user_id")))
+        else:
+            cur.execute(f"SELECT * FROM {tbl}")
         rows = cur.fetchall()
         conn.close()
         
@@ -1519,39 +1462,28 @@ def export_csv(table_name):
             flash(f"No data in {table_name}.", "warning")
             return redirect(url_for("reports.dashboard"))
         
-        # Get column names
         columns = [description[0] for description in cur.description]
-        
-        # Create CSV
         output = io.StringIO()
         writer = csv.writer(output)
-        
-        # Write headers
         writer.writerow(columns)
         
-        # Write data
         for row in rows:
             row_data = []
             for col in columns:
                 value = row[col]
-                
-                # Format created_at for followups table to match import format
                 if table_name == "followups" and col == "created_at" and value:
                     try:
                         if 'T' in str(value):
                             dt = datetime.fromisoformat(value)
-                            value = dt.strftime("%d-%m-%Y %I:%M %p")  # 23-03-2026 02:30 PM
+                            value = dt.strftime("%d-%m-%Y %I:%M %p")
                     except (ValueError, AttributeError):
                         pass
-                
-                # Format next_followup_date for followups table
                 if table_name == "followups" and col == "next_followup_date" and value:
                     try:
                         dt = datetime.strptime(str(value), "%Y-%m-%d")
-                        value = dt.strftime("%d-%m-%Y")  # 23-03-2026
+                        value = dt.strftime("%d-%m-%Y")
                     except (ValueError, AttributeError):
                         pass
-                
                 row_data.append(value if value is not None else "")
             writer.writerow(row_data)
         

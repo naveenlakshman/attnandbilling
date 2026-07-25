@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Batch Management - {{ company.company_short_name }}{% endblock %}
 
@@ -374,10 +374,10 @@
           </td>
           <td style="white-space: nowrap; font-size: 12px;">
             {% if batch.start_date %}
-            <div>📅 {{ batch.start_date }}{% if batch.end_date %} – {{ batch.end_date }}{% endif %}</div>
+            <div>📅 {{ batch.start_date | format_datetime }}{% if batch.end_date %} – {{ batch.end_date | format_datetime }}{% endif %}</div>
             {% endif %}
             {% if batch.start_time %}
-            <div>🕐 {{ batch.start_time }} – {{ batch.end_time }}</div>
+            <div>🕐 {{ batch.start_time | format_time }}{% if batch.end_time %} – {{ batch.end_time | format_time }}{% endif %}</div>
             {% endif %}
             {% if not batch.start_date and not batch.start_time %}
             <span class="text-muted">Ongoing</span>

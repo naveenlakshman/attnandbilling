@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}{{ batch.batch_name }} - {{ company.company_short_name }}{% endblock %}
 
@@ -355,14 +355,14 @@
         <span class="detail-pill-icon">📅</span>
         <div>
           <div class="detail-pill-label">Start Date</div>
-          <div class="detail-pill-value">{{ batch.start_date }}</div>
+          <div class="detail-pill-value">{{ batch.start_date | format_datetime }}</div>
         </div>
       </div>
       <div class="detail-pill">
         <span class="detail-pill-icon">🏁</span>
         <div>
           <div class="detail-pill-label">End Date</div>
-          <div class="detail-pill-value">{{ batch.end_date or 'Ongoing' }}</div>
+          <div class="detail-pill-value">{{ batch.end_date | format_datetime if batch.end_date else 'Ongoing' }}</div>
         </div>
       </div>
       {% else %}
@@ -380,7 +380,13 @@
         <span class="detail-pill-icon">🕐</span>
         <div>
           <div class="detail-pill-label">Timing</div>
-          <div class="detail-pill-value">{{ batch.start_time }} – {{ batch.end_time }}</div>
+          <div class="detail-pill-value">
+            {% if batch.end_time %}
+              {{ batch.start_time | format_time }} – {{ batch.end_time | format_time }}
+            {% else %}
+              {{ batch.start_time | format_time }}
+            {% endif %}
+          </div>
         </div>
       </div>
       {% endif %}
@@ -389,7 +395,7 @@
         <span class="detail-pill-icon">🗓️</span>
         <div>
           <div class="detail-pill-label">Created</div>
-          <div class="detail-pill-value">{{ batch.created_at | replace('T', ' ') | truncate(16, True, '') }}</div>
+          <div class="detail-pill-value">{{ batch.created_at | format_datetime }}</div>
         </div>
       </div>
 
@@ -398,7 +404,7 @@
         <span class="detail-pill-icon">✏️</span>
         <div>
           <div class="detail-pill-label">Last Updated</div>
-          <div class="detail-pill-value">{{ batch.updated_at | replace('T', ' ') | truncate(16, True, '') }}</div>
+          <div class="detail-pill-value">{{ batch.updated_at | format_datetime }}</div>
         </div>
       </div>
       {% endif %}
@@ -465,7 +471,7 @@
             <td style="font-weight:600; color:#1a1f36; font-size:12px;"><a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration:none; color:#0d6efd;">{{ student.student_code }}</a></td>
             <td><a href="{{ url_for('billing.student_profile', student_id=student.student_id) }}" style="text-decoration:none; color:inherit; font-weight:500;">{{ student.full_name }}</a></td>
             <td>{{ student.phone or '—' }}</td>
-            <td style="font-size:12px;">{{ student.joined_on or '—' }}</td>
+            <td style="font-size:12px;">{{ student.joined_on | format_datetime if student.joined_on else '—' }}</td>
             <td>
               <span class="student-status {{ student.status }}">
                 {% if student.status == 'active' %}✓ Active
@@ -513,7 +519,7 @@
               {% else %}✗ Dropped{% endif %}
             </span>
             {% if student.joined_on %}
-              <span style="font-size:11px; color:#9ca3af;">Joined {{ student.joined_on }}</span>
+              <span style="font-size:11px; color:#9ca3af;">Joined {{ student.joined_on | format_datetime }}</span>
             {% endif %}
           </div>
         </div>

@@ -59,6 +59,64 @@ print('Leaked Sumaya Bhanu in pipeline:', 'Sumaya Bhanu' in r_pipe.text)
 r_exp = s.get('http://localhost:8080/billing/expenses', headers={'Host': 'test2.localhost'})
 print('EXPENSES LIST GET:', r_exp.status_code)
 
+# 7b. Attendance dashboard on test2.localhost
+r_test2_att = s.get('http://localhost:8080/attendance/dashboard', headers={'Host': 'test2.localhost'})
+print('TEST2.LOCALHOST ATTENDANCE DASHBOARD GET:', r_test2_att.status_code)
+
+r_test2_leave = s.get('http://localhost:8080/attendance/leave-requests', headers={'Host': 'test2.localhost'})
+print('TEST2.LOCALHOST LEAVE REQUESTS GET:', r_test2_leave.status_code)
+print('Leaked Sindhu S in leave requests:', 'Sindhu S' in r_test2_leave.text)
+print('Leaked Divyashree A in leave requests:', 'Divyashree' in r_test2_leave.text)
+r_test2_newbatch = s.get('http://localhost:8080/attendance/batches/new', headers={'Host': 'test2.localhost'})
+print('TEST2.LOCALHOST CREATE BATCH FORM GET:', r_test2_newbatch.status_code, 'Has 12-hour select:', 'start_period' in r_test2_newbatch.text)
+
+r_test2_assign = s.get('http://localhost:8080/attendance/batches/370/assign-students', headers={'Host': 'test2.localhost'})
+print('TEST2.LOCALHOST ASSIGN STUDENTS GET:', r_test2_assign.status_code)
+print('Leaked Global IT student 1516720 Madava Lead1 in assign students:', 'Madava Lead1' in r_test2_assign.text)
+
+r_test2_mark = s.get('http://localhost:8080/attendance/mark-attendance', headers={'Host': 'test2.localhost'})
+print('TEST2.LOCALHOST MARK ATTENDANCE GET:', r_test2_mark.status_code)
+print('Leaked Global IT branch "Head Office" in mark attendance:', 'Head Office' in r_test2_mark.text)
+print('Leaked Global IT branch "Hoskote Branch" in mark attendance:', 'Hoskote Branch' in r_test2_mark.text)
+
+r_test2_pattern = s.get('http://localhost:8080/attendance/attendance-pattern', headers={'Host': 'test2.localhost'})
+print('TEST2.LOCALHOST ATTENDANCE PATTERN GET:', r_test2_pattern.status_code)
+print('Leaked Global IT branch "Head Office" in attendance pattern:', 'Head Office' in r_test2_pattern.text)
+print('Leaked Global IT branch "Hoskote Branch" in attendance pattern:', 'Hoskote Branch' in r_test2_pattern.text)
+
+# 8. Primary Admin Login & Phase 6 Endpoints
+s_admin = requests.Session()
+r_adm_login = s_admin.get('http://localhost:8080/login')
+m_adm = re.search(r'meta name="csrf-token" content="([^"]+)"', r_adm_login.text)
+csrf_adm = m_adm.group(1) if m_adm else ''
+
+r_adm_post = s_admin.post(
+    'http://localhost:8080/login',
+    data={'csrf_token': csrf_adm, 'username': 'admin', 'password': 'adminpassword123'},
+    allow_redirects=True
+)
+
+r_att_dash = s_admin.get('http://localhost:8080/attendance/dashboard')
+print('PRIMARY ADMIN ATTENDANCE DASHBOARD GET:', r_att_dash.status_code)
+
+r_att_batches = s_admin.get('http://localhost:8080/attendance/batches')
+print('PRIMARY ADMIN ATTENDANCE BATCHES GET:', r_att_batches.status_code)
+
+r_att_leaves = s_admin.get('http://localhost:8080/attendance/leave-requests')
+print('PRIMARY ADMIN ATTENDANCE LEAVE REQUESTS GET:', r_att_leaves.status_code)
+
+r_rep_dash = s_admin.get('http://localhost:8080/reports/')
+print('PRIMARY ADMIN REPORTS DASHBOARD GET:', r_rep_dash.status_code)
+
+r_rep_daily = s_admin.get('http://localhost:8080/reports/daily')
+print('PRIMARY ADMIN REPORTS DAILY GET:', r_rep_daily.status_code)
+
+r_rep_monthly = s_admin.get('http://localhost:8080/reports/attendance/monthly')
+print('PRIMARY ADMIN REPORTS MONTHLY ATTENDANCE GET:', r_rep_monthly.status_code)
+
+r_rep_export = s_admin.get('http://localhost:8080/reports/export/students')
+print('PRIMARY ADMIN REPORTS EXPORT STUDENTS CSV GET:', r_rep_export.status_code)
+
 # 2. Student Login
 s2 = requests.Session()
 r3 = s2.get('http://localhost:8080/student/login', headers={'Host': 'test2.localhost'})

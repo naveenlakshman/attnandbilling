@@ -1,13 +1,13 @@
 import os
 import mimetypes
 from io import BytesIO
+from datetime import datetime, timedelta, timezone
 
 from flask import Flask, send_file, send_from_directory, session, abort, redirect, url_for, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 from extensions import csrf, limiter
 from config import Config
-from db import get_conn
-from db import init_db, get_company_profile
+from db import get_conn, init_db, get_company_profile
 from services.storage import get_storage_service
 from modules.leads.routes import leads_bp
 from modules.billing.routes import billing_bp
@@ -23,22 +23,42 @@ from modules.website import website_bp
 from modules.platform_admin import platform_admin_bp
 from modules.core.utils import login_required
 from services.tenant_context import init_tenant_context
-from datetime import datetime, timedelta, timezone
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 def format_datetime(value):
-    """Jinja2 filter to format ISO datetime to user-friendly format"""
+    """Jinja2 filter to format ISO datetime/date string to dd-MMM-yyyy hh:mm AM/PM or dd-MMM-yyyy format"""
+    if not value:
+        return ""
+    val_str = str(value).strip()
+    try:
+        if 'T' in val_str or ' ' in val_str:
+            dt = datetime.fromisoformat(val_str)
+            return dt.strftime("%d-%b-%Y %I:%M %p")  # 25-Jul-2026 01:20 PM
+        elif ':' in val_str and len(val_str) <= 8:
+            parts = val_str.split(':')
+            dt = datetime(2026, 1, 1, int(parts[0]), int(parts[1]))
+            return dt.strftime("%I:%M %p")  # 10:30 AM
+        else:
+            dt = datetime.strptime(val_str, "%Y-%m-%d")
+            return dt.strftime("%d-%b-%Y")  # 25-Jul-2026
+    except (ValueError, AttributeError):
+        return val_str
+
+def format_time(value):
+    """Jinja2 filter to format 24-hour HH:MM time to 12-hour hh:mm AM/PM"""
     if not value:
         return ""
     try:
-        # Handle ISO format datetime (2026-03-23T12:32:00)
-        if 'T' in str(value):
-            dt = datetime.fromisoformat(value)
-            return dt.strftime("%d-%b-%Y %I:%M %p")  # 23-Mar-2026 12:32 PM
-        # Handle date-only format (2026-03-23)
-        else:
-            dt = datetime.strptime(str(value), "%Y-%m-%d")
-            return dt.strftime("%d-%b-%Y")  # 23-Mar-2026
-    except (ValueError, AttributeError):
+        val_str = str(value).strip()
+        parts = val_str.split(':')
+        if len(parts) >= 2:
+            h = int(parts[0])
+            m = int(parts[1])
+            dt = datetime(2026, 1, 1, h, m)
+            return dt.strftime("%I:%M %p")
+        return val_str
+    except Exception:
         return str(value)
 
 def to_ist_time(value):
@@ -51,11 +71,9 @@ def to_ist_time(value):
         else:
             dt = datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
         ist = dt + timedelta(hours=5, minutes=30)
-        return ist.strftime("%I:%M %p")  # e.g. 12:23 PM
+        return ist.strftime("%I:%M %p")
     except (ValueError, AttributeError):
         return str(value)[11:16]
-
-IST = timezone(timedelta(hours=5, minutes=30))
 
 def format_ist_datetime(value, output_format=None):
     """Convert a stored UTC datetime to IST with an optional strftime format."""
@@ -158,7 +176,20 @@ def create_app():
             return None
         if request.endpoint in secondary_tenant_safe_endpoints:
             return None
-        if request.endpoint and (request.endpoint.startswith("leads.") or request.endpoint.startswith("students.") or request.endpoint.startswith("website.") or request.endpoint.startswith("billing.")):
+        if request.endpoint and (
+            request.endpoint.startswith("leads.")
+            or request.endpoint.startswith("students.")
+            or request.endpoint.startswith("website.")
+            or request.endpoint.startswith("billing.")
+            or request.endpoint.startswith("attendance.")
+            or request.endpoint.startswith("reports.")
+            or request.endpoint.startswith("lms_admin.")
+            or request.endpoint.startswith("exams.")
+            or request.endpoint.startswith("certificates.")
+            or request.endpoint.startswith("baddebt.")
+            or request.endpoint.startswith("assets.")
+            or request.endpoint.startswith("import_export.")
+        ):
             return None
         abort(403)
 
@@ -322,7 +353,6 @@ def create_app():
     def serve_content(filename):
         """Serve uploaded content files"""
         try:
-            # Security: only serve from the uploads/content directory
             upload_path = os.path.join(Config.UPLOAD_FOLDER)
             return send_from_directory(upload_path, filename)
         except Exception as e:
@@ -357,6 +387,7 @@ def create_app():
 
     # Register Jinja2 filters
     app.jinja_env.filters['format_datetime'] = format_datetime
+    app.jinja_env.filters['format_time'] = format_time
     app.jinja_env.filters['to_ist_time'] = to_ist_time
     app.jinja_env.filters['format_ist_datetime'] = format_ist_datetime
     app.jinja_env.filters['basename'] = os.path.basename
@@ -379,7 +410,6 @@ def create_app():
     @app.context_processor
     def inject_company():
         return {"company": get_company_profile()}
-
     @app.context_processor
     def inject_student_profile_score():
         student_id = session.get('student_id')

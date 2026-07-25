@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, jsonif
 from datetime import datetime, timedelta, timezone
 from db import get_conn, log_activity
 from functools import wraps
+from services.tenant_context import get_current_institute_id
 
 attendance_bp = Blueprint('attendance', __name__)
 
@@ -82,14 +83,15 @@ def dashboard():
             # If user can't view all branches, use their assigned branch
             working_branch_id = user['branch_id']
         
+        current_inst = get_current_institute_id(default=1)
         # Get all branches for the dropdown (only if user can view all branches)
         available_branches = []
         if user['can_view_all_branches']:
             cur.execute("""
                 SELECT id, branch_name FROM branches 
-                WHERE is_active = 1 
+                WHERE is_active = 1 AND institute_id = ?
                 ORDER BY branch_name ASC
-            """)
+            """, (current_inst,))
             available_branches = cur.fetchall()
         
         # Get available trainers for the trainer filter dropdown
@@ -97,11 +99,12 @@ def dashboard():
             SELECT DISTINCT u.id, u.full_name
             FROM batches b
             JOIN users u ON b.trainer_id = u.id
-            WHERE b.status = 'active'
+            JOIN branches br ON b.branch_id = br.id
+            WHERE b.status = 'active' AND br.institute_id = ?
             AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
             AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
         """
-        trainer_filter_params = [today, today]
+        trainer_filter_params = [current_inst, today, today]
         if not user['can_view_all_branches']:
             trainer_filter_query += " AND b.branch_id = ?"
             trainer_filter_params.append(user['branch_id'])
@@ -145,6 +148,7 @@ def dashboard():
                 LEFT JOIN users u ON b.trainer_id = u.id
                 LEFT JOIN branches br ON b.branch_id = br.id
                 WHERE b.status = 'active'
+                AND br.institute_id = ?
                 AND (b.trainer_id = ? OR ? = 0)
                 AND (
                     b.start_date IS NULL 
@@ -155,7 +159,7 @@ def dashboard():
                     OR date(b.end_date) >= date(?)
                 )
                 ORDER BY b.start_time ASC
-            """, (selected_trainer_id, selected_trainer_id, today, today))
+            """, (current_inst, selected_trainer_id, selected_trainer_id, today, today))
         else:
             # Non-admin users see only their branch
             cur.execute("""
@@ -394,6 +398,7 @@ def list_batches():
         if not trainer_filter and session.get('role') != 'admin':
             trainer_filter = str(user_id)
         
+        current_inst = get_current_institute_id(default=1)
         # Build query
         query = """
             SELECT b.id, b.batch_name, c.course_name, b.start_date, b.end_date, 
@@ -404,9 +409,9 @@ def list_batches():
             LEFT JOIN courses c ON b.course_id = c.id
             LEFT JOIN users u ON b.trainer_id = u.id
             LEFT JOIN branches br ON b.branch_id = br.id
-            WHERE 1=1
+            WHERE br.institute_id = ?
         """
-        params = []
+        params = [current_inst]
         
         # Add branch filter
         if not user['can_view_all_branches']:
@@ -433,7 +438,7 @@ def list_batches():
         
         # Get all branches for filter dropdown
         if user['can_view_all_branches']:
-            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
             branches = cur.fetchall()
         else:
             branches = []
@@ -443,9 +448,10 @@ def list_batches():
             SELECT DISTINCT u.id, u.full_name
             FROM batches b
             JOIN users u ON b.trainer_id = u.id
-            WHERE 1=1
+            JOIN branches br ON b.branch_id = br.id
+            WHERE br.institute_id = ?
         """
-        trainer_params = []
+        trainer_params = [current_inst]
         if not user['can_view_all_branches']:
             trainer_query += " AND b.branch_id = ?"
             trainer_params.append(user['branch_id'])
@@ -487,6 +493,8 @@ def create_batch():
         cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
         
+        current_inst = get_current_institute_id(default=1)
+        
         if request.method == 'POST':
             # Get form data
             batch_name = request.form.get('batch_name', '').strip()
@@ -506,6 +514,26 @@ def create_batch():
             if not branch_id:
                 return render_template('attendance/batch_form.html', error="Branch is required",
                                      courses=[], trainers=[], branches=[], user=user), 400
+            
+            # Ensure branch belongs to current institute
+            branch_chk = cur.execute("SELECT id, opening_time, closing_time FROM branches WHERE id = ? AND institute_id = ?", (branch_id, current_inst)).fetchone()
+            if not branch_chk:
+                return render_template('attendance/batch_form.html', error="Invalid branch for this institute",
+                                     courses=[], trainers=[], branches=[], user=user), 400
+
+            # Validate operating hours if configured for branch
+            op_time = branch_chk['opening_time']
+            cl_time = branch_chk['closing_time']
+            if op_time and start_time and start_time < op_time:
+                return render_template('attendance/batch_form.html', error=f"Start time ({start_time}) cannot be earlier than branch opening time ({op_time})",
+                                     courses=[], trainers=[], branches=[], user=user), 400
+            if cl_time and end_time and end_time > cl_time:
+                return render_template('attendance/batch_form.html', error=f"End time ({end_time}) cannot be later than branch closing time ({cl_time})",
+                                     courses=[], trainers=[], branches=[], user=user), 400
+            if start_time and end_time and end_time <= start_time:
+                return render_template('attendance/batch_form.html', error="End time must be after start time",
+                                     courses=[], trainers=[], branches=[], user=user), 400
+
             if not start_date:
                 return render_template('attendance/batch_form.html', error="Start date is required",
                                      courses=[], trainers=[], branches=[], user=user), 400
@@ -548,22 +576,30 @@ def create_batch():
         cur.execute("""
             SELECT id, full_name FROM users 
             WHERE role = 'staff' AND is_active = 1 
+              AND (branch_id IN (SELECT id FROM branches WHERE institute_id = ?) OR branch_id IS NULL)
             ORDER BY full_name ASC
-        """)
+        """, (current_inst,))
         trainers = cur.fetchall()
         
         # Get branches
         if user['can_view_all_branches']:
-            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+            cur.execute("SELECT id, branch_name, opening_time, closing_time FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
             branches = cur.fetchall()
         else:
-            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1", 
-                       (user['branch_id'],))
+            cur.execute("SELECT id, branch_name, opening_time, closing_time FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?", 
+                       (user['branch_id'], current_inst))
             branches = cur.fetchall()
         
+        branches = [dict(b) for b in branches]
+        openings = [b['opening_time'] for b in branches if b.get('opening_time')]
+        closings = [b['closing_time'] for b in branches if b.get('closing_time')]
+        inst_opening = min(openings) if openings else '08:00'
+        inst_closing = max(closings) if closings else '20:00'
+
         return render_template('attendance/batch_form.html',
                              batch=None, courses=courses, trainers=trainers, 
-                             branches=branches, user=user)
+                             branches=branches, inst_opening=inst_opening,
+                             inst_closing=inst_closing, user=user)
     
     finally:
         conn.close()
@@ -781,12 +817,13 @@ def edit_batch(batch_id):
             trainer_id = request.form.get('trainer_id') or None
             status = request.form.get('status', 'active')
 
+            current_inst = get_current_institute_id(default=1)
             def _edit_error(msg):
                 cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name ASC")
                 _courses = cur.fetchall()
                 cur.execute("SELECT id, full_name FROM users WHERE role = 'staff' AND is_active = 1 ORDER BY full_name ASC")
                 _trainers = cur.fetchall()
-                cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+                cur.execute("SELECT id, branch_name, opening_time, closing_time FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
                 _branches = cur.fetchall()
                 return render_template('attendance/batch_form.html', batch=batch,
                                        error=msg, courses=_courses, trainers=_trainers,
@@ -795,6 +832,19 @@ def edit_batch(batch_id):
             # Validate
             if not batch_name:
                 return _edit_error("Batch name is required")
+            
+            # Validate branch operating hours
+            branch_info = cur.execute("SELECT opening_time, closing_time FROM branches WHERE id = ?", (batch['branch_id'],)).fetchone()
+            if branch_info:
+                op_time = branch_info['opening_time']
+                cl_time = branch_info['closing_time']
+                if op_time and start_time and start_time < op_time:
+                    return _edit_error(f"Start time ({start_time}) cannot be earlier than branch opening time ({op_time})")
+                if cl_time and end_time and end_time > cl_time:
+                    return _edit_error(f"End time ({end_time}) cannot be later than branch closing time ({cl_time})")
+                if start_time and end_time and end_time <= start_time:
+                    return _edit_error("End time must be after start time")
+
             if not start_date:
                 return _edit_error("Start date is required")
             if not end_date:
@@ -824,6 +874,7 @@ def edit_batch(batch_id):
                 return _edit_error(str(e))
         
         # GET request - show form
+        current_inst = get_current_institute_id(default=1)
         cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name ASC")
         courses = cur.fetchall()
         
@@ -831,16 +882,23 @@ def edit_batch(batch_id):
         trainers = cur.fetchall()
         
         if user['can_view_all_branches']:
-            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+            cur.execute("SELECT id, branch_name, opening_time, closing_time FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
             branches = cur.fetchall()
         else:
-            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1",
-                       (user['branch_id'],))
+            cur.execute("SELECT id, branch_name, opening_time, closing_time FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?",
+                       (user['branch_id'], current_inst))
             branches = cur.fetchall()
         
+        branches = [dict(b) for b in branches]
+        openings = [b['opening_time'] for b in branches if b.get('opening_time')]
+        closings = [b['closing_time'] for b in branches if b.get('closing_time')]
+        inst_opening = min(openings) if openings else '08:00'
+        inst_closing = max(closings) if closings else '20:00'
+
         return render_template('attendance/batch_form.html',
                              batch=batch, courses=courses, trainers=trainers,
-                             branches=branches, edit=True, user=user)
+                             branches=branches, inst_opening=inst_opening,
+                             inst_closing=inst_closing, edit=True, user=user)
     
     finally:
         conn.close()
@@ -905,14 +963,15 @@ def assign_students(batch_id):
         cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
         
-        # Get batch
+        current_inst = get_current_institute_id(default=1)
+        # Get batch - verify branch belongs to current institute
         cur.execute("""
-            SELECT b.id, b.batch_name, c.course_name, b.branch_id, br.branch_name
+            SELECT b.id, b.batch_name, b.course_id, c.course_name, b.branch_id, br.branch_name
             FROM batches b
             LEFT JOIN courses c ON b.course_id = c.id
             LEFT JOIN branches br ON b.branch_id = br.id
-            WHERE b.id = ?
-        """, (batch_id,))
+            WHERE b.id = ? AND br.institute_id = ?
+        """, (batch_id, current_inst))
         
         batch = cur.fetchone()
         if not batch:
@@ -928,33 +987,80 @@ def assign_students(batch_id):
                    s.student_code, s.full_name, s.phone
             FROM student_batches sb
             JOIN students s ON sb.student_id = s.id
-            WHERE sb.batch_id = ?
+            WHERE sb.batch_id = ? AND s.institute_id = ?
             ORDER BY sb.joined_on DESC
-        """, (batch_id,))
+        """, (batch_id, current_inst))
         
         assigned_students = cur.fetchall()
         assigned_student_ids = [s['student_id'] for s in assigned_students]
-        
-        # Get available students (active students not in this batch, from same branch)
+
+        # Determine compatible course IDs if batch has a course assigned
+        batch_course_id = batch['course_id']
+        compatible_course_ids = set()
+        if batch_course_id:
+            compatible_course_ids.add(batch_course_id)
+            
+            # 1. LMS Program Mappings (lms_course_program_map)
+            cur.execute("""
+                SELECT DISTINCT cpm2.course_id
+                FROM lms_course_program_map cpm1
+                JOIN lms_course_program_map cpm2 ON cpm1.program_id = cpm2.program_id
+                WHERE cpm1.course_id = ?
+            """, (batch_course_id,))
+            for r in cur.fetchall():
+                compatible_course_ids.add(r['course_id'])
+
+            # 2. Combo / Sub-course mappings (e.g. DFA <-> CCOM, Tally, Advance Excel)
+            cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1")
+            all_inst_courses = cur.fetchall()
+            
+            batch_cname = (batch['course_name'] or '').upper()
+            is_dfa = 'DFA' in batch_cname or 'DIPLOMA IN FINANCIAL' in batch_cname
+            is_sub_combo = any(k in batch_cname for k in ['CCOM', 'TALLY', 'EXCEL', 'ACCOUNTING'])
+
+            for c in all_inst_courses:
+                c_name_upper = (c['course_name'] or '').upper()
+                if is_dfa:
+                    if 'DFA' in c_name_upper or any(k in c_name_upper for k in ['CCOM', 'TALLY', 'EXCEL', 'ACCOUNTING']):
+                        compatible_course_ids.add(c['id'])
+                elif is_sub_combo:
+                    if 'DFA' in c_name_upper or 'DIPLOMA IN FINANCIAL' in c_name_upper:
+                        compatible_course_ids.add(c['id'])
+
+        # Build SQL condition for course compatibility
+        course_clause = ""
+        course_params = []
+        if batch_course_id and compatible_course_ids:
+            c_placeholders = ','.join('?' * len(compatible_course_ids))
+            course_clause = f"""
+                AND s.id IN (
+                    SELECT DISTINCT i.student_id
+                    FROM invoices i
+                    JOIN invoice_items ii ON ii.invoice_id = i.id
+                    WHERE i.institute_id = ? AND ii.course_id IN ({c_placeholders})
+                )
+            """
+            course_params = [current_inst, *compatible_course_ids]
+
+        # Get available students (active students from current institute & batch's branch matching course, not in this batch)
+        exclude_clause = ""
+        exclude_params = []
         if assigned_student_ids:
             placeholders = ','.join('?' * len(assigned_student_ids))
-            cur.execute(f"""
-                SELECT s.id, s.student_code, s.full_name, s.phone, s.email
-                FROM students s
-                WHERE s.status = 'active'
-                AND s.branch_id = ?
-                AND s.id NOT IN ({placeholders})
-                ORDER BY s.full_name ASC
-            """, (batch['branch_id'], *assigned_student_ids))
-        else:
-            cur.execute("""
-                SELECT s.id, s.student_code, s.full_name, s.phone, s.email
-                FROM students s
-                WHERE s.status = 'active'
-                AND s.branch_id = ?
-                ORDER BY s.full_name ASC
-            """, (batch['branch_id'],))
-        
+            exclude_clause = f" AND s.id NOT IN ({placeholders})"
+            exclude_params = list(assigned_student_ids)
+
+        query = f"""
+            SELECT s.id, s.student_code, s.full_name, s.phone, s.email
+            FROM students s
+            WHERE s.status = 'active'
+            AND s.institute_id = ?
+            AND s.branch_id = ?
+            {course_clause}
+            {exclude_clause}
+            ORDER BY s.full_name ASC
+        """
+        cur.execute(query, [current_inst, batch['branch_id'], *course_params, *exclude_params])
         available_students = cur.fetchall()
         
         if request.method == 'POST':
@@ -1116,18 +1222,25 @@ def mark_attendance():
         if not attendance_date:
             attendance_date = datetime.now().strftime("%Y-%m-%d")
         
-        # Get branches
+        current_inst = get_current_institute_id(default=1)
+        # Get branches for active institute
         if user['can_view_all_branches']:
-            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
         else:
-            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1",
-                       (user['branch_id'],))
+            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?",
+                       (user['branch_id'], current_inst))
         
         branches = cur.fetchall()
+        valid_branch_ids = [b['id'] for b in branches]
         
-        # Default to user's branch if not specified
-        if not branch_id:
-            branch_id = user['branch_id']
+        # Default to user's branch if valid, else first branch of active institute
+        if not branch_id or int(branch_id) not in valid_branch_ids:
+            if user['branch_id'] in valid_branch_ids:
+                branch_id = user['branch_id']
+            elif valid_branch_ids:
+                branch_id = valid_branch_ids[0]
+            else:
+                branch_id = None
         else:
             branch_id = int(branch_id)
         
@@ -1497,12 +1610,13 @@ def daily_report():
         if batch_id is None:
             batch_id = 'all'
         
+        current_inst = get_current_institute_id(default=1)
         # Get branches
         if user['can_view_all_branches']:
-            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
         else:
-            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1",
-                       (user['branch_id'],))
+            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?",
+                       (user['branch_id'], current_inst))
         
         branches = cur.fetchall()
         
@@ -1718,12 +1832,13 @@ def monthly_summary():
                 to_date = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
             to_date = to_date.strftime("%Y-%m-%d")
         
+        current_inst = get_current_institute_id(default=1)
         # Get branches
         if user['can_view_all_branches']:
-            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
         else:
-            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1",
-                       (user['branch_id'],))
+            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?",
+                       (user['branch_id'], current_inst))
         
         branches = cur.fetchall()
         
@@ -1868,12 +1983,13 @@ def defaulters():
         followup_status = request.args.get('followup_status')
         threshold = float(request.args.get('threshold', 75))  # Default 75% attendance
         
+        current_inst = get_current_institute_id(default=1)
         # Get branches
         if user['can_view_all_branches']:
-            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
         else:
-            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1",
-                       (user['branch_id'],))
+            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?",
+                       (user['branch_id'], current_inst))
         
         branches = cur.fetchall()
         
@@ -2101,12 +2217,13 @@ def followups():
         from_date = request.args.get('from_date')
         to_date = request.args.get('to_date')
         
+        current_inst = get_current_institute_id(default=1)
         # Get branches
         if user['can_view_all_branches']:
-            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
         else:
-            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1",
-                       (user['branch_id'],))
+            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?",
+                       (user['branch_id'], current_inst))
         
         branches = cur.fetchall()
         
@@ -2486,10 +2603,11 @@ def batch_planner():
         can_view_all = session.get('can_view_all_branches', 1)
         user_branch_id = session.get('branch_id')
 
+        current_inst = get_current_institute_id(default=1)
         if can_view_all:
-            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (current_inst,))
         else:
-            cur.execute("SELECT * FROM branches WHERE id = ? AND is_active = 1", (user_branch_id,))
+            cur.execute("SELECT * FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?", (user_branch_id, current_inst))
         branches = cur.fetchall()
 
         selected_branch_id = request.args.get('branch_id', type=int)
@@ -2765,11 +2883,12 @@ def attendance_pattern():
         cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
 
+        current_inst = get_current_institute_id(default=1)
         # Branch list
         if user['can_view_all_branches']:
-            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name ASC")
+            cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
         else:
-            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1", (user['branch_id'],))
+            cur.execute("SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?", (user['branch_id'], current_inst))
         branches = cur.fetchall()
 
         # Resolve selected branch
@@ -2810,17 +2929,19 @@ def attendance_pattern():
                 SELECT b.id, b.batch_name, c.course_name
                 FROM batches b
                 LEFT JOIN courses c ON b.course_id = c.id
-                WHERE b.branch_id = ? AND b.status = 'active'
+                JOIN branches br ON b.branch_id = br.id
+                WHERE b.branch_id = ? AND b.status = 'active' AND br.institute_id = ?
                 ORDER BY b.start_time ASC
-            """, (selected_branch_id,))
+            """, (selected_branch_id, current_inst))
         else:
             cur.execute("""
                 SELECT b.id, b.batch_name, c.course_name
                 FROM batches b
                 LEFT JOIN courses c ON b.course_id = c.id
-                WHERE b.status = 'active'
+                JOIN branches br ON b.branch_id = br.id
+                WHERE b.status = 'active' AND br.institute_id = ?
                 ORDER BY b.start_time ASC
-            """)
+            """, (current_inst,))
         batches = cur.fetchall()
 
         # Students in selected batch (or all students across branch if no batch)
@@ -2896,7 +3017,8 @@ def leave_requests():
     conn = get_conn()
     cur = conn.cursor()
     try:
-        # Fetch all leave requests, newest first; join student info for display
+        current_inst = get_current_institute_id(default=1)
+        # Fetch leave requests for current institute only
         cur.execute("""
             SELECT lr.*,
                    s.full_name AS student_name,
@@ -2911,14 +3033,15 @@ def leave_requests():
                 FROM student_batches sb
                 JOIN batches b ON b.id = sb.batch_id
                 LEFT JOIN users u ON u.id = b.trainer_id
-                                WHERE b.trainer_id IS NOT NULL
+                WHERE b.trainer_id IS NOT NULL
                 GROUP BY sb.student_id
             ) tn ON tn.student_id = lr.student_id
             LEFT JOIN users u ON u.id = lr.reviewed_by
+            WHERE s.institute_id = ?
             ORDER BY
                 CASE lr.status WHEN 'pending' THEN 0 ELSE 1 END,
                 lr.created_at DESC
-        """)
+        """, (current_inst,))
         all_requests = cur.fetchall()
 
         # Split into pending and non-pending for template convenience
@@ -2951,10 +3074,14 @@ def leave_request_action(leave_id):
 
     conn = get_conn()
     try:
-        # Confirm the leave request exists before updating
-        row = conn.execute(
-            "SELECT id, student_id FROM leave_requests WHERE id = ?", (leave_id,)
-        ).fetchone()
+        current_inst = get_current_institute_id(default=1)
+        # Confirm the leave request exists for current institute before updating
+        row = conn.execute("""
+            SELECT lr.id, lr.student_id
+            FROM leave_requests lr
+            JOIN students s ON s.id = lr.student_id
+            WHERE lr.id = ? AND s.institute_id = ?
+        """, (leave_id, current_inst)).fetchone()
 
         if not row:
             flash('Leave request not found.', 'danger')
