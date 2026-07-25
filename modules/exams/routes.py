@@ -6,6 +6,7 @@ from flask import flash, redirect, render_template, request, session, url_for
 
 from db import get_conn, log_activity
 from modules.core.utils import lms_content_manager_required
+from services.tenant_context import get_current_institute_id
 from . import exams_bp
 
 
@@ -404,6 +405,7 @@ def _latest_final_exam_application(cur, student_id, program_id):
 
 
 def _get_final_exam_application(cur, application_id):
+    current_inst = get_current_institute_id(default=1)
     return cur.execute(
         """
             SELECT
@@ -419,9 +421,9 @@ def _get_final_exam_application(cur, application_id):
             JOIN students s ON s.id = app.student_id
             LEFT JOIN lms_programs lp ON lp.id = app.course_id
             LEFT JOIN courses c ON c.id = lp.course_id
-            WHERE app.id = ?
+            WHERE app.id = ? AND s.institute_id = ?
         """,
-        (application_id,),
+        (application_id, current_inst),
     ).fetchone()
 
 
@@ -1243,6 +1245,7 @@ def final_exam_apply():
 @exams_bp.route("/lms_admin/final-exam/applications", methods=["GET"])
 @lms_content_manager_required
 def final_exam_applications():
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -1273,6 +1276,7 @@ def final_exam_applications():
                 LEFT JOIN certificates cert ON cert.student_id = app.student_id 
                                            AND cert.course_id = c.id 
                                            AND cert.status = 'Active'
+                WHERE s.institute_id = ?
                 ORDER BY
                     CASE app.status
                         WHEN 'PENDING' THEN 0
@@ -1280,7 +1284,8 @@ def final_exam_applications():
                         ELSE 2
                     END,
                     app.applied_on DESC
-            """
+            """,
+            (current_inst,)
         ).fetchall()
     finally:
         conn.close()

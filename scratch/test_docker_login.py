@@ -84,6 +84,19 @@ print('TEST2.LOCALHOST ATTENDANCE PATTERN GET:', r_test2_pattern.status_code)
 print('Leaked Global IT branch "Head Office" in attendance pattern:', 'Head Office' in r_test2_pattern.text)
 print('Leaked Global IT branch "Hoskote Branch" in attendance pattern:', 'Hoskote Branch' in r_test2_pattern.text)
 
+r_test2_lms = s.get('http://localhost:8080/lms_admin/dashboard', headers={'Host': 'test2.localhost'})
+print('TEST2.LOCALHOST LMS DASHBOARD GET:', r_test2_lms.status_code)
+print('Leaked Global IT programs (17 active programs):', '>17<' in r_test2_lms.text)
+
+r_test2_fin = s.get('http://localhost:8080/billing/dashboard', headers={'Host': 'test2.localhost'})
+print('TEST2.LOCALHOST FINANCE DASHBOARD GET:', r_test2_fin.status_code)
+
+r_test2_rep = s.get('http://localhost:8080/reports/', headers={'Host': 'test2.localhost'})
+print('TEST2.LOCALHOST REPORTS DASHBOARD GET:', r_test2_rep.status_code)
+
+r_test2_usr = s.get('http://localhost:8080/users', headers={'Host': 'test2.localhost'})
+print('TEST2.LOCALHOST USERS GET:', r_test2_usr.status_code)
+
 # 8. Primary Admin Login & Phase 6 Endpoints
 s_admin = requests.Session()
 r_adm_login = s_admin.get('http://localhost:8080/login')

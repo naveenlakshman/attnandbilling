@@ -1476,6 +1476,69 @@ def init_db():
             cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN master_topic_id INTEGER")
         if "updated_at" not in last_activity_cols:
             cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN updated_at TEXT")
+    # --- Phase 7 Migration: LMS & Exams Multi-Tenant Scoping ---
+    lms_tenant_tables = [
+        "lms_programs",
+        "lms_assignments",
+        "lms_assignment_submissions",
+        "lms_batch_program_access",
+        "lms_student_program_access",
+        "lms_student_topic_progress",
+        "lms_master_topic_progress",
+        "lms_final_exam_applications",
+        "lms_final_exam_attempts",
+        "lms_chapter_mock_attempts",
+    ]
+    for tbl in lms_tenant_tables:
+        try:
+            cur.execute(f"SELECT institute_id FROM {tbl} LIMIT 1")
+        except Exception:
+            try:
+                cur.execute(f"ALTER TABLE {tbl} ADD COLUMN institute_id INT DEFAULT 1")
+            except Exception:
+                pass
+
+    # Backfill institute_id from student/batch tables where available
+    cur.execute("""
+        UPDATE lms_assignment_submissions
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_assignment_submissions.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_batch_program_access
+        SET institute_id = COALESCE((SELECT institute_id FROM batches WHERE batches.id = lms_batch_program_access.batch_id), 1)
+        WHERE batch_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_student_program_access
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_student_program_access.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_student_topic_progress
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_student_topic_progress.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_master_topic_progress
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_master_topic_progress.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_final_exam_applications
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_final_exam_applications.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_final_exam_attempts
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_final_exam_attempts.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_chapter_mock_attempts
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_chapter_mock_attempts.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
 
     cur.execute("""
         UPDATE student_program_last_activity

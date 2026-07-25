@@ -19,6 +19,7 @@ from werkzeug.utils import secure_filename
 from config import Config, DB_PATH
 from modules.core.utils import login_required, admin_required, lms_content_manager_required
 from services.storage import get_storage_service
+from services.tenant_context import get_current_institute_id
 from modules.lms_admin.publishing import get_program_publishing_readiness
 from modules.lms_admin.editorial import (
     apply_revision_snapshot, decode_revision, ensure_baseline_revision,
@@ -879,12 +880,13 @@ def exit_demo():
 @login_required
 def dashboard():
     """LMS content workspace for administrators and staff."""
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     try:
         cur = conn.cursor()
         
         # Get counts for dashboard metrics
-        cur.execute("SELECT COUNT(*) as count FROM lms_programs WHERE is_deleted = 0 AND slug != ?", (_MASTER_BRIDGE_PROGRAM_SLUG,))
+        cur.execute("SELECT COUNT(*) as count FROM lms_programs WHERE is_deleted = 0 AND slug != ? AND institute_id = ?", (_MASTER_BRIDGE_PROGRAM_SLUG, current_inst))
         total_programs = cur.fetchone()['count']
         
         cur.execute("SELECT COUNT(*) as count FROM lms_master_chapters WHERE status = 'active'")
@@ -919,8 +921,8 @@ def dashboard():
         cur.execute("""
             SELECT COUNT(*) AS count
             FROM lms_programs
-            WHERE is_deleted = 0 AND slug != ? AND is_published = 0
-        """, (_MASTER_BRIDGE_PROGRAM_SLUG,))
+            WHERE is_deleted = 0 AND slug != ? AND is_published = 0 AND institute_id = ?
+        """, (_MASTER_BRIDGE_PROGRAM_SLUG, current_inst))
         draft_programs = cur.fetchone()['count']
         
         cur.execute("SELECT COUNT(*) as count FROM lms_mock_tests")
@@ -928,9 +930,10 @@ def dashboard():
 
         cur.execute("""
             SELECT COUNT(*) as count
-            FROM lms_final_exam_applications
-            WHERE status = 'PENDING'
-        """)
+            FROM lms_final_exam_applications app
+            JOIN students s ON s.id = app.student_id
+            WHERE app.status = 'PENDING' AND s.institute_id = ?
+        """, (current_inst,))
         pending_final_exam_applications = cur.fetchone()['count']
         
         # Get recent LMS activity (last 10 records)
@@ -1026,20 +1029,21 @@ def list_programs():
             LEFT JOIN courses c ON lp.course_id = c.id
         """
 
+        current_inst = get_current_institute_id(default=1)
         # Active programs
         cur.execute(_program_select + """
-            WHERE lp.slug != ? AND lp.is_deleted = 0
+            WHERE lp.slug != ? AND lp.is_deleted = 0 AND lp.institute_id = ?
             ORDER BY lp.created_at DESC
-        """, (_MASTER_BRIDGE_PROGRAM_SLUG,))
+        """, (_MASTER_BRIDGE_PROGRAM_SLUG, current_inst))
         programs = cur.fetchall()
 
         # Deleted programs (admin only)
         deleted_programs = []
         if session.get('role') == 'admin':
             cur.execute(_program_select + """
-                WHERE lp.slug != ? AND lp.is_deleted = 1
+                WHERE lp.slug != ? AND lp.is_deleted = 1 AND lp.institute_id = ?
                 ORDER BY lp.updated_at DESC
-            """, (_MASTER_BRIDGE_PROGRAM_SLUG,))
+            """, (_MASTER_BRIDGE_PROGRAM_SLUG, current_inst))
             deleted_programs = cur.fetchall()
 
         return render_template('lms_programs.html', programs=programs, deleted_programs=deleted_programs)
