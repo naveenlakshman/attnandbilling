@@ -55,8 +55,29 @@ def get_all_tables_data(current_inst=1):
 
         where_clause = ""
         params = []
-        if "institute_id" in columns:
+        if table_name == "institutes":
+            where_clause = "WHERE id = ?"
+            params = [current_inst]
+        elif "institute_id" in columns:
             where_clause = "WHERE institute_id = ?"
+            params = [current_inst]
+        elif table_name in ("installment_plans", "invoice_items", "invoice_payments"):
+            where_clause = "WHERE invoice_id IN (SELECT id FROM invoices WHERE institute_id = ?)"
+            params = [current_inst]
+        elif table_name in ("leave_requests", "student_batches", "student_notes", "student_documents", "student_qualifications", "lms_student_topic_progress", "lms_topic_progress"):
+            where_clause = "WHERE student_id IN (SELECT id FROM students WHERE institute_id = ?)"
+            params = [current_inst]
+        elif table_name == "followups":
+            where_clause = "WHERE lead_id IN (SELECT id FROM leads WHERE institute_id = ?)"
+            params = [current_inst]
+        elif table_name == "attendance_records":
+            where_clause = "WHERE student_id IN (SELECT id FROM students WHERE institute_id = ?) OR batch_id IN (SELECT id FROM batches WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?))"
+            params = [current_inst, current_inst]
+        elif table_name in ("lms_program_chapters", "lms_chapters"):
+            where_clause = "WHERE program_id IN (SELECT id FROM lms_programs WHERE institute_id = ?)"
+            params = [current_inst]
+        elif table_name == "lms_topics":
+            where_clause = "WHERE chapter_id IN (SELECT lc.id FROM lms_chapters lc WHERE lc.program_id IN (SELECT id FROM lms_programs WHERE institute_id = ?))"
             params = [current_inst]
         elif "branch_id" in columns:
             where_clause = "WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?)"
@@ -76,6 +97,22 @@ def get_all_tables_data(current_inst=1):
                     elif hasattr(v, 'isoformat'):
                         row_dict[k] = str(v)
                 data.append(row_dict)
+
+        # Fallback for company_profile when empty for tenant
+        if table_name == "company_profile" and not data:
+            from db import get_company_profile
+            prof = get_company_profile(current_inst)
+            if prof:
+                prof_dict = dict(prof)
+                for k, v in prof_dict.items():
+                    if isinstance(v, (bytes, bytearray)):
+                        prof_dict[k] = "<binary>"
+                    elif hasattr(v, 'isoformat'):
+                        prof_dict[k] = str(v)
+                data.append(prof_dict)
+                for k in prof_dict.keys():
+                    if k not in columns:
+                        columns.append(k)
         
         tables_data[table_name] = {
             'columns': columns,

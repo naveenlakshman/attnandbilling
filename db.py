@@ -1525,6 +1525,7 @@ def init_db():
         "certificate_audit_logs",
         "activity_logs",
         "bad_debt_writeoffs",
+        "company_profile",
     ]
     for tbl in lms_tenant_tables:
         cols = _get_table_columns_set(cur, tbl)
