@@ -145,7 +145,7 @@
       <div class="mr-sticky-sidebar">
         <!-- Back Link -->
         <div class="mb-3">
-          <a href="{{ url_for('reports.attendance_monthly_report', month=date_str[:7], branch_id=selected_branch_id) }}" class="btn-back w-100 justify-content-center">
+          <a href="{{ url_for('attendance.monthly_summary', month=date_str[:7], branch_id=selected_branch_id) }}" class="btn-back w-100 justify-content-center">
             &larr; Back to Monthly Summary
           </a>
         </div>

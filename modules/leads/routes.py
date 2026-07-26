@@ -2198,9 +2198,9 @@ def reports():
     lost_reason_rows = cur.fetchall()
 
     # Monthly conversion trend (use conversion_date, fall back to updated_at)
-    trend_where = ["l.is_deleted = 0", "l.status = 'converted'",
+    trend_where = ["l.is_deleted = 0", "l.status = 'converted'", "l.institute_id = ?",
                    "COALESCE(l.conversion_date, substr(l.updated_at,1,10)) IS NOT NULL"]
-    trend_params = []
+    trend_params = [current_inst]
 
     if user_id_filter:
         trend_where.append("l.assigned_to_id = ?")
@@ -2282,16 +2282,17 @@ def reports():
     cur.execute("""
         SELECT id, full_name, username, is_active
         FROM users
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY full_name
-    """)
+    """, (current_inst,))
     all_users = cur.fetchall()
 
     # User stats only when no specific user filter is selected
     user_stats = []
     if not user_id_filter:
         for user in all_users:
-            user_where = ["assigned_to_id = ?", "is_deleted = 0"]
-            user_params = [user["id"]]
+            user_where = ["assigned_to_id = ?", "is_deleted = 0", "institute_id = ?"]
+            user_params = [user["id"], current_inst]
 
             if date_from:
                 user_where.append("substr(created_at, 1, 10) >= ?")

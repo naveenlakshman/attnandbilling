@@ -1619,15 +1619,21 @@ def daily_report():
                        (user['branch_id'], current_inst))
         
         branches = cur.fetchall()
+        valid_branch_ids = [b['id'] for b in branches]
         
         # Default branch
-        if not branch_id:
-            branch_id = user['branch_id']
+        try:
+            req_branch = int(branch_id) if branch_id else None
+        except Exception:
+            req_branch = None
+
+        if not req_branch or (valid_branch_ids and req_branch not in valid_branch_ids):
+            branch_id = valid_branch_ids[0] if valid_branch_ids else user['branch_id']
         else:
-            branch_id = int(branch_id)
+            branch_id = req_branch
         
         # Check branch access
-        if not user['can_view_all_branches'] and branch_id != user['branch_id']:
+        if not user['can_view_all_branches'] and valid_branch_ids and branch_id not in valid_branch_ids:
             return redirect(url_for('attendance.daily_report'))
         
         # Get batches for branch

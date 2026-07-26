@@ -411,6 +411,14 @@ def create_app():
     def inject_company():
         return {"company": get_company_profile()}
     @app.context_processor
+    def inject_platform_admin():
+        from services.tenant_context import get_current_institute_id
+        current_inst = get_current_institute_id(default=1)
+        return {
+            "is_platform_admin": current_inst == 1,
+            "current_institute_id": current_inst
+        }
+    @app.context_processor
     def inject_student_profile_score():
         student_id = session.get('student_id')
         if not student_id:

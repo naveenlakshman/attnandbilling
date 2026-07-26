@@ -29,13 +29,21 @@
               <textarea class="form-control" name="description" rows="4" maxlength="1200" placeholder="Optional overview">{{ chapter.description if chapter else '' }}</textarea>
             </div>
 
-            <div class="mb-4">
+            <div class="mb-3">
               <label class="form-label">Status</label>
               <select class="form-select" name="status">
                 <option value="active" {% if not chapter or chapter.status == 'active' %}selected{% endif %}>Active</option>
                 <option value="archived" {% if chapter and chapter.status == 'archived' %}selected{% endif %}>Archived</option>
               </select>
             </div>
+
+            {% if session.get('institute_id', 1) == 1 or session.get('role') == 'admin' %}
+            <div class="mb-4 form-check form-switch bg-light p-3 rounded border">
+              <input class="form-check-input ms-0 me-2" type="checkbox" name="is_shared" id="isSharedSwitch" value="1" {% if not chapter or chapter.is_shared %}checked{% endif %}>
+              <label class="form-check-label fw-bold" for="isSharedSwitch">Share with all institutes</label>
+              <div class="form-text text-muted">When checked, all tenant institutes can view and attach this master chapter to their programs. Uncheck to keep private to Platform Admin.</div>
+            </div>
+            {% endif %}
 
             <div class="d-flex gap-2">
               <button type="submit" class="btn btn-primary">{% if chapter %}Save Changes{% else %}Create Chapter{% endif %}</button>

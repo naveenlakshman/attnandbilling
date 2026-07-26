@@ -127,7 +127,7 @@
           Certificates
         </a>
         <a class="nav-link {{ 'active' if ep == 'lms_admin.progress_dashboard' else '' }}" href="{{ url_for('lms_admin.progress_dashboard') }}">Student Progress</a>
-        {% if is_admin %}
+        {% if is_admin and is_platform_admin %}
           <div class="erp-subsection">System Configuration</div>
           <a class="nav-link {{ 'active' if ep == 'lms_admin.phase6_rollout_view' else '' }}" href="{{ url_for('lms_admin.phase6_rollout_view') }}">Legacy Migration</a>
           <a class="nav-link {{ 'active' if ep in ['lms_admin.list_course_mappings', 'lms_admin.manage_course_mapping'] else '' }}" href="{{ url_for('lms_admin.list_course_mappings') }}">Course Mapping</a>

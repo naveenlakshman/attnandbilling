@@ -2461,6 +2461,7 @@ def lms_attendance_gap():
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         
         # Determine accessible branch context
         cur.execute("SELECT id, branch_id, can_view_all_branches, role FROM users WHERE id = ?", (user_id,))
@@ -2492,12 +2493,13 @@ def lms_attendance_gap():
         # Load dropdown filters
         if can_view_all:
             branches = cur.execute(
-                "SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name"
+                "SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name",
+                (current_inst,)
             ).fetchall()
         else:
             branches = cur.execute(
-                "SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1",
-                (user_branch_id,)
+                "SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?",
+                (user_branch_id, current_inst)
             ).fetchall()
 
         if selected_branch_id:
@@ -2512,11 +2514,13 @@ def lms_attendance_gap():
             ).fetchall()
         else:
             batches = cur.execute(
-                "SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name"
+                "SELECT id, batch_name FROM batches WHERE status = 'active' AND branch_id IN (SELECT id FROM branches WHERE institute_id = ?) ORDER BY batch_name",
+                (current_inst,)
             ).fetchall()
 
         programs = cur.execute(
-            "SELECT id, program_name FROM lms_programs WHERE is_active = 1 AND is_deleted = 0 ORDER BY program_name"
+            "SELECT id, program_name FROM lms_programs WHERE is_active = 1 AND is_deleted = 0 AND institute_id = ? ORDER BY program_name",
+            (current_inst,)
         ).fetchall()
 
         # Enforce program enrollment explicit check
@@ -2531,12 +2535,14 @@ def lms_attendance_gap():
 
         where_clauses = [
             "s.status = 'active'",
+            "s.institute_id = ?",
             "lp.is_active = 1",
             "lp.is_deleted = 0",
+            "lp.institute_id = ?",
             _enroll_check,
             "EXISTS (SELECT 1 FROM student_batches sb_act WHERE sb_act.student_id = s.id AND sb_act.status = 'active')"
         ]
-        params = []
+        params = [current_inst, current_inst]
 
         if selected_program_id:
             where_clauses.append("lp.id = ?")

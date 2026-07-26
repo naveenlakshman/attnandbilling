@@ -254,9 +254,38 @@ def student_certificate_view(cert_id):
         )
     finally:
         conn.close()
+from db import get_conn
+from services.tenant_context import get_current_institute_id
+from modules.core.utils import lms_content_manager_required, admin_required
+from . import certificates_bp
+
+logger = logging.getLogger("app.certificates")
+from .services import EligibilityService, CertificateService
+from .verifier import verify_certificate_number
+from .generator import get_certificate_render_data
+from .audit import log_certificate_action
 
 # ---------------------------------------------------------------------------
-# Admin Panel - Certificate Dashboard & List
+# Student Portal Auth Helper
+# ---------------------------------------------------------------------------
+def _student_required():
+    if "student_id" not in session:
+        return True, redirect(url_for("students.login"))
+    return False, None
+
+def _get_client_info():
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ip and ',' in ip:
+        ip = ip.split(',')[0].strip()
+    ua = request.headers.get('User-Agent', '')
+    return ip, ua
+
+# ---------------------------------------------------------------------------
+# Public Verification Route
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Admin Panel - Certificate List / Search
 # ---------------------------------------------------------------------------
 @certificates_bp.route("/lms_admin/certificates", methods=["GET"])
 @lms_content_manager_required
@@ -264,18 +293,19 @@ def admin_list():
     conn = get_conn()
     try:
         cur = conn.cursor()
-        
+        current_inst = get_current_institute_id(default=1)
+
         # 1. Fetch search filters
         student_filter = request.args.get("student", "").strip()
         course_filter = request.args.get("course", "").strip()
         branch_filter = request.args.get("branch", "").strip()
         status_filter = request.args.get("status", "").strip()
-        
+
         # Build dynamic query
         query_parts = ["SELECT c.*, cr.course_name, s.full_name AS student_name, s.student_code, b.branch_name FROM certificates c JOIN students s ON s.id = c.student_id JOIN courses cr ON cr.id = c.course_id LEFT JOIN branches b ON b.id = s.branch_id"]
-        where_parts = []
-        params = []
-        
+        where_parts = ["(c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))"]
+        params = [current_inst, current_inst]
+
         if student_filter:
             where_parts.append("(s.full_name LIKE ? OR s.student_code LIKE ?)")
             params.extend([f"%{student_filter}%", f"%{student_filter}%"])
@@ -288,33 +318,31 @@ def admin_list():
         if status_filter:
             where_parts.append("c.status = ?")
             params.append(status_filter)
-            
-        if where_parts:
-            query_parts.append("WHERE " + " AND ".join(where_parts))
-            
+
+        query_parts.append("WHERE " + " AND ".join(where_parts))
         query_parts.append("ORDER BY c.issue_date DESC, c.id DESC")
         certs = cur.execute(" ".join(query_parts), params).fetchall()
 
         # 2. Fetch metrics
-        total_issued = cur.execute("SELECT COUNT(*) AS count FROM certificates").fetchone()["count"]
-        
+        total_issued = cur.execute("SELECT COUNT(*) AS count FROM certificates c JOIN students s ON s.id = c.student_id WHERE (c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))", (current_inst, current_inst)).fetchone()["count"]
+
         today_date = datetime.date.today().isoformat()
-        issued_today = cur.execute("SELECT COUNT(*) AS count FROM certificates WHERE issue_date = ?", (today_date,)).fetchone()["count"]
-        
+        issued_today = cur.execute("SELECT COUNT(*) AS count FROM certificates c JOIN students s ON s.id = c.student_id WHERE c.issue_date = ? AND (c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))", (today_date, current_inst, current_inst)).fetchone()["count"]
+
         this_month_prefix = today_date[:7] + "%"
-        issued_month = cur.execute("SELECT COUNT(*) AS count FROM certificates WHERE issue_date LIKE ?", (this_month_prefix,)).fetchone()["count"]
-        
-        revoked_count = cur.execute("SELECT COUNT(*) AS count FROM certificates WHERE status = 'Revoked'").fetchone()["count"]
-        reissued_count = cur.execute("SELECT COUNT(*) AS count FROM certificates WHERE status = 'Re-issued'").fetchone()["count"]
-        
+        issued_month = cur.execute("SELECT COUNT(*) AS count FROM certificates c JOIN students s ON s.id = c.student_id WHERE c.issue_date LIKE ? AND (c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))", (this_month_prefix, current_inst, current_inst)).fetchone()["count"]
+
+        revoked_count = cur.execute("SELECT COUNT(*) AS count FROM certificates c JOIN students s ON s.id = c.student_id WHERE c.status = 'Revoked' AND (c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))", (current_inst, current_inst)).fetchone()["count"]
+        reissued_count = cur.execute("SELECT COUNT(*) AS count FROM certificates c JOIN students s ON s.id = c.student_id WHERE c.status = 'Re-issued' AND (c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))", (current_inst, current_inst)).fetchone()["count"]
+
         # Operational verification metrics from audit log
-        verifications = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs WHERE action = 'Verified'").fetchone()["count"]
-        downloads = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs WHERE action = 'Downloaded'").fetchone()["count"]
-        prints = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs WHERE action = 'Printed'").fetchone()["count"]
-        views = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs WHERE action = 'Viewed'").fetchone()["count"]
+        verifications = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs cal JOIN certificates c ON c.id = cal.certificate_id JOIN students s ON s.id = c.student_id WHERE cal.action = 'Verified' AND (cal.institute_id = ? OR c.institute_id = ? OR s.institute_id = ?)", (current_inst, current_inst, current_inst)).fetchone()["count"]
+        downloads = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs cal JOIN certificates c ON c.id = cal.certificate_id JOIN students s ON s.id = c.student_id WHERE cal.action = 'Downloaded' AND (cal.institute_id = ? OR c.institute_id = ? OR s.institute_id = ?)", (current_inst, current_inst, current_inst)).fetchone()["count"]
+        prints = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs cal JOIN certificates c ON c.id = cal.certificate_id JOIN students s ON s.id = c.student_id WHERE cal.action = 'Printed' AND (cal.institute_id = ? OR c.institute_id = ? OR s.institute_id = ?)", (current_inst, current_inst, current_inst)).fetchone()["count"]
+        views = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs cal JOIN certificates c ON c.id = cal.certificate_id JOIN students s ON s.id = c.student_id WHERE cal.action = 'Viewed' AND (cal.institute_id = ? OR c.institute_id = ? OR s.institute_id = ?)", (current_inst, current_inst, current_inst)).fetchone()["count"]
 
         # Fetch branches and courses for dropdown filters
-        branches = cur.execute("SELECT branch_name FROM branches WHERE is_active = 1").fetchall()
+        branches = cur.execute("SELECT branch_name FROM branches WHERE is_active = 1 AND institute_id = ?", (current_inst,)).fetchall()
         courses = cur.execute("SELECT course_name FROM courses WHERE is_active = 1").fetchall()
 
         return render_template(

@@ -1113,7 +1113,8 @@ def list_master_chapters():
         if usage not in ('used', 'unused', 'all'):
             usage = 'all'
 
-        base_sql = """
+        current_inst = get_current_institute_id(default=1)
+        base_sql = f"""
                 SELECT
                     mc.id,
                     mc.title,
@@ -1121,12 +1122,16 @@ def list_master_chapters():
                     mc.status,
                     mc.created_at,
                     mc.updated_at,
+                    mc.institute_id,
+                    COALESCE(mc.is_shared, 1) AS is_shared,
                     COUNT(DISTINCT mt.id) AS topic_count,
-                    COUNT(DISTINCT pc.program_id) AS linked_program_count,
-                    GROUP_CONCAT(DISTINCT pc.program_id) AS linked_program_ids
+                    COUNT(DISTINCT lp.id) AS linked_program_count,
+                    GROUP_CONCAT(DISTINCT lp.id) AS linked_program_ids
                 FROM lms_master_chapters mc
                 LEFT JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
                 LEFT JOIN lms_program_chapters pc ON pc.master_chapter_id = mc.id
+                LEFT JOIN lms_programs lp ON lp.id = pc.program_id AND lp.institute_id = {current_inst} AND lp.is_deleted = 0
+                WHERE (mc.institute_id = {current_inst} OR COALESCE(mc.is_shared, 1) = 1 OR mc.institute_id = 1)
                 GROUP BY mc.id
         """
         filters = []
@@ -1160,6 +1165,7 @@ def list_master_chapters():
             "ORDER BY library.created_at DESC, library.id DESC LIMIT ? OFFSET ?",
             (*params, per_page, offset),
         ).fetchall()
+        current_inst = get_current_institute_id(default=1)
         cur.execute(
             """
                 SELECT id, program_name
@@ -1167,9 +1173,10 @@ def list_master_chapters():
                 WHERE is_deleted = 0
                   AND is_active = 1
                   AND slug != ?
+                  AND institute_id = ?
                 ORDER BY program_name ASC
             """,
-            (_MASTER_BRIDGE_PROGRAM_SLUG,)
+            (_MASTER_BRIDGE_PROGRAM_SLUG, current_inst)
         )
         programs = cur.fetchall()
         filters = {
@@ -1209,6 +1216,9 @@ def master_chapter_new():
             if status not in ('active', 'archived'):
                 status = 'active'
 
+            current_inst = get_current_institute_id(default=1)
+            is_shared = 1 if (current_inst == 1 and request.form.get('is_shared') == '1') else (1 if current_inst == 1 and 'is_shared' not in request.form else 0)
+
             now = datetime.now().isoformat(timespec='seconds')
             cur.execute(
                 """
@@ -1217,11 +1227,13 @@ def master_chapter_new():
                         description,
                         status,
                         created_by,
+                        institute_id,
+                        is_shared,
                         created_at,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (title, description, status, session.get('user_id'), now, now)
+                (title, description, status, session.get('user_id'), current_inst, is_shared, now, now)
             )
             chapter_id = cur.lastrowid
             conn.commit()
@@ -1249,17 +1261,18 @@ def master_chapter_edit(master_chapter_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         chapter = cur.execute(
             """
-                SELECT id, title, description, status, created_at, updated_at
+                SELECT id, title, description, status, institute_id, COALESCE(is_shared, 1) AS is_shared, created_at, updated_at
                 FROM lms_master_chapters
-                WHERE id = ?
+                WHERE id = ? AND (institute_id = ? OR COALESCE(is_shared, 1) = 1 OR institute_id = 1)
             """,
-            (master_chapter_id,)
+            (master_chapter_id, current_inst)
         ).fetchone()
 
         if not chapter:
-            flash('Master chapter not found.', 'danger')
+            flash('Master chapter not found or permission denied.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
 
         if request.method == 'POST':
@@ -1285,6 +1298,7 @@ def master_chapter_edit(master_chapter_id):
                     flash('This chapter cannot be archived while it is used by a published program.', 'warning')
                     return redirect(url_for('lms_admin.master_chapter_edit', master_chapter_id=master_chapter_id))
 
+            is_shared = 1 if (current_inst == 1 and request.form.get('is_shared') == '1') else (0 if current_inst != 1 else (chapter['is_shared'] if 'is_shared' not in request.form else 0))
             now = datetime.now().isoformat(timespec='seconds')
             cur.execute(
                 """
@@ -1292,10 +1306,11 @@ def master_chapter_edit(master_chapter_id):
                     SET title = ?,
                         description = ?,
                         status = ?,
+                        is_shared = ?,
                         updated_at = ?
                     WHERE id = ?
                 """,
-                (title, description, status, now, master_chapter_id)
+                (title, description, status, is_shared, now, master_chapter_id)
             )
             conn.commit()
 
@@ -3256,7 +3271,9 @@ def migrate_legacy_chapter_pilot(program_id, chapter_id):
 @lms_admin_bp.route('/phase6/rollout', methods=['GET'])
 @admin_required
 def phase6_rollout_view():
-    """Legacy migration dashboard: discover unmigrated legacy chapters by program."""
+    """Legacy migration dashboard: discover unmigrated legacy chapters by program (Platform Admin Only)."""
+    if get_current_institute_id(default=1) != 1:
+        abort(403)
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -3335,7 +3352,9 @@ def phase6_rollout_view():
 @lms_admin_bp.route('/phase6/rollout/migrate', methods=['POST'])
 @admin_required
 def phase6_rollout_migrate():
-    """Controlled migration for selected legacy chapters of one program."""
+    """Controlled migration for selected legacy chapters of one program (Platform Admin Only)."""
+    if get_current_institute_id(default=1) != 1:
+        abort(403)
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -6147,6 +6166,7 @@ def progress_dashboard():
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
 
         # ── Filter param extraction ──────────────────────────────────────
         f_branch_id  = request.args.get('branch_id',  '').strip()
@@ -6163,7 +6183,8 @@ def progress_dashboard():
 
         # ── Dropdown data for filter bar ────────────────────────────────
         branches = cur.execute(
-            "SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name"
+            "SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name",
+            (current_inst,)
         ).fetchall()
 
         if branch_id:
@@ -6173,11 +6194,13 @@ def progress_dashboard():
             ).fetchall()
         else:
             filter_batches = cur.execute(
-                "SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name"
+                "SELECT id, batch_name FROM batches WHERE status = 'active' AND branch_id IN (SELECT id FROM branches WHERE institute_id = ?) ORDER BY batch_name",
+                (current_inst,)
             ).fetchall()
 
         programs = cur.execute(
-            "SELECT id, program_name FROM lms_programs WHERE is_active = 1 AND is_deleted = 0 ORDER BY program_name"
+            "SELECT id, program_name FROM lms_programs WHERE is_active = 1 AND is_deleted = 0 AND institute_id = ? ORDER BY program_name",
+            (current_inst,)
         ).fetchall()
 
         staff_users = cur.execute(
@@ -6186,8 +6209,9 @@ def progress_dashboard():
                JOIN batches b ON b.trainer_id = u.id
                JOIN student_batches sb ON sb.batch_id = b.id AND sb.status = 'active'
                JOIN students s ON s.id = sb.student_id AND s.status = 'active'
-               WHERE u.is_active = 1
-               ORDER BY u.full_name"""
+               WHERE u.is_active = 1 AND s.institute_id = ?
+               ORDER BY u.full_name""",
+            (current_inst,)
         ).fetchall()
 
         # ── WHERE clause builder ────────────────────────────────────────
@@ -6224,11 +6248,13 @@ def progress_dashboard():
 
         where_clauses = [
             "s.status = 'active'",
+            "s.institute_id = ?",
             "lp.is_active = 1",
             "lp.is_deleted = 0",
+            "lp.institute_id = ?",
             _enroll_check,
         ]
-        params = []
+        params = [current_inst, current_inst]
 
         if program_id:
             where_clauses.append("lp.id = ?")
@@ -7128,7 +7154,9 @@ def view_batch_progress(batch_id):
 @lms_admin_bp.route('/course-mapping', methods=['GET'])
 @admin_required
 def list_course_mappings():
-    """List all course-to-program mappings grouped by course."""
+    """List all course-to-program mappings grouped by course (Platform Admin Only)."""
+    if get_current_institute_id(default=1) != 1:
+        abort(403)
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -7676,6 +7704,7 @@ def all_assignments():
         current_user_id = actor['id']
         admin_branch_limited = is_admin and int(actor['can_view_all_branches'] or 0) != 1
 
+        current_inst = get_current_institute_id(default=1)
         requested_trainer_id = request.args.get('trainer_id', type=int)
         requested_batch_id = request.args.get('batch_id', type=int)
         requested_program_id = request.args.get('program_id', type=int)
@@ -7692,10 +7721,11 @@ def all_assignments():
                 SELECT u.id, u.full_name
                 FROM users u
                 WHERE u.role = 'staff' AND u.is_active = 1
+                  AND u.institute_id = ?
                   AND (? = 0 OR u.branch_id = ?)
                 ORDER BY u.full_name
                 """,
-                (1 if admin_branch_limited else 0, actor['branch_id'])
+                (current_inst, 1 if admin_branch_limited else 0, actor['branch_id'])
             ).fetchall()
         else:
             trainers = conn.execute(
@@ -7703,8 +7733,9 @@ def all_assignments():
                 SELECT u.id, u.full_name
                 FROM users u
                 WHERE u.id = ? AND u.role = 'staff' AND u.is_active = 1
+                  AND u.institute_id = ?
                 """,
-                (current_user_id,)
+                (current_user_id, current_inst)
             ).fetchall()
 
         if selected_trainer_id and selected_trainer_id not in {row['id'] for row in trainers}:
@@ -7717,6 +7748,7 @@ def all_assignments():
             LEFT JOIN courses c ON c.id = lp.course_id
             WHERE lp.is_active = 1
               AND lp.is_deleted = 0
+              AND lp.institute_id = ?
               AND EXISTS (
                   SELECT 1
                   FROM lms_program_chapters pc
@@ -7724,7 +7756,8 @@ def all_assignments():
                     AND pc.is_visible = 1
               )
             ORDER BY lp.program_name
-            """
+            """,
+            (current_inst,)
         ).fetchall()
 
         if selected_program_id:
@@ -7735,6 +7768,7 @@ def all_assignments():
                 WHERE lp.id = ?
                   AND lp.is_active = 1
                   AND lp.is_deleted = 0
+                  AND lp.institute_id = ?
                   AND EXISTS (
                       SELECT 1
                       FROM lms_program_chapters pc
@@ -7742,7 +7776,7 @@ def all_assignments():
                         AND pc.is_visible = 1
                   )
                 """,
-                (selected_program_id,)
+                (selected_program_id, current_inst)
             ).fetchone()
             if not valid_program:
                 selected_program_id = None
@@ -7750,8 +7784,8 @@ def all_assignments():
         # Active batch dropdown data, narrowed by trainer and selected program.
         # For assignment review, program scope is based on submitted assignments
         # tied to that program's linked master chapters, not batch-program access.
-        batch_where = ["LOWER(COALESCE(b.status, '')) = 'active'"]
-        batch_params = []
+        batch_where = ["LOWER(COALESCE(b.status, '')) = 'active'", "b.branch_id IN (SELECT id FROM branches WHERE institute_id = ?)"]
+        batch_params = [current_inst]
         if admin_branch_limited:
             batch_where.append("b.branch_id = ?")
             batch_params.append(actor['branch_id'])
@@ -7788,8 +7822,8 @@ def all_assignments():
 
         # Validate batch scope. If invalid for current trainer scope, ignore safely.
         if selected_batch_id:
-            valid_batch_where = ["b.id = ?", "LOWER(COALESCE(b.status, '')) = 'active'"]
-            valid_batch_params = [selected_batch_id]
+            valid_batch_where = ["b.id = ?", "LOWER(COALESCE(b.status, '')) = 'active'", "b.branch_id IN (SELECT id FROM branches WHERE institute_id = ?)"]
+            valid_batch_params = [selected_batch_id, current_inst]
             if admin_branch_limited:
                 valid_batch_where.append("b.branch_id = ?")
                 valid_batch_params.append(actor['branch_id'])
@@ -7850,8 +7884,9 @@ def all_assignments():
             scope_where = [
                 "sb.status = 'active'",
                 "LOWER(COALESCE(b.status, '')) = 'active'",
+                "s.institute_id = ?",
             ]
-            scope_params = []
+            scope_params = [current_inst]
             if admin_branch_limited:
                 scope_where.append("b.branch_id = ?")
                 scope_params.append(actor['branch_id'])
@@ -7902,8 +7937,9 @@ def all_assignments():
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
                 {program_join}
                 JOIN assignment_counts ac ON ac.assignment_id = a.id
+                WHERE (a.institute_id = ? OR (a.institute_id IS NULL AND 1 = ?))
             """
-            base_params = scope_params + program_params
+            base_params = scope_params + program_params + [current_inst, current_inst]
         else:
             base_sql = f"""
                 SELECT
@@ -7919,23 +7955,27 @@ def all_assignments():
                     (SELECT COUNT(*)
                      FROM lms_assignment_submissions s
                      WHERE s.assignment_id = a.id
-                       AND s.is_latest = 1) AS submission_count,
+                       AND s.is_latest = 1
+                       AND (s.institute_id = {current_inst} OR (s.institute_id IS NULL AND 1 = {current_inst}))) AS submission_count,
                     (SELECT COUNT(*)
                      FROM lms_assignment_submissions s
                      WHERE s.assignment_id = a.id
                        AND s.is_latest = 1
+                       AND (s.institute_id = {current_inst} OR (s.institute_id IS NULL AND 1 = {current_inst}))
                        AND COALESCE(s.review_status, 'submitted') IN ('accepted', 'rejected')) AS reviewed_count,
                     (SELECT COUNT(*)
                      FROM lms_assignment_submissions s
                      WHERE s.assignment_id = a.id
                        AND s.is_latest = 1
+                       AND (s.institute_id = {current_inst} OR (s.institute_id IS NULL AND 1 = {current_inst}))
                        AND COALESCE(s.review_status, 'submitted') = 'submitted') AS pending_count
                 FROM lms_assignments a
                 JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
                 {program_join}
+                WHERE (a.institute_id = ? OR (a.institute_id IS NULL AND 1 = ?))
             """
-            base_params = program_params
+            base_params = program_params + [current_inst, current_inst]
 
         review_filter = (request.args.get('review_filter') or 'all').strip().lower()
         if review_filter not in {'all', 'submissions', 'pending', 'reviewed'}:
@@ -8080,6 +8120,7 @@ def review_queue():
     conn = get_conn()
     try:
         actor = _current_lms_actor(conn)
+        current_inst = get_current_institute_id(default=1)
         if not actor:
             abort(403)
         is_admin = actor['role'] == 'admin'
@@ -8094,20 +8135,21 @@ def review_queue():
             trainers = conn.execute(
                 """SELECT id, full_name FROM users
                    WHERE role = 'staff' AND is_active = 1
+                     AND institute_id = ?
                      AND (? = 0 OR branch_id = ?)
                    ORDER BY full_name""",
-                (1 if admin_branch_limited else 0, actor['branch_id']),
+                (current_inst, 1 if admin_branch_limited else 0, actor['branch_id']),
             ).fetchall()
             if selected_trainer_id and selected_trainer_id not in {row['id'] for row in trainers}:
                 selected_trainer_id = None
         else:
             trainers = conn.execute(
-                "SELECT id, full_name FROM users WHERE id = ? AND is_active = 1",
-                (actor['id'],),
+                "SELECT id, full_name FROM users WHERE id = ? AND is_active = 1 AND institute_id = ?",
+                (actor['id'], current_inst),
             ).fetchall()
 
-        batch_where = ["LOWER(COALESCE(status, '')) = 'active'"]
-        batch_params = []
+        batch_where = ["LOWER(COALESCE(status, '')) = 'active'", "branch_id IN (SELECT id FROM branches WHERE institute_id = ?)"]
+        batch_params = [current_inst]
         if selected_trainer_id:
             batch_where.append('trainer_id = ?')
             batch_params.append(selected_trainer_id)
@@ -8125,14 +8167,15 @@ def review_queue():
             """SELECT lp.id, lp.program_name, c.course_name
                FROM lms_programs lp
                LEFT JOIN courses c ON c.id = lp.course_id
-               WHERE lp.is_active = 1 AND lp.is_deleted = 0
-               ORDER BY lp.program_name"""
+               WHERE lp.is_active = 1 AND lp.is_deleted = 0 AND lp.institute_id = ?
+               ORDER BY lp.program_name""",
+            (current_inst,)
         ).fetchall()
         if selected_program_id and selected_program_id not in {row['id'] for row in programs}:
             selected_program_id = None
 
-        scope_where = ['s.is_latest = 1']
-        scope_params = []
+        scope_where = ['s.is_latest = 1', '(s.institute_id = ? OR (s.institute_id IS NULL AND st.institute_id = ?))']
+        scope_params = [current_inst, current_inst]
         if selected_trainer_id:
             scope_where.append("""EXISTS (
                 SELECT 1 FROM student_batches sb_scope
@@ -8196,7 +8239,7 @@ def review_queue():
                     FROM lms_program_chapters pc_names
                     JOIN lms_programs lp_names ON lp_names.id = pc_names.program_id
                     WHERE pc_names.master_chapter_id = mt.master_chapter_id
-                      AND pc_names.is_visible = 1 AND lp_names.is_active = 1) AS program_names
+                      AND pc_names.is_visible = 1 AND lp_names.is_active = 1 AND lp_names.institute_id = {current_inst}) AS program_names
             FROM lms_assignment_submissions s
             JOIN lms_assignments a ON a.id = s.assignment_id
             JOIN lms_master_topics mt ON mt.id = a.master_topic_id

@@ -3,6 +3,7 @@ from datetime import datetime
 import time
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
+from services.tenant_context import get_current_institute_id
 
 baddebt_bp = Blueprint("baddebt", __name__)
 
@@ -15,6 +16,7 @@ def dashboard():
     """Display all bad debt write-offs"""
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     # Get all write-offs with related invoice and student details
     cur.execute("""
@@ -39,8 +41,9 @@ def dashboard():
         JOIN invoices i ON bw.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
         LEFT JOIN users u ON bw.authorized_by = u.id
+        WHERE (bw.institute_id = ? OR i.institute_id = ? OR s.institute_id = ?)
         ORDER BY bw.writeoff_date DESC
-    """)
+    """, (current_inst, current_inst, current_inst))
     write_offs = cur.fetchall()
 
     # Calculate totals
@@ -257,6 +260,7 @@ def create():
     # GET request - show form
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     # Get pre-selected invoice if passed from invoice view
     pre_selected_invoice = None
@@ -275,8 +279,8 @@ def create():
                     i.branch_id
                 FROM invoices i
                 JOIN students s ON i.student_id = s.id
-                WHERE i.id = ? AND i.status IN ('unpaid', 'partially_paid')
-            """, (invoice_id_param,))
+                WHERE i.id = ? AND i.status IN ('unpaid', 'partially_paid') AND (i.institute_id = ? OR s.institute_id = ?)
+            """, (invoice_id_param, current_inst, current_inst))
             pre_selected_invoice = cur.fetchone()
         except:
             pass
@@ -294,9 +298,9 @@ def create():
             i.branch_id
         FROM invoices i
         JOIN students s ON i.student_id = s.id
-        WHERE i.status IN ('unpaid', 'partially_paid')
+        WHERE i.status IN ('unpaid', 'partially_paid') AND (i.institute_id = ? OR s.institute_id = ?)
         ORDER BY i.invoice_no DESC
-    """)
+    """, (current_inst, current_inst))
     invoices = cur.fetchall()
 
     conn.close()

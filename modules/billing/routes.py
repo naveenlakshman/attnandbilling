@@ -753,6 +753,7 @@ def menu():
 def dashboard():
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     branch_id = request.args.get("branch_id", "").strip()
     period = request.args.get("period", "this_fy").strip()
@@ -810,34 +811,34 @@ def dashboard():
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     branches = cur.fetchall()
 
-    student_query = "SELECT COUNT(*) AS total_students FROM students WHERE substr(created_at, 1, 10) BETWEEN ? AND ?"
-    student_params = [start_date, end_date]
+    student_query = "SELECT COUNT(*) AS total_students FROM students WHERE substr(created_at, 1, 10) BETWEEN ? AND ? AND institute_id = ?"
+    student_params = [start_date, end_date, current_inst]
 
-    invoice_count_query = "SELECT COUNT(*) AS total_invoices FROM invoices WHERE parse_date(invoice_date) BETWEEN ? AND ?"
-    invoice_count_params = [start_date, end_date]
+    invoice_count_query = "SELECT COUNT(*) AS total_invoices FROM invoices WHERE parse_date(invoice_date) BETWEEN ? AND ? AND institute_id = ?"
+    invoice_count_params = [start_date, end_date, current_inst]
 
-    sales_query = "SELECT IFNULL(SUM(total_amount), 0) AS total_sales FROM invoices WHERE parse_date(invoice_date) BETWEEN ? AND ?"
-    sales_params = [start_date, end_date]
+    sales_query = "SELECT IFNULL(SUM(total_amount), 0) AS total_sales FROM invoices WHERE parse_date(invoice_date) BETWEEN ? AND ? AND institute_id = ?"
+    sales_params = [start_date, end_date, current_inst]
 
     receipt_query = """
         SELECT IFNULL(SUM(amount_received), 0) AS total_receipts
         FROM receipts
         JOIN invoices ON receipts.invoice_id = invoices.id
-        WHERE parse_date(receipts.receipt_date) BETWEEN ? AND ?
+        WHERE parse_date(receipts.receipt_date) BETWEEN ? AND ? AND (receipts.institute_id = ? OR invoices.institute_id = ?)
     """
-    receipt_params = [start_date, end_date]
+    receipt_params = [start_date, end_date, current_inst, current_inst]
 
     expense_query = """
         SELECT IFNULL(SUM(amount), 0) AS total_expenses
         FROM expenses
-        WHERE expense_date BETWEEN ? AND ?
+        WHERE expense_date BETWEEN ? AND ? AND institute_id = ?
     """
-    expense_params = [start_date, end_date]
+    expense_params = [start_date, end_date, current_inst]
 
     if branch_id:
         student_query += " AND branch_id = ?"
@@ -888,9 +889,9 @@ def dashboard():
             i.branch_id
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        WHERE ip.status IN ('pending', 'partially_paid', 'overdue')
+        WHERE ip.status IN ('pending', 'partially_paid', 'overdue') AND i.institute_id = ?
     """
-    aging_params = []
+    aging_params = [current_inst]
 
     if branch_id:
         aging_query += " AND (i.branch_id = ? OR i.branch_id IS NULL)"
@@ -970,9 +971,9 @@ def dashboard():
             invoice_date,
             total_amount
         FROM invoices
-        WHERE parse_date(invoice_date) BETWEEN ? AND ?
+        WHERE parse_date(invoice_date) BETWEEN ? AND ? AND institute_id = ?
     """
-    monthly_sales_params = [start_date, end_date]
+    monthly_sales_params = [start_date, end_date, current_inst]
 
     if branch_id:
         monthly_sales_query += " AND branch_id = ?"
@@ -1006,9 +1007,9 @@ def dashboard():
             IFNULL(SUM(receipts.amount_received), 0) AS total_amount
         FROM receipts
         JOIN invoices ON receipts.invoice_id = invoices.id
-        WHERE parse_date(receipts.receipt_date) BETWEEN ? AND ?
+        WHERE parse_date(receipts.receipt_date) BETWEEN ? AND ? AND (receipts.institute_id = ? OR invoices.institute_id = ?)
     """
-    monthly_receipts_params = [start_date, end_date]
+    monthly_receipts_params = [start_date, end_date, current_inst, current_inst]
 
     if branch_id:
         monthly_receipts_query += " AND invoices.branch_id = ?"
@@ -1027,9 +1028,9 @@ def dashboard():
             substr(expense_date, 1, 7) AS ym,
             IFNULL(SUM(amount), 0) AS total_amount
         FROM expenses
-        WHERE expense_date BETWEEN ? AND ?
+        WHERE expense_date BETWEEN ? AND ? AND institute_id = ?
     """
-    monthly_expenses_params = [start_date, end_date]
+    monthly_expenses_params = [start_date, end_date, current_inst]
 
     if branch_id:
         monthly_expenses_query += " AND branch_id = ?"
@@ -6843,6 +6844,7 @@ def receipt_send_sms(receipt_id):
 def receivables():
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     today = datetime.now().date().isoformat()
     branch_id = request.args.get("branch_id", "").strip()
@@ -6853,9 +6855,9 @@ def receivables():
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     branches = cur.fetchall()
 
     # Trainers for filter dropdown (only for admin)
@@ -6865,9 +6867,9 @@ def receivables():
             SELECT DISTINCT u.id, u.full_name
             FROM users u
             JOIN batches bt ON bt.trainer_id = u.id
-            WHERE bt.status = 'active'
+            WHERE bt.status = 'active' AND u.institute_id = ?
             ORDER BY u.full_name ASC
-        """)
+        """, (current_inst,))
         available_trainers = cur.fetchall()
 
     # Trainer filter SQL snippet (added to WHERE clause of each query)
@@ -6920,6 +6922,7 @@ def receivables():
         LEFT JOIN branches b
             ON i.branch_id = b.id
         WHERE ip.status != 'paid'
+          AND (i.institute_id = ? OR s.institute_id = ?)
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           AND (
@@ -6927,7 +6930,7 @@ def receivables():
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
           ) < i.total_amount
     """
-    past_dues_params = [today]
+    past_dues_params = [current_inst, current_inst, today]
 
     if branch_id:
         past_dues_query += " AND i.branch_id = ?"
@@ -6978,6 +6981,7 @@ def receivables():
         LEFT JOIN branches b
             ON i.branch_id = b.id
         WHERE ip.status != 'paid'
+          AND (i.institute_id = ? OR s.institute_id = ?)
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           AND (
@@ -6985,7 +6989,7 @@ def receivables():
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
           ) < i.total_amount
     """
-    todays_dues_params = [today]
+    todays_dues_params = [current_inst, current_inst, today]
 
     if branch_id:
         todays_dues_query += " AND i.branch_id = ?"
@@ -7036,6 +7040,7 @@ def receivables():
         LEFT JOIN branches b
             ON i.branch_id = b.id
         WHERE ip.status != 'paid'
+          AND (i.institute_id = ? OR s.institute_id = ?)
           AND parse_date(ip.due_date) > ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           AND (
@@ -7043,7 +7048,7 @@ def receivables():
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
           ) < i.total_amount
     """
-    upcoming_dues_params = [today]
+    upcoming_dues_params = [current_inst, current_inst, today]
 
     if branch_id:
         upcoming_dues_query += " AND i.branch_id = ?"
@@ -7085,6 +7090,7 @@ def receivables():
         JOIN students s
             ON i.student_id = s.id
         WHERE ip.status != 'paid'
+          AND (i.institute_id = ? OR s.institute_id = ?)
           AND parse_date(ip.due_date) >= ?
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
@@ -7094,6 +7100,8 @@ def receivables():
           ) < i.total_amount
     """
     monthly_expected_params = [
+        current_inst,
+        current_inst,
         current_month_start.isoformat(),
         receivables_window_end.isoformat(),
     ]
@@ -7606,6 +7614,7 @@ def activity_logs():
 
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     from_date = request.args.get("from_date", "").strip()
     to_date = request.args.get("to_date", "").strip()
@@ -7623,24 +7632,26 @@ def activity_logs():
     cur.execute("""
         SELECT id, full_name, username
         FROM users
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY full_name
-    """)
+    """, (current_inst,))
     users = cur.fetchall()
 
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     branches = cur.fetchall()
 
     cur.execute("""
-        SELECT DISTINCT module_name
-        FROM activity_logs
-        ORDER BY module_name
-    """)
+        SELECT DISTINCT al.module_name
+        FROM activity_logs al
+        LEFT JOIN users u ON al.user_id = u.id
+        WHERE (al.institute_id = ? OR (al.institute_id IS NULL AND u.institute_id = ?))
+        ORDER BY al.module_name
+    """, (current_inst, current_inst))
     modules = cur.fetchall()
 
     query = """
@@ -7655,8 +7666,9 @@ def activity_logs():
         LEFT JOIN branches
             ON activity_logs.branch_id = branches.id
         WHERE substr(activity_logs.created_at, 1, 10) BETWEEN ? AND ?
+          AND (activity_logs.institute_id = ? OR (activity_logs.institute_id IS NULL AND users.institute_id = ?))
     """
-    params = [from_date, to_date]
+    params = [from_date, to_date, current_inst, current_inst]
 
     if user_id:
         query += " AND activity_logs.user_id = ? "
