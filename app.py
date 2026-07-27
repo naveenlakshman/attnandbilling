@@ -259,6 +259,21 @@ def create_app():
             url += ("&" if "?" in url else "?") + qs
         return redirect(url)
 
+    @app.route('/static/images/certificate_templates/<path:filename>')
+    def serve_fallback_certificate_templates(filename):
+        if filename.startswith("certificates/"):
+            filename = filename.replace("certificates/", "", 1)
+        try:
+            storage_service = get_storage_service()
+            dest_path = f"certificates/{filename}"
+            if storage_service.file_exists(dest_path):
+                url = storage_service.generate_public_url(dest_path)
+                if url:
+                    return redirect_with_query(url)
+        except Exception:
+            pass
+        return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'certificate_templates'), filename)
+
     @app.route('/static/images/student_photos/<path:filename>')
     def serve_fallback_student_photos(filename):
         if filename.startswith("student_photos/"):
@@ -268,7 +283,7 @@ def create_app():
             dest_path = f"student_photos/{filename}"
             if storage_service.file_exists(dest_path):
                 url = storage_service.generate_public_url(dest_path)
-                if url.startswith("http"):
+                if url:
                     return redirect_with_query(url)
         except Exception:
             pass
@@ -281,12 +296,11 @@ def create_app():
             dest_path = f"lms/images/{filename}"
             if storage_service.file_exists(dest_path):
                 url = storage_service.generate_public_url(dest_path)
-                if url.startswith("http"):
+                if url:
                     return redirect_with_query(url)
         except Exception:
             pass
         return send_from_directory(os.path.join(app.root_path, 'static', 'lms', 'images'), filename)
-
 
     @app.route('/static/images/student_signatures/<path:filename>')
     def serve_fallback_student_signatures(filename):
@@ -297,7 +311,7 @@ def create_app():
             dest_path = f"signatures/{filename}"
             if storage_service.file_exists(dest_path):
                 url = storage_service.generate_public_url(dest_path)
-                if url.startswith("http"):
+                if url:
                     return redirect_with_query(url)
         except Exception:
             pass
@@ -312,41 +326,11 @@ def create_app():
             dest_path = f"logos/{filename}"
             if storage_service.file_exists(dest_path):
                 url = storage_service.generate_public_url(dest_path)
-                if url.startswith("http"):
+                if url:
                     return redirect_with_query(url)
         except Exception:
             pass
         return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'company_logo'), filename)
-
-    @app.route('/static/images/certificate_templates/<path:filename>')
-    def serve_fallback_certificate_templates(filename):
-        if filename.startswith("certificates/"):
-            filename = filename.replace("certificates/", "", 1)
-        try:
-            storage_service = get_storage_service()
-            dest_path = f"certificates/{filename}"
-            if storage_service.file_exists(dest_path):
-                url = storage_service.generate_public_url(dest_path)
-                if url.startswith("http"):
-                    return redirect_with_query(url)
-        except Exception:
-            pass
-        return send_from_directory(os.path.join(app.root_path, 'static', 'images', 'certificate_templates'), filename)
-
-    @app.route('/uploads/student_documents/<path:filename>')
-    def serve_fallback_student_documents(filename):
-        if filename.startswith("documents/"):
-            filename = filename.replace("documents/", "", 1)
-        try:
-            storage_service = get_storage_service()
-            dest_path = f"documents/{filename}"
-            if storage_service.file_exists(dest_path):
-                url = storage_service.generate_public_url(dest_path)
-                if url.startswith("http"):
-                    return redirect_with_query(url)
-        except Exception:
-            pass
-        return send_from_directory(os.path.join(app.root_path, 'uploads', 'student_documents'), filename)
 
     # File serving route for uploaded content
     @app.route('/uploads/content/<path:filename>')

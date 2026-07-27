@@ -1,5 +1,5 @@
 # pyrefly: ignore [missing-import]
-from flask import render_template, request, redirect, url_for, session, flash, current_app
+from flask import render_template, request, redirect, url_for, session, flash, current_app, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -69,8 +69,9 @@ def _mark_student_logged_in(student, mode='lab'):
     session.permanent = mode == 'mobile_app'
     session['student_id'] = student['id']
     session['student_name'] = student['full_name']
-    session['student_code'] = student['student_code']
-    session['institute_id'] = get_current_institute_id(default=1)
+    inst_id = student.get('institute_id') or get_current_institute_id(default=1)
+    session['institute_id'] = inst_id
+    session['student_institute_id'] = inst_id
     session['student_login_at'] = int(datetime.utcnow().timestamp())
     session['student_session_mode'] = mode
     session['student_force_password_change'] = (
@@ -1965,12 +1966,13 @@ def profile_request_update():
             
         # 3. Save pending request
         import json
+        inst_id = student['institute_id'] if student['institute_id'] else 1
         conn.execute(
             """
-            INSERT INTO student_profile_update_requests (student_id, requested_data, status)
-            VALUES (?, ?, 'PENDING')
+            INSERT INTO student_profile_update_requests (student_id, requested_data, status, institute_id)
+            VALUES (?, ?, 'PENDING', ?)
             """,
-            (student_id, json.dumps(requested_data))
+            (student_id, json.dumps(requested_data), inst_id)
         )
         conn.commit()
         flash('Your profile update request has been submitted for staff approval.', 'success')
@@ -1981,6 +1983,60 @@ def profile_request_update():
         conn.close()
         
     return redirect(url_for('students.profile'))
+
+
+@students_bp.route('/profile/save-signature', methods=['POST'])
+@student_login_required
+def save_signature():
+    """Save student or parent digital signature from student profile page."""
+    import os, base64
+    student_id = session['student_id']
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, student_code, full_name, institute_id FROM students WHERE id = ?", (student_id,))
+    student = cur.fetchone()
+    if not student:
+        conn.close()
+        return jsonify({"success": False, "error": "Student not found"}), 404
+
+    sig_type = request.form.get("sig_type", "").strip()   # "student" or "parent"
+    sig_data = request.form.get("sig_data", "").strip()   # base64 PNG data URL
+
+    if sig_type not in ("student", "parent"):
+        conn.close()
+        return jsonify({"success": False, "error": "Invalid signature type"}), 400
+    if not sig_data:
+        conn.close()
+        return jsonify({"success": False, "error": "No signature data"}), 400
+
+    try:
+        if ',' in sig_data:
+            sig_data = sig_data.split(',')[1]
+        sig_bytes = base64.b64decode(sig_data)
+
+        code = student["student_code"]
+        filename = f"signatures/{code}_{sig_type}_signature.png"
+        
+        storage_service = get_storage_service()
+        storage_service.upload_file(sig_bytes, filename, content_type="image/png")
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if sig_type == "student":
+            cur.execute(
+                "UPDATE students SET student_signature_filename=?, student_signature_date=?, updated_at=? WHERE id=?",
+                (filename, now, now, student_id)
+            )
+        else:
+            cur.execute(
+                "UPDATE students SET parent_signature_filename=?, parent_signature_date=?, updated_at=? WHERE id=?",
+                (filename, now, now, student_id)
+            )
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "filename": filename, "signed_at": now})
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @students_bp.route('/change-password', methods=['GET', 'POST'])

@@ -9488,3 +9488,174 @@ def admin_download_submission(submission_id):
         download_name=orig_name,
         mimetype=mimetype,
     )
+
+
+@lms_admin_bp.route("/profile-update-requests", methods=["GET", "POST"])
+@login_required
+def profile_update_requests():
+    """Review dashboard for student profile update requests."""
+    current_inst = get_current_institute_id(default=1)
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        
+        # Handle POST actions (Approve or Reject directly from review page)
+        if request.method == "POST":
+            action = request.form.get("action", "").strip()
+            request_id = request.form.get("request_id", "").strip()
+            
+            if action in ("approve", "reject") and request_id.isdigit():
+                req_id = int(request_id)
+                request_row = cur.execute(
+                    """
+                    SELECT req.*, s.full_name AS student_name, s.profile_approved_updates_count
+                    FROM student_profile_update_requests req
+                    JOIN students s ON s.id = req.student_id
+                    WHERE req.id = ? AND (req.institute_id = ? OR s.institute_id = ?)
+                    """,
+                    (req_id, current_inst, current_inst)
+                ).fetchone()
+                
+                if not request_row:
+                    flash("Profile update request not found.", "danger")
+                elif request_row["status"] != "PENDING":
+                    flash(f"This request has already been processed ({request_row['status']}).", "warning")
+                elif action == "approve":
+                    import json
+                    requested_data = json.loads(request_row["requested_data"] or "{}")
+                    student_id = request_row["student_id"]
+                    
+                    if request_row["profile_approved_updates_count"] >= 3:
+                        flash("Student has already reached the maximum limit of 3 approved profile updates.", "danger")
+                    else:
+                        if requested_data:
+                            fields = []
+                            params = []
+                            for field, val in requested_data.items():
+                                fields.append(f"`{field}` = ?")
+                                params.append(val)
+                            fields.append("profile_approved_updates_count = profile_approved_updates_count + 1")
+                            params.append(student_id)
+                            cur.execute(f"UPDATE students SET {', '.join(fields)} WHERE id = ?", params)
+                            
+                        now = datetime.now().isoformat(timespec="seconds")
+                        cur.execute(
+                            """
+                            UPDATE student_profile_update_requests
+                            SET status = 'APPROVED', processed_by = ?, processed_at = ?
+                            WHERE id = ?
+                            """,
+                            (session.get("user_id"), now, req_id)
+                        )
+                        conn.commit()
+                        flash(f"Approved profile update request for {request_row['student_name']}.", "success")
+                        log_activity(
+                            user_id=session.get("user_id"),
+                            branch_id=None,
+                            action_type="update",
+                            module_name="students",
+                            record_id=student_id,
+                            description=f"Approved profile update request #{req_id} for {request_row['student_name']}"
+                        )
+                elif action == "reject":
+                    rejection_reason = request.form.get("rejection_reason", "").strip() or "Not approved by administration"
+                    student_id = request_row["student_id"]
+                    now = datetime.now().isoformat(timespec="seconds")
+                    cur.execute(
+                        """
+                        UPDATE student_profile_update_requests
+                        SET status = 'REJECTED', rejection_reason = ?, processed_by = ?, processed_at = ?
+                        WHERE id = ?
+                        """,
+                        (rejection_reason, session.get("user_id"), now, req_id)
+                    )
+                    conn.commit()
+                    flash(f"Rejected profile update request for {request_row['student_name']}.", "info")
+                    log_activity(
+                        user_id=session.get("user_id"),
+                        branch_id=None,
+                        action_type="update",
+                        module_name="students",
+                        record_id=student_id,
+                        description=f"Rejected profile update request #{req_id} for {request_row['student_name']}: {rejection_reason}"
+                    )
+            return redirect(url_for("lms_admin.profile_update_requests", status=request.args.get("status", "PENDING")))
+
+        # GET method - fetch list
+        status_filter = request.args.get("status", "PENDING").strip().upper()
+        if status_filter not in ("PENDING", "APPROVED", "REJECTED", "ALL"):
+            status_filter = "PENDING"
+            
+        where_clauses = ["(req.institute_id = ? OR s.institute_id = ?)"]
+        params = [current_inst, current_inst]
+        
+        if status_filter != "ALL":
+            where_clauses.append("req.status = ?")
+            params.append(status_filter)
+            
+        where_sql = " AND ".join(where_clauses)
+        
+        requests_rows = cur.execute(
+            f"""
+            SELECT req.*,
+                   s.student_code, s.full_name AS student_name, s.phone AS student_phone, s.email AS student_email,
+                   s.full_name, s.phone, s.email, s.address, s.gender, s.education_level, s.qualification, s.employment_status,
+                   s.date_of_birth, s.parent_name, s.parent_contact, s.father_name, s.mother_name,
+                   s.tenth_institution, s.tenth_board, s.tenth_year, s.tenth_percentage,
+                   s.puc_institution, s.puc_board, s.puc_stream, s.puc_year, s.puc_percentage,
+                   b.branch_name, u.username AS reviewer_username
+            FROM student_profile_update_requests req
+            JOIN students s ON s.id = req.student_id
+            LEFT JOIN branches b ON s.branch_id = b.id
+            LEFT JOIN users u ON req.processed_by = u.id
+            WHERE {where_sql}
+            ORDER BY req.id DESC
+            """,
+            params
+        ).fetchall()
+        
+        # Format diffs
+        import json
+        formatted_requests = []
+        for r in requests_rows:
+            r_dict = dict(r)
+            req_data = json.loads(r_dict.get("requested_data") or "{}")
+            diffs = []
+            for field, new_val in req_data.items():
+                old_val = r_dict.get(field, "")
+                diffs.append({
+                    "field": field,
+                    "label": field.replace("_", " ").title(),
+                    "old_val": old_val if old_val is not None else "",
+                    "new_val": new_val
+                })
+            r_dict["diffs"] = diffs
+            formatted_requests.append(r_dict)
+            
+        # Counts for tabs
+        counts = cur.execute(
+            """
+            SELECT 
+                SUM(CASE WHEN req.status = 'PENDING' THEN 1 ELSE 0 END) AS pending_count,
+                SUM(CASE WHEN req.status = 'APPROVED' THEN 1 ELSE 0 END) AS approved_count,
+                SUM(CASE WHEN req.status = 'REJECTED' THEN 1 ELSE 0 END) AS rejected_count,
+                COUNT(*) AS total_count
+            FROM student_profile_update_requests req
+            JOIN students s ON s.id = req.student_id
+            WHERE (req.institute_id = ? OR s.institute_id = ?)
+            """,
+            (current_inst, current_inst)
+        ).fetchone()
+        
+    finally:
+        conn.close()
+        
+    return render_template(
+        "lms_admin/profile_update_requests.html",
+        requests=formatted_requests,
+        status_filter=status_filter,
+        pending_count=counts["pending_count"] if counts and counts["pending_count"] else 0,
+        approved_count=counts["approved_count"] if counts and counts["approved_count"] else 0,
+        rejected_count=counts["rejected_count"] if counts and counts["rejected_count"] else 0,
+        total_count=counts["total_count"] if counts and counts["total_count"] else 0
+    )

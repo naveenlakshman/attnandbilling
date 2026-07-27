@@ -3,6 +3,7 @@
 {% block page_title %}👤 My Profile{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
 <style>
   .profile-header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -74,7 +75,7 @@
 <div class="profile-header">
   <div class="profile-photo">
     {% if student.photo_filename %}
-      <img src="{{ url_for('static', filename='images/student_photos/' ~ student.photo_filename) }}"
+      <img src="{{ storage_url(student.photo_filename if student.photo_filename.startswith('student_photos/') else 'student_photos/' ~ student.photo_filename) }}"
            alt="{{ student.full_name }}">
     {% else %}
       👤
@@ -357,23 +358,22 @@
       <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; background-color: #f8fafc; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
         <div>
           <h4 style="font-size: 13px; font-weight: 700; color: #495057; margin-bottom: 12px; text-transform: uppercase;">Student Signature</h4>
-          {% if student.student_signature_filename %}
-            <div style="background-color: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; margin-bottom: 12px;">
-              <img src="/static/images/student_signatures/{{ student.student_signature_filename }}" alt="Student Signature" style="max-height: 80px; max-width: 100%;">
-            </div>
-            <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">Signed On: {{ student.student_signature_date }}</p>
-          {% else %}
-            <p class="text-muted" style="font-size: 12px; font-style: italic; margin-bottom: 12px;">Not yet signed. Please draw and save your signature below.</p>
-          {% endif %}
-        </div>
-        
-        <div style="margin-top: auto;">
-          <div class="mb-2">
-            <canvas id="student-sig-canvas" width="400" height="150" style="border: 1px dashed #cbd5e1; border-radius: 6px; background-color: #fff; touch-action: none; cursor: crosshair; width: 100%; display: block; height: 150px;"></canvas>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <button type="button" id="student-sig-clear" class="btn btn-outline-secondary btn-sm" style="flex: 1;">Clear</button>
-            <button type="button" id="student-sig-save" class="btn btn-primary btn-sm" style="flex: 1;">Save Signature</button>
+          <div id="sigBox_student">
+            {% if student.student_signature_filename %}
+              <div style="background-color: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; margin-bottom: 12px;">
+                <img id="sigImg_student" src="{{ storage_url(student.student_signature_filename if student.student_signature_filename.startswith('signatures/') else 'signatures/' ~ student.student_signature_filename) }}" alt="Student Signature" style="max-height: 80px; max-width: 100%;">
+              </div>
+              <p class="text-muted" id="sigDate_student" style="font-size: 11px; margin-bottom: 12px;">Signed On: {{ student.student_signature_date }}</p>
+            {% else %}
+              <div id="sigEmpty_student" class="text-muted" style="font-size: 12px; font-style: italic; margin-bottom: 12px;">Not yet signed. Click below to sign.</div>
+              <div id="sigPreviewWrap_student" style="display:none; background-color: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; margin-bottom: 12px;">
+                <img id="sigImg_student" src="" alt="Student Signature" style="max-height: 80px; max-width: 100%;">
+                <div class="text-muted" id="sigDate_student" style="font-size: 11px; margin-top: 4px;"></div>
+              </div>
+            {% endif %}
+            <button type="button" class="btn btn-primary btn-sm w-100 mt-2" id="sigBtn_student" onclick="openSigModal('student')">
+              {% if student.student_signature_filename %}🔄 Update Signature{% else %}✍️ Collect Signature{% endif %}
+            </button>
           </div>
         </div>
       </div>
@@ -384,23 +384,22 @@
       <div style="border: 1px solid #e9ecef; border-radius: 8px; padding: 16px; background-color: #f8fafc; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
         <div>
           <h4 style="font-size: 13px; font-weight: 700; color: #495057; margin-bottom: 12px; text-transform: uppercase;">Parent / Guardian Signature</h4>
-          {% if student.parent_signature_filename %}
-            <div style="background-color: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; margin-bottom: 12px;">
-              <img src="/static/images/student_signatures/{{ student.parent_signature_filename }}" alt="Parent Signature" style="max-height: 80px; max-width: 100%;">
-            </div>
-            <p class="text-muted" style="font-size: 11px; margin-bottom: 12px;">Signed On: {{ student.parent_signature_date }}</p>
-          {% else %}
-            <p class="text-muted" style="font-size: 12px; font-style: italic; margin-bottom: 12px;">Not yet signed. Please draw and save parent signature below.</p>
-          {% endif %}
-        </div>
-        
-        <div style="margin-top: auto;">
-          <div class="mb-2">
-            <canvas id="parent-sig-canvas" width="400" height="150" style="border: 1px dashed #cbd5e1; border-radius: 6px; background-color: #fff; touch-action: none; cursor: crosshair; width: 100%; display: block; height: 150px;"></canvas>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <button type="button" id="parent-sig-clear" class="btn btn-outline-secondary btn-sm" style="flex: 1;">Clear</button>
-            <button type="button" id="parent-sig-save" class="btn btn-primary btn-sm" style="flex: 1;">Save Signature</button>
+          <div id="sigBox_parent">
+            {% if student.parent_signature_filename %}
+              <div style="background-color: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; margin-bottom: 12px;">
+                <img id="sigImg_parent" src="{{ storage_url(student.parent_signature_filename if student.parent_signature_filename.startswith('signatures/') else 'signatures/' ~ student.parent_signature_filename) }}" alt="Parent Signature" style="max-height: 80px; max-width: 100%;">
+              </div>
+              <p class="text-muted" id="sigDate_parent" style="font-size: 11px; margin-bottom: 12px;">Signed On: {{ student.parent_signature_date }}</p>
+            {% else %}
+              <div id="sigEmpty_parent" class="text-muted" style="font-size: 12px; font-style: italic; margin-bottom: 12px;">Not yet signed. Click below to sign.</div>
+              <div id="sigPreviewWrap_parent" style="display:none; background-color: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; margin-bottom: 12px;">
+                <img id="sigImg_parent" src="" alt="Parent Signature" style="max-height: 80px; max-width: 100%;">
+                <div class="text-muted" id="sigDate_parent" style="font-size: 11px; margin-top: 4px;"></div>
+              </div>
+            {% endif %}
+            <button type="button" class="btn btn-primary btn-sm w-100 mt-2" id="sigBtn_parent" onclick="openSigModal('parent')">
+              {% if student.parent_signature_filename %}🔄 Update Signature{% else %}✍️ Collect Signature{% endif %}
+            </button>
           </div>
         </div>
       </div>
@@ -649,102 +648,542 @@
   {% endif %}
 </div>
 #}
+<!-- ── Signature Pad Modal ────────────────────────────────────────── -->
+<div id="sigPadModal" onclick="if(event.target===this)closeSigModal()">
+  <div class="sig-modal-box">
+    <div class="sig-modal-title" id="sigModalTitle">✍️ Student Signature</div>
+    <div class="sig-modal-subtitle" id="sigModalSubtitle">Sign clearly within the box. Use finger or stylus on mobile.</div>
+
+    <!-- Tab switcher -->
+    <div class="sig-tab-row">
+      <button class="sig-tab active" id="tabDraw"   onclick="switchSigTab('draw')">✍️ Draw</button>
+      <button class="sig-tab"        id="tabCamera" onclick="switchSigTab('camera')">📷 Camera</button>
+      <button class="sig-tab"        id="tabUpload" onclick="switchSigTab('upload')">🖼 Upload</button>
+    </div>
+
+    <!-- Draw panel -->
+    <div id="sigDrawPanel">
+      <canvas id="sigCanvas"></canvas>
+      <div class="sig-toolbar">
+        <button class="sig-tool-btn" onclick="sigUndo()">↩ Undo</button>
+        <button class="sig-tool-btn" onclick="sigClear()">🗑 Clear</button>
+        <span class="sig-stroke-hint" id="sigStrokeHint">Draw your signature above</span>
+      </div>
+    </div>
+
+    <!-- Camera panel -->
+    <div id="sigCameraPanel" style="display:none;">
+      <!-- Live view -->
+      <div id="sigCamLive">
+        <div class="sig-camera-frame">
+          <video id="sigCamVideo" class="sig-camera-video" autoplay playsinline></video>
+          <button type="button" class="sig-camera-flip" onclick="flipSigCam()">🔄 Flip</button>
+        </div>
+        <canvas id="sigCamCanvas" class="profile-hidden-input"></canvas>
+        <button type="button" class="sig-btn-save sig-capture-btn" onclick="snapSigCam()">📸 Capture</button>
+      </div>
+      <!-- Snap preview -->
+      <div id="sigCamPreview" style="display:none;">
+        <div class="sig-preview-frame">
+          <img id="sigCamImg" src="" alt="Captured">
+        </div>
+        <div class="sig-action-row">
+          <button class="sig-tool-btn profile-flex-fill" onclick="retakeSigCam()">🔄 Retake</button>
+          <button class="sig-tool-btn sig-tool-btn-primary profile-flex-fill" onclick="useSigCamSnap()">✔ Use This</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload panel -->
+    <div id="sigUploadPanel" style="display:none;">
+
+      <!-- Step A: Pick file -->
+      <div id="sigPickStep">
+        <div id="sigUploadDrop" onclick="document.getElementById('sigFileInput').click()">
+          <div id="sigUploadHint">
+            <div class="sig-upload-icon">🖼</div>
+            <div class="sig-upload-title">Tap to choose an image</div>
+            <div class="sig-upload-subtitle">JPG, PNG, WEBP supported</div>
+          </div>
+        </div>
+        <input type="file" id="sigFileInput" accept="image/*" class="profile-hidden-input" onchange="handleSigUpload(this)">
+      </div>
+
+      <!-- Step B: Crop -->
+      <div id="sigCropStep" style="display:none;">
+        <div id="sigCropWrapper" class="sig-crop-wrapper">
+          <img id="sigCropImage" src="" alt="Crop" class="sig-crop-image">
+        </div>
+        <div class="sig-action-row">
+          <button class="sig-tool-btn sig-tool-btn-primary profile-flex-fill" onclick="applySigCrop()">✂️ Crop & Use</button>
+          <button class="sig-tool-btn profile-flex-fill" onclick="backToSigPick()">← Change</button>
+        </div>
+      </div>
+
+      <!-- Step C: Preview after crop -->
+      <div id="sigPreviewStep" style="display:none;">
+        <div class="sig-preview-frame">
+          <img id="sigUploadPreview" src="" alt="Preview">
+        </div>
+        <button class="sig-tool-btn sig-capture-btn" onclick="clearSigUpload()">🗑 Remove &amp; Re-pick</button>
+      </div>
+
+    </div>
+
+    <div class="sig-save-row">
+      <button class="sig-btn-save" id="sigSaveBtn" onclick="saveSig()" disabled>💾 Save Signature</button>
+      <button class="sig-btn-cancel" onclick="closeSigModal()">Cancel</button>
+    </div>
+    <div class="sig-status-msg" id="sigStatusMsg"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 <script>
-  function initSignaturePad(canvasId, clearBtnId, saveBtnId, sigType) {
-      const canvas = document.getElementById(canvasId);
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+(function(){
+  var sigType = null;
+  var pad = null;
+  var sigCropper = null;
+  var saveUrl = "/student/profile/save-signature";
 
-      let drawing = false;
-      let lastX = 0;
-      let lastY = 0;
+  /* ═══════════════════════════════════════════════════════
+     SignaturePad — smooth Bézier-interpolated drawing
+  ═══════════════════════════════════════════════════════ */
+  function SignaturePad(canvas) {
+    this.canvas   = canvas;
+    this.ctx      = canvas.getContext('2d');
+    this.strokes  = [];
+    this.live     = null;
+    this.drawing  = false;
+    this._bindEvents();
+  }
 
-      function getPos(e) {
-          const rect = canvas.getBoundingClientRect();
-          const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-          const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-          return {
-              x: clientX - rect.left,
-              y: clientY - rect.top
-          };
+  SignaturePad.prototype._setupCtx = function() {
+    this.ctx.strokeStyle = '#1a1a2e';
+    this.ctx.lineWidth   = 2.2;
+    this.ctx.lineCap     = 'round';
+    this.ctx.lineJoin    = 'round';
+  };
+
+  SignaturePad.prototype._getPos = function(e) {
+    var r = this.canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  SignaturePad.prototype._bindEvents = function() {
+    var self = this, c = this.canvas;
+    c.addEventListener('pointerdown',  function(e){ e.preventDefault(); self._down(e); },  { passive: false });
+    c.addEventListener('pointermove',  function(e){ e.preventDefault(); self._move(e); },  { passive: false });
+    c.addEventListener('pointerup',    function(e){ self._up(e); });
+    c.addEventListener('pointercancel',function(e){ self._up(e); });
+    c.addEventListener('pointerleave', function(e){ self._up(e); });
+  };
+
+  SignaturePad.prototype._down = function(e) {
+    this.canvas.setPointerCapture(e.pointerId);
+    this.drawing = true;
+    this.live    = [ this._getPos(e) ];
+    this.strokes.push(this.live);
+    this._redraw();
+    _onUpdate();
+  };
+
+  SignaturePad.prototype._move = function(e) {
+    if (!this.drawing || !this.live) return;
+    this.live.push(this._getPos(e));
+    this._redraw();
+    _onUpdate();
+  };
+
+  SignaturePad.prototype._up = function(e) {
+    if (!this.drawing) return;
+    this.drawing = false;
+    this.live    = null;
+    try { this.canvas.releasePointerCapture(e.pointerId); } catch(_) {}
+    this._redraw();
+    _onUpdate();
+  };
+
+  SignaturePad.prototype.resize = function() {
+    var r   = this.canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var w   = Math.round(r.width  * dpr);
+    var h   = Math.round(r.height * dpr);
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width  = w;
+      this.canvas.height = h;
+    }
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this._drawGuide();
+    this._redraw();
+  };
+
+  SignaturePad.prototype._drawGuide = function() {
+    var r = this.canvas.getBoundingClientRect();
+    var y = Math.round(r.height * 0.72);
+    this.ctx.save();
+    this.ctx.strokeStyle = '#cbd5e1';
+    this.ctx.lineWidth   = 1;
+    this.ctx.setLineDash([6, 4]);
+    this.ctx.beginPath();
+    this.ctx.moveTo(20, y);
+    this.ctx.lineTo(r.width - 20, y);
+    this.ctx.stroke();
+    this.ctx.restore();
+  };
+
+  SignaturePad.prototype._redraw = function() {
+    var r = this.canvas.getBoundingClientRect();
+    this.ctx.clearRect(0, 0, r.width, r.height);
+    this._drawGuide();
+    this._setupCtx();
+    for (var s = 0; s < this.strokes.length; s++) {
+      var pts = this.strokes[s];
+      if (pts.length === 0) continue;
+      if (pts.length < 3) {
+        this.ctx.beginPath();
+        this.ctx.arc(pts[0].x, pts[0].y, 1.2, 0, Math.PI * 2);
+        this.ctx.fillStyle = '#1a1a2e';
+        this.ctx.fill();
+        continue;
       }
-
-      function startDraw(e) {
-          drawing = true;
-          const pos = getPos(e);
-          lastX = pos.x;
-          lastY = pos.y;
-          if (e.touches) e.preventDefault();
+      this.ctx.beginPath();
+      this.ctx.moveTo(pts[0].x, pts[0].y);
+      for (var i = 1; i < pts.length - 1; i++) {
+        var mid = { x: (pts[i].x + pts[i+1].x) / 2, y: (pts[i].y + pts[i+1].y) / 2 };
+        this.ctx.quadraticCurveTo(pts[i].x, pts[i].y, mid.x, mid.y);
       }
+      this.ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+      this.ctx.stroke();
+    }
+  };
 
-      function draw(e) {
-          if (!drawing) return;
-          const pos = getPos(e);
-          ctx.beginPath();
-          ctx.moveTo(lastX, lastY);
-          ctx.lineTo(pos.x, pos.y);
-          ctx.stroke();
-          lastX = pos.x;
-          lastY = pos.y;
-          if (e.touches) e.preventDefault();
-      }
+  SignaturePad.prototype.undo = function() {
+    if (this.strokes.length === 0) return;
+    this.strokes.pop();
+    var r = this.canvas.getBoundingClientRect();
+    this.ctx.clearRect(0, 0, r.width, r.height);
+    this._drawGuide();
+    this._redraw();
+    _onUpdate();
+  };
 
-      function stopDraw() {
-          drawing = false;
-      }
+  SignaturePad.prototype.clear = function() {
+    this.strokes = [];
+    var r = this.canvas.getBoundingClientRect();
+    this.ctx.clearRect(0, 0, r.width, r.height);
+    this._drawGuide();
+    _onUpdate();
+  };
 
-      canvas.addEventListener('mousedown', startDraw);
-      canvas.addEventListener('mousemove', draw);
-      canvas.addEventListener('mouseup', stopDraw);
-      canvas.addEventListener('mouseleave', stopDraw);
+  SignaturePad.prototype.isEmpty = function() {
+    return this.strokes.length === 0;
+  };
 
-      canvas.addEventListener('touchstart', startDraw, {passive: false});
-      canvas.addEventListener('touchmove', draw, {passive: false});
-      canvas.addEventListener('touchend', stopDraw);
+  SignaturePad.prototype.toDataURL = function() {
+    var off = document.createElement('canvas');
+    off.width  = this.canvas.width;
+    off.height = this.canvas.height;
+    var ctx = off.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, off.width, off.height);
+    ctx.drawImage(this.canvas, 0, 0);
+    return off.toDataURL('image/png');
+  };
 
-      document.getElementById(clearBtnId).addEventListener('click', () => {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-      });
+  function _onUpdate() {
+    if (!pad) return;
+    var n    = pad.strokes.length;
+    var hint = document.getElementById('sigStrokeHint');
+    var btn  = document.getElementById('sigSaveBtn');
+    if (n === 0) {
+      hint.textContent = 'Draw your signature above';
+      btn.disabled = true;
+    } else {
+      hint.textContent = n + ' stroke' + (n === 1 ? '' : 's');
+      btn.disabled = false;
+    }
+    if (sigMode === 'upload' || sigMode === 'camera') {
+      btn.disabled = !uploadedDataURL;
+    }
+  }
 
-      document.getElementById(saveBtnId).addEventListener('click', () => {
-          const blank = document.createElement('canvas');
-          blank.width = canvas.width;
-          blank.height = canvas.height;
-          if (canvas.toDataURL() === blank.toDataURL()) {
-              alert('Please draw a signature before saving.');
-              return;
-          }
+  function _clearMsg() {
+    var el = document.getElementById('sigStatusMsg');
+    el.textContent = '';
+    el.className = 'sig-status-msg';
+  }
 
-          const dataURL = canvas.toDataURL('image/png');
-          
-          const formData = new FormData();
-          formData.append('csrf_token', '{{ csrf_token() }}');
-          formData.append('sig_type', sigType);
-          formData.append('sig_data', dataURL);
+  var sigMode = 'draw';
+  var uploadedDataURL = null;
+  var camStream = null;
+  var camFacingMode = 'user';
 
-          fetch('/student/profile/save-signature', {
-              method: 'POST',
-              body: formData
-          })
-          .then(res => res.json())
-          .then(data => {
-              if (data.success) {
-                  alert('Signature saved successfully!');
-                  location.reload();
-              } else {
-                  alert('Error: ' + data.error);
-              }
-          })
-          .catch(err => {
-              alert('Failed to save signature: ' + err);
-          });
+  window.switchSigTab = function(mode) {
+    if (sigMode === 'camera' && mode !== 'camera') { _stopSigCam(); }
+    sigMode = mode;
+    document.getElementById('tabDraw').classList.toggle('active',   mode === 'draw');
+    document.getElementById('tabCamera').classList.toggle('active', mode === 'camera');
+    document.getElementById('tabUpload').classList.toggle('active', mode === 'upload');
+    document.getElementById('sigDrawPanel').style.display   = mode === 'draw'   ? '' : 'none';
+    document.getElementById('sigCameraPanel').style.display = mode === 'camera' ? '' : 'none';
+    document.getElementById('sigUploadPanel').style.display = mode === 'upload' ? '' : 'none';
+    _onUpdate();
+    if (mode === 'draw' && pad) { pad.resize(); }
+    if (mode === 'camera') { _startSigCam(); }
+  };
+
+  function _startSigCam() {
+    _stopSigCam();
+    document.getElementById('sigCamLive').style.display    = '';
+    document.getElementById('sigCamPreview').style.display = 'none';
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacingMode }, audio: false })
+      .then(function(stream) {
+        camStream = stream;
+        var v = document.getElementById('sigCamVideo');
+        v.srcObject = stream;
+        v.play();
+      })
+      .catch(function(err) {
+        var msg = document.getElementById('sigStatusMsg');
+        msg.textContent = '✗ Camera error: ' + err.message;
+        msg.className = 'sig-status-msg error';
       });
   }
 
+  function _stopSigCam() {
+    if (camStream) {
+      camStream.getTracks().forEach(function(t){ t.stop(); });
+      camStream = null;
+    }
+    var v = document.getElementById('sigCamVideo');
+    if (v) v.srcObject = null;
+  }
+
+  window.flipSigCam = function() {
+    camFacingMode = camFacingMode === 'user' ? 'environment' : 'user';
+    _startSigCam();
+  };
+
+  window.snapSigCam = function() {
+    var v = document.getElementById('sigCamVideo');
+    var c = document.getElementById('sigCamCanvas');
+    c.width  = v.videoWidth  || 640;
+    c.height = v.videoHeight || 480;
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    var snap = c.toDataURL('image/png');
+    _stopSigCam();
+    document.getElementById('sigCamImg').src = snap;
+    document.getElementById('sigCamLive').style.display    = 'none';
+    document.getElementById('sigCamPreview').style.display = '';
+    window._sigCamSnap = snap;
+  };
+
+  window.retakeSigCam = function() {
+    window._sigCamSnap = null;
+    _startSigCam();
+    document.getElementById('sigCamPreview').style.display = 'none';
+    document.getElementById('sigCamLive').style.display    = '';
+    _onUpdate();
+  };
+
+  window.useSigCamSnap = function() {
+    if (!window._sigCamSnap) return;
+    uploadedDataURL = window._sigCamSnap;
+    window._sigCamSnap = null;
+    _onUpdate();
+  };
+
+  window.handleSigUpload = function(input) {
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('sigPickStep').style.display    = 'none';
+      document.getElementById('sigCropStep').style.display    = '';
+      document.getElementById('sigPreviewStep').style.display = 'none';
+
+      var img = document.getElementById('sigCropImage');
+      img.src = e.target.result;
+
+      if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+
+      img.onload = function() {
+        sigCropper = new Cropper(img, {
+          viewMode: 1,
+          dragMode: 'move',
+          autoCropArea: 0.9,
+          responsive: true,
+          checkCrossOrigin: false,
+          background: false,
+          movable: true,
+          zoomable: true,
+          rotatable: false
+        });
+      };
+    };
+    reader.readAsDataURL(file);
+  };
+
+  window.applySigCrop = function() {
+    if (!sigCropper) return;
+    var canvas = sigCropper.getCroppedCanvas({ maxWidth: 800, maxHeight: 400, fillColor: '#fff' });
+    uploadedDataURL = canvas.toDataURL('image/png');
+    sigCropper.destroy();
+    sigCropper = null;
+
+    document.getElementById('sigUploadPreview').src         = uploadedDataURL;
+    document.getElementById('sigPickStep').style.display    = 'none';
+    document.getElementById('sigCropStep').style.display    = 'none';
+    document.getElementById('sigPreviewStep').style.display = '';
+    _onUpdate();
+  };
+
+  window.backToSigPick = function() {
+    if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+    document.getElementById('sigCropStep').style.display = 'none';
+    document.getElementById('sigPickStep').style.display = '';
+    document.getElementById('sigFileInput').value = '';
+  };
+
+  window.clearSigUpload = function() {
+    uploadedDataURL = null;
+    if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+    document.getElementById('sigUploadPreview').src         = '';
+    document.getElementById('sigPickStep').style.display    = '';
+    document.getElementById('sigCropStep').style.display    = 'none';
+    document.getElementById('sigPreviewStep').style.display = 'none';
+    document.getElementById('sigFileInput').value = '';
+    _onUpdate();
+  };
+
+  window.openSigModal = function(type) {
+    sigType = type;
+    var isParent = (type === 'parent');
+    document.getElementById('sigModalTitle').textContent =
+      isParent ? '✍️ Parent / Guardian Signature' : '✍️ Student Signature';
+    document.getElementById('sigModalSubtitle').textContent =
+      isParent
+        ? ({{ (student.parent_name or 'Parent/Guardian') | tojson }}) + ': please sign clearly within the box.'
+        : ({{ student.full_name | tojson }}) + ': please sign clearly within the box.';
+    _clearMsg();
+    document.getElementById('sigSaveBtn').textContent  = '💾 Save Signature';
+    document.getElementById('sigSaveBtn').disabled     = true;
+
+    _stopSigCam();
+    window._sigCamSnap = null;
+    sigMode = 'draw';
+    uploadedDataURL = null;
+    document.getElementById('tabDraw').classList.add('active');
+    document.getElementById('tabCamera').classList.remove('active');
+    document.getElementById('tabUpload').classList.remove('active');
+    document.getElementById('sigDrawPanel').style.display   = '';
+    document.getElementById('sigCameraPanel').style.display = 'none';
+    document.getElementById('sigUploadPanel').style.display = 'none';
+    clearSigUpload();
+    document.getElementById('sigPadModal').classList.add('show');
+    document.body.style.overflow = 'hidden';
+
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        var canvas = document.getElementById('sigCanvas');
+        pad = new SignaturePad(canvas);
+        pad.resize();
+        _onUpdate();
+      });
+    });
+  };
+
+  window.closeSigModal = function() {
+    _stopSigCam();
+    window._sigCamSnap = null;
+    document.getElementById('sigPadModal').classList.remove('show');
+    document.body.style.overflow = '';
+    pad = null;
+    sigType = null;
+    uploadedDataURL = null;
+    if (sigCropper) { sigCropper.destroy(); sigCropper = null; }
+    clearSigUpload();
+  };
+
+  window.sigUndo  = function() { if (pad && sigMode === 'draw') pad.undo(); };
+  window.sigClear = function() {
+    if (sigMode === 'draw') {
+      if (!pad || pad.isEmpty()) return;
+      if (!confirm('Clear the signature?')) return;
+      pad.clear();
+    }
+  };
+
+  window.saveSig = function() {
+    var btn = document.getElementById('sigSaveBtn');
+    var msg = document.getElementById('sigStatusMsg');
+    var dataURL;
+
+    if (sigMode === 'upload' || sigMode === 'camera') {
+      if (!uploadedDataURL) return;
+      dataURL = uploadedDataURL;
+    } else {
+      if (!pad || pad.isEmpty()) return;
+      dataURL = pad.toDataURL();
+    }
+
+    btn.disabled     = true;
+    btn.textContent  = '⏳ Saving…';
+    msg.textContent  = '';
+    msg.className    = 'sig-status-msg';
+
+    var fd = new FormData();
+    fd.append('sig_type', sigType);
+    fd.append('sig_data',  dataURL);
+
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var headers = csrfMeta ? { 'X-CSRFToken': csrfMeta.content } : {};
+
+    fetch(saveUrl, { method: 'POST', headers: headers, body: fd })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          msg.textContent = '✓ Saved on ' + data.signed_at;
+          msg.className   = 'sig-status-msg success';
+          btn.textContent = '✓ Saved!';
+          _updateStatusBox(sigType, dataURL, data.signed_at);
+          setTimeout(closeSigModal, 1100);
+        } else {
+          msg.textContent = '✗ ' + (data.error || 'Save failed');
+          msg.className   = 'sig-status-msg error';
+          btn.disabled    = false;
+          btn.textContent = '💾 Save Signature';
+        }
+      })
+      .catch(function(err) {
+        msg.textContent = '✗ Network error: ' + err.message;
+        msg.className   = 'sig-status-msg error';
+        btn.disabled    = false;
+        btn.textContent = '💾 Save Signature';
+      });
+  };
+
+  function _updateStatusBox(type, dataURL, signedAt) {
+    var dateStr = signedAt ? 'Signed: ' + signedAt.substring(0, 10) : '';
+    var emptyEl = document.getElementById('sigEmpty_'       + type);
+    var wrapEl  = document.getElementById('sigPreviewWrap_' + type);
+    var imgEl   = document.getElementById('sigImg_'         + type);
+    var dateEl  = document.getElementById('sigDate_'        + type);
+    var btnEl   = document.getElementById('sigBtn_'         + type);
+
+    if (emptyEl)  emptyEl.style.display  = 'none';
+    if (wrapEl)   wrapEl.style.display   = 'block';
+    if (imgEl)    imgEl.src              = dataURL;
+    if (dateEl)   dateEl.textContent     = dateStr;
+    if (btnEl)    btnEl.textContent      = '🔄 Update Signature';
+  }
+
+  window.addEventListener('resize', function() { if (pad) pad.resize(); });
+})();
+</script>
+
+<script>
   const qualificationLevels = {{ qualification_levels | tojson if qualification_levels else '{}' }};
   const educationLevelSelect = document.querySelector('select[name="education_level"]');
   const qualificationSelect = document.getElementById('qualification_select');
@@ -858,8 +1297,6 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-      initSignaturePad('student-sig-canvas', 'student-sig-clear', 'student-sig-save', 'student');
-      initSignaturePad('parent-sig-canvas', 'parent-sig-clear', 'parent-sig-save', 'parent');
       updateQualifications();
   });
 </script>

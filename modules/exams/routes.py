@@ -14,6 +14,7 @@ VALID_CORRECT_OPTIONS = {"A", "B", "C", "D"}
 
 
 def _get_programs(cur):
+    current_inst = get_current_institute_id(default=1)
     return cur.execute(
         """
             SELECT
@@ -22,13 +23,15 @@ def _get_programs(cur):
                 c.course_name
             FROM lms_programs lp
             LEFT JOIN courses c ON c.id = lp.course_id
-            WHERE COALESCE(lp.is_deleted, 0) = 0
+            WHERE COALESCE(lp.is_deleted, 0) = 0 AND lp.institute_id = ?
             ORDER BY c.course_name COLLATE NOCASE, lp.program_name COLLATE NOCASE
-        """
+        """,
+        (current_inst,)
     ).fetchall()
 
 
 def _get_chapters(cur):
+    current_inst = get_current_institute_id(default=1)
     return cur.execute(
         """
             SELECT
@@ -38,13 +41,17 @@ def _get_chapters(cur):
                 GROUP_CONCAT(DISTINCT pc.program_id) AS program_ids
             FROM lms_master_chapters mc
             LEFT JOIN lms_program_chapters pc ON pc.master_chapter_id = mc.id
+            LEFT JOIN lms_programs lp ON pc.program_id = lp.id
+            WHERE (mc.institute_id = ? OR mc.is_shared = 1 OR lp.institute_id = ?)
             GROUP BY mc.id
             ORDER BY mc.title COLLATE NOCASE
-        """
+        """,
+        (current_inst, current_inst)
     ).fetchall()
 
 
 def _get_questions(cur):
+    current_inst = get_current_institute_id(default=1)
     return cur.execute(
         """
             SELECT
@@ -65,9 +72,12 @@ def _get_questions(cur):
             LEFT JOIN lms_master_chapters mc ON mc.id = qb.chapter_id
             LEFT JOIN lms_master_topics mt ON mt.id = qb.master_topic_id
             LEFT JOIN lms_program_chapters pc ON pc.master_chapter_id = mc.id
+            LEFT JOIN lms_programs lp ON pc.program_id = lp.id
+            WHERE (qb.institute_id = ? OR mc.institute_id = ? OR mc.is_shared = 1 OR lp.institute_id = ?)
             GROUP BY qb.id
             ORDER BY qb.id DESC
-        """
+        """,
+        (current_inst, current_inst, current_inst)
     ).fetchall()
 
 
