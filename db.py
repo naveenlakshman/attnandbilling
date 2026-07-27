@@ -2619,7 +2619,7 @@ def init_db():
     cur.execute("SELECT id FROM certificate_settings WHERE id = 1")
     if not cur.fetchone():
         cur.execute("""
-            INSERT INTO certificate_settings (
+            INSERT OR IGNORE INTO certificate_settings (
                 id, prefix, default_template_id, default_pass_percentage, qr_verification_url_pattern,
                 auto_generate_certificates, allow_manual_issue, allow_reissue, show_student_photo,
                 show_grade, enable_certificate_verification, year_format, sequence_length, created_at
@@ -2629,7 +2629,7 @@ def init_db():
     cur.execute("SELECT id FROM attendance_calendar_settings WHERE id = 1")
     if not cur.fetchone():
         cur.execute("""
-            INSERT INTO attendance_calendar_settings (id, working_days, created_at)
+            INSERT OR IGNORE INTO attendance_calendar_settings (id, working_days, created_at)
             VALUES (1, '0,1,2,3,4,5', ?)
         """, (now,))
 
