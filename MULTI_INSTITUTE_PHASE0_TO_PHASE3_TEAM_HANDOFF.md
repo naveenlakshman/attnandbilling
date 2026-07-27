@@ -880,6 +880,9 @@ references, not raw credentials.
 
 ## 15. Phase 9 — Onboarding and subscription enforcement
 
+**Implementation status (27 July 2026): completed locally on
+`feature/multi-institute-phase2`; not deployed.**
+
 ### 15.1 Onboarding workflow
 
 Build a platform-owner wizard:
@@ -893,6 +896,18 @@ Build a platform-owner wizard:
 7. settings and numbering;
 8. integration readiness;
 9. activation checklist.
+
+Implemented routes:
+
+- `GET|POST /platform/onboarding/new` — institute identity;
+- `GET|POST /platform/onboarding/<institute_id>/step/<2-9>` — resumable
+  onboarding steps;
+- `POST /platform/onboarding/<institute_id>/activate` — guarded activation.
+
+New institutes remain in `onboarding` state until the server verifies identity,
+subscription, primary domain, branding, an active branch, an active institute
+administrator, and numbering settings. Integration readiness records provider
+status only; secret values must continue to use Secret Manager.
 
 ### 15.2 Subscription and limits
 
@@ -910,10 +925,73 @@ Support:
 
 Limits must be enforced server-side and transactionally.
 
+Implemented in:
+
+- `migrations/20260727_multi_institute_phase9_onboarding_subscriptions.sql`;
+- `services/subscriptions.py`;
+- the platform-owner and institute-admin branch/user creation and reactivation
+  routes;
+- student admission;
+- CSV import paths for branches, staff, and students;
+- the centralized storage provider;
+- the application-wide authenticated subscription/feature gate.
+
+The migration adds:
+
+- `subscription_plans`;
+- `institute_subscriptions`;
+- `institute_onboarding`;
+- `tenant_storage_objects`.
+
+It seeds Starter, Growth, and Enterprise plans. Existing institutes receive
+Enterprise during migration to preserve current behavior. New institutes receive
+an explicitly selected plan during onboarding.
+
+Platform owners can manage an institute at:
+
+```text
+/platform/institutes/<institute_id>/subscription
+```
+
+This screen supports plan assignment, validated overrides, feature flags, grace
+periods, suspension, and reactivation. An override cannot be saved below current
+usage. Suspended tenants and expired trial/grace access are rejected on the
+server. Reactivating a branch or user also rechecks the applicable limit.
+
+Storage uploads are recorded by canonical tenant object path and byte size.
+Uploads lock the subscription row while checking capacity, and successful
+uploads update storage metadata before the quota transaction commits.
+
+Institutes created before Phase 9 remain on unlimited Enterprise storage.
+The platform blocks assigning them a finite storage limit until a legacy object
+inventory is reconciled into `tenant_storage_objects`. This prevents untracked
+historical files from bypassing a newly assigned quota. Institutes created by
+the Phase 9 wizard are tracked from their first upload.
+
 ### 15.3 Exit gate
 
 > A platform owner can onboard, limit, suspend, and reactivate an institute
 > without database commands, and the institute cannot bypass its plan.
+
+Local verification:
+
+```text
+PHASE9_MYSQL_TESTS=PASS
+```
+
+The Phase 9 suite verifies:
+
+- serialized branch and staff limits;
+- a zero-student override;
+- byte-level storage rejection and successful tracked upload;
+- enabled and disabled feature behavior;
+- suspension and reactivation;
+- onboarding and subscription page rendering;
+- cleanup of all temporary tenant records and files.
+
+During regression testing, the Phase 1 membership backfill was also corrected to
+use each user's `institute_id`. The previous legacy statement used institute 1
+for every user and could create a cross-institute membership when re-run.
 
 ---
 
@@ -1025,6 +1103,7 @@ scratch/test_multi_institute_phase0.py
 scratch/test_multi_institute_phase1.py
 scratch/test_multi_institute_phase2.py
 scratch/test_multi_institute_phase3.py
+scratch/test_multi_institute_phase9.py
 ```
 
 Expected final markers:
@@ -1034,6 +1113,7 @@ phase0_isolation_characterization=OK
 phase1_tenant_foundation=OK
 PHASE2_MYSQL_TESTS=PASS
 PHASE3_MYSQL_TESTS=PASS
+PHASE9_MYSQL_TESTS=PASS
 ```
 
 ---
@@ -1049,4 +1129,3 @@ Do not unlock the Leads or Students sidebar modules until:
 3. all direct-ID routes are tenant-scoped;
 4. student uploads use tenant-prefixed storage;
 5. two institutes with the same student code pass the full isolation suite.
-

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import abort, current_app, flash, redirect, render_template, request, session, url_for
 from werkzeug.security import generate_password_hash
@@ -10,6 +11,12 @@ from werkzeug.utils import secure_filename
 
 from db import clear_company_cache, get_conn
 from services.storage import get_storage_service
+from services.subscriptions import (
+    PlanLimitExceeded,
+    SubscriptionAccessDenied,
+    lock_and_check_limit,
+    usage_summary,
+)
 from modules.core.utils import login_required, platform_owner_required
 from services.tenant_context import clear_tenant_cache, normalize_hostname
 
@@ -134,7 +141,12 @@ def institutes():
                       AND im.is_active = 1) AS admin_count,
                    (SELECT hostname FROM institute_domains d
                     WHERE d.institute_id = i.id AND d.is_primary = 1
-                    ORDER BY d.id LIMIT 1) AS primary_hostname
+                    ORDER BY d.id LIMIT 1) AS primary_hostname,
+                   (SELECT p.name FROM institute_subscriptions s
+                    JOIN subscription_plans p ON p.id = s.plan_id
+                    WHERE s.institute_id = i.id LIMIT 1) AS plan_name,
+                   (SELECT s.status FROM institute_subscriptions s
+                    WHERE s.institute_id = i.id LIMIT 1) AS subscription_status
             FROM institutes i
             ORDER BY i.name
             """
@@ -173,6 +185,16 @@ def institute_new():
             ),
         )
         institute_id = cur.lastrowid
+        cur.execute(
+            """
+            INSERT INTO institute_subscriptions (
+                institute_id, plan_id, status, starts_at, created_at, updated_at
+            )
+            SELECT ?, id, 'active', ?, ?, ?
+            FROM subscription_plans WHERE code = 'starter'
+            """,
+            (institute_id, now, now, now),
+        )
         cur.execute(
             """
             INSERT INTO institute_branding (
@@ -271,6 +293,13 @@ def institute_detail(institute_id):
             """,
             (institute_id,),
         ).fetchall()
+        subscription = conn.execute(
+            """SELECT s.*, p.name AS plan_name, p.code AS plan_code
+               FROM institute_subscriptions s
+               JOIN subscription_plans p ON p.id = s.plan_id
+               WHERE s.institute_id = ?""",
+            (institute_id,),
+        ).fetchone()
         return render_template(
             "platform_admin/institute_detail.html",
             institute=institute,
@@ -279,6 +308,7 @@ def institute_detail(institute_id):
             domains=domains,
             branches=branches,
             admins=admins,
+            subscription=subscription,
         )
     finally:
         conn.close()
@@ -400,10 +430,38 @@ def institute_toggle_status(institute_id):
     conn = get_conn()
     try:
         institute = _institute_or_404(conn, institute_id)
-        new_status = "inactive" if institute["status"] == "active" else "active"
+        onboarding = conn.execute(
+            "SELECT status FROM institute_onboarding WHERE institute_id = ?",
+            (institute_id,),
+        ).fetchone()
+        if onboarding and onboarding["status"] != "completed":
+            flash("Finish the onboarding activation checklist first.", "warning")
+            return redirect(
+                url_for(
+                    "platform_admin.onboarding_step",
+                    institute_id=institute_id,
+                    step=9,
+                )
+            )
+        new_status = "suspended" if institute["status"] == "active" else "active"
+        subscription_status = "suspended" if new_status == "suspended" else "active"
+        now = _now()
         conn.execute(
             "UPDATE institutes SET status = ?, updated_at = ? WHERE id = ?",
-            (new_status, _now(), institute_id),
+            (new_status, now, institute_id),
+        )
+        conn.execute(
+            """UPDATE institute_subscriptions
+               SET status = ?, suspended_at = ?, suspension_reason = ?,
+                   grace_ends_at = NULL, updated_at = ?
+               WHERE institute_id = ?""",
+            (
+                subscription_status,
+                now if subscription_status == "suspended" else None,
+                "Suspended from institute administration"
+                if subscription_status == "suspended" else None,
+                now, institute_id,
+            ),
         )
         conn.commit()
         clear_tenant_cache()
@@ -454,6 +512,12 @@ def institute_branch_new(institute_id):
         ).fetchone()
         if duplicate:
             flash("That branch name or code is already used by this institute.", "danger")
+            return redirect(url_for("platform_admin.institute_branch_new", institute_id=institute_id))
+        try:
+            lock_and_check_limit(conn, institute_id, "branches")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            flash(str(exc), "danger")
             return redirect(url_for("platform_admin.institute_branch_new", institute_id=institute_id))
         conn.execute(
             """
@@ -634,9 +698,19 @@ def institute_branch_toggle(institute_id, branch_id):
         ).fetchone()
         if not branch:
             abort(404)
+        new_status = 0 if branch["is_active"] else 1
+        if new_status:
+            try:
+                lock_and_check_limit(conn, institute_id, "branches")
+            except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+                conn.rollback()
+                flash(str(exc), "danger")
+                return redirect(
+                    url_for("platform_admin.institute_detail", institute_id=institute_id)
+                )
         conn.execute(
             "UPDATE branches SET is_active = ? WHERE id = ? AND institute_id = ?",
-            (0 if branch["is_active"] else 1, branch_id, institute_id),
+            (new_status, branch_id, institute_id),
         )
         conn.commit()
         flash("Branch status updated.", "success")
@@ -680,6 +754,12 @@ def institute_admin_new(institute_id):
             (institute_id, username),
         ).fetchone():
             flash("That username is already used by this institute.", "danger")
+            return redirect(url_for("platform_admin.institute_admin_new", institute_id=institute_id))
+        try:
+            lock_and_check_limit(conn, institute_id, "staff")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            flash(str(exc), "danger")
             return redirect(url_for("platform_admin.institute_admin_new", institute_id=institute_id))
         now = _now()
         cur = conn.cursor()
@@ -731,6 +811,15 @@ def institute_admin_toggle(institute_id, user_id):
         if not user:
             abort(404)
         new_status = 0 if user["is_active"] else 1
+        if new_status:
+            try:
+                lock_and_check_limit(conn, institute_id, "staff")
+            except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+                conn.rollback()
+                flash(str(exc), "danger")
+                return redirect(
+                    url_for("platform_admin.institute_detail", institute_id=institute_id)
+                )
         now = _now()
         conn.execute(
             "UPDATE users SET is_active = ?, updated_at = ? WHERE id = ? AND institute_id = ?",
@@ -744,5 +833,673 @@ def institute_admin_toggle(institute_id, user_id):
         conn.commit()
         flash("Administrator status updated.", "success")
         return redirect(url_for("platform_admin.institute_detail", institute_id=institute_id))
+    finally:
+        conn.close()
+
+
+def _active_plans(conn):
+    return conn.execute(
+        "SELECT * FROM subscription_plans WHERE is_active = 1 ORDER BY sort_order, name"
+    ).fetchall()
+
+
+def _onboarding_or_404(conn, institute_id):
+    onboarding = conn.execute(
+        "SELECT * FROM institute_onboarding WHERE institute_id = ?",
+        (institute_id,),
+    ).fetchone()
+    if not onboarding:
+        abort(404)
+    return onboarding
+
+
+def _onboarding_checklist(conn, institute_id):
+    institute = _institute_or_404(conn, institute_id)
+    checks = {
+        "identity": bool(institute["name"] and institute["slug"]),
+        "subscription": bool(
+            conn.execute(
+                """SELECT id FROM institute_subscriptions
+                   WHERE institute_id = ?
+                     AND status IN ('active', 'trialing', 'grace')""",
+                (institute_id,),
+            ).fetchone()
+        ),
+        "domain": bool(
+            conn.execute(
+                """SELECT id FROM institute_domains
+                   WHERE institute_id = ? AND is_primary = 1""",
+                (institute_id,),
+            ).fetchone()
+        ),
+        "branding": bool(
+            conn.execute(
+                "SELECT id FROM institute_branding WHERE institute_id = ?",
+                (institute_id,),
+            ).fetchone()
+        ),
+        "branch": bool(
+            conn.execute(
+                "SELECT id FROM branches WHERE institute_id = ? AND is_active = 1",
+                (institute_id,),
+            ).fetchone()
+        ),
+        "administrator": bool(
+            conn.execute(
+                """SELECT im.id FROM institute_memberships im
+                   JOIN users u ON u.id = im.user_id AND u.institute_id = im.institute_id
+                   WHERE im.institute_id = ? AND im.membership_role = 'institute_admin'
+                     AND im.is_active = 1 AND u.is_active = 1""",
+                (institute_id,),
+            ).fetchone()
+        ),
+        "settings": bool(
+            conn.execute(
+                "SELECT id FROM institute_settings WHERE institute_id = ?",
+                (institute_id,),
+            ).fetchone()
+        ),
+    }
+    checks["ready"] = all(checks.values())
+    return checks
+
+
+@platform_admin_bp.route("/onboarding/new", methods=["GET", "POST"])
+@login_required
+@platform_owner_required
+def onboarding_new():
+    """Step 1: create an inactive institute identity and onboarding record."""
+    if request.method == "GET":
+        return render_template("platform_admin/onboarding.html", step=1)
+
+    conn = get_conn()
+    try:
+        values, error = _validate_institute_form(conn)
+        if error:
+            flash(error, "danger")
+            return render_template(
+                "platform_admin/onboarding.html", step=1, form_data=request.form
+            )
+        now = _now()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO institutes (
+                name, short_name, slug, status, timezone, locale,
+                currency_code, created_at, updated_at
+            ) VALUES (?, ?, ?, 'onboarding', ?, ?, ?, ?, ?)
+            """,
+            (
+                values["name"], values["short_name"], values["slug"],
+                values["timezone"], values["locale"], values["currency_code"], now, now,
+            ),
+        )
+        institute_id = cur.lastrowid
+        cur.execute(
+            """
+            INSERT INTO institute_branding (
+                institute_id, display_name, short_name, tagline, primary_color,
+                secondary_color, email, phone, website, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                institute_id, values["name"], values["short_name"], values["tagline"],
+                values["primary_color"], values["secondary_color"], values["email"],
+                values["phone"], values["website"], now, now,
+            ),
+        )
+        cur.execute(
+            """
+            INSERT INTO institute_settings (
+                institute_id, invoice_prefix, receipt_prefix, student_prefix,
+                certificate_prefix, date_format, created_at, updated_at
+            ) VALUES (?, 'INV', 'RCP', 'STU', 'CERT', 'DD-MMM-YYYY', ?, ?)
+            """,
+            (institute_id, now, now),
+        )
+        cur.execute(
+            """
+            INSERT INTO institute_onboarding (
+                institute_id, status, current_step, created_by, created_at, updated_at
+            ) VALUES (?, 'draft', 2, ?, ?, ?)
+            """,
+            (institute_id, session.get("user_id"), now, now),
+        )
+        conn.commit()
+        flash("Institute identity saved. Assign its subscription plan.", "success")
+        return redirect(
+            url_for("platform_admin.onboarding_step", institute_id=institute_id, step=2)
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@platform_admin_bp.route(
+    "/onboarding/<int:institute_id>/step/<int:step>", methods=["GET", "POST"]
+)
+@login_required
+@platform_owner_required
+def onboarding_step(institute_id, step):
+    if step < 2 or step > 9:
+        abort(404)
+    conn = get_conn()
+    try:
+        institute = _institute_or_404(conn, institute_id)
+        onboarding = _onboarding_or_404(conn, institute_id)
+        plans = _active_plans(conn)
+        subscription = conn.execute(
+            """SELECT s.*, p.code AS plan_code, p.name AS plan_name
+               FROM institute_subscriptions s
+               JOIN subscription_plans p ON p.id = s.plan_id
+               WHERE s.institute_id = ?""",
+            (institute_id,),
+        ).fetchone()
+        branding = conn.execute(
+            "SELECT * FROM institute_branding WHERE institute_id = ?", (institute_id,)
+        ).fetchone()
+        domain = conn.execute(
+            """SELECT * FROM institute_domains
+               WHERE institute_id = ? AND is_primary = 1 ORDER BY id LIMIT 1""",
+            (institute_id,),
+        ).fetchone()
+        branches = conn.execute(
+            "SELECT * FROM branches WHERE institute_id = ? ORDER BY branch_name",
+            (institute_id,),
+        ).fetchall()
+        admins = conn.execute(
+            """SELECT u.* FROM users u
+               JOIN institute_memberships im
+                 ON im.user_id = u.id AND im.institute_id = u.institute_id
+               WHERE u.institute_id = ? AND im.membership_role = 'institute_admin'""",
+            (institute_id,),
+        ).fetchall()
+        settings = conn.execute(
+            "SELECT * FROM institute_settings WHERE institute_id = ?", (institute_id,)
+        ).fetchone()
+        integrations = conn.execute(
+            "SELECT * FROM institute_integrations WHERE institute_id = ? ORDER BY integration_type",
+            (institute_id,),
+        ).fetchall()
+
+        if request.method == "POST":
+            now = _now()
+            if step == 2:
+                plan_id = request.form.get("plan_id", type=int)
+                plan = conn.execute(
+                    "SELECT * FROM subscription_plans WHERE id = ? AND is_active = 1",
+                    (plan_id,),
+                ).fetchone()
+                if not plan:
+                    flash("Choose an active subscription plan.", "danger")
+                    return redirect(request.url)
+                status = request.form.get("subscription_status", "trialing")
+                if status not in {"trialing", "active"}:
+                    status = "trialing"
+                trial_days = max(0, min(request.form.get("trial_days", 14, type=int), 90))
+                trial_end = (
+                    (datetime.now() + timedelta(days=trial_days)).isoformat(timespec="seconds")
+                    if status == "trialing" and trial_days
+                    else None
+                )
+                conn.execute(
+                    """
+                    INSERT INTO institute_subscriptions (
+                        institute_id, plan_id, status, starts_at, trial_ends_at,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE plan_id = VALUES(plan_id),
+                        status = VALUES(status), trial_ends_at = VALUES(trial_ends_at),
+                        updated_at = VALUES(updated_at)
+                    """,
+                    (institute_id, plan_id, status, now, trial_end, now, now),
+                )
+            elif step == 3:
+                hostname = normalize_hostname(request.form.get("hostname", ""))
+                if not hostname:
+                    flash("A primary hostname is required.", "danger")
+                    return redirect(request.url)
+                owner = conn.execute(
+                    "SELECT institute_id FROM institute_domains WHERE hostname = ?",
+                    (hostname,),
+                ).fetchone()
+                if owner and int(owner["institute_id"]) != institute_id:
+                    flash("That hostname belongs to another institute.", "danger")
+                    return redirect(request.url)
+                domain_status, verified_at = _domain_activation(hostname)
+                current_primary = conn.execute(
+                    """SELECT id FROM institute_domains
+                       WHERE institute_id = ? AND is_primary = 1
+                       ORDER BY id LIMIT 1""",
+                    (institute_id,),
+                ).fetchone()
+                if current_primary:
+                    conn.execute(
+                        """UPDATE institute_domains
+                           SET hostname = ?, status = ?, verified_at = ?, updated_at = ?
+                           WHERE id = ? AND institute_id = ?""",
+                        (
+                            hostname, domain_status, verified_at, now,
+                            current_primary["id"], institute_id,
+                        ),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO institute_domains (
+                            institute_id, hostname, domain_type, is_primary, status,
+                            verified_at, created_at, updated_at
+                        ) VALUES (?, ?, 'custom', 1, ?, ?, ?, ?)
+                        """,
+                        (
+                            institute_id, hostname, domain_status, verified_at, now, now,
+                        ),
+                    )
+            elif step == 4:
+                try:
+                    logo_path = _save_brand_file(
+                        institute_id, "logo", "logos",
+                        branding["logo_path"] if branding else None,
+                    )
+                    favicon_path = _save_brand_file(
+                        institute_id, "favicon", "favicons",
+                        branding["favicon_path"] if branding else None,
+                    )
+                except ValueError as exc:
+                    flash(str(exc), "danger")
+                    return redirect(request.url)
+                conn.execute(
+                    """
+                    UPDATE institute_branding SET
+                        display_name = ?, short_name = ?, tagline = ?,
+                        primary_color = ?, secondary_color = ?, logo_path = ?,
+                        favicon_path = ?, email = ?, phone = ?, website = ?, updated_at = ?
+                    WHERE institute_id = ?
+                    """,
+                    (
+                        request.form.get("display_name", "").strip() or institute["name"],
+                        request.form.get("short_name", "").strip() or institute["short_name"],
+                        request.form.get("tagline", "").strip(),
+                        request.form.get("primary_color", "#2563EB"),
+                        request.form.get("secondary_color", "#16A34A"),
+                        logo_path, favicon_path,
+                        request.form.get("email", "").strip(),
+                        request.form.get("phone", "").strip(),
+                        request.form.get("website", "").strip(),
+                        now, institute_id,
+                    ),
+                )
+            elif step == 5:
+                values = _branch_form_values()
+                if not values["branch_name"] or not values["branch_code"]:
+                    flash("Branch name and code are required.", "danger")
+                    return redirect(request.url)
+                lock_and_check_limit(conn, institute_id, "branches")
+                conn.execute(
+                    """
+                    INSERT INTO branches (
+                        institute_id, branch_name, branch_code, address, is_active,
+                        no_of_computers, opening_time, closing_time, created_at
+                    ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+                    """,
+                    (
+                        institute_id, values["branch_name"], values["branch_code"],
+                        values["address"], values["no_of_computers"],
+                        values["opening_time"], values["closing_time"], now,
+                    ),
+                )
+            elif step == 6:
+                full_name = request.form.get("full_name", "").strip()
+                username = request.form.get("username", "").strip()
+                password = request.form.get("password", "")
+                branch_id = request.form.get("branch_id", type=int)
+                if not full_name or not username or not password:
+                    flash("Name, username and password are required.", "danger")
+                    return redirect(request.url)
+                if branch_id and not conn.execute(
+                    "SELECT id FROM branches WHERE id = ? AND institute_id = ?",
+                    (branch_id, institute_id),
+                ).fetchone():
+                    abort(400)
+                lock_and_check_limit(conn, institute_id, "staff")
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    INSERT INTO users (
+                        institute_id, full_name, username, password_hash, role,
+                        platform_role, branch_id, can_view_all_branches, is_active,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, 'admin', NULL, ?, 1, 1, ?, ?)
+                    """,
+                    (
+                        institute_id, full_name, username,
+                        generate_password_hash(password), branch_id, now, now,
+                    ),
+                )
+                user_id = cur.lastrowid
+                cur.execute(
+                    """
+                    INSERT INTO institute_memberships (
+                        institute_id, user_id, membership_role, is_active,
+                        created_at, updated_at
+                    ) VALUES (?, ?, 'institute_admin', 1, ?, ?)
+                    """,
+                    (institute_id, user_id, now, now),
+                )
+            elif step == 7:
+                conn.execute(
+                    """
+                    UPDATE institute_settings SET
+                        invoice_prefix = ?, receipt_prefix = ?, student_prefix = ?,
+                        certificate_prefix = ?, date_format = ?, updated_at = ?
+                    WHERE institute_id = ?
+                    """,
+                    (
+                        request.form.get("invoice_prefix", "INV").strip() or "INV",
+                        request.form.get("receipt_prefix", "RCP").strip() or "RCP",
+                        request.form.get("student_prefix", "STU").strip() or "STU",
+                        request.form.get("certificate_prefix", "CERT").strip() or "CERT",
+                        request.form.get("date_format", "DD-MMM-YYYY").strip(),
+                        now, institute_id,
+                    ),
+                )
+            elif step == 8:
+                for integration_type in ("sms", "email", "storage"):
+                    ready = request.form.get(f"{integration_type}_ready") == "1"
+                    provider = request.form.get(
+                        f"{integration_type}_provider", ""
+                    ).strip() or "not-configured"
+                    conn.execute(
+                        """
+                        INSERT INTO institute_integrations (
+                            institute_id, integration_type, provider, status,
+                            configuration_json, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE provider = VALUES(provider),
+                            status = VALUES(status),
+                            configuration_json = VALUES(configuration_json),
+                            updated_at = VALUES(updated_at)
+                        """,
+                        (
+                            institute_id, integration_type, provider,
+                            "ready" if ready else "inactive",
+                            json.dumps({"readiness_confirmed": ready}), now, now,
+                        ),
+                    )
+            elif step == 9:
+                checks = _onboarding_checklist(conn, institute_id)
+                conn.execute(
+                    "UPDATE institute_onboarding SET checklist_json = ?, updated_at = ? WHERE institute_id = ?",
+                    (json.dumps(checks), now, institute_id),
+                )
+
+            next_step = min(step + 1, 9)
+            conn.execute(
+                """UPDATE institute_onboarding
+                   SET current_step = GREATEST(current_step, ?), updated_at = ?
+                   WHERE institute_id = ?""",
+                (next_step, now, institute_id),
+            )
+            conn.commit()
+            clear_tenant_cache()
+            clear_company_cache(institute_id)
+            return redirect(
+                url_for(
+                    "platform_admin.onboarding_step",
+                    institute_id=institute_id,
+                    step=next_step,
+                )
+            )
+
+        checks = _onboarding_checklist(conn, institute_id) if step == 9 else None
+        return render_template(
+            "platform_admin/onboarding.html",
+            step=step,
+            institute=institute,
+            onboarding=onboarding,
+            plans=plans,
+            subscription=subscription,
+            branding=branding,
+            domain=domain,
+            branches=branches,
+            admins=admins,
+            settings=settings,
+            integrations=integrations,
+            checks=checks,
+        )
+    except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+        conn.rollback()
+        flash(str(exc), "danger")
+        return redirect(request.url)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@platform_admin_bp.post("/onboarding/<int:institute_id>/activate")
+@login_required
+@platform_owner_required
+def onboarding_activate(institute_id):
+    conn = get_conn()
+    try:
+        _onboarding_or_404(conn, institute_id)
+        checks = _onboarding_checklist(conn, institute_id)
+        if not checks["ready"]:
+            flash("Complete every required activation item first.", "danger")
+            return redirect(
+                url_for("platform_admin.onboarding_step", institute_id=institute_id, step=9)
+            )
+        now = _now()
+        conn.execute(
+            "UPDATE institutes SET status = 'active', updated_at = ? WHERE id = ?",
+            (now, institute_id),
+        )
+        conn.execute(
+            """
+            UPDATE institute_onboarding SET status = 'completed', current_step = 9,
+                checklist_json = ?, completed_by = ?, completed_at = ?, updated_at = ?
+            WHERE institute_id = ?
+            """,
+            (json.dumps(checks), session.get("user_id"), now, now, institute_id),
+        )
+        conn.commit()
+        clear_tenant_cache()
+        flash("Institute activated successfully.", "success")
+        return redirect(
+            url_for("platform_admin.institute_detail", institute_id=institute_id)
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@platform_admin_bp.route(
+    "/institutes/<int:institute_id>/subscription", methods=["GET", "POST"]
+)
+@login_required
+@platform_owner_required
+def institute_subscription(institute_id):
+    conn = get_conn()
+    try:
+        institute = _institute_or_404(conn, institute_id)
+        if request.method == "POST":
+            plan_id = request.form.get("plan_id", type=int)
+            if not conn.execute(
+                "SELECT id FROM subscription_plans WHERE id = ? AND is_active = 1",
+                (plan_id,),
+            ).fetchone():
+                abort(400)
+
+            def optional_nonnegative(name):
+                value = request.form.get(name, "").strip()
+                if not value:
+                    return None
+                parsed = int(value)
+                if parsed < 0:
+                    raise ValueError
+                return parsed
+
+            try:
+                branch_limit = optional_nonnegative("branch_limit_override")
+                staff_limit = optional_nonnegative("staff_limit_override")
+                student_limit = optional_nonnegative("student_limit_override")
+                storage_mb = optional_nonnegative("storage_limit_mb_override")
+            except ValueError:
+                flash("Limit overrides must be non-negative whole numbers.", "danger")
+                return redirect(request.url)
+            features = {
+                feature: "1" in request.form.getlist(f"feature_{feature}")
+                for feature in (
+                    "crm", "students", "finance", "attendance", "reports",
+                    "lms", "certificates", "integrations",
+                )
+            }
+            plan = conn.execute(
+                "SELECT * FROM subscription_plans WHERE id = ?",
+                (plan_id,),
+            ).fetchone()
+            _, current_usage = usage_summary(conn, institute_id)
+            proposed_limits = {
+                "branches": branch_limit if branch_limit is not None else plan["branch_limit"],
+                "staff": staff_limit if staff_limit is not None else plan["staff_limit"],
+                "students": student_limit if student_limit is not None else plan["student_limit"],
+                "storage": (
+                    storage_mb * 1024 * 1024
+                    if storage_mb is not None else plan["storage_limit_bytes"]
+                ),
+            }
+            has_phase9_onboarding = conn.execute(
+                "SELECT id FROM institute_onboarding WHERE institute_id = ?",
+                (institute_id,),
+            ).fetchone()
+            if proposed_limits["storage"] is not None and not has_phase9_onboarding:
+                flash(
+                    "This legacy institute must complete a storage inventory "
+                    "reconciliation before a finite storage limit can be applied.",
+                    "danger",
+                )
+                return redirect(request.url)
+            over_limit = [
+                resource for resource, limit in proposed_limits.items()
+                if limit is not None and current_usage[resource] > int(limit)
+            ]
+            if over_limit:
+                flash(
+                    "Cannot apply limits below current usage: "
+                    + ", ".join(over_limit) + ".",
+                    "danger",
+                )
+                return redirect(request.url)
+            now = _now()
+            conn.execute(
+                """
+                UPDATE institute_subscriptions SET
+                    plan_id = ?, branch_limit_override = ?,
+                    staff_limit_override = ?, student_limit_override = ?,
+                    storage_limit_bytes_override = ?, feature_overrides_json = ?,
+                    updated_at = ?
+                WHERE institute_id = ?
+                """,
+                (
+                    plan_id, branch_limit, staff_limit, student_limit,
+                    storage_mb * 1024 * 1024 if storage_mb is not None else None,
+                    json.dumps(features), now, institute_id,
+                ),
+            )
+            conn.commit()
+            flash("Subscription and limits updated.", "success")
+            return redirect(
+                url_for("platform_admin.institute_subscription", institute_id=institute_id)
+            )
+        entitlement, usage = usage_summary(conn, institute_id)
+        subscription = conn.execute(
+            "SELECT * FROM institute_subscriptions WHERE institute_id = ?",
+            (institute_id,),
+        ).fetchone()
+        return render_template(
+            "platform_admin/subscription.html",
+            institute=institute,
+            subscription=subscription,
+            entitlement=entitlement,
+            usage=usage,
+            plans=_active_plans(conn),
+        )
+    finally:
+        conn.close()
+
+
+@platform_admin_bp.post("/institutes/<int:institute_id>/subscription/lifecycle")
+@login_required
+@platform_owner_required
+def institute_subscription_lifecycle(institute_id):
+    action = request.form.get("action", "")
+    if action not in {"grace", "suspend", "reactivate"}:
+        abort(400)
+    conn = get_conn()
+    try:
+        _institute_or_404(conn, institute_id)
+        now_dt = datetime.now()
+        now = now_dt.isoformat(timespec="seconds")
+        if action == "grace":
+            days = max(1, min(request.form.get("grace_days", 7, type=int), 90))
+            conn.execute(
+                """UPDATE institute_subscriptions
+                   SET status = 'grace', grace_ends_at = ?, suspended_at = NULL,
+                       suspension_reason = NULL, updated_at = ?
+                   WHERE institute_id = ?""",
+                (
+                    (now_dt + timedelta(days=days)).isoformat(timespec="seconds"),
+                    now, institute_id,
+                ),
+            )
+            conn.execute(
+                "UPDATE institutes SET status = 'active', updated_at = ? WHERE id = ?",
+                (now, institute_id),
+            )
+        elif action == "suspend":
+            reason = request.form.get("reason", "").strip()
+            if not reason:
+                flash("A suspension reason is required.", "danger")
+                return redirect(
+                    url_for("platform_admin.institute_subscription", institute_id=institute_id)
+                )
+            conn.execute(
+                """UPDATE institute_subscriptions
+                   SET status = 'suspended', suspended_at = ?,
+                       suspension_reason = ?, updated_at = ?
+                   WHERE institute_id = ?""",
+                (now, reason, now, institute_id),
+            )
+            conn.execute(
+                "UPDATE institutes SET status = 'suspended', updated_at = ? WHERE id = ?",
+                (now, institute_id),
+            )
+        else:
+            conn.execute(
+                """UPDATE institute_subscriptions
+                   SET status = 'active', grace_ends_at = NULL, suspended_at = NULL,
+                       suspension_reason = NULL, updated_at = ?
+                   WHERE institute_id = ?""",
+                (now, institute_id),
+            )
+            conn.execute(
+                "UPDATE institutes SET status = 'active', updated_at = ? WHERE id = ?",
+                (now, institute_id),
+            )
+        conn.commit()
+        clear_tenant_cache()
+        flash(f"Institute subscription updated: {action}.", "success")
+        return redirect(
+            url_for("platform_admin.institute_subscription", institute_id=institute_id)
+        )
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()

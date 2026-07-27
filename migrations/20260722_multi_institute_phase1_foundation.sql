@@ -234,7 +234,7 @@ INSERT INTO institute_memberships (
     institute_id, user_id, membership_role, is_active, created_at, updated_at
 )
 SELECT
-    1, id,
+    institute_id, id,
     CASE WHEN role = 'admin' THEN 'institute_admin' ELSE role END,
     is_active, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 FROM users

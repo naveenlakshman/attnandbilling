@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Institute Onboarding - Platform Administration{% endblock %}
+{% block page_title %}Institute Onboarding{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width: 1200px;">
+  <div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+      <a href="{{ url_for('platform_admin.institutes') }}" class="small">← All institutes</a>
+      <h2 class="mt-2 mb-1">{{ institute.name if institute else 'Onboard a new institute' }}</h2>
+      <p class="text-muted mb-0">Step {{ step }} of 9 · Complete the setup in order, then activate.</p>
+    </div>
+    {% if institute %}<span class="badge bg-{{ 'success' if institute.status == 'active' else 'warning text-dark' }}">{{ institute.status|title }}</span>{% endif %}
+  </div>
+
+  <div class="progress mb-4" style="height: 8px;">
+    <div class="progress-bar" style="width: {{ (step / 9 * 100)|round }}%"></div>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 mb-4">
+    {% set labels = ['Identity','Plan & limits','Domain','Branding','First branch','First administrator','Numbering','Integrations','Activation'] %}
+    {% for label in labels %}
+      {% set number = loop.index %}
+      {% if institute and number >= 2 %}
+        <a class="btn btn-sm {{ 'btn-primary' if step == number else 'btn-outline-secondary' }}" href="{{ url_for('platform_admin.onboarding_step', institute_id=institute.id, step=number) }}">{{ number }}. {{ label }}</a>
+      {% else %}
+        <span class="btn btn-sm {{ 'btn-primary' if step == number else 'btn-outline-secondary disabled' }}">{{ number }}. {{ label }}</span>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      {% if step == 1 %}
+        <h3>Institute identity</h3>
+        <p class="text-muted">The institute remains unavailable to tenant users until step 9 activation.</p>
+        <form method="post">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Institute name *</label><input class="form-control" name="name" required value="{{ form_data.name if form_data else '' }}"></div>
+            <div class="col-md-3"><label class="form-label">Short name *</label><input class="form-control" name="short_name" required value="{{ form_data.short_name if form_data else '' }}"></div>
+            <div class="col-md-3"><label class="form-label">Slug *</label><input class="form-control" name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" value="{{ form_data.slug if form_data else '' }}"></div>
+            <div class="col-md-4"><label class="form-label">Timezone</label><input class="form-control" name="timezone" value="Asia/Kolkata"></div>
+            <div class="col-md-4"><label class="form-label">Locale</label><input class="form-control" name="locale" value="en-IN"></div>
+            <div class="col-md-4"><label class="form-label">Currency</label><input class="form-control" name="currency_code" maxlength="3" value="INR"></div>
+          </div>
+          <button class="btn btn-primary mt-4">Save and continue</button>
+        </form>
+
+      {% elif step == 2 %}
+        <h3>Plan and limits</h3>
+        <p class="text-muted">Limits are enforced on the server. Enterprise uses unlimited values unless an override is applied later.</p>
+        <form method="post">
+          <div class="row g-3">
+            {% for plan in plans %}
+            <div class="col-lg-4">
+              <label class="card h-100 p-3 border">
+                <div><input type="radio" name="plan_id" value="{{ plan.id }}" required {% if subscription and subscription.plan_id == plan.id %}checked{% endif %}> <strong>{{ plan.name }}</strong></div>
+                <div class="small text-muted mt-2">{{ plan.description }}</div>
+                <ul class="small mt-3 mb-0">
+                  <li>Branches: {{ plan.branch_limit if plan.branch_limit is not none else 'Unlimited' }}</li>
+                  <li>Staff: {{ plan.staff_limit if plan.staff_limit is not none else 'Unlimited' }}</li>
+                  <li>Students: {{ plan.student_limit if plan.student_limit is not none else 'Unlimited' }}</li>
+                  <li>Storage: {{ ((plan.storage_limit_bytes / 1024 / 1024 / 1024)|round(1)) ~ ' GB' if plan.storage_limit_bytes is not none else 'Unlimited' }}</li>
+                </ul>
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="row g-3 mt-2">
+            <div class="col-md-4"><label class="form-label">Starting state</label><select class="form-select" name="subscription_status"><option value="trialing">Trial</option><option value="active">Active</option></select></div>
+            <div class="col-md-4"><label class="form-label">Trial days</label><input class="form-control" type="number" min="0" max="90" name="trial_days" value="14"></div>
+          </div>
+          <button class="btn btn-primary mt-4">Save and continue</button>
+        </form>
+
+      {% elif step == 3 %}
+        <h3>Primary domain</h3>
+        <p class="text-muted">Local <code>*.localhost</code> hostnames activate automatically outside production. Public domains remain pending until infrastructure verification.</p>
+        <form method="post">
+          <label class="form-label">Hostname *</label>
+          <input class="form-control" name="hostname" required placeholder="institute.example.com" value="{{ domain.hostname if domain else '' }}">
+          <button class="btn btn-primary mt-4">Save and continue</button>
+        </form>
+
+      {% elif step == 4 %}
+        <h3>Branding</h3>
+        <form method="post" enctype="multipart/form-data">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Display name *</label><input class="form-control" name="display_name" value="{{ branding.display_name if branding else institute.name }}"></div>
+            <div class="col-md-3"><label class="form-label">Short name</label><input class="form-control" name="short_name" value="{{ branding.short_name if branding else institute.short_name }}"></div>
+            <div class="col-md-3"><label class="form-label">Tagline</label><input class="form-control" name="tagline" value="{{ branding.tagline if branding else '' }}"></div>
+            <div class="col-md-3"><label class="form-label">Primary color</label><input class="form-control form-control-color w-100" type="color" name="primary_color" value="{{ branding.primary_color if branding else '#2563EB' }}"></div>
+            <div class="col-md-3"><label class="form-label">Secondary color</label><input class="form-control form-control-color w-100" type="color" name="secondary_color" value="{{ branding.secondary_color if branding else '#16A34A' }}"></div>
+            <div class="col-md-3"><label class="form-label">Logo (max 2 MB)</label><input class="form-control" type="file" name="logo" accept=".png,.jpg,.jpeg,.webp,.ico"></div>
+            <div class="col-md-3"><label class="form-label">Favicon (max 2 MB)</label><input class="form-control" type="file" name="favicon" accept=".png,.jpg,.jpeg,.webp,.ico"></div>
+            <div class="col-md-4"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{ branding.email if branding else '' }}"></div>
+            <div class="col-md-4"><label class="form-label">Phone</label><input class="form-control" name="phone" value="{{ branding.phone if branding else '' }}"></div>
+            <div class="col-md-4"><label class="form-label">Website</label><input class="form-control" name="website" value="{{ branding.website if branding else '' }}"></div>
+          </div>
+          <button class="btn btn-primary mt-4">Save and continue</button>
+        </form>
+
+      {% elif step == 5 %}
+        <h3>First branch</h3>
+        {% if branches %}<div class="alert alert-success">A branch already exists: <strong>{{ branches[0].branch_name }}</strong>. You may continue without creating another.</div>{% endif %}
+        <form method="post">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Branch name *</label><input class="form-control" name="branch_name" {% if not branches %}required{% endif %}></div>
+            <div class="col-md-3"><label class="form-label">Branch code *</label><input class="form-control" name="branch_code" {% if not branches %}required{% endif %}></div>
+            <div class="col-md-3"><label class="form-label">Computers</label><input class="form-control" type="number" min="0" name="no_of_computers" value="0"></div>
+            <div class="col-12"><label class="form-label">Address</label><textarea class="form-control" name="address"></textarea></div>
+          </div>
+          {% if not branches %}<button class="btn btn-primary mt-4">Create and continue</button>{% else %}<a class="btn btn-primary mt-4" href="{{ url_for('platform_admin.onboarding_step', institute_id=institute.id, step=6) }}">Continue</a>{% endif %}
+        </form>
+
+      {% elif step == 6 %}
+        <h3>First institute administrator</h3>
+        {% if admins %}<div class="alert alert-success">Administrator <strong>{{ admins[0].username }}</strong> already exists.</div>{% endif %}
+        {% if not admins %}
+        <form method="post">
+          <div class="row g-3">
+            <div class="col-md-4"><label class="form-label">Full name *</label><input class="form-control" name="full_name" required></div>
+            <div class="col-md-4"><label class="form-label">Username *</label><input class="form-control" name="username" required autocomplete="off"></div>
+            <div class="col-md-4"><label class="form-label">Temporary password *</label><input class="form-control" type="password" name="password" required autocomplete="new-password" minlength="8"></div>
+            <div class="col-md-4"><label class="form-label">Branch</label><select class="form-select" name="branch_id"><option value="">All branches</option>{% for branch in branches %}<option value="{{ branch.id }}">{{ branch.branch_name }}</option>{% endfor %}</select></div>
+          </div>
+          <button class="btn btn-primary mt-4">Create and continue</button>
+        </form>
+        {% else %}<a class="btn btn-primary" href="{{ url_for('platform_admin.onboarding_step', institute_id=institute.id, step=7) }}">Continue</a>{% endif %}
+
+      {% elif step == 7 %}
+        <h3>Settings and numbering</h3>
+        <form method="post">
+          <div class="row g-3">
+            <div class="col-md-3"><label class="form-label">Invoice prefix</label><input class="form-control" name="invoice_prefix" value="{{ settings.invoice_prefix }}"></div>
+            <div class="col-md-3"><label class="form-label">Receipt prefix</label><input class="form-control" name="receipt_prefix" value="{{ settings.receipt_prefix }}"></div>
+            <div class="col-md-3"><label class="form-label">Student prefix</label><input class="form-control" name="student_prefix" value="{{ settings.student_prefix }}"></div>
+            <div class="col-md-3"><label class="form-label">Certificate prefix</label><input class="form-control" name="certificate_prefix" value="{{ settings.certificate_prefix }}"></div>
+            <div class="col-md-4"><label class="form-label">Date format</label><input class="form-control" name="date_format" value="{{ settings.date_format }}"></div>
+          </div>
+          <button class="btn btn-primary mt-4">Save and continue</button>
+        </form>
+
+      {% elif step == 8 %}
+        <h3>Integration readiness</h3>
+        <p class="text-muted">This records readiness only. Never paste credentials here; production secrets belong in Secret Manager.</p>
+        <form method="post">
+          {% for kind in ['sms', 'email', 'storage'] %}
+          <div class="row align-items-end g-3 border-bottom pb-3 mb-3">
+            <div class="col-md-3"><strong>{{ kind|upper }}</strong></div>
+            <div class="col-md-5"><label class="form-label">Provider</label><input class="form-control" name="{{ kind }}_provider" placeholder="Provider name"></div>
+            <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="{{ kind }}_ready" value="1" id="{{ kind }}Ready"><label class="form-check-label" for="{{ kind }}Ready">Configuration is ready</label></div></div>
+          </div>
+          {% endfor %}
+          <button class="btn btn-primary">Save and continue</button>
+        </form>
+
+      {% elif step == 9 %}
+        <h3>Activation checklist</h3>
+        <p class="text-muted">Activation is server-side and is blocked until every required item passes.</p>
+        <div class="list-group mb-4">
+          {% for key, label in [('identity','Institute identity'),('subscription','Plan assigned'),('domain','Primary domain configured'),('branding','Branding record'),('branch','Active branch'),('administrator','Active administrator'),('settings','Numbering settings')] %}
+          <div class="list-group-item d-flex justify-content-between"><span>{{ label }}</span><span class="badge bg-{{ 'success' if checks[key] else 'danger' }}">{{ 'Ready' if checks[key] else 'Missing' }}</span></div>
+          {% endfor %}
+        </div>
+        {% if checks.ready %}
+        <form method="post" action="{{ url_for('platform_admin.onboarding_activate', institute_id=institute.id) }}">
+          <button class="btn btn-success btn-lg" onclick="return confirm('Activate this institute now?')">Activate institute</button>
+        </form>
+        {% else %}
+        <div class="alert alert-warning">Return to the missing steps before activation.</div>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+

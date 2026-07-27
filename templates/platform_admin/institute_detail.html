@@ -5,7 +5,11 @@
 <div class="container-fluid">
   <div class="d-flex justify-content-between align-items-start mb-4">
     <div><a href="{{ url_for('platform_admin.institutes') }}" class="small">← All institutes</a><h2 class="mt-2 mb-1">{{ institute.name }}</h2><div class="text-muted">{{ institute.slug }} · {{ institute.timezone }} · {{ institute.currency_code }}</div></div>
-    <div class="d-flex gap-2"><a class="btn btn-outline-primary" href="{{ url_for('platform_admin.institute_edit', institute_id=institute.id) }}">Edit settings</a><form method="post" action="{{ url_for('platform_admin.institute_toggle_status', institute_id=institute.id) }}"><button class="btn btn-outline-{{ 'danger' if institute.status == 'active' else 'success' }}" onclick="return confirm('Change this institute status?')">{{ 'Deactivate' if institute.status == 'active' else 'Activate' }}</button></form></div>
+    <div class="d-flex gap-2"><a class="btn btn-outline-primary" href="{{ url_for('platform_admin.institute_subscription', institute_id=institute.id) }}">Plan &amp; limits</a><a class="btn btn-outline-primary" href="{{ url_for('platform_admin.institute_edit', institute_id=institute.id) }}">Edit settings</a><form method="post" action="{{ url_for('platform_admin.institute_toggle_status', institute_id=institute.id) }}"><button class="btn btn-outline-{{ 'danger' if institute.status == 'active' else 'success' }}" onclick="return confirm('Change this institute status?')">{{ 'Deactivate' if institute.status == 'active' else 'Activate' }}</button></form></div>
+  </div>
+  <div class="alert alert-light border d-flex justify-content-between align-items-center mb-4">
+    <div><strong>Subscription:</strong> {{ subscription.plan_name if subscription else 'Not assigned' }} · {{ subscription.status|title if subscription else 'Unavailable' }}</div>
+    <a href="{{ url_for('platform_admin.institute_subscription', institute_id=institute.id) }}">Manage subscription</a>
   </div>
   <div class="row g-3 mb-4">
     <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Status</span><strong class="fs-5">{{ institute.status|title }}</strong></div></div>

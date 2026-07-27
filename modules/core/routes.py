@@ -12,6 +12,12 @@ logger = logging.getLogger("app.core")
 from .sms import send_sms
 from extensions import public_auth_limit
 from services.tenant_context import get_current_institute_id
+from services.subscriptions import (
+    PlanLimitExceeded,
+    SubscriptionAccessDenied,
+    assert_subscription_access,
+    lock_and_check_limit,
+)
 
 core_bp = Blueprint("core", __name__)
 
@@ -57,9 +63,14 @@ def login():
             LIMIT 1
         """, (current_institute_id, username, current_institute_id))
         user = cur.fetchone()
-        conn.close()
-
         if user and check_password_hash(user["password_hash"], password):
+            try:
+                assert_subscription_access(conn, user["institute_id"])
+            except SubscriptionAccessDenied as exc:
+                conn.close()
+                flash(str(exc), "danger")
+                return render_template("core/login.html")
+            conn.close()
             session.permanent = True
             session["user_id"] = user["id"]
             session["full_name"] = user["full_name"]
@@ -88,6 +99,7 @@ def login():
             flash("Login successful.", "success")
             return redirect(url_for("core.dashboard"))
 
+        conn.close()
         flash("Invalid username or password.", "danger")
 
     return render_template("core/login.html")
@@ -712,6 +724,13 @@ def user_new():
             return redirect(url_for("core.user_new"))
 
         now = datetime.now().isoformat(timespec="seconds")
+        try:
+            lock_and_check_limit(conn, institute_id, "staff")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("core.user_new"))
 
         cur.execute("""
             INSERT INTO users (
@@ -914,6 +933,14 @@ def user_toggle_status(user_id):
         return redirect(url_for("core.users"))
 
     new_status = 0 if user["is_active"] == 1 else 1
+    if new_status == 1:
+        try:
+            lock_and_check_limit(conn, institute_id, "staff")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("core.users"))
 
     cur.execute("""
         UPDATE users
@@ -1004,6 +1031,13 @@ def branch_new():
             return redirect(url_for("core.branch_new"))
 
         now = datetime.now().isoformat(timespec="seconds")
+        try:
+            lock_and_check_limit(conn, institute_id, "branches")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("core.branch_new"))
 
         cur.execute("""
             INSERT INTO branches (
@@ -1140,6 +1174,14 @@ def branch_toggle_status(branch_id):
         return redirect(url_for("core.branches"))
 
     new_status = 0 if branch["is_active"] == 1 else 1
+    if new_status == 1:
+        try:
+            lock_and_check_limit(conn, institute_id, "branches")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("core.branches"))
 
     cur.execute("""
         UPDATE branches

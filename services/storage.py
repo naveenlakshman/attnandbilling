@@ -10,6 +10,79 @@ logger = logging.getLogger("app.storage")
 _TENANT_PATH_RE = re.compile(r"^tenants/([1-9][0-9]*)/(.+)$")
 
 
+def _payload_size(file_data):
+    if isinstance(file_data, bytes):
+        return len(file_data)
+    if isinstance(file_data, str):
+        encoded = file_data.split(",", 1)[1] if "," in file_data else file_data
+        return len(base64.b64decode(encoded))
+    if hasattr(file_data, "seek") and hasattr(file_data, "tell"):
+        position = file_data.tell()
+        file_data.seek(0, os.SEEK_END)
+        size = file_data.tell()
+        file_data.seek(position)
+        return int(size)
+    raise ValueError("Unable to determine upload size for quota enforcement.")
+
+
+def _storage_write_guard(canonical_path, file_data):
+    """Lock subscription capacity until storage metadata is committed."""
+    from db import get_conn
+    from services.subscriptions import lock_and_check_limit
+    from services.tenant_context import get_current_institute_id
+
+    tenant_id, _ = parse_tenant_storage_path(canonical_path)
+    institute_id = tenant_id or get_current_institute_id(default=1)
+    size_bytes = _payload_size(file_data)
+    conn = get_conn()
+    try:
+        existing = conn.execute(
+            "SELECT size_bytes FROM tenant_storage_objects WHERE object_path = ?",
+            (canonical_path,),
+        ).fetchone()
+        previous_size = int(existing["size_bytes"] or 0) if existing else 0
+        requested = max(0, size_bytes - previous_size)
+        lock_and_check_limit(conn, institute_id, "storage", requested)
+        return conn, int(institute_id), size_bytes
+    except Exception:
+        conn.rollback()
+        conn.close()
+        raise
+
+
+def _commit_storage_write(conn, institute_id, canonical_path, size_bytes, content_type):
+    conn.execute(
+        """
+        INSERT INTO tenant_storage_objects (
+            institute_id, object_path, size_bytes, content_type, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE institute_id = VALUES(institute_id),
+            size_bytes = VALUES(size_bytes), content_type = VALUES(content_type),
+            updated_at = NOW()
+        """,
+        (institute_id, canonical_path, size_bytes, content_type),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _remove_storage_record(canonical_path):
+    from db import get_conn
+
+    conn = get_conn()
+    try:
+        conn.execute(
+            "DELETE FROM tenant_storage_objects WHERE object_path = ?",
+            (canonical_path,),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception("Could not remove storage quota metadata for %s", canonical_path)
+    finally:
+        conn.close()
+
+
 def parse_tenant_storage_path(path):
     normalized = (path or "").replace("\\", "/").lstrip("/")
     match = _TENANT_PATH_RE.fullmatch(normalized)
@@ -157,34 +230,47 @@ class LocalStorageProvider:
 
     def upload_file(self, file_data, destination_path, content_type=None):
         logger.info(f"LocalUpload: {destination_path}")
-        local_path = self._resolve_local_path(destination_path)
+        canonical_path = tenant_storage_path(destination_path)
+        quota_conn, institute_id, size_bytes = _storage_write_guard(
+            canonical_path, file_data
+        )
+        local_path = self._resolve_local_path(canonical_path)
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
-
-        if isinstance(file_data, str) and (file_data.startswith("data:") or "," in file_data):
-            # Base64 string decode
-            if "," in file_data:
-                file_data = file_data.split(",")[1]
-            data_bytes = base64.b64decode(file_data)
-            with open(local_path, "wb") as f:
-                f.write(data_bytes)
-        elif isinstance(file_data, bytes):
-            with open(local_path, "wb") as f:
-                f.write(file_data)
-        else:
-            # File-like object (Flask FileStorage)
-            file_data.seek(0)
-            file_data.save(local_path)
-            
-        return tenant_storage_path(destination_path)
+        try:
+            if isinstance(file_data, str) and (file_data.startswith("data:") or "," in file_data):
+                # Base64 string decode
+                if "," in file_data:
+                    file_data = file_data.split(",")[1]
+                data_bytes = base64.b64decode(file_data)
+                with open(local_path, "wb") as f:
+                    f.write(data_bytes)
+            elif isinstance(file_data, bytes):
+                with open(local_path, "wb") as f:
+                    f.write(file_data)
+            else:
+                # File-like object (Flask FileStorage)
+                file_data.seek(0)
+                file_data.save(local_path)
+            _commit_storage_write(
+                quota_conn, institute_id, canonical_path, size_bytes, content_type
+            )
+            return canonical_path
+        except Exception:
+            quota_conn.rollback()
+            quota_conn.close()
+            raise
 
     def delete_file(self, destination_path):
         logger.info(f"LocalDelete: {destination_path}")
-        local_path = self._resolve_local_path(destination_path)
+        canonical_path = tenant_storage_path(destination_path)
+        local_path = self._resolve_local_path(canonical_path)
         if os.path.isfile(local_path):
             try:
                 os.remove(local_path)
             except Exception as e:
                 logger.error(f"Failed to delete local file {local_path}: {e}")
+                return
+        _remove_storage_record(canonical_path)
 
     def file_exists(self, destination_path):
         local_path = self._resolve_local_path(destination_path)
@@ -218,9 +304,10 @@ class LocalStorageProvider:
             return f.read()
 
     def replace_file(self, file_data, old_destination_path, new_destination_path, content_type=None):
-        if old_destination_path:
+        stored_path = self.upload_file(file_data, new_destination_path, content_type)
+        if old_destination_path and tenant_storage_path(old_destination_path) != stored_path:
             self.delete_file(old_destination_path)
-        return self.upload_file(file_data, new_destination_path, content_type)
+        return stored_path
 
 
 class GCSStorageProvider:
@@ -234,26 +321,33 @@ class GCSStorageProvider:
     def upload_file(self, file_data, destination_path, content_type=None):
         logger.info(f"GCSUpload: {destination_path}")
         gcs_path = tenant_storage_path(destination_path)
+        quota_conn, institute_id, size_bytes = _storage_write_guard(gcs_path, file_data)
         blob = self.bucket.blob(gcs_path)
-
-        if isinstance(file_data, str) and (file_data.startswith("data:") or "," in file_data):
-            # Base64 string decode
-            if "," in file_data:
-                file_data = file_data.split(",")[1]
-            data_bytes = base64.b64decode(file_data)
-            blob.upload_from_string(data_bytes, content_type=content_type or "image/jpeg")
-        elif isinstance(file_data, bytes):
-            blob.upload_from_string(file_data, content_type=content_type or "application/octet-stream")
-        else:
-            # File-like object (Flask FileStorage)
-            file_data.seek(0)
-            if hasattr(file_data, "read"):
-                # GCS upload_from_file expects stream
-                blob.upload_from_file(file_data, content_type=content_type or file_data.content_type)
+        try:
+            if isinstance(file_data, str) and (file_data.startswith("data:") or "," in file_data):
+                # Base64 string decode
+                if "," in file_data:
+                    file_data = file_data.split(",")[1]
+                data_bytes = base64.b64decode(file_data)
+                blob.upload_from_string(data_bytes, content_type=content_type or "image/jpeg")
+            elif isinstance(file_data, bytes):
+                blob.upload_from_string(file_data, content_type=content_type or "application/octet-stream")
             else:
-                file_data.save(blob)
-
-        return gcs_path
+                # File-like object (Flask FileStorage)
+                file_data.seek(0)
+                if hasattr(file_data, "read"):
+                    # GCS upload_from_file expects stream
+                    blob.upload_from_file(file_data, content_type=content_type or file_data.content_type)
+                else:
+                    file_data.save(blob)
+            _commit_storage_write(
+                quota_conn, institute_id, gcs_path, size_bytes, content_type
+            )
+            return gcs_path
+        except Exception:
+            quota_conn.rollback()
+            quota_conn.close()
+            raise
 
     def delete_file(self, destination_path):
         logger.info(f"GCSDelete: {destination_path}")
@@ -261,6 +355,7 @@ class GCSStorageProvider:
         blob = self.bucket.blob(gcs_path)
         try:
             blob.delete()
+            _remove_storage_record(gcs_path)
         except Exception as e:
             # GCS returns exception if object doesn't exist, we can ignore it
             logger.debug(f"Failed to delete GCS object {gcs_path}: {e}")
@@ -284,9 +379,10 @@ class GCSStorageProvider:
         return blob.download_as_bytes()
 
     def replace_file(self, file_data, old_destination_path, new_destination_path, content_type=None):
-        if old_destination_path:
+        stored_path = self.upload_file(file_data, new_destination_path, content_type)
+        if old_destination_path and tenant_storage_path(old_destination_path) != stored_path:
             self.delete_file(old_destination_path)
-        return self.upload_file(file_data, new_destination_path, content_type)
+        return stored_path
 
 
 # Single-instance storage service factory

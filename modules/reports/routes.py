@@ -8,6 +8,7 @@ from modules.core.utils import login_required, admin_required
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta, timezone
 from services.tenant_context import get_current_institute_id
+from services.subscriptions import lock_and_check_limit
 
 reports_bp = Blueprint("reports", __name__)
 
@@ -1919,6 +1920,7 @@ def upload_csv():
         
         conn = get_conn()
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         
         rows_imported = 0
         errors = []
@@ -1936,14 +1938,20 @@ def upload_csv():
             
             try:
                 if table_name == "branches":
+                    is_active = int(row.get("is_active", 1))
+                    if is_active:
+                        lock_and_check_limit(conn, current_inst, "branches")
                     cur.execute("""
-                        INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO branches (
+                            institute_id, branch_name, branch_code, address, is_active, created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("branch_name", "").strip(),
                         row.get("branch_code", "").strip(),
                         row.get("address", "").strip(),
-                        int(row.get("is_active", 1)),
+                        is_active,
                         datetime.now().isoformat(timespec="seconds")
                     ))
                     rows_imported += 1
@@ -1989,14 +1997,15 @@ def upload_csv():
                     
                     cur.execute("""
                         INSERT INTO leads (
-                            name, phone, whatsapp, gender, age, education_status, stream,
+                            institute_id, name, phone, whatsapp, gender, age, education_status, stream,
                             institute_name, career_goal, interested_courses, lead_source, decision_maker, 
                             lead_location, start_timeframe, lead_score, stage, status, lost_reason,
                             last_contact_date, next_followup_date, followup_count, notes, 
                             is_deleted, assigned_to_id, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("name", "").strip(),
                         row.get("phone", "").strip(),
                         row.get("whatsapp", "").strip() or None,
@@ -2038,14 +2047,28 @@ def upload_csv():
                     if student_location:
                         student_location = student_location.lower()
                     
+                    student_status = row.get("status", "active").strip() or "active"
+                    if student_status == "active":
+                        lock_and_check_limit(conn, current_inst, "students")
+                    branch_id = (
+                        int(row.get("branch_id"))
+                        if row.get("branch_id") else session.get("branch_id")
+                    )
+                    if not branch_id or not conn.execute(
+                        "SELECT id FROM branches WHERE id = ? AND institute_id = ?",
+                        (branch_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: branch_id must belong to this institute")
+                        continue
                     cur.execute("""
                         INSERT INTO students (
-                            student_code, full_name, phone, email, gender, address,
+                            institute_id, student_code, full_name, phone, email, gender, address,
                             education_level, qualification, student_location, employment_status,
                             status, branch_id, joined_date, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("student_code", "").strip(),
                         row.get("full_name", "").strip(),
                         row.get("phone", "").strip(),
@@ -2056,8 +2079,8 @@ def upload_csv():
                         row.get("qualification", "").strip() or None,
                         student_location,
                         row.get("employment_status", "unemployed").strip() or "unemployed",
-                        row.get("status", "active").strip() or "active",
-                        int(row.get("branch_id", 1)) if row.get("branch_id") else 1,
+                        student_status,
+                        branch_id,
                         parse_date(row.get("joined_date", "")) or datetime.now().isoformat(timespec="seconds"),
                         datetime.now().isoformat(timespec="seconds"),
                         datetime.now().isoformat(timespec="seconds")
@@ -2372,23 +2395,53 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "users":
+                    user_active = int(row.get("is_active", 1))
+                    if user_active:
+                        lock_and_check_limit(conn, current_inst, "staff")
+                    branch_id = (
+                        int(row.get("branch_id"))
+                        if row.get("branch_id") else session.get("branch_id")
+                    )
+                    if branch_id and not conn.execute(
+                        "SELECT id FROM branches WHERE id = ? AND institute_id = ?",
+                        (branch_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: branch_id must belong to this institute")
+                        continue
                     cur.execute("""
                         INSERT INTO users (
-                            full_name, username, password_hash, role, phone, branch_id, 
+                            institute_id, full_name, username, password_hash, role, phone, branch_id,
                             can_view_all_branches, is_active, created_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("full_name", "").strip(),
                         row.get("username", "").strip(),
                         generate_password_hash(row.get("username", "")),  # Default password = username
                         row.get("role", "staff").strip() or "staff",
                         row.get("phone", "").strip() or None,
-                        int(row.get("branch_id")) if row.get("branch_id") else 1,
+                        branch_id,
                         int(row.get("can_view_all_branches", 0)),
-                        int(row.get("is_active", 1)),
+                        user_active,
                         datetime.now().isoformat(timespec="seconds")
                     ))
+                    imported_user_id = cur.lastrowid
+                    cur.execute(
+                        """INSERT INTO institute_memberships (
+                               institute_id, user_id, membership_role, is_active,
+                               created_at, updated_at
+                           ) VALUES (?, ?, ?, ?, ?, ?)""",
+                        (
+                            current_inst, imported_user_id,
+                            "institute_admin"
+                            if (row.get("role", "staff").strip() or "staff") == "admin"
+                            else "staff",
+                            user_active,
+                            datetime.now().isoformat(timespec="seconds"),
+                            datetime.now().isoformat(timespec="seconds"),
+                        ),
+                    )
                     rows_imported += 1
                 
                 elif table_name == "expenses":

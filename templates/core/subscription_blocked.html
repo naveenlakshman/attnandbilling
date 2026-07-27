@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Institute Access Restricted{% endblock %}
+{% block page_title %}Access Restricted{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width: 760px;">
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-5 text-center">
+      <div class="display-5 mb-3">🔒</div>
+      <h2>Institute access is restricted</h2>
+      <p class="text-muted fs-5">{{ subscription_message }}</p>
+      <p class="small text-muted">Your records remain stored. Contact your institute administrator or the platform owner for plan or account assistance.</p>
+      <a class="btn btn-outline-secondary mt-2" href="{{ url_for('core.logout') }}">Sign out</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

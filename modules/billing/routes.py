@@ -14,6 +14,11 @@ import os
 import base64
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
+from services.subscriptions import (
+    PlanLimitExceeded,
+    SubscriptionAccessDenied,
+    lock_and_check_limit,
+)
 
 logger = logging.getLogger("app.billing")
 
@@ -2634,6 +2639,16 @@ def student_new():
             next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else 1
             student_code = f"{stu_prefix}{next_seq:03d}"
 
+        # Serialize student creation on the subscription row. The student INSERT
+        # below is committed in this same transaction.
+        try:
+            lock_and_check_limit(conn, current_inst, "students")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("billing.student_new"))
+
         # Save photo if provided
         photo_filename = None
         if photo_data:
@@ -4944,11 +4959,12 @@ def invoice_new():
                 flash("Please add at least one bill item.", "danger")
                 return redirect(url_for("billing.invoice_new"))
 
+            current_inst = get_current_institute_id(default=1)
             cur.execute("""
-                SELECT id, branch_id, full_name
+                SELECT id, branch_id, full_name, status
                 FROM students
-                WHERE id = ?
-            """, (student_id,))
+                WHERE id = ? AND institute_id = ?
+            """, (student_id, current_inst))
             student = cur.fetchone()
 
             if not student:
@@ -4958,7 +4974,6 @@ def invoice_new():
             branch_id = student["branch_id"]
 
             if not branch_id:
-                current_inst = get_current_institute_id(default=1)
                 cur.execute(
                     "SELECT id FROM branches WHERE institute_id = ? AND is_active = 1 LIMIT 1",
                     (current_inst,)
@@ -4972,6 +4987,14 @@ def invoice_new():
                     )
                 else:
                     flash("Selected student does not have a branch assigned.", "danger")
+                    return redirect(url_for("billing.invoice_new"))
+
+            if student["status"] != "active":
+                try:
+                    lock_and_check_limit(conn, current_inst, "students")
+                except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+                    conn.rollback()
+                    flash(str(exc), "danger")
                     return redirect(url_for("billing.invoice_new"))
 
             now = datetime.now().isoformat(timespec="seconds")

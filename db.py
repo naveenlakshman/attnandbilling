@@ -2171,7 +2171,7 @@ def init_db():
         INSERT OR IGNORE INTO institute_memberships (
             institute_id, user_id, membership_role, is_active, created_at, updated_at
         )
-        SELECT 1, id,
+        SELECT institute_id, id,
                CASE WHEN role = 'admin' THEN 'institute_admin' ELSE role END,
                is_active, ?, ?
         FROM users

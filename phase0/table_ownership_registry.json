@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "audit_date": "2026-07-22",
+  "schema_version": 2,
+  "audit_date": "2026-07-27",
   "ownership_values": {
     "direct": "The table requires a non-null institute_id.",
     "inherited": "Ownership is derived through a parent; a direct institute_id remains recommended for raw-SQL safety where noted in the plan.",
@@ -35,7 +35,9 @@
     "institute_domains": "direct",
     "institute_integrations": "direct",
     "institute_memberships": "direct",
+    "institute_onboarding": "direct",
     "institute_settings": "direct",
+    "institute_subscriptions": "direct",
     "institutes": "platform",
     "installment_plans": "inherited",
     "invoice_items": "inherited",
@@ -78,8 +80,10 @@
     "student_program_last_activity": "direct",
     "student_uploaded_documents": "direct",
     "students": "direct",
+    "subscription_plans": "platform",
     "tenant_migration_runs": "direct",
     "tenant_security_audit": "direct",
+    "tenant_storage_objects": "direct",
     "users": "direct"
   }
 }

@@ -3,7 +3,7 @@ import mimetypes
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 
-from flask import Flask, send_file, send_from_directory, session, abort, redirect, url_for, request
+from flask import Flask, send_file, send_from_directory, session, abort, redirect, url_for, request, render_template
 from werkzeug.middleware.proxy_fix import ProxyFix
 from extensions import csrf, limiter
 from config import Config
@@ -192,6 +192,56 @@ def create_app():
         ):
             return None
         abort(403)
+
+    feature_blueprints = {
+        "leads": "crm",
+        "students": "students",
+        "billing": "finance",
+        "baddebt": "finance",
+        "assets": "finance",
+        "attendance": "attendance",
+        "reports": "reports",
+        "import_export": "reports",
+        "lms_admin": "lms",
+        "exams": "lms",
+        "certificates": "certificates",
+    }
+
+    @app.before_request
+    def enforce_subscription_access():
+        """Apply lifecycle and feature entitlements to authenticated tenants."""
+        if not (session.get("user_id") or session.get("student_id")):
+            return None
+        if session.get("platform_role") == "platform_owner":
+            return None
+        if request.endpoint in {"core.login", "core.logout", "static", "healthz"}:
+            return None
+
+        from services.subscriptions import (
+            SubscriptionAccessDenied,
+            assert_feature_enabled,
+            assert_subscription_access,
+        )
+        from services.tenant_context import get_current_institute_id
+
+        institute_id = session.get("institute_id") or session.get("student_institute_id")
+        institute_id = int(institute_id or get_current_institute_id(default=1))
+        conn = get_conn()
+        try:
+            endpoint_prefix = (request.endpoint or "").split(".", 1)[0]
+            feature = feature_blueprints.get(endpoint_prefix)
+            if feature:
+                assert_feature_enabled(conn, institute_id, feature)
+            else:
+                assert_subscription_access(conn, institute_id)
+        except SubscriptionAccessDenied as exc:
+            return render_template(
+                "core/subscription_blocked.html",
+                subscription_message=str(exc),
+            ), 403
+        finally:
+            conn.close()
+        return None
 
     # Register storage_url global in Jinja templates
     def storage_url(path):
