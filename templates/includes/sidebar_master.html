@@ -25,10 +25,13 @@
     <span class="erp-nav-mark"><i class="bi bi-building-add"></i></span>
     <span class="nav-text">Add New Institute</span>
   </a>
+  {% if session.get('support_session_id') %}
   <hr class="sidebar-divider">
-  <div class="erp-subsection">Current Institute</div>
+  <div class="erp-subsection">Support: {{ session.get('support_institute_name') }}</div>
   {% endif %}
-  
+  {% endif %}
+
+  {% if not is_platform_owner or session.get('support_session_id') %}
   <!-- Dashboard Section -->
   <a class="nav-link erp-primary-link {{ 'active' if ep == 'core.dashboard' else '' }}"
      href="{{ url_for('core.dashboard') }}">
@@ -260,6 +263,7 @@
     </div>
   </div>
 
+  {% endif %}
   <hr class="sidebar-divider">
   <a class="nav-link text-danger-nav" href="{{ url_for('core.logout') }}">
     <span class="erp-nav-mark text-danger-icon"><i class="bi bi-box-arrow-left"></i></span>

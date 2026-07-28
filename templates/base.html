@@ -119,12 +119,24 @@
             <span class="d-none d-md-inline">({{ session.get('role') }})</span>
           {% endif %}
         </div>
-        <a href="{{ url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary top-home-btn" title="Back to Main Dashboard">🏠 Home</a>
+        <a href="{{ url_for('platform_admin.institutes') if session.get('platform_account_id') and not session.get('support_session_id') else url_for('core.dashboard') }}" class="btn btn-sm btn-outline-primary top-home-btn" title="Back to dashboard">🏠 Home</a>
       </div>
     </div>
 
     <!-- Content -->
     <div class="erp-content">
+      {% if session.get('platform_account_id') and session.get('support_session_id') %}
+      <div class="alert alert-warning border-warning d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 no-print">
+        <div>
+          <strong>Audited support session:</strong>
+          You are operating inside {{ session.get('support_institute_name') }}.
+          Tenant actions are recorded under your platform identity.
+        </div>
+        <form method="post" action="{{ url_for('platform_admin.institute_support_exit') }}" class="m-0">
+          <button class="btn btn-sm btn-dark">Exit institute</button>
+        </form>
+      </div>
+      {% endif %}
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
@@ -142,10 +154,13 @@
 </div>
 
 <!-- Global Mobile Bottom Navigation -->
-{% include 'includes/mobile_nav_master.html' %}
+{% if not session.get('platform_account_id') or session.get('support_session_id') %}
+  {% include 'includes/mobile_nav_master.html' %}
+{% endif %}
 
 <!-- Dynamic FAB Menu Overlays -->
-{% if request.endpoint and request.endpoint.startswith('attendance.') %}
+{% if session.get('platform_account_id') and not session.get('support_session_id') %}
+{% elif request.endpoint and request.endpoint.startswith('attendance.') %}
   {% include 'includes/fab_menu_attendance.html' %}
 {% elif request.endpoint and request.endpoint.startswith('billing.') %}
   {% include 'includes/fab_menu_billing.html' %}

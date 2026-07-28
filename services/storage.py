@@ -180,6 +180,7 @@ def tenant_storage_path(path, institute_id=None):
             is_platform_owner = (
                 has_request_context()
                 and session.get("platform_role") == "platform_owner"
+                and session.get("support_session_id")
             )
             if (
                 current_id is not None

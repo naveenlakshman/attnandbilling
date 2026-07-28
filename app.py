@@ -145,6 +145,42 @@ def create_app():
     app.register_blueprint(certificates_bp)
     init_tenant_context(app)
 
+    @app.before_request
+    def enforce_platform_control_plane_boundary():
+        """Keep platform identities out of tenant modules unless support is active."""
+        if not session.get("platform_account_id"):
+            return None
+        endpoint = request.endpoint or ""
+        platform_endpoint = endpoint.startswith("platform_admin.")
+        exempt = endpoint in {"core.login", "core.logout", "static", "healthz"}
+
+        if session.get("support_session_id"):
+            from services.platform_access import (
+                clear_tenant_support_state,
+                close_support_session,
+                validate_support_session,
+            )
+
+            conn = get_conn()
+            try:
+                support = validate_support_session(conn)
+                if support:
+                    conn.commit()
+                    return None
+                close_support_session(conn, "expired_or_invalid")
+                conn.commit()
+                clear_tenant_support_state()
+            finally:
+                conn.close()
+            if not platform_endpoint and not exempt:
+                return redirect(url_for("platform_admin.institutes"))
+
+        if platform_endpoint or exempt:
+            return None
+        if endpoint == "core.dashboard":
+            return redirect(url_for("platform_admin.institutes"))
+        abort(403)
+
     secondary_tenant_safe_endpoints = {
         "core.home",
         "core.login",
@@ -271,10 +307,10 @@ def create_app():
             try:
                 platform_owner = bool(
                     conn.execute(
-                        """SELECT id FROM users
-                           WHERE id = ? AND platform_role = 'platform_owner'
+                        """SELECT id FROM platform_accounts
+                           WHERE id = ? AND role = 'platform_owner'
                              AND is_active = 1""",
-                        (session.get("user_id"),),
+                        (session.get("platform_account_id"),),
                     ).fetchone()
                 )
             finally:

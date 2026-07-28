@@ -101,6 +101,14 @@ class Config:
     DOMAIN_VERIFICATION_PREFIX = os.environ.get(
         "DOMAIN_VERIFICATION_PREFIX", "_globaliterp-verification"
     ).strip().lower()
+    PLATFORM_SUPPORT_SESSION_MINUTES = max(
+        15, min(int(os.environ.get("PLATFORM_SUPPORT_SESSION_MINUTES", "60")), 240)
+    )
+    PLATFORM_CONTROL_HOSTS = {
+        host.strip().lower()
+        for host in os.environ.get("PLATFORM_CONTROL_HOSTS", "").split(",")
+        if host.strip()
+    }
 
     # App debug mode
     DEBUG_MODE = _env_bool("DEBUG_MODE", default=False)

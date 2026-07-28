@@ -41,6 +41,17 @@ steps:
       - python
       - scripts/test_domain_verification.py
 
+  - id: verify-platform-owner-separation
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --env
+      - SECRET_KEY=cloud-build-platform-separation-only
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
+      - python
+      - scratch/test_platform_owner_separation.py
+
   - id: push
     name: gcr.io/cloud-builders/docker
     args:
@@ -74,7 +85,7 @@ steps:
       - --timeout=120
       - --min-instances=0
       - --max-instances=5
-      - --set-env-vars=APP_ENV=production,DEBUG_MODE=false,SESSION_COOKIE_SECURE=true,SESSION_COOKIE_NAME=__Host-erp_session,SECURITY_HEADERS_ENABLED=true,PROXY_FIX_X_FOR=1,PROXY_FIX_X_PROTO=1,PROXY_FIX_X_HOST=1,TENANT_RESOLUTION_MODE=observe,DB_TYPE=mysql,DB_CONNECTION_MODE=direct,MYSQL_HOST=127.0.0.1,MYSQL_PORT=3306,MYSQL_USER=attn_app,MYSQL_DB=attn_billing_staging,MYSQL_UNIX_SOCKET=/cloudsql/${_CLOUD_SQL_INSTANCE},STORAGE_PROVIDER=gcs,GCS_BUCKET_NAME=global-it-erp-staging-storage,RATELIMIT_STORAGE_URI=redis://${_REDIS_HOST}:6379/0
+      - --set-env-vars=APP_ENV=production,DEBUG_MODE=false,SESSION_COOKIE_SECURE=true,SESSION_COOKIE_NAME=__Host-erp_session,SECURITY_HEADERS_ENABLED=true,PROXY_FIX_X_FOR=1,PROXY_FIX_X_PROTO=1,PROXY_FIX_X_HOST=1,TENANT_RESOLUTION_MODE=observe,PLATFORM_CONTROL_HOSTS=attn-billing-staging-nuls5dpt4a-el.a.run.app,DB_TYPE=mysql,DB_CONNECTION_MODE=direct,MYSQL_HOST=127.0.0.1,MYSQL_PORT=3306,MYSQL_USER=attn_app,MYSQL_DB=attn_billing_staging,MYSQL_UNIX_SOCKET=/cloudsql/${_CLOUD_SQL_INSTANCE},STORAGE_PROVIDER=gcs,GCS_BUCKET_NAME=global-it-erp-staging-storage,RATELIMIT_STORAGE_URI=redis://${_REDIS_HOST}:6379/0
       - --set-secrets=SECRET_KEY=attn-billing-staging-secret-key:2,MYSQL_PASSWORD=attn-billing-staging-mysql-password:2
 
 images:

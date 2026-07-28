@@ -607,6 +607,43 @@ def init_db():
         )
     """)
 
+    # ---------- PLATFORM CONTROL PLANE ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS platform_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT NOT NULL,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'platform_owner',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_login_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS platform_support_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            platform_account_id INTEGER NOT NULL,
+            institute_id INTEGER NOT NULL,
+            support_user_id INTEGER,
+            reason TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            last_activity_at TEXT NOT NULL,
+            ended_at TEXT,
+            end_reason TEXT,
+            request_ip TEXT,
+            user_agent TEXT,
+            FOREIGN KEY (platform_account_id) REFERENCES platform_accounts(id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id),
+            FOREIGN KEY (support_user_id) REFERENCES users(id)
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_platform_accounts_active_role ON platform_accounts(is_active, role)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_platform_support_active ON platform_support_sessions(platform_account_id, ended_at, expires_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_platform_support_institute ON platform_support_sessions(institute_id, started_at)")
+
     # ---------- LEADS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS leads (
@@ -2133,19 +2170,6 @@ def init_db():
                is_active, ?, ?
         FROM users
     """, (now, now))
-    cur.execute("""
-        UPDATE users
-        SET platform_role = 'platform_owner'
-        WHERE id = (
-            SELECT _u.id FROM (
-                SELECT id FROM users
-                WHERE role = 'admin' AND is_active = 1
-                ORDER BY id
-                LIMIT 1
-            ) AS _u
-        )
-          AND (platform_role IS NULL OR platform_role = '')
-    """)
     cur.execute("UPDATE activity_logs SET institute_id = 1 WHERE institute_id IS NULL")
 
     # ---------- DEFAULT EXPENSE CATEGORIES ----------

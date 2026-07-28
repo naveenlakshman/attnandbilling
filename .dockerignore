@@ -14,6 +14,7 @@ backup_test_attn_billing.sql
 docs/
 scratch/*
 !scratch/test_no_legacy_bootstrap.py
+!scratch/test_platform_owner_separation.py
 scripts/*
 !scripts/test_domain_verification.py
 *.log

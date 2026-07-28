@@ -25,6 +25,11 @@ from services.subscriptions import (
 )
 from modules.core.utils import login_required, platform_owner_required
 from services.tenant_context import clear_tenant_cache, normalize_hostname
+from services.platform_access import (
+    clear_tenant_support_state,
+    close_support_session,
+    start_support_session,
+)
 
 from . import platform_admin_bp
 
@@ -320,6 +325,15 @@ def institute_detail(institute_id):
                WHERE s.institute_id = ?""",
             (institute_id,),
         ).fetchone()
+        support_history = conn.execute(
+            """SELECT ps.*, pa.full_name AS platform_owner_name,
+                      pa.username AS platform_owner_username
+               FROM platform_support_sessions ps
+               JOIN platform_accounts pa ON pa.id = ps.platform_account_id
+               WHERE ps.institute_id = ?
+               ORDER BY ps.id DESC LIMIT 10""",
+            (institute_id,),
+        ).fetchall()
         return render_template(
             "platform_admin/institute_detail.html",
             institute=institute,
@@ -329,7 +343,65 @@ def institute_detail(institute_id):
             branches=branches,
             admins=admins,
             subscription=subscription,
+            support_history=support_history,
         )
+    finally:
+        conn.close()
+
+
+@platform_admin_bp.post("/institutes/<int:institute_id>/support/enter")
+@login_required
+@platform_owner_required
+def institute_support_enter(institute_id):
+    reason = request.form.get("reason", "").strip()
+    if len(reason) < 10:
+        flash("Enter a support reason of at least 10 characters.", "danger")
+        return redirect(
+            url_for("platform_admin.institute_detail", institute_id=institute_id)
+        )
+    conn = get_conn()
+    try:
+        institute = _institute_or_404(conn, institute_id)
+        account = conn.execute(
+            """SELECT * FROM platform_accounts
+               WHERE id = ? AND role = 'platform_owner' AND is_active = 1""",
+            (session["platform_account_id"],),
+        ).fetchone()
+        if not account:
+            abort(403)
+        start_support_session(conn, account, institute, reason[:500])
+        conn.commit()
+        flash(
+            f"Support session started for {institute['name']}. All activity is audited.",
+            "warning",
+        )
+        return redirect(url_for("core.dashboard"))
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@platform_admin_bp.post("/support/exit")
+@login_required
+@platform_owner_required
+def institute_support_exit():
+    conn = get_conn()
+    try:
+        institute_id = session.get("institute_id")
+        close_support_session(conn, "exited_by_platform_owner")
+        conn.commit()
+        clear_tenant_support_state()
+        flash("Tenant support session ended.", "success")
+        if institute_id:
+            return redirect(
+                url_for(
+                    "platform_admin.institute_detail",
+                    institute_id=institute_id,
+                )
+            )
+        return redirect(url_for("platform_admin.institutes"))
     finally:
         conn.close()
 

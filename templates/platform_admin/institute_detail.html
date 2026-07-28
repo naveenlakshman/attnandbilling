@@ -5,7 +5,7 @@
 <div class="container-fluid">
   <div class="d-flex justify-content-between align-items-start mb-4">
     <div><a href="{{ url_for('platform_admin.institutes') }}" class="small">← All institutes</a><h2 class="mt-2 mb-1">{{ institute.name }}</h2><div class="text-muted">{{ institute.slug }} · {{ institute.timezone }} · {{ institute.currency_code }}</div></div>
-    <div class="d-flex gap-2"><a class="btn btn-outline-primary" href="{{ url_for('platform_admin.institute_subscription', institute_id=institute.id) }}">Plan &amp; limits</a><a class="btn btn-outline-primary" href="{{ url_for('platform_admin.institute_edit', institute_id=institute.id) }}">Edit settings</a><form method="post" action="{{ url_for('platform_admin.institute_toggle_status', institute_id=institute.id) }}"><button class="btn btn-outline-{{ 'danger' if institute.status == 'active' else 'success' }}" onclick="return confirm('Change this institute status?')">{{ 'Deactivate' if institute.status == 'active' else 'Activate' }}</button></form></div>
+    <div class="d-flex gap-2 flex-wrap justify-content-end"><button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#enterSupportModal">Enter institute</button><a class="btn btn-outline-primary" href="{{ url_for('platform_admin.institute_subscription', institute_id=institute.id) }}">Plan &amp; limits</a><a class="btn btn-outline-primary" href="{{ url_for('platform_admin.institute_edit', institute_id=institute.id) }}">Edit settings</a><form method="post" action="{{ url_for('platform_admin.institute_toggle_status', institute_id=institute.id) }}"><button class="btn btn-outline-{{ 'danger' if institute.status == 'active' else 'success' }}" onclick="return confirm('Change this institute status?')">{{ 'Deactivate' if institute.status == 'active' else 'Activate' }}</button></form></div>
   </div>
   <div class="alert alert-light border d-flex justify-content-between align-items-center mb-4">
     <div><strong>Subscription:</strong> {{ subscription.plan_name if subscription else 'Not assigned' }} · {{ subscription.status|title if subscription else 'Unavailable' }}</div>
@@ -30,5 +30,26 @@
     {% else %}<tr><td colspan="5" class="text-center text-muted py-4">No institute administrators yet.</td></tr>{% endfor %}
     </tbody></table></div>
   </div>
+  <div class="card border-0 shadow-sm mt-4">
+    <div class="card-header bg-white"><h4 class="mb-0">Recent platform support access</h4></div>
+    <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Platform owner</th><th>Reason</th><th>Started</th><th>Ended</th><th>Status</th></tr></thead><tbody>
+    {% for access in support_history %}<tr><td>{{ access.platform_owner_name }}<br><small class="text-muted">{{ access.platform_owner_username }}</small></td><td>{{ access.reason }}</td><td>{{ access.started_at|format_datetime }}</td><td>{{ access.ended_at|format_datetime if access.ended_at else '—' }}</td><td>{{ 'Active' if not access.ended_at else access.end_reason|replace('_', ' ')|title }}</td></tr>
+    {% else %}<tr><td colspan="5" class="text-center text-muted py-4">No platform support access recorded.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+</div>
+
+<div class="modal fade" id="enterSupportModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog"><div class="modal-content">
+    <form method="post" action="{{ url_for('platform_admin.institute_support_enter', institute_id=institute.id) }}">
+      <div class="modal-header"><h5 class="modal-title">Enter {{ institute.name }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="alert alert-warning">This creates a time-limited, audited support session. Your platform identity, reason, time, IP address and tenant activity remain traceable.</div>
+        <label class="form-label" for="supportReason">Support reason *</label>
+        <textarea class="form-control" id="supportReason" name="reason" minlength="10" maxlength="500" required placeholder="Example: Investigating onboarding configuration reported by institute administrator"></textarea>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-warning">Start support session</button></div>
+    </form>
+  </div></div>
 </div>
 {% endblock %}

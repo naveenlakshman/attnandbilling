@@ -1,4 +1,4 @@
-from flask import Blueprint, abort, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Blueprint, abort, current_app, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
 import os
@@ -11,7 +11,8 @@ logger = logging.getLogger("app.core")
 
 from .sms import send_sms
 from extensions import public_auth_limit
-from services.tenant_context import get_current_institute_id
+from services.tenant_context import get_current_institute_id, normalize_hostname
+from services.platform_access import close_support_session
 from services.subscriptions import (
     PlanLimitExceeded,
     SubscriptionAccessDenied,
@@ -38,7 +39,7 @@ def home():
 @core_bp.route("/login", methods=["GET", "POST"])
 @public_auth_limit()
 def login():
-    if "user_id" in session:
+    if "user_id" in session or "platform_account_id" in session:
         return redirect(url_for("core.dashboard"))
 
     if request.method == "POST":
@@ -47,6 +48,48 @@ def login():
 
         conn = get_conn()
         cur = conn.cursor()
+        request_host = normalize_hostname(request.host)
+        platform_login_allowed = (
+            request_host in current_app.config["PLATFORM_CONTROL_HOSTS"]
+            or any(
+                request_host.endswith(f"---{allowed_host}")
+                for allowed_host in current_app.config["PLATFORM_CONTROL_HOSTS"]
+            )
+            or (
+                current_app.config["APP_ENV"] != "production"
+                and request_host in {"localhost", "127.0.0.1", "::1"}
+            )
+        )
+        platform_account = (
+            cur.execute(
+                """SELECT * FROM platform_accounts
+                   WHERE username = ? AND role = 'platform_owner' AND is_active = 1
+                   LIMIT 1""",
+                (username,),
+            ).fetchone()
+            if platform_login_allowed
+            else None
+        )
+        if platform_account and check_password_hash(
+            platform_account["password_hash"], password
+        ):
+            now = datetime.now().isoformat(timespec="seconds")
+            conn.execute(
+                "UPDATE platform_accounts SET last_login_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, platform_account["id"]),
+            )
+            conn.commit()
+            conn.close()
+            session.clear()
+            session.permanent = True
+            session["platform_account_id"] = int(platform_account["id"])
+            session["full_name"] = platform_account["full_name"]
+            session["username"] = platform_account["username"]
+            session["role"] = "platform_owner"
+            session["platform_role"] = "platform_owner"
+            flash("Platform login successful.", "success")
+            return redirect(url_for("platform_admin.institutes"))
+
         current_institute_id = get_current_institute_id(default=1)
         cur.execute("""
             SELECT u.*
@@ -107,6 +150,8 @@ def login():
 @core_bp.route("/dashboard")
 @login_required
 def dashboard():
+    if session.get("platform_account_id") and not session.get("support_session_id"):
+        return redirect(url_for("platform_admin.institutes"))
     institute_id = get_current_institute_id(default=1)
     if institute_id != 1:
         conn = get_conn()
@@ -568,6 +613,13 @@ def _staff_dashboard():
 
 @core_bp.route("/logout")
 def logout():
+    if session.get("support_session_id") and session.get("platform_account_id"):
+        conn = get_conn()
+        try:
+            close_support_session(conn, "logout")
+            conn.commit()
+        finally:
+            conn.close()
     session.clear()
     flash("You have been logged out.", "info")
     return redirect(url_for("core.login"))

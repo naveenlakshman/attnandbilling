@@ -133,6 +133,33 @@ def _fetch_default_tenant():
         conn.close()
 
 
+def _fetch_platform_support_tenant():
+    support_session_id = session.get("support_session_id")
+    platform_account_id = session.get("platform_account_id")
+    if not support_session_id or not platform_account_id:
+        return None
+    conn = get_conn()
+    try:
+        return conn.execute(
+            """SELECT i.id, i.name, i.short_name, i.slug, i.status,
+                      i.timezone, i.locale, i.currency_code
+               FROM platform_support_sessions ps
+               JOIN platform_accounts pa ON pa.id = ps.platform_account_id
+               JOIN institutes i ON i.id = ps.institute_id
+               WHERE ps.id = ? AND ps.platform_account_id = ?
+                 AND ps.ended_at IS NULL AND ps.expires_at > ?
+                 AND pa.is_active = 1 AND pa.role = 'platform_owner'
+               LIMIT 1""",
+            (
+                support_session_id,
+                platform_account_id,
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        ).fetchone()
+    finally:
+        conn.close()
+
+
 def resolve_tenant(raw_host, allow_compatibility_fallback=False):
     hostname = normalize_hostname(raw_host)
     if not hostname:
@@ -211,9 +238,18 @@ def _bind_request_tenant():
     if mode == "off":
         return None
 
-    tenant = resolve_tenant(
-        request.host,
-        allow_compatibility_fallback=(mode == "observe"),
+    support_tenant = _fetch_platform_support_tenant()
+    tenant = (
+        _row_to_context(
+            support_tenant,
+            normalize_hostname(request.host),
+            "platform_support_session",
+        )
+        if support_tenant
+        else resolve_tenant(
+            request.host,
+            allow_compatibility_fallback=(mode == "observe"),
+        )
     )
     if tenant is None:
         if request.endpoint in current_app.config.get("TENANT_STRICT_EXEMPT_ENDPOINTS", {"healthz", "static"}):
