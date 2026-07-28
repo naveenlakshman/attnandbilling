@@ -1,7 +1,7 @@
 import datetime
 # pyrefly: ignore [missing-import]
 from flask import render_template, request, redirect, url_for, session, flash, jsonify, abort, current_app
-from db import get_conn
+from db import get_conn, get_company_profile
 from services.storage import get_storage_service
 import logging
 from modules.core.utils import lms_content_manager_required, admin_required
@@ -195,7 +195,7 @@ def student_certificates_list():
         ).fetchall()
         
         # Load Company Info
-        company = conn.execute("SELECT * FROM company_profile WHERE id = 1").fetchone()
+        company = get_company_profile()
         
         return render_template("certificates/my_certificates.html", certs=certs, company=company)
     finally:
@@ -235,7 +235,7 @@ def student_certificate_view(cert_id):
         base_url = request.url_root
         data = get_certificate_render_data(conn.cursor(), cert_id, base_url)
         settings = EligibilityService.get_settings(conn.cursor())
-        company = conn.execute("SELECT * FROM company_profile WHERE id = 1").fetchone()
+        company = get_company_profile()
 
         layout = "base.html" if is_admin else "students/base.html"
 

@@ -10,7 +10,7 @@ import urllib.parse
 import re
 import os
 import uuid
-from db import get_conn
+from db import get_conn, get_company_profile
 from extensions import limiter, public_auth_limit
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
@@ -666,11 +666,7 @@ def login():
 
     mobile_app_login = _is_mobile_app_request()
 
-    conn = get_conn()
-    try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
-    finally:
-        conn.close()
+    company = get_company_profile()
 
     if request.method == 'POST':
         student_code = request.form.get('student_code', '').strip().upper()
@@ -732,7 +728,7 @@ def dashboard():
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         if _is_demo():
             # Demo mode: show one published program per course/reference so cloned drafts
@@ -1001,7 +997,7 @@ def program_view(program_id):
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         # Verify access
         access = _has_program_access(conn, program_id, student_id)
@@ -1093,7 +1089,7 @@ def chapter_view(chapter_id):
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         chapter = conn.execute("""
             SELECT lc.*, lp.program_name, lp.id AS program_id
@@ -1141,7 +1137,7 @@ def topic_view(topic_id):
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         topic = conn.execute("""
             SELECT lt.*, lc.chapter_title, lc.id AS chapter_id,
@@ -1283,7 +1279,7 @@ def master_topic_view(program_id, master_topic_id):
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         access = _has_program_access(conn, program_id, student_id)
         if not access:
@@ -1702,7 +1698,7 @@ def profile():
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
         if _is_demo():
             student = {
                 'id': 0,
@@ -2046,7 +2042,7 @@ def change_password():
 
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         if _is_demo():
             flash('Demo mode is read-only. Password changes are disabled.', 'warning')

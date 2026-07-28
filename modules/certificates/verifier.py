@@ -1,3 +1,7 @@
+from db import get_company_profile
+from services.tenant_context import get_current_institute_id
+
+
 def verify_certificate_number(conn, certificate_number):
     """
     Looks up a certificate directly by number, returning only safe metadata for public display.
@@ -5,6 +9,7 @@ def verify_certificate_number(conn, certificate_number):
     cur = conn.cursor()
     
     # Fast, indexed lookup on certificates table first
+    current_institute_id = get_current_institute_id(default=1)
     cert = cur.execute(
         """
         SELECT 
@@ -19,8 +24,9 @@ def verify_certificate_number(conn, certificate_number):
             c.student_id
         FROM certificates c
         WHERE c.certificate_number = ?
+          AND c.institute_id = ?
         """,
-        (certificate_number,)
+        (certificate_number, current_institute_id)
     ).fetchone()
     
     if not cert:
@@ -39,9 +45,8 @@ def verify_certificate_number(conn, certificate_number):
     
     branch_name = student["branch_name"] if student and student["branch_name"] else "Head Office"
     
-    # Fetch general company profile
-    company = cur.execute("SELECT company_name FROM company_profile WHERE id = 1").fetchone()
-    institution_name = company["company_name"] if company else "Global IT Education"
+    company = get_company_profile(current_institute_id)
+    institution_name = company["company_name"]
 
     return {
         "certificate_number": cert["certificate_number"],
