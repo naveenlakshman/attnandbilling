@@ -32,6 +32,15 @@ steps:
       - python
       - scratch/test_no_legacy_bootstrap.py
 
+  - id: verify-domain-ownership-workflow
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
+      - python
+      - scripts/test_domain_verification.py
+
   - id: push
     name: gcr.io/cloud-builders/docker
     args:

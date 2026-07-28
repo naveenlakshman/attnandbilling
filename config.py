@@ -98,6 +98,9 @@ class Config:
     # context while retaining current single-institute compatibility.
     TENANT_RESOLUTION_MODE = os.environ.get("TENANT_RESOLUTION_MODE", "observe").strip().lower()
     TENANT_STRICT_EXEMPT_ENDPOINTS = {"healthz", "static"}
+    DOMAIN_VERIFICATION_PREFIX = os.environ.get(
+        "DOMAIN_VERIFICATION_PREFIX", "_globaliterp-verification"
+    ).strip().lower()
 
     # App debug mode
     DEBUG_MODE = _env_bool("DEBUG_MODE", default=False)

@@ -11,6 +11,12 @@ from werkzeug.utils import secure_filename
 
 from db import clear_company_cache, get_conn
 from services.storage import get_storage_service
+from services.domain_verification import (
+    generate_verification_token,
+    verification_record_name,
+    verification_record_value,
+    verify_dns_challenge,
+)
 from services.subscriptions import (
     PlanLimitExceeded,
     SubscriptionAccessDenied,
@@ -40,6 +46,14 @@ def _domain_activation(hostname):
         and current_app.config.get("APP_ENV") != "production"
     )
     return ("active", _now()) if is_local else ("pending", None)
+
+
+def _new_domain_challenge(hostname):
+    token = generate_verification_token()
+    record_name = verification_record_name(
+        hostname, current_app.config["DOMAIN_VERIFICATION_PREFIX"]
+    )
+    return token, record_name
 
 
 def _save_brand_file(institute_id, field_name, category, old_path=None):
@@ -235,16 +249,22 @@ def institute_new():
         )
         if values["hostname"]:
             domain_status, verified_at = _domain_activation(values["hostname"])
+            token, record_name = (
+                (None, None)
+                if domain_status == "active"
+                else _new_domain_challenge(values["hostname"])
+            )
             cur.execute(
                 """
                 INSERT INTO institute_domains (
                     institute_id, hostname, domain_type, is_primary, status,
-                    verified_at, created_at, updated_at
-                ) VALUES (?, ?, 'custom', 1, ?, ?, ?, ?)
+                    verified_at, verification_token, verification_record_name,
+                    created_at, updated_at
+                ) VALUES (?, ?, 'custom', 1, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     institute_id, values["hostname"], domain_status,
-                    verified_at, now, now,
+                    verified_at, token, record_name, now, now,
                 ),
             )
         conn.commit()
@@ -386,15 +406,30 @@ def institute_edit(institute_id):
         )
         if values["hostname"]:
             domain_status, verified_at = _domain_activation(values["hostname"])
+            hostname_changed = (
+                not primary_domain
+                or primary_domain["hostname"] != values["hostname"]
+            )
+            if domain_status == "active":
+                token, record_name = None, None
+            elif hostname_changed:
+                token, record_name = _new_domain_challenge(values["hostname"])
+            else:
+                token = primary_domain["verification_token"]
+                record_name = primary_domain["verification_record_name"]
             if primary_domain:
                 conn.execute(
                     """
                     UPDATE institute_domains
-                    SET hostname = ?, status = ?, verified_at = ?, updated_at = ?
+                    SET hostname = ?, status = ?, verified_at = ?,
+                        verification_token = ?, verification_record_name = ?,
+                        verification_last_checked_at = NULL,
+                        verification_message = NULL, updated_at = ?
                     WHERE id = ? AND institute_id = ?
                     """,
                     (
-                        values["hostname"], domain_status, verified_at, now,
+                        values["hostname"], domain_status, verified_at,
+                        token, record_name, now,
                         primary_domain["id"], institute_id,
                     ),
                 )
@@ -403,12 +438,13 @@ def institute_edit(institute_id):
                     """
                     INSERT INTO institute_domains (
                         institute_id, hostname, domain_type, is_primary, status,
-                        verified_at, created_at, updated_at
-                    ) VALUES (?, ?, 'custom', 1, ?, ?, ?, ?)
+                        verified_at, verification_token, verification_record_name,
+                        created_at, updated_at
+                    ) VALUES (?, ?, 'custom', 1, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         institute_id, values["hostname"], domain_status,
-                        verified_at, now, now,
+                        verified_at, token, record_name, now, now,
                     ),
                 )
         conn.commit()
@@ -419,6 +455,136 @@ def institute_edit(institute_id):
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+
+def _domain_or_404(conn, institute_id, domain_id):
+    domain = conn.execute(
+        """SELECT * FROM institute_domains
+           WHERE id = ? AND institute_id = ?""",
+        (domain_id, institute_id),
+    ).fetchone()
+    if not domain:
+        abort(404)
+    return domain
+
+
+@platform_admin_bp.route(
+    "/institutes/<int:institute_id>/domains/<int:domain_id>/verification"
+)
+@login_required
+@platform_owner_required
+def institute_domain_verification(institute_id, domain_id):
+    conn = get_conn()
+    try:
+        institute = _institute_or_404(conn, institute_id)
+        domain = _domain_or_404(conn, institute_id, domain_id)
+        return render_template(
+            "platform_admin/domain_verification.html",
+            institute=institute,
+            domain=domain,
+            txt_value=(
+                verification_record_value(domain["verification_token"])
+                if domain["verification_token"]
+                else None
+            ),
+        )
+    finally:
+        conn.close()
+
+
+@platform_admin_bp.post(
+    "/institutes/<int:institute_id>/domains/<int:domain_id>/verification/challenge"
+)
+@login_required
+@platform_owner_required
+def institute_domain_verification_challenge(institute_id, domain_id):
+    conn = get_conn()
+    try:
+        _institute_or_404(conn, institute_id)
+        domain = _domain_or_404(conn, institute_id, domain_id)
+        if domain["status"] == "active":
+            flash("This domain is already verified.", "info")
+        else:
+            token, record_name = _new_domain_challenge(domain["hostname"])
+            conn.execute(
+                """UPDATE institute_domains
+                   SET verification_token = ?, verification_record_name = ?,
+                       verification_last_checked_at = NULL,
+                       verification_message = NULL, updated_at = ?
+                   WHERE id = ? AND institute_id = ?""",
+                (token, record_name, _now(), domain_id, institute_id),
+            )
+            conn.commit()
+            flash("A new DNS verification record has been generated.", "success")
+        return redirect(
+            url_for(
+                "platform_admin.institute_domain_verification",
+                institute_id=institute_id,
+                domain_id=domain_id,
+            )
+        )
+    finally:
+        conn.close()
+
+
+@platform_admin_bp.post(
+    "/institutes/<int:institute_id>/domains/<int:domain_id>/verification/check"
+)
+@login_required
+@platform_owner_required
+def institute_domain_verification_check(institute_id, domain_id):
+    conn = get_conn()
+    try:
+        _institute_or_404(conn, institute_id)
+        domain = _domain_or_404(conn, institute_id, domain_id)
+        if not domain["verification_token"] or not domain["verification_record_name"]:
+            flash("Generate a DNS challenge before checking verification.", "warning")
+            return redirect(
+                url_for(
+                    "platform_admin.institute_domain_verification",
+                    institute_id=institute_id,
+                    domain_id=domain_id,
+                )
+            )
+
+        verified, message = verify_dns_challenge(
+            domain["verification_record_name"],
+            verification_record_value(domain["verification_token"]),
+        )
+        now = _now()
+        conn.execute(
+            """UPDATE institute_domains
+               SET status = ?, verified_at = ?, verification_last_checked_at = ?,
+                   verification_message = ?, updated_at = ?
+               WHERE id = ? AND institute_id = ?""",
+            (
+                "active" if verified else "pending",
+                now if verified else None,
+                now,
+                message,
+                now,
+                domain_id,
+                institute_id,
+            ),
+        )
+        conn.commit()
+        if verified:
+            clear_tenant_cache()
+            flash(
+                "Domain ownership verified and the hostname is active in the application.",
+                "success",
+            )
+        else:
+            flash(message, "warning")
+        return redirect(
+            url_for(
+                "platform_admin.institute_domain_verification",
+                institute_id=institute_id,
+                domain_id=domain_id,
+            )
+        )
     finally:
         conn.close()
 
@@ -1070,18 +1236,32 @@ def onboarding_step(institute_id, step):
                     return redirect(request.url)
                 domain_status, verified_at = _domain_activation(hostname)
                 current_primary = conn.execute(
-                    """SELECT id FROM institute_domains
+                    """SELECT * FROM institute_domains
                        WHERE institute_id = ? AND is_primary = 1
                        ORDER BY id LIMIT 1""",
                     (institute_id,),
                 ).fetchone()
+                hostname_changed = (
+                    not current_primary or current_primary["hostname"] != hostname
+                )
+                if domain_status == "active":
+                    token, record_name = None, None
+                elif hostname_changed:
+                    token, record_name = _new_domain_challenge(hostname)
+                else:
+                    token = current_primary["verification_token"]
+                    record_name = current_primary["verification_record_name"]
                 if current_primary:
                     conn.execute(
                         """UPDATE institute_domains
-                           SET hostname = ?, status = ?, verified_at = ?, updated_at = ?
+                           SET hostname = ?, status = ?, verified_at = ?,
+                               verification_token = ?, verification_record_name = ?,
+                               verification_last_checked_at = NULL,
+                               verification_message = NULL, updated_at = ?
                            WHERE id = ? AND institute_id = ?""",
                         (
-                            hostname, domain_status, verified_at, now,
+                            hostname, domain_status, verified_at,
+                            token, record_name, now,
                             current_primary["id"], institute_id,
                         ),
                     )
@@ -1090,11 +1270,13 @@ def onboarding_step(institute_id, step):
                         """
                         INSERT INTO institute_domains (
                             institute_id, hostname, domain_type, is_primary, status,
-                            verified_at, created_at, updated_at
-                        ) VALUES (?, ?, 'custom', 1, ?, ?, ?, ?)
+                            verified_at, verification_token, verification_record_name,
+                            created_at, updated_at
+                        ) VALUES (?, ?, 'custom', 1, ?, ?, ?, ?, ?, ?)
                         """,
                         (
-                            institute_id, hostname, domain_status, verified_at, now, now,
+                            institute_id, hostname, domain_status, verified_at,
+                            token, record_name, now, now,
                         ),
                     )
             elif step == 4:

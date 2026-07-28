@@ -14,7 +14,7 @@
   <div class="row g-3 mb-4">
     <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Status</span><strong class="fs-5">{{ institute.status|title }}</strong></div></div>
     <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Brand</span><strong class="fs-5">{{ branding.display_name if branding else institute.name }}</strong><span>{{ branding.tagline if branding else '' }}</span></div></div>
-    <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Primary domain</span><strong class="fs-6">{{ domains[0].hostname if domains else 'Not configured' }}</strong><span>{{ domains[0].status|title if domains else '' }}</span></div></div>
+    <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Primary domain</span><strong class="fs-6">{{ domains[0].hostname if domains else 'Not configured' }}</strong><span>{{ domains[0].status|title if domains else '' }}</span>{% if domains %}<a class="mt-2" href="{{ url_for('platform_admin.institute_domain_verification', institute_id=institute.id, domain_id=domains[0].id) }}">{{ 'View verification' if domains[0].status == 'active' else 'Verify domain' }}</a>{% endif %}</div></div>
   </div>
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white d-flex justify-content-between align-items-center"><h4 class="mb-0">Branches</h4><a class="btn btn-sm btn-primary" href="{{ url_for('platform_admin.institute_branch_new', institute_id=institute.id) }}">Add branch</a></div>

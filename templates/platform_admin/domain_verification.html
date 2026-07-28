@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Verify {{ domain.hostname }}{% endblock %}
+{% block page_title %}Domain Verification{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width: 1050px;">
+  <a href="{{ url_for('platform_admin.institute_detail', institute_id=institute.id) }}" class="small">&larr; Back to {{ institute.name }}</a>
+  <div class="d-flex justify-content-between align-items-start mt-3 mb-4">
+    <div>
+      <h2 class="mb-1">Verify {{ domain.hostname }}</h2>
+      <p class="text-muted mb-0">Prove ownership with a unique DNS TXT record. Verification cannot be bypassed manually.</p>
+    </div>
+    <span class="badge fs-6 bg-{{ 'success' if domain.status == 'active' else 'warning text-dark' }}">{{ domain.status|title }}</span>
+  </div>
+
+  {% if domain.status == 'active' %}
+  <div class="alert alert-success">
+    <strong>Ownership verified.</strong>
+    Verified {{ domain.verified_at|format_datetime if domain.verified_at else '' }}.
+    The application now recognizes this hostname for {{ institute.name }}.
+  </div>
+  {% else %}
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h4>1. Add this TXT record at your DNS provider</h4>
+      {% if txt_value %}
+      <div class="table-responsive mt-3">
+        <table class="table table-bordered align-middle">
+          <tr><th style="width: 180px;">Type</th><td><code>TXT</code></td></tr>
+          <tr><th>Name / Host</th><td><code class="user-select-all">{{ domain.verification_record_name }}</code></td></tr>
+          <tr><th>Value</th><td><code class="user-select-all text-break">{{ txt_value }}</code></td></tr>
+          <tr><th>TTL</th><td>300 seconds (or your provider's default)</td></tr>
+        </table>
+      </div>
+      <p class="text-muted">Some DNS providers automatically append your domain. If so, enter only <code>{{ domain.verification_record_name.split('.')[0] }}</code> in the Name/Host field.</p>
+      {% else %}
+      <p>No verification challenge exists yet.</p>
+      <form method="post" action="{{ url_for('platform_admin.institute_domain_verification_challenge', institute_id=institute.id, domain_id=domain.id) }}">
+        <button class="btn btn-primary">Generate DNS challenge</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if txt_value %}
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <h4>2. Verify after DNS has propagated</h4>
+      <p>DNS changes can take several minutes or longer. This check reads public DNS and activates the hostname only when the exact challenge value matches.</p>
+      {% if domain.verification_message %}
+      <div class="alert alert-light border">
+        <strong>Last result:</strong> {{ domain.verification_message }}
+        {% if domain.verification_last_checked_at %}<br><small class="text-muted">{{ domain.verification_last_checked_at|format_datetime }}</small>{% endif %}
+      </div>
+      {% endif %}
+      <div class="d-flex gap-2">
+        <form method="post" action="{{ url_for('platform_admin.institute_domain_verification_check', institute_id=institute.id, domain_id=domain.id) }}">
+          <button class="btn btn-primary">Check DNS and verify</button>
+        </form>
+        <form method="post" action="{{ url_for('platform_admin.institute_domain_verification_challenge', institute_id=institute.id, domain_id=domain.id) }}" onsubmit="return confirm('Generate a new value? The current TXT value will stop working.');">
+          <button class="btn btn-outline-secondary">Regenerate challenge</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <div class="alert alert-info">
+    <strong>Important:</strong> TXT verification proves ownership. Your DNS must also route the hostname through the platform's configured Google Cloud HTTPS entry point before users can open it. Do not point a custom hostname directly at the raw <code>run.app</code> URL.
+  </div>
+</div>
+{% endblock %}
