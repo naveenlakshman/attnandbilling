@@ -17,6 +17,19 @@ steps:
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
       - .
 
+  - id: verify-no-legacy-bootstrap
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --env
+      - APP_ENV=testing
+      - --env
+      - SECRET_KEY=cloud-build-regression-only
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
+      - python
+      - scratch/test_no_legacy_bootstrap.py
+
   - id: push
     name: gcr.io/cloud-builders/docker
     args:
