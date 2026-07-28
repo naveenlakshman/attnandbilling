@@ -477,19 +477,22 @@ def institute_edit(institute_id):
             ),
         )
         if values["hostname"]:
-            domain_status, verified_at = _domain_activation(values["hostname"])
             hostname_changed = (
                 not primary_domain
                 or primary_domain["hostname"] != values["hostname"]
             )
-            if domain_status == "active":
-                token, record_name = None, None
-            elif hostname_changed:
-                token, record_name = _new_domain_challenge(values["hostname"])
+            # Editing identity or branding must not invalidate a domain that was
+            # already verified. Only a real hostname change requires a new
+            # ownership challenge.
+            if primary_domain and not hostname_changed:
+                pass
             else:
-                token = primary_domain["verification_token"]
-                record_name = primary_domain["verification_record_name"]
-            if primary_domain:
+                domain_status, verified_at = _domain_activation(values["hostname"])
+                if domain_status == "active":
+                    token, record_name = None, None
+                else:
+                    token, record_name = _new_domain_challenge(values["hostname"])
+            if primary_domain and hostname_changed:
                 conn.execute(
                     """
                     UPDATE institute_domains
@@ -505,7 +508,7 @@ def institute_edit(institute_id):
                         primary_domain["id"], institute_id,
                     ),
                 )
-            else:
+            elif not primary_domain:
                 conn.execute(
                     """
                     INSERT INTO institute_domains (
@@ -1306,7 +1309,6 @@ def onboarding_step(institute_id, step):
                 if owner and int(owner["institute_id"]) != institute_id:
                     flash("That hostname belongs to another institute.", "danger")
                     return redirect(request.url)
-                domain_status, verified_at = _domain_activation(hostname)
                 current_primary = conn.execute(
                     """SELECT * FROM institute_domains
                        WHERE institute_id = ? AND is_primary = 1
@@ -1316,14 +1318,18 @@ def onboarding_step(institute_id, step):
                 hostname_changed = (
                     not current_primary or current_primary["hostname"] != hostname
                 )
-                if domain_status == "active":
-                    token, record_name = None, None
-                elif hostname_changed:
-                    token, record_name = _new_domain_challenge(hostname)
+                # Re-saving the same hostname must preserve its verification
+                # status. A new challenge is needed only when the hostname
+                # itself changes.
+                if current_primary and not hostname_changed:
+                    pass
                 else:
-                    token = current_primary["verification_token"]
-                    record_name = current_primary["verification_record_name"]
-                if current_primary:
+                    domain_status, verified_at = _domain_activation(hostname)
+                    if domain_status == "active":
+                        token, record_name = None, None
+                    else:
+                        token, record_name = _new_domain_challenge(hostname)
+                if current_primary and hostname_changed:
                     conn.execute(
                         """UPDATE institute_domains
                            SET hostname = ?, status = ?, verified_at = ?,
@@ -1337,7 +1343,7 @@ def onboarding_step(institute_id, step):
                             current_primary["id"], institute_id,
                         ),
                     )
-                else:
+                elif not current_primary:
                     conn.execute(
                         """
                         INSERT INTO institute_domains (
