@@ -31,14 +31,22 @@
           <tr><th>TTL</th><td>300 seconds (or your provider's default)</td></tr>
         </table>
       </div>
+      {% set hostname_labels = domain.hostname.split('.') %}
+      {% set record_prefix = domain.verification_record_name.split('.')[0] %}
       <div class="alert alert-info mb-0">
-        <strong>Name/Host guidance:</strong> Use the complete record name shown above
-        unless your DNS provider automatically appends the DNS zone it manages. If it
-        does, remove only that zone suffix and keep every subdomain label. For example,
-        when verifying <code>harsha.globaliteducation.com</code> in the
-        <code>globaliteducation.com</code> zone, enter
-        <code>_globaliterp-verification.harsha</code>, not only
-        <code>_globaliterp-verification</code>.
+        <strong>Name/Host guidance:</strong>
+        <ul class="mb-0 mt-2">
+          <li>Authoritative full name: <code>{{ domain.verification_record_name }}</code></li>
+          {% if hostname_labels|length >= 3 %}
+          <li>
+            If your provider manages <code>{{ hostname_labels[1:]|join('.') }}</code>
+            and appends it automatically, enter
+            <code>{{ record_prefix }}.{{ hostname_labels[0] }}</code>.
+          </li>
+          {% endif %}
+        </ul>
+        Remove only the DNS-zone suffix your provider appends. Never remove the
+        institute's subdomain label.
       </div>
       {% else %}
       <p>No verification challenge exists yet.</p>
