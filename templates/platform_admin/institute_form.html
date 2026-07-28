@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Edit' if institute else 'Add' }} Institute{% endblock %}
+{% block title %}{{ 'Edit' if institute else 'Add' }} Institute - {{ company.company_short_name }}{% endblock %}
 {% block page_title %}{{ 'Edit Institute' if institute else 'Create Institute' }}{% endblock %}
 {% block content %}
 {% set source = branding or {} %}

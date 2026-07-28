@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Edit' if user else 'Add' }} Administrator{% endblock %}
+{% block title %}{{ 'Edit' if user else 'Add' }} Administrator - {{ company.company_short_name }}{% endblock %}
 {% block page_title %}Institute Administrator{% endblock %}
 {% block content %}
 <div class="container-fluid">
