@@ -334,6 +334,25 @@ def institute_detail(institute_id):
                ORDER BY ps.id DESC LIMIT 10""",
             (institute_id,),
         ).fetchall()
+        routing_dns = None
+        primary_domain = domains[0] if domains else None
+        ingress_ipv4 = current_app.config.get("PLATFORM_INGRESS_IPV4", "")
+        if (
+            primary_domain
+            and primary_domain["status"] == "active"
+            and ingress_ipv4
+        ):
+            hostname_labels = primary_domain["hostname"].split(".")
+            routing_dns = {
+                "fqdn": primary_domain["hostname"],
+                "zone": (
+                    ".".join(hostname_labels[1:])
+                    if len(hostname_labels) >= 3
+                    else primary_domain["hostname"]
+                ),
+                "host": hostname_labels[0] if len(hostname_labels) >= 3 else "@",
+                "ipv4": ingress_ipv4,
+            }
         return render_template(
             "platform_admin/institute_detail.html",
             institute=institute,
@@ -344,6 +363,7 @@ def institute_detail(institute_id):
             admins=admins,
             subscription=subscription,
             support_history=support_history,
+            routing_dns=routing_dns,
         )
     finally:
         conn.close()

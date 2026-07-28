@@ -16,6 +16,38 @@
     <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Brand</span><strong class="fs-5">{{ branding.display_name if branding else institute.name }}</strong><span>{{ branding.tagline if branding else '' }}</span></div></div>
     <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Primary domain</span><strong class="fs-6">{{ domains[0].hostname if domains else 'Not configured' }}</strong><span>{{ domains[0].status|title if domains else '' }}</span>{% if domains %}<a class="mt-2" href="{{ url_for('platform_admin.institute_domain_verification', institute_id=institute.id, domain_id=domains[0].id) }}">{{ 'View verification' if domains[0].status == 'active' else 'Verify domain' }}</a>{% endif %}</div></div>
   </div>
+  {% if routing_dns %}
+  <div class="card border-primary shadow-sm mb-4">
+    <div class="card-header bg-primary-subtle">
+      <strong>DNS routing — connect {{ routing_dns.fqdn }}</strong>
+    </div>
+    <div class="card-body">
+      <p class="mb-3">
+        Ownership is verified. Add this record at the DNS provider so the
+        hostname reaches the platform's Google Cloud HTTPS entry point.
+      </p>
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle mb-2">
+          <thead><tr><th>Type</th><th>Name / Host</th><th>Data / Value</th><th>TTL</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>A</code></td>
+              <td><code class="user-select-all">{{ routing_dns.host }}</code></td>
+              <td><code class="user-select-all">{{ routing_dns.ipv4 }}</code></td>
+              <td>300 seconds (or provider default)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <small class="text-muted">
+        The Name/Host above assumes your provider manages
+        <code>{{ routing_dns.zone }}</code> and appends it automatically.
+        The resulting full hostname must be <code>{{ routing_dns.fqdn }}</code>.
+        Remove any conflicting A or CNAME record for the same host.
+      </small>
+    </div>
+  </div>
+  {% endif %}
   <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white d-flex justify-content-between align-items-center"><h4 class="mb-0">Branches</h4><a class="btn btn-sm btn-primary" href="{{ url_for('platform_admin.institute_branch_new', institute_id=institute.id) }}">Add branch</a></div>
     <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Name</th><th>Code</th><th>Address</th><th>Status</th><th></th></tr></thead><tbody>

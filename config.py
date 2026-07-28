@@ -115,6 +115,7 @@ class Config:
     PLATFORM_TAGLINE = os.environ.get(
         "PLATFORM_TAGLINE", "Secure control plane"
     ).strip()
+    PLATFORM_INGRESS_IPV4 = os.environ.get("PLATFORM_INGRESS_IPV4", "").strip()
 
     # App debug mode
     DEBUG_MODE = _env_bool("DEBUG_MODE", default=False)
