@@ -8,10 +8,26 @@
 {% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') or ep.startswith('certificates.') %}
 {% set finance_active = (ep.startswith('billing.') and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
 {% set reports_active = ep.startswith('reports.') or ep == 'leads.reports' or ep in ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
-{% set platform_active = ep.startswith('platform_admin.') %}
 {% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.')) %}
 
 <div class="erp-master-nav accordion accordion-flush" id="erpSidebarAccordion">
+
+  {% if is_platform_owner %}
+  <!-- Keep platform-wide controls permanently visible and separate from tenant modules. -->
+  <div class="erp-subsection">Platform Owner</div>
+  <a class="nav-link erp-primary-link {{ 'active' if ep in ['platform_admin.institutes', 'platform_admin.institute_detail', 'platform_admin.institute_edit', 'platform_admin.institute_subscription'] else '' }}"
+     href="{{ url_for('platform_admin.institutes') }}">
+    <span class="erp-nav-mark"><i class="bi bi-buildings-fill"></i></span>
+    <span class="nav-text">Manage Institutes</span>
+  </a>
+  <a class="nav-link erp-primary-link {{ 'active' if ep in ['platform_admin.onboarding_new', 'platform_admin.onboarding_step'] else '' }}"
+     href="{{ url_for('platform_admin.onboarding_new') }}">
+    <span class="erp-nav-mark"><i class="bi bi-building-add"></i></span>
+    <span class="nav-text">Add New Institute</span>
+  </a>
+  <hr class="sidebar-divider">
+  <div class="erp-subsection">Current Institute</div>
+  {% endif %}
   
   <!-- Dashboard Section -->
   <a class="nav-link erp-primary-link {{ 'active' if ep == 'core.dashboard' else '' }}"
@@ -208,35 +224,6 @@
       </div>
     </div>
   </div>
-
-  {% if is_platform_owner %}
-  <!-- Platform-wide controls are intentionally separate from institute administration. -->
-  <div class="erp-module" data-module="platform">
-    <button class="erp-module-toggle {{ 'active' if platform_active else '' }}"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#sidebarPlatform"
-            aria-expanded="{{ 'true' if platform_active else 'false' }}"
-            aria-controls="sidebarPlatform">
-      <span>
-        <span class="erp-nav-mark"><i class="bi bi-buildings-fill"></i></span>
-        <span class="nav-text">Platform Administration</span>
-      </span>
-      <span class="erp-module-chevron"><i class="bi bi-chevron-right"></i></span>
-    </button>
-    <div id="sidebarPlatform"
-         class="accordion-collapse collapse {{ 'show' if platform_active else '' }}"
-         data-bs-parent="#erpSidebarAccordion">
-      <div class="erp-module-menu">
-        <div class="erp-subsection">Multi-Institute</div>
-        <a class="nav-link {{ 'active' if ep in ['platform_admin.institutes', 'platform_admin.institute_detail', 'platform_admin.institute_edit', 'platform_admin.institute_subscription'] else '' }}"
-           href="{{ url_for('platform_admin.institutes') }}">Manage Institutes</a>
-        <a class="nav-link {{ 'active' if ep in ['platform_admin.onboarding_new', 'platform_admin.onboarding_step'] else '' }}"
-           href="{{ url_for('platform_admin.onboarding_new') }}">Onboard New Institute</a>
-      </div>
-    </div>
-  </div>
-  {% endif %}
 
   <!-- Administration Section -->
   <div class="erp-module" data-module="admin">
