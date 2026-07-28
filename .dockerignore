@@ -12,7 +12,8 @@ backup_test_attn_billing.sql
 *.db
 .agents/
 docs/
-scratch/
+scratch/*
+!scratch/test_no_legacy_bootstrap.py
 scripts/
 *.log
 uploads/
