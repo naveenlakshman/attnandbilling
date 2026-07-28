@@ -1820,11 +1820,13 @@ def init_db():
     """)
 
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")
+    add_column_if_not_exists(cur, "courses", "institute_id", "INTEGER NOT NULL DEFAULT 1")
     add_column_if_not_exists(cur, "courses", "course_domain", "TEXT")
     add_column_if_not_exists(cur, "courses", "course_category", "TEXT")
     add_column_if_not_exists(cur, "courses", "show_on_website", "INTEGER NOT NULL DEFAULT 0")
     add_column_if_not_exists(cur, "courses", "duration_hours", "INTEGER")
     add_column_if_not_exists(cur, "courses", "course_slug", "TEXT")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_courses_institute_public ON courses(institute_id, is_active, show_on_website)")
 
     add_column_if_not_exists(cur, "invoices", "branch_id", "INTEGER")
     add_column_if_not_exists(cur, "invoices", "sms_token", "TEXT")

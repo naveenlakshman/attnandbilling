@@ -4135,16 +4135,18 @@ def export_students_csv():
 def courses():
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT *
         FROM courses
+        WHERE institute_id = ?
         ORDER BY
             CASE WHEN course_domain IS NULL OR course_domain = '' THEN 1 ELSE 0 END,
             course_domain,
             CASE WHEN duration_hours IS NULL THEN 9999 ELSE duration_hours END,
             course_name
-    """)
+    """, (current_inst,))
     courses = cur.fetchall()
     conn.close()
 
@@ -4181,6 +4183,7 @@ COURSE_CATEGORIES = [
 @billing_bp.route("/course/new", methods=["GET", "POST"])
 @login_required
 def course_new():
+    current_inst = get_current_institute_id(default=1)
     if request.method == "POST":
         course_name = request.form["course_name"].strip()
         duration = request.form["duration"].strip()
@@ -4201,6 +4204,7 @@ def course_new():
 
         cur.execute("""
             INSERT INTO courses (
+                institute_id,
                 course_name,
                 duration,
                 fee,
@@ -4212,8 +4216,9 @@ def course_new():
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            current_inst,
             course_name,
             duration,
             fee,
@@ -4251,12 +4256,13 @@ def course_new():
 def course_edit(id):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT *
         FROM courses
-        WHERE id = ?
-    """, (id,))
+        WHERE id = ? AND institute_id = ?
+    """, (id, current_inst))
     course = cur.fetchone()
 
     if not course:
@@ -4290,7 +4296,7 @@ def course_edit(id):
                 duration_hours = ?,
                 course_slug = ?,
                 updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND institute_id = ?
         """, (
             course_name,
             duration,
@@ -4301,7 +4307,8 @@ def course_edit(id):
             duration_hours,
             course_slug,
             now,
-            id
+            id,
+            current_inst,
         ))
 
         conn.commit()
@@ -4330,8 +4337,12 @@ def course_edit(id):
 def course_toggle_active(id):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
-    cur.execute("SELECT id, course_name, is_active FROM courses WHERE id = ?", (id,))
+    cur.execute(
+        "SELECT id, course_name, is_active FROM courses WHERE id = ? AND institute_id = ?",
+        (id, current_inst),
+    )
     course = cur.fetchone()
 
     if not course:
@@ -4343,7 +4354,10 @@ def course_toggle_active(id):
     label = "activated" if new_status else "deactivated"
 
     now = datetime.now().isoformat(timespec="seconds")
-    cur.execute("UPDATE courses SET is_active = ?, updated_at = ? WHERE id = ?", (new_status, now, id))
+    cur.execute(
+        "UPDATE courses SET is_active = ?, updated_at = ? WHERE id = ? AND institute_id = ?",
+        (new_status, now, id, current_inst),
+    )
     conn.commit()
     conn.close()
 
@@ -4366,8 +4380,13 @@ def course_toggle_active(id):
 def course_toggle_website(id):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
-    cur.execute("SELECT id, course_name, is_active, show_on_website FROM courses WHERE id = ?", (id,))
+    cur.execute(
+        """SELECT id, course_name, is_active, show_on_website
+           FROM courses WHERE id = ? AND institute_id = ?""",
+        (id, current_inst),
+    )
     course = cur.fetchone()
 
     if not course:
@@ -4384,8 +4403,11 @@ def course_toggle_website(id):
     label = "added to" if new_val else "removed from"
 
     now = datetime.now().isoformat(timespec="seconds")
-    cur.execute("UPDATE courses SET show_on_website = ?, updated_at = ? WHERE id = ?",
-                (new_val, now, id))
+    cur.execute(
+        """UPDATE courses SET show_on_website = ?, updated_at = ?
+           WHERE id = ? AND institute_id = ?""",
+        (new_val, now, id, current_inst),
+    )
     conn.commit()
     conn.close()
 
