@@ -2064,79 +2064,26 @@ def init_db():
             now
         ))
 
-    # ---------- DEFAULT BRANCHES ----------
-    cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HO",))
-    ho_branch = cur.fetchone()
-    if not ho_branch:
-        cur.execute("""
-            INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            "Global IT Education Head Office",
-            "HO",
-            "T G Extension, Opposite to B M Lab, Hoskote",
-            1,
-            now
-        ))
-
-    cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HB",))
-    hb_branch = cur.fetchone()
-    if not hb_branch:
-        cur.execute("""
-            INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            "Global IT Education – Hoskote Branch",
-            "HB",
-            "College Road, Near Ayyappa Swamy Temple, Hoskote",
-            1,
-            now
-        ))
-
-    cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HO",))
-    head_office = cur.fetchone()
-    head_office_id = head_office["id"] if head_office else 1
-
-    # ---------- DEFAULT ADMIN USER ----------
-    cur.execute("SELECT id FROM users WHERE username = ?", ("admin",))
-    existing_admin = cur.fetchone()
-
-    if not existing_admin:
-        cur.execute("""
-            INSERT INTO users (
-                full_name,
-                username,
-                password_hash,
-                role,
-                phone,
-                branch_id,
-                can_view_all_branches,
-                is_active,
-                created_at,
-                updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            "Administrator",
-            "admin",
-            generate_password_hash("admin123"),
-            "admin",
-            "",
-            head_office_id,
-            1,
-            1,
-            now,
-            now
-        ))
-
     # ---------- BACKFILL OLD DATA ----------
-    cur.execute("UPDATE users SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+    # Startup must never create shared credentials or branches. Existing
+    # single-institute installations can still have branchless historical rows,
+    # so attach them only when institute 1 already has a branch.
+    cur.execute("""
+        SELECT id
+        FROM branches
+        WHERE institute_id = 1
+        ORDER BY CASE WHEN branch_code = 'HO' THEN 0 ELSE 1 END, id
+        LIMIT 1
+    """)
+    head_office = cur.fetchone()
+    head_office_id = head_office["id"] if head_office else None
+    if head_office_id is not None:
+        cur.execute("UPDATE users SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+        cur.execute("UPDATE students SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+        cur.execute("UPDATE invoices SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
     cur.execute("UPDATE users SET can_view_all_branches = 1 WHERE can_view_all_branches IS NULL")
     cur.execute("UPDATE branches SET institute_id = 1 WHERE institute_id IS NULL")
     cur.execute("UPDATE users SET institute_id = 1 WHERE institute_id IS NULL")
-
-    cur.execute("UPDATE students SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
-    cur.execute("UPDATE invoices SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
 
     cur.execute("""
         INSERT OR IGNORE INTO institutes (
