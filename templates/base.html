@@ -20,7 +20,7 @@
     .erp-module-toggle.active { border-left-color: var(--tenant-primary); }
     .erp-nav-mark { color: var(--tenant-primary); }
   </style>
-  <link rel="icon" type="image/x-icon" href="{{ storage_url(company.favicon_path) if company.favicon_path else url_for('static', filename='favicon.ico') }}">
+  <link rel="icon" href="{{ storage_url(company.favicon_path) if company.favicon_path else url_for('static', filename='favicon-neutral.svg', v=1) }}">
   <script>
     (function() {
       var isCollapsed = localStorage.getItem('erp_sidebar_collapsed') === 'true';

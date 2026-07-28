@@ -28,7 +28,7 @@
       <div class="col-md-6">
         <label class="form-label">Favicon</label>
         <input class="form-control" type="file" name="favicon" accept=".png,.ico">
-        {% if source.favicon_path %}<div class="form-text">A favicon is already configured.</div>{% endif %}
+        {% if source.favicon_path %}<div class="form-text">A favicon is already configured.</div>{% else %}<div class="form-text">No favicon uploaded. A neutral platform icon will be used.</div>{% endif %}
       </div>
       <div class="col-md-4"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{ request.form.get('email', source.email or '') }}"></div>
       <div class="col-md-4"><label class="form-label">Phone</label><input class="form-control" name="phone" value="{{ request.form.get('phone', source.phone or '') }}"></div>

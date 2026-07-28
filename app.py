@@ -152,7 +152,12 @@ def create_app():
             return None
         endpoint = request.endpoint or ""
         platform_endpoint = endpoint.startswith("platform_admin.")
-        exempt = endpoint in {"core.login", "core.logout", "static", "healthz"}
+        # Tenant branding files are public or enforce their own tenant/session
+        # authorization in tenant_file(). The platform boundary must not block
+        # those image requests when rendering institute administration pages.
+        exempt = endpoint in {
+            "core.login", "core.logout", "static", "healthz", "tenant_file"
+        }
 
         if session.get("support_session_id"):
             from services.platform_access import (
