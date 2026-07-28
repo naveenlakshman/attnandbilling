@@ -536,6 +536,16 @@ def add_column_if_not_exists(cur, table_name, column_name, column_def):
 
 def init_db():
     conn = get_conn()
+    # Gunicorn imports the application in multiple workers. Serialize MySQL
+    # startup schema checks so concurrent CREATE/ALTER statements cannot
+    # deadlock one another during a cold Cloud Run start.
+    if Config.DB_TYPE == "mysql":
+        lock_row = conn.execute(
+            "SELECT GET_LOCK('attn_billing_init_db', 120) AS acquired"
+        ).fetchone()
+        if not lock_row or int(lock_row["acquired"] or 0) != 1:
+            conn.close()
+            raise RuntimeError("Timed out waiting for the database initialization lock")
     try:
         conn.execute("PRAGMA journal_mode = WAL;")
         conn.execute("PRAGMA synchronous = NORMAL;")
@@ -2629,4 +2639,6 @@ def init_db():
     """)
 
     conn.commit()
+    if Config.DB_TYPE == "mysql":
+        conn.execute("SELECT RELEASE_LOCK('attn_billing_init_db')")
     conn.close()
