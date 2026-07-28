@@ -14,11 +14,11 @@ from modules.core import routes
 
 SCHEMA = """
 CREATE TABLE receipts (
-    id INTEGER PRIMARY KEY, institute_id INTEGER, receipt_date TEXT,
+    id INTEGER PRIMARY KEY, invoice_id INTEGER, receipt_date TEXT,
     amount_received REAL
 );
 CREATE TABLE expenses (
-    id INTEGER PRIMARY KEY, institute_id INTEGER, expense_date TEXT, amount REAL
+    id INTEGER PRIMARY KEY, branch_id INTEGER, expense_date TEXT, amount REAL
 );
 CREATE TABLE students (
     id INTEGER PRIMARY KEY, institute_id INTEGER, full_name TEXT,
@@ -38,7 +38,7 @@ CREATE TABLE installment_plans (
     amount_due REAL, amount_paid REAL, remarks TEXT, status TEXT
 );
 CREATE TABLE bad_debt_writeoffs (
-    id INTEGER PRIMARY KEY, institute_id INTEGER, amount_written_off REAL
+    id INTEGER PRIMARY KEY, invoice_id INTEGER, amount_written_off REAL
 );
 CREATE TABLE branches (
     id INTEGER PRIMARY KEY, institute_id INTEGER, branch_name TEXT
@@ -108,6 +108,13 @@ def seed(path):
     conn.executemany(
         "INSERT INTO branches VALUES (?, ?, ?)",
         [(1, 1, "Other Branch"), (7, 7, "Harsha Branch")],
+    )
+    conn.executemany(
+        "INSERT INTO invoices VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            (1, 1, 1, "OTHER-1", 1, "unpaid"),
+            (7, 7, 7, "HARSHA-7", 7, "unpaid"),
+        ],
     )
     conn.executemany(
         "INSERT INTO batches VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

@@ -172,17 +172,20 @@ def dashboard():
 
     # ── Revenue this month ──────────────────────────────────────
     cur.execute("""
-        SELECT COALESCE(SUM(amount_received), 0) AS total
-        FROM receipts
-        WHERE institute_id = ? AND strftime('%Y-%m', receipt_date) = ?
+        SELECT COALESCE(SUM(r.amount_received), 0) AS total
+        FROM receipts r
+        JOIN invoices i ON r.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE s.institute_id = ? AND strftime('%Y-%m', r.receipt_date) = ?
     """, [institute_id, current_month])
     revenue_this_month = float(cur.fetchone()["total"] or 0)
 
     # ── Expenses this month ─────────────────────────────────────
     cur.execute("""
-        SELECT COALESCE(SUM(amount), 0) AS total
-        FROM expenses
-        WHERE institute_id = ? AND strftime('%Y-%m', expense_date) = ?
+        SELECT COALESCE(SUM(e.amount), 0) AS total
+        FROM expenses e
+        JOIN branches br ON e.branch_id = br.id
+        WHERE br.institute_id = ? AND strftime('%Y-%m', e.expense_date) = ?
     """, [institute_id, current_month])
     expenses_this_month = float(cur.fetchone()["total"] or 0)
 
@@ -247,12 +250,11 @@ def dashboard():
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE i.institute_id = ? AND s.institute_id = ?
-          AND ip.status != 'paid'
+        WHERE s.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
         ORDER BY parse_date(ip.due_date) ASC
-    """, [institute_id, institute_id, today])
+    """, [institute_id, today])
     past_dues = cur.fetchall()
     total_past_due = sum(float(r["balance_due"] or 0) for r in past_dues)
 
@@ -266,12 +268,11 @@ def dashboard():
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE i.institute_id = ? AND s.institute_id = ?
-          AND ip.status != 'paid'
+        WHERE s.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
         ORDER BY s.full_name ASC
-    """, [institute_id, institute_id, today])
+    """, [institute_id, today])
     todays_dues = cur.fetchall()
     total_today_due = sum(float(r["balance_due"] or 0) for r in todays_dues)
 
@@ -282,7 +283,8 @@ def dashboard():
             COUNT(*) AS cnt
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        WHERE i.institute_id = ? AND ip.status != 'paid'
+        JOIN students s ON i.student_id = s.id
+        WHERE s.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) > ?
           AND parse_date(ip.due_date) <= ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
@@ -293,8 +295,11 @@ def dashboard():
 
     # ── Bad debt total ──────────────────────────────────────────
     cur.execute(
-        """SELECT COALESCE(SUM(amount_written_off), 0) AS total
-           FROM bad_debt_writeoffs WHERE institute_id = ?""",
+        """SELECT COALESCE(SUM(w.amount_written_off), 0) AS total
+           FROM bad_debt_writeoffs w
+           JOIN invoices i ON w.invoice_id = i.id
+           JOIN students s ON i.student_id = s.id
+           WHERE s.institute_id = ?""",
         [institute_id],
     )
     total_bad_debt = float(cur.fetchone()["total"] or 0)
@@ -563,14 +568,13 @@ def _staff_dashboard(institute_id):
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE i.institute_id = ? AND s.institute_id = ?
-          AND ip.status != 'paid'
+        WHERE s.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           {branch_clause}
         ORDER BY parse_date(ip.due_date) ASC
         LIMIT 50
-    """, [institute_id, institute_id, today] + branch_param)
+    """, [institute_id, today] + branch_param)
     past_dues = cur.fetchall()
     total_past_due = sum(float(r["balance_due"] or 0) for r in past_dues)
 
@@ -584,13 +588,12 @@ def _staff_dashboard(institute_id):
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE i.institute_id = ? AND s.institute_id = ?
-          AND ip.status != 'paid'
+        WHERE s.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           {branch_clause}
         ORDER BY s.full_name ASC
-    """, [institute_id, institute_id, today] + branch_param)
+    """, [institute_id, today] + branch_param)
     todays_dues = cur.fetchall()
     total_today_due = sum(float(r["balance_due"] or 0) for r in todays_dues)
 
@@ -698,7 +701,8 @@ def sidebar_badges():
                 SELECT COUNT(DISTINCT ip.id) AS cnt
                 FROM installment_plans ip
                 JOIN invoices i ON ip.invoice_id = i.id
-                WHERE i.institute_id = ? AND ip.status != 'paid'
+                JOIN students s ON i.student_id = s.id
+                WHERE s.institute_id = ? AND ip.status != 'paid'
                   AND parse_date(ip.due_date) <= ?
                   AND i.status NOT IN ('write_off', 'partially_written_off')
             """, [institute_id, today])
@@ -708,7 +712,8 @@ def sidebar_badges():
                 SELECT COUNT(DISTINCT ip.id) AS cnt
                 FROM installment_plans ip
                 JOIN invoices i ON ip.invoice_id = i.id
-                WHERE i.institute_id = ? AND ip.status != 'paid'
+                JOIN students s ON i.student_id = s.id
+                WHERE s.institute_id = ? AND ip.status != 'paid'
                   AND parse_date(ip.due_date) <= ?
                   AND i.status NOT IN ('write_off', 'partially_written_off')
                   AND i.branch_id = ?
