@@ -31,7 +31,15 @@
           <tr><th>TTL</th><td>300 seconds (or your provider's default)</td></tr>
         </table>
       </div>
-      <p class="text-muted">Some DNS providers automatically append your domain. If so, enter only <code>{{ domain.verification_record_name.split('.')[0] }}</code> in the Name/Host field.</p>
+      <div class="alert alert-info mb-0">
+        <strong>Name/Host guidance:</strong> Use the complete record name shown above
+        unless your DNS provider automatically appends the DNS zone it manages. If it
+        does, remove only that zone suffix and keep every subdomain label. For example,
+        when verifying <code>harsha.globaliteducation.com</code> in the
+        <code>globaliteducation.com</code> zone, enter
+        <code>_globaliterp-verification.harsha</code>, not only
+        <code>_globaliterp-verification</code>.
+      </div>
       {% else %}
       <p>No verification challenge exists yet.</p>
       <form method="post" action="{{ url_for('platform_admin.institute_domain_verification_challenge', institute_id=institute.id, domain_id=domain.id) }}">
