@@ -52,6 +52,17 @@ steps:
       - python
       - scratch/test_platform_owner_separation.py
 
+  - id: verify-public-website-tenant-isolation
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --env
+      - SECRET_KEY=cloud-build-public-website-isolation-only
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
+      - python
+      - scratch/test_public_website_tenant_isolation.py
+
   - id: push
     name: gcr.io/cloud-builders/docker
     args:

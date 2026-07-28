@@ -4,23 +4,26 @@ from datetime import datetime
 from db import get_conn
 from modules.website import website_bp
 from extensions import public_form_limit
+from services.tenant_context import get_current_institute_id
 
 
 @website_bp.route("/")
 def home():
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("""
         SELECT course_name, duration, fee, course_domain, course_category,
                duration_hours, course_slug
         FROM courses
-        WHERE is_active = 1 AND show_on_website = 1
+        WHERE institute_id = ?
+          AND is_active = 1 AND show_on_website = 1
         ORDER BY
             CASE WHEN course_domain IS NULL OR course_domain = '' THEN 1 ELSE 0 END,
             course_domain,
             CASE WHEN duration_hours IS NULL THEN 9999 ELSE duration_hours END,
             course_name
-    """)
+    """, (current_inst,))
     courses = cur.fetchall()
     conn.close()
 
@@ -53,6 +56,7 @@ def home():
 @website_bp.route("/enquire", methods=["POST"])
 @public_form_limit()
 def enquire():
+    current_inst = get_current_institute_id(default=1)
     name = request.form.get("name", "").strip()
     phone = request.form.get("phone", "").strip()
     email = request.form.get("email", "").strip()
@@ -100,15 +104,34 @@ def enquire():
     now = datetime.now().isoformat(timespec="seconds")
     notes = message if message else None
 
-    # Auto-assign website leads to Chaithra (user id=2)
-    WEBSITE_DEFAULT_OWNER_ID = 2
-
-    from services.tenant_context import get_current_institute_id
-    current_inst = get_current_institute_id(default=1)
-
     conn = get_conn()
     try:
         cur = conn.cursor()
+        if interested_course and interested_course != "Other":
+            course = cur.execute(
+                """SELECT id FROM courses
+                   WHERE institute_id = ? AND course_name = ?
+                     AND is_active = 1 AND show_on_website = 1
+                   LIMIT 1""",
+                (current_inst, interested_course),
+            ).fetchone()
+            if not course:
+                flash("The selected course is not available for this institute.", "danger")
+                return redirect(url_for("website.home") + "#enquire")
+
+        # Assign only to an active administrator belonging to this institute.
+        owner = cur.execute(
+            """SELECT u.id
+               FROM institute_memberships im
+               JOIN users u ON u.id = im.user_id
+                           AND u.institute_id = im.institute_id
+               WHERE im.institute_id = ?
+                 AND im.membership_role = 'institute_admin'
+                 AND im.is_active = 1 AND u.is_active = 1
+               ORDER BY u.id LIMIT 1""",
+            (current_inst,),
+        ).fetchone()
+        website_owner_id = owner["id"] if owner else None
         cur.execute("""
             INSERT INTO leads (
                 institute_id,
@@ -118,7 +141,7 @@ def enquire():
                 created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, 'Website', 'New Lead', 'active', ?, ?, ?, ?)
         """, (current_inst, name, phone, email or None, interested_course or None,
-              notes, WEBSITE_DEFAULT_OWNER_ID, now, now))
+              notes, website_owner_id, now, now))
         conn.commit()
     finally:
         conn.close()
@@ -132,6 +155,20 @@ def course_page(slug):
     # Security: allow only alphanumeric, hyphens, underscores
     import re
     if not re.fullmatch(r"[a-zA-Z0-9_-]{1,60}", slug):
+        abort(404)
+    current_inst = get_current_institute_id(default=1)
+    conn = get_conn()
+    try:
+        course = conn.execute(
+            """SELECT id FROM courses
+               WHERE institute_id = ? AND course_slug = ?
+                 AND is_active = 1 AND show_on_website = 1
+               LIMIT 1""",
+            (current_inst, slug),
+        ).fetchone()
+    finally:
+        conn.close()
+    if not course:
         abort(404)
     template_path = f"website/courses/{slug}.html"
     # Verify the file actually exists before rendering
