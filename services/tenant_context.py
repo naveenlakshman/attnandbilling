@@ -66,6 +66,19 @@ def normalize_hostname(raw_host):
     return value if _HOST_RE.fullmatch(value) else ""
 
 
+def is_platform_control_host(raw_host):
+    """Return whether the request belongs to the platform control plane."""
+    hostname = normalize_hostname(raw_host)
+    allowed_hosts = current_app.config.get("PLATFORM_CONTROL_HOSTS", set())
+    return bool(
+        hostname
+        and (
+            hostname in allowed_hosts
+            or any(hostname.endswith(f"---{allowed}") for allowed in allowed_hosts)
+        )
+    )
+
+
 def clear_tenant_cache(hostname=None):
     with _cache_lock:
         if hostname:
@@ -239,6 +252,11 @@ def _bind_request_tenant():
         return None
 
     support_tenant = _fetch_platform_support_tenant()
+    # A raw platform hostname is not a tenant. It acquires tenant context only
+    # through an explicit, audited support session.
+    if not support_tenant and is_platform_control_host(request.host):
+        g.platform_control_host = True
+        return None
     tenant = (
         _row_to_context(
             support_tenant,

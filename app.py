@@ -146,6 +146,21 @@ def create_app():
     init_tenant_context(app)
 
     @app.before_request
+    def enforce_platform_control_host_routes():
+        """Never expose tenant portals through a raw platform hostname."""
+        from services.tenant_context import is_platform_control_host
+
+        if not is_platform_control_host(request.host) or session.get("support_session_id"):
+            return None
+        endpoint = request.endpoint or ""
+        if (
+            endpoint.startswith("platform_admin.")
+            or endpoint in {"core.login", "core.logout", "static", "healthz", "tenant_file"}
+        ):
+            return None
+        return redirect(url_for("core.login"))
+
+    @app.before_request
     def enforce_platform_control_plane_boundary():
         """Keep platform identities out of tenant modules unless support is active."""
         if not session.get("platform_account_id"):
@@ -484,6 +499,20 @@ def create_app():
 
     @app.context_processor
     def inject_company():
+        from services.tenant_context import is_platform_control_host
+        if is_platform_control_host(request.host) and not session.get("support_session_id"):
+            return {
+                "company": {
+                    "company_name": app.config["PLATFORM_DISPLAY_NAME"],
+                    "company_short_name": app.config["PLATFORM_DISPLAY_NAME"],
+                    "tagline": app.config["PLATFORM_TAGLINE"],
+                    "logo_filename": None,
+                    "logo_path": None,
+                    "favicon_path": None,
+                    "primary_color": "#2563eb",
+                    "secondary_color": "#0f172a",
+                }
+            }
         return {"company": get_company_profile()}
     @app.context_processor
     def inject_platform_admin():

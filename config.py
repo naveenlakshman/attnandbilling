@@ -106,9 +106,15 @@ class Config:
     )
     PLATFORM_CONTROL_HOSTS = {
         host.strip().lower()
-        for host in os.environ.get("PLATFORM_CONTROL_HOSTS", "").split(",")
+        for host in os.environ.get("PLATFORM_CONTROL_HOSTS", "").replace("|", ",").split(",")
         if host.strip()
     }
+    PLATFORM_DISPLAY_NAME = os.environ.get(
+        "PLATFORM_DISPLAY_NAME", "Platform Administration"
+    ).strip()
+    PLATFORM_TAGLINE = os.environ.get(
+        "PLATFORM_TAGLINE", "Secure control plane"
+    ).strip()
 
     # App debug mode
     DEBUG_MODE = _env_bool("DEBUG_MODE", default=False)

@@ -11,7 +11,7 @@
     </div>
     {% endif %}
     <h3 class="text-center mb-1">{{ company.company_short_name }}</h3>
-    <p class="text-center text-muted mb-4">Login to your account</p>
+    <p class="text-center text-muted mb-4">{{ 'Platform owner login' if platform_control_login else 'Login to your account' }}</p>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -37,6 +37,7 @@
 
         <button type="submit" class="btn btn-primary w-100">Login</button>
     </form>
+    {% if not platform_control_login %}
     <hr class="my-3">
     <div class="text-center">
         <p class="text-muted mb-2" style="font-size: 0.9rem;">Are you a student?</p>
@@ -47,5 +48,6 @@
             🔍 Verify Student Certificate
         </a>
     </div>
+    {% endif %}
 </div>
 {% endblock %}

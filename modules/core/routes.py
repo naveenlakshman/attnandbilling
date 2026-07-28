@@ -11,7 +11,11 @@ logger = logging.getLogger("app.core")
 
 from .sms import send_sms
 from extensions import public_auth_limit
-from services.tenant_context import get_current_institute_id, normalize_hostname
+from services.tenant_context import (
+    get_current_institute_id,
+    is_platform_control_host,
+    normalize_hostname,
+)
 from services.platform_access import close_support_session
 from services.subscriptions import (
     PlanLimitExceeded,
@@ -48,16 +52,11 @@ def login():
 
         conn = get_conn()
         cur = conn.cursor()
-        request_host = normalize_hostname(request.host)
         platform_login_allowed = (
-            request_host in current_app.config["PLATFORM_CONTROL_HOSTS"]
-            or any(
-                request_host.endswith(f"---{allowed_host}")
-                for allowed_host in current_app.config["PLATFORM_CONTROL_HOSTS"]
-            )
+            is_platform_control_host(request.host)
             or (
                 current_app.config["APP_ENV"] != "production"
-                and request_host in {"localhost", "127.0.0.1", "::1"}
+                and normalize_hostname(request.host) in {"localhost", "127.0.0.1", "::1"}
             )
         )
         platform_account = (
@@ -90,22 +89,24 @@ def login():
             flash("Platform login successful.", "success")
             return redirect(url_for("platform_admin.institutes"))
 
-        current_institute_id = get_current_institute_id(default=1)
-        cur.execute("""
-            SELECT u.*
-            FROM users u
-            LEFT JOIN institute_memberships im
-              ON im.user_id = u.id
-             AND im.institute_id = ?
-             AND im.is_active = 1
-            WHERE u.username = ?
-              AND u.is_active = 1
-              AND u.institute_id = ?
-              AND im.id IS NOT NULL
-            ORDER BY u.id
-            LIMIT 1
-        """, (current_institute_id, username, current_institute_id))
-        user = cur.fetchone()
+        user = None
+        if not platform_login_allowed:
+            current_institute_id = get_current_institute_id(default=1)
+            cur.execute("""
+                SELECT u.*
+                FROM users u
+                LEFT JOIN institute_memberships im
+                  ON im.user_id = u.id
+                 AND im.institute_id = ?
+                 AND im.is_active = 1
+                WHERE u.username = ?
+                  AND u.is_active = 1
+                  AND u.institute_id = ?
+                  AND im.id IS NOT NULL
+                ORDER BY u.id
+                LIMIT 1
+            """, (current_institute_id, username, current_institute_id))
+            user = cur.fetchone()
         if user and check_password_hash(user["password_hash"], password):
             try:
                 assert_subscription_access(conn, user["institute_id"])
@@ -145,7 +146,10 @@ def login():
         conn.close()
         flash("Invalid username or password.", "danger")
 
-    return render_template("core/login.html")
+    return render_template(
+        "core/login.html",
+        platform_control_login=is_platform_control_host(request.host),
+    )
 
 @core_bp.route("/dashboard")
 @login_required
