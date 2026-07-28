@@ -402,32 +402,38 @@ def get_company_profile(institute_id=None):
     conn = get_conn()
     try:
         cur = conn.cursor()
-        if cache_key != 1:
-            cur.execute(
-                """
-                SELECT i.id, COALESCE(b.display_name, i.name) AS company_name,
-                       COALESCE(b.short_name, i.short_name) AS company_short_name,
-                       COALESCE(b.tagline, 'ERP System') AS tagline,
-                       COALESCE(b.address, '') AS address,
-                       COALESCE(b.phone, '') AS phone,
-                       COALESCE(b.email, '') AS email,
-                       COALESCE(b.website, '') AS website,
-                       NULL AS logo_filename,
-                       b.logo_path,
-                       b.favicon_path,
-                       b.primary_color,
-                       b.secondary_color,
-                       COALESCE(b.registration_number, '') AS reg_number,
-                       b.updated_at
-                FROM institutes i
-                LEFT JOIN institute_branding b ON b.institute_id = i.id
-                WHERE i.id = ?
-                """,
-                (cache_key,),
-            )
-        else:
-            cur.execute("SELECT * FROM company_profile WHERE id = 1")
+        # Institute 1 was historically special-cased to the singleton
+        # company_profile table. That leaks the legacy Global IT identity after
+        # institute 1 is renamed/rebranded. All tenants, including ID 1, must
+        # read their identity from the tenant-owned branding tables.
+        cur.execute(
+            """
+            SELECT i.id, COALESCE(b.display_name, i.name) AS company_name,
+                   COALESCE(b.short_name, i.short_name) AS company_short_name,
+                   COALESCE(b.tagline, 'ERP System') AS tagline,
+                   COALESCE(b.address, '') AS address,
+                   COALESCE(b.phone, '') AS phone,
+                   COALESCE(b.email, '') AS email,
+                   COALESCE(b.website, '') AS website,
+                   NULL AS logo_filename,
+                   b.logo_path,
+                   b.favicon_path,
+                   b.primary_color,
+                   b.secondary_color,
+                   COALESCE(b.registration_number, '') AS reg_number,
+                   b.updated_at
+            FROM institutes i
+            LEFT JOIN institute_branding b ON b.institute_id = i.id
+            WHERE i.id = ?
+            """,
+            (cache_key,),
+        )
         row = cur.fetchone()
+        # Preserve compatibility only for an incompletely migrated legacy
+        # database where institute 1 itself is absent.
+        if not row and cache_key == 1:
+            cur.execute("SELECT * FROM company_profile WHERE id = 1")
+            row = cur.fetchone()
         if row:
             result = dict(row)
         else:

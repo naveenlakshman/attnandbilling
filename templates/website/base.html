@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ company.company_name }}{% endblock %}</title>
   <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
-  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="icon" href="{{ storage_url(company.favicon_path) if company.favicon_path else url_for('static', filename='favicon.ico') }}">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -182,8 +182,8 @@
     <!-- Top row: brand + hamburger -->
     <div class="d-flex align-items-center justify-content-between">
       <a href="{{ url_for('website.home') }}" class="brand d-flex align-items-center gap-2">
-        {% if company.logo_filename %}
-          <img src="{{ url_for('static', filename='images/company_logo/' ~ company.logo_filename) }}"
+        {% if company.logo_path or company.logo_filename %}
+          <img src="{{ storage_url(company.logo_path) if company.logo_path else url_for('static', filename='images/company_logo/' ~ company.logo_filename) }}"
                alt="{{ company.company_short_name }}" height="34"
                style="object-fit:contain; vertical-align:middle;">
         {% endif %}

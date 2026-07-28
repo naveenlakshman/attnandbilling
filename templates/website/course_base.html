@@ -69,8 +69,8 @@
 <nav class="site-nav">
   <div class="nav-inner">
     <a href="/" class="nav-brand">
-      {% if company.logo_filename %}
-        <img src="{{ url_for('static', filename='images/company_logo/' ~ company.logo_filename) }}"
+      {% if company.logo_path or company.logo_filename %}
+        <img src="{{ storage_url(company.logo_path) if company.logo_path else url_for('static', filename='images/company_logo/' ~ company.logo_filename) }}"
              alt="{{ company.company_short_name }}" height="36"
              style="object-fit:contain; vertical-align:middle;">
       {% endif %}
