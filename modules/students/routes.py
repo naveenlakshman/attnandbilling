@@ -2039,10 +2039,22 @@ def save_signature():
 @student_login_required
 def change_password():
     student_id = session['student_id']
+    current_inst = get_current_institute_id(default=1)
 
     conn = get_conn()
     try:
         company = get_company_profile()
+        password_record = conn.execute(
+            """
+            SELECT password_changed_at
+            FROM students
+            WHERE id = ? AND institute_id = ?
+            """,
+            (student_id, current_inst),
+        ).fetchone()
+        last_password_change = (
+            password_record['password_changed_at'] if password_record else None
+        )
 
         if _is_demo():
             flash('Demo mode is read-only. Password changes are disabled.', 'warning')
@@ -2065,9 +2077,10 @@ def change_password():
                 """
                 SELECT id, password_hash, student_code
                 FROM students
-                WHERE id = ? AND status != 'dropped' AND portal_enabled = 1
+                WHERE id = ? AND institute_id = ?
+                  AND status != 'dropped' AND portal_enabled = 1
                 """,
-                (student_id,)
+                (student_id, current_inst)
             ).fetchone()
 
             if not student or not student['password_hash']:
@@ -2088,9 +2101,19 @@ def change_password():
                 return redirect(url_for('students.change_password'))
 
             new_password_hash = generate_password_hash(new_password)
+            password_changed_at = datetime.utcnow().isoformat(timespec='seconds')
             conn.execute(
-                "UPDATE students SET password_hash = ? WHERE id = ?",
-                (new_password_hash, student_id)
+                """
+                UPDATE students
+                SET password_hash = ?, password_changed_at = ?
+                WHERE id = ? AND institute_id = ?
+                """,
+                (
+                    new_password_hash,
+                    password_changed_at,
+                    student_id,
+                    current_inst,
+                )
             )
             conn.commit()
             session['student_force_password_change'] = False
@@ -2106,7 +2129,11 @@ def change_password():
     finally:
         conn.close()
 
-    return render_template('students/change_password.html', company=company)
+    return render_template(
+        'students/change_password.html',
+        company=company,
+        last_password_change=last_password_change,
+    )
 
 
 # ---------------------------------------------------------------------------

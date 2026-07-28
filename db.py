@@ -1769,6 +1769,7 @@ def init_db():
     # Student portal login
     add_column_if_not_exists(cur, "students", "password_hash", "TEXT")
     add_column_if_not_exists(cur, "students", "portal_enabled", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_not_exists(cur, "students", "password_changed_at", "TEXT")
     # Lead-to-student linkage
     add_column_if_not_exists(cur, "students", "lead_id", "INTEGER")
     add_column_if_not_exists(cur, "leads", "branch_id", "INTEGER")
