@@ -11,6 +11,16 @@ VALID_STAGES = [
     "Lost",
 ]
 
+EDITABLE_STAGES = [
+    "New Lead",
+    "Contacted",
+    "Interested",
+    "Counseling Done",
+    "Follow-up",
+]
+
+TERMINAL_STAGES = {"Converted", "Lost"}
+
 
 def _parse_yyyy_mm_dd(value):
     text = (value or "").strip()

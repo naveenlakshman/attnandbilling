@@ -629,6 +629,11 @@ def lead_create():
         _phone_error = None
         if not name or not phone:
             _phone_error = "Name and Phone are required."
+        elif stage not in lead_services.EDITABLE_STAGES:
+            _phone_error = (
+                "Converted and Lost cannot be selected from the lead form. "
+                "Use the dedicated Convert or Mark Lost action."
+            )
         elif len(_phone_digits) != 10 or _phone_digits[0] not in '6789':
             _phone_error = "Phone must be a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)."
         elif not whatsapp:
@@ -677,6 +682,7 @@ def lead_create():
                 session_branch_id=session_branch_id,
                 last_contact_min_date=today_ist_str,
                 last_contact_max_date=today_ist_str,
+                editable_stages=lead_services.EDITABLE_STAGES,
             )
 
         conn = get_conn()
@@ -787,6 +793,7 @@ def lead_create():
         session_branch_id=session_branch_id,
         last_contact_min_date=_today_ist_date_str(),
         last_contact_max_date=_today_ist_date_str(),
+        editable_stages=lead_services.EDITABLE_STAGES,
     )
 @leads_bp.route("/<int:lead_id>")
 @login_required
@@ -1347,6 +1354,17 @@ def lead_edit(lead_id):
         _phone_error_edit = None
         if not name or not phone:
             _phone_error_edit = "Name and Phone are required."
+        elif (
+            stage not in lead_services.EDITABLE_STAGES
+            and not (
+                lead.get("stage") in lead_services.TERMINAL_STAGES
+                and stage == lead.get("stage")
+            )
+        ):
+            _phone_error_edit = (
+                "Converted and Lost cannot be selected from the lead form. "
+                "Use the dedicated Convert or Mark Lost action."
+            )
         elif len(_phone_digits_edit) != 10 or _phone_digits_edit[0] not in '6789':
             _phone_error_edit = "Phone must be a valid 10-digit Indian mobile number (starting with 6, 7, 8, or 9)."
         elif not whatsapp:
@@ -1395,6 +1413,7 @@ def lead_edit(lead_id):
                 session_branch_id=session_branch_id,
                 last_contact_min_date=lead_created_date,
                 last_contact_max_date=today_ist_str,
+                editable_stages=lead_services.EDITABLE_STAGES,
             )
 
         now = datetime.now().isoformat(timespec="seconds")
@@ -1515,6 +1534,7 @@ def lead_edit(lead_id):
         session_branch_id=session_branch_id,
         last_contact_min_date=_date_part(lead.get("created_at")) or _today_ist_date_str(),
         last_contact_max_date=_today_ist_date_str(),
+        editable_stages=lead_services.EDITABLE_STAGES,
     )
 
 @leads_bp.route("/<int:lead_id>/stage", methods=["POST"])

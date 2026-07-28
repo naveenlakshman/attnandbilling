@@ -17,6 +17,7 @@ scratch/*
 !scratch/test_platform_owner_separation.py
 !scratch/test_public_website_tenant_isolation.py
 !scratch/test_dashboard_tenant_isolation.py
+!scratch/test_lead_form_stage_guard.py
 scripts/*
 !scripts/test_domain_verification.py
 *.log
