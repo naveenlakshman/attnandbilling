@@ -157,29 +157,10 @@ def dashboard():
     if session.get("platform_account_id") and not session.get("support_session_id"):
         return redirect(url_for("platform_admin.institutes"))
     institute_id = get_current_institute_id(default=1)
-    if institute_id != 1:
-        conn = get_conn()
-        try:
-            branch_count = conn.execute(
-                "SELECT COUNT(*) AS n FROM branches WHERE institute_id = ? AND is_active = 1",
-                (institute_id,),
-            ).fetchone()["n"]
-            user_count = conn.execute(
-                """SELECT COUNT(*) AS n FROM users
-                   WHERE institute_id = ? AND platform_role IS NULL AND is_active = 1""",
-                (institute_id,),
-            ).fetchone()["n"]
-        finally:
-            conn.close()
-        return render_template(
-            "core/tenant_foundation_dashboard.html",
-            branch_count=branch_count,
-            user_count=user_count,
-        )
 
     # Staff users get their own dedicated dashboard
     if session.get("role") == "staff":
-        return _staff_dashboard()
+        return _staff_dashboard(institute_id)
 
     # ── Admin dashboard below ────────────────────────────────────
     conn = get_conn()
@@ -193,57 +174,67 @@ def dashboard():
     cur.execute("""
         SELECT COALESCE(SUM(amount_received), 0) AS total
         FROM receipts
-        WHERE strftime('%Y-%m', receipt_date) = ?
-    """, [current_month])
+        WHERE institute_id = ? AND strftime('%Y-%m', receipt_date) = ?
+    """, [institute_id, current_month])
     revenue_this_month = float(cur.fetchone()["total"] or 0)
 
     # ── Expenses this month ─────────────────────────────────────
     cur.execute("""
         SELECT COALESCE(SUM(amount), 0) AS total
         FROM expenses
-        WHERE strftime('%Y-%m', expense_date) = ?
-    """, [current_month])
+        WHERE institute_id = ? AND strftime('%Y-%m', expense_date) = ?
+    """, [institute_id, current_month])
     expenses_this_month = float(cur.fetchone()["total"] or 0)
 
     # ── Active students ─────────────────────────────────────────
-    cur.execute("SELECT COUNT(*) AS cnt FROM students WHERE status = 'active'")
+    cur.execute(
+        "SELECT COUNT(*) AS cnt FROM students WHERE institute_id = ? AND status = 'active'",
+        [institute_id],
+    )
     active_students = cur.fetchone()["cnt"]
 
     # ── New students this month ─────────────────────────────────
     cur.execute("""
         SELECT COUNT(*) AS cnt FROM students
-        WHERE strftime('%Y-%m', joined_date) = ?
-    """, [current_month])
+        WHERE institute_id = ? AND strftime('%Y-%m', joined_date) = ?
+    """, [institute_id, current_month])
     new_students_this_month = cur.fetchone()["cnt"]
 
     # ── Active leads ────────────────────────────────────────────
     cur.execute("""
         SELECT COUNT(*) AS cnt FROM leads
-        WHERE status = 'active' AND is_deleted = 0
-    """)
+        WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
+    """, [institute_id])
     active_leads = cur.fetchone()["cnt"]
 
     # ── Leads by stage ──────────────────────────────────────────
     cur.execute("""
         SELECT stage, COUNT(*) AS cnt FROM leads
-        WHERE status = 'active' AND is_deleted = 0
+        WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
         GROUP BY stage
         ORDER BY cnt DESC
-    """)
+    """, [institute_id])
     leads_by_stage = cur.fetchall()
 
     # ── Lead conversion stats ───────────────────────────────────
-    cur.execute("SELECT COUNT(*) AS cnt FROM leads WHERE status = 'converted' AND is_deleted = 0")
+    cur.execute(
+        """SELECT COUNT(*) AS cnt FROM leads
+           WHERE institute_id = ? AND status = 'converted' AND is_deleted = 0""",
+        [institute_id],
+    )
     total_converted = cur.fetchone()["cnt"]
-    cur.execute("SELECT COUNT(*) AS cnt FROM leads WHERE is_deleted = 0")
+    cur.execute(
+        "SELECT COUNT(*) AS cnt FROM leads WHERE institute_id = ? AND is_deleted = 0",
+        [institute_id],
+    )
     total_leads_all = cur.fetchone()["cnt"]
     conversion_rate = round((total_converted / total_leads_all * 100), 1) if total_leads_all else 0
 
     # ── Today's new leads ───────────────────────────────────────
     cur.execute("""
         SELECT COUNT(*) AS cnt FROM leads
-        WHERE date(created_at) = ? AND is_deleted = 0
-    """, [today])
+        WHERE institute_id = ? AND date(created_at) = ? AND is_deleted = 0
+    """, [institute_id, today])
     today_new_leads = cur.fetchone()["cnt"]
 
     # ── Past due installments ───────────────────────────────────
@@ -256,11 +247,12 @@ def dashboard():
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE ip.status != 'paid'
+        WHERE i.institute_id = ? AND s.institute_id = ?
+          AND ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
         ORDER BY parse_date(ip.due_date) ASC
-    """, [today])
+    """, [institute_id, institute_id, today])
     past_dues = cur.fetchall()
     total_past_due = sum(float(r["balance_due"] or 0) for r in past_dues)
 
@@ -274,11 +266,12 @@ def dashboard():
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE ip.status != 'paid'
+        WHERE i.institute_id = ? AND s.institute_id = ?
+          AND ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
         ORDER BY s.full_name ASC
-    """, [today])
+    """, [institute_id, institute_id, today])
     todays_dues = cur.fetchall()
     total_today_due = sum(float(r["balance_due"] or 0) for r in todays_dues)
 
@@ -289,17 +282,21 @@ def dashboard():
             COUNT(*) AS cnt
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        WHERE ip.status != 'paid'
+        WHERE i.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) > ?
           AND parse_date(ip.due_date) <= ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
-    """, [today, seven_days_later])
+    """, [institute_id, today, seven_days_later])
     row = cur.fetchone()
     total_next7_due = float(row["total"] or 0)
     count_next7_due = row["cnt"]
 
     # ── Bad debt total ──────────────────────────────────────────
-    cur.execute("SELECT COALESCE(SUM(amount_written_off), 0) AS total FROM bad_debt_writeoffs")
+    cur.execute(
+        """SELECT COALESCE(SUM(amount_written_off), 0) AS total
+           FROM bad_debt_writeoffs WHERE institute_id = ?""",
+        [institute_id],
+    )
     total_bad_debt = float(cur.fetchone()["total"] or 0)
 
     # ── Today's attendance ──────────────────────────────────────
@@ -307,12 +304,14 @@ def dashboard():
         SELECT ar.status, COUNT(*) AS cnt
         FROM attendance_records ar
         JOIN batches b ON ar.batch_id = b.id
+        JOIN branches br ON b.branch_id = br.id
         WHERE ar.attendance_date = ?
+          AND br.institute_id = ?
           AND b.status = 'active'
           AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
           AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
         GROUP BY ar.status
-    """, [today, today, today])
+    """, [today, institute_id, today, today])
     att_rows = cur.fetchall()
     att_summary = {r["status"]: r["cnt"] for r in att_rows}
     att_present = att_summary.get("present", 0)
@@ -326,37 +325,43 @@ def dashboard():
         SELECT COUNT(*) AS cnt
         FROM student_batches sb
         JOIN batches b ON sb.batch_id = b.id
-        WHERE b.status = 'active'
+        JOIN branches br ON b.branch_id = br.id
+        WHERE br.institute_id = ? AND b.status = 'active'
           AND sb.status = 'active'
           AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
           AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
-    """, [today, today])
+    """, [institute_id, today, today])
     total_students_today = cur.fetchone()["cnt"]
     attendance_rate = _marked_percentage(att_marked, total_students_today)
 
     # ── Active batches ──────────────────────────────────────────
-    cur.execute("SELECT COUNT(*) AS cnt FROM batches WHERE status = 'active'")
+    cur.execute(
+        """SELECT COUNT(*) AS cnt FROM batches b
+           JOIN branches br ON b.branch_id = br.id
+           WHERE br.institute_id = ? AND b.status = 'active'""",
+        [institute_id],
+    )
     active_batches = cur.fetchone()["cnt"]
 
     # ── Past due leads ──────────────────────────────────────────
     cur.execute("""
         SELECT id, name, phone, next_followup_date, lead_score, stage
         FROM leads
-        WHERE status = 'active' AND is_deleted = 0
+        WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
           AND next_followup_date IS NOT NULL
           AND next_followup_date < ?
         ORDER BY next_followup_date ASC
-    """, [today])
+    """, [institute_id, today])
     past_due_leads = cur.fetchall()
 
     # ── Today's due leads ───────────────────────────────────────
     cur.execute("""
         SELECT id, name, phone, next_followup_date, lead_score, stage
         FROM leads
-        WHERE status = 'active' AND is_deleted = 0
+        WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
           AND next_followup_date = ?
         ORDER BY lead_score DESC
-    """, [today])
+    """, [institute_id, today])
     today_due_leads = cur.fetchall()
 
     # ── Recent activity ─────────────────────────────────────────
@@ -364,13 +369,19 @@ def dashboard():
         SELECT al.action_type, al.module_name, al.description, al.created_at,
                u.full_name AS user_name
         FROM activity_logs al
-        LEFT JOIN users u ON al.user_id = u.id
+        LEFT JOIN users u ON al.user_id = u.id AND u.institute_id = al.institute_id
+        WHERE al.institute_id = ?
         ORDER BY al.created_at DESC
         LIMIT 10
-    """)
+    """, [institute_id])
     recent_activity = cur.fetchall()
 
-    cur.execute("SELECT COUNT(*) AS cnt FROM leave_requests WHERE status = 'pending'")
+    cur.execute(
+        """SELECT COUNT(*) AS cnt FROM leave_requests lr
+           JOIN students s ON lr.student_id = s.id
+           WHERE s.institute_id = ? AND lr.status = 'pending'""",
+        [institute_id],
+    )
     pending_leave_count = cur.fetchone()["cnt"]
 
     conn.close()
@@ -418,7 +429,7 @@ def dashboard():
     )
 
 
-def _staff_dashboard():
+def _staff_dashboard(institute_id):
     """Build and render the staff dashboard for the logged-in staff user."""
     user_id = session.get("user_id")
     branch_id = session.get("branch_id")
@@ -438,10 +449,10 @@ def _staff_dashboard():
         LEFT JOIN courses c ON b.course_id = c.id
         LEFT JOIN branches br ON b.branch_id = br.id
         LEFT JOIN student_batches sb ON sb.batch_id = b.id AND sb.status = 'active'
-        WHERE b.trainer_id = ? AND b.status = 'active'
+        WHERE br.institute_id = ? AND b.trainer_id = ? AND b.status = 'active'
         GROUP BY b.id
         ORDER BY b.batch_name ASC
-    """, [user_id])
+    """, [institute_id, user_id])
     my_batches = cur.fetchall()
     batch_ids = [row["id"] for row in my_batches]
 
@@ -449,10 +460,11 @@ def _staff_dashboard():
     cur.execute("""
         SELECT b.id
         FROM batches b
-        WHERE b.trainer_id = ? AND b.status = 'active'
+        JOIN branches br ON b.branch_id = br.id
+        WHERE br.institute_id = ? AND b.trainer_id = ? AND b.status = 'active'
           AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
           AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
-    """, [user_id, today, today])
+    """, [institute_id, user_id, today, today])
     today_batch_ids = [r["id"] for r in cur.fetchall()]
 
     if today_batch_ids:
@@ -491,20 +503,22 @@ def _staff_dashboard():
     cur.execute("""
         SELECT id, name, phone, next_followup_date, lead_score, stage
         FROM leads
-        WHERE assigned_to_id = ? AND status = 'active' AND is_deleted = 0
+        WHERE institute_id = ? AND assigned_to_id = ?
+          AND status = 'active' AND is_deleted = 0
           AND next_followup_date IS NOT NULL AND next_followup_date < ?
         ORDER BY next_followup_date ASC
-    """, [user_id, today])
+    """, [institute_id, user_id, today])
     my_past_due_leads = cur.fetchall()
 
     # ── My assigned leads — followup today ─────────────────────
     cur.execute("""
         SELECT id, name, phone, next_followup_date, lead_score, stage
         FROM leads
-        WHERE assigned_to_id = ? AND status = 'active' AND is_deleted = 0
+        WHERE institute_id = ? AND assigned_to_id = ?
+          AND status = 'active' AND is_deleted = 0
           AND next_followup_date = ?
         ORDER BY lead_score DESC
-    """, [user_id, today])
+    """, [institute_id, user_id, today])
     my_today_leads = cur.fetchall()
 
     # ── Active students in my batches ───────────────────────────
@@ -521,10 +535,14 @@ def _staff_dashboard():
 
     # ── New students this month in my branch ────────────────────
     branch_filter = "" if can_view_all else "AND branch_id = ?"
-    branch_params = [current_month] if can_view_all else [current_month, branch_id]
+    branch_params = (
+        [institute_id, current_month]
+        if can_view_all
+        else [institute_id, current_month, branch_id]
+    )
     cur.execute(f"""
         SELECT COUNT(*) AS cnt FROM students
-        WHERE strftime('%Y-%m', joined_date) = ? {branch_filter}
+        WHERE institute_id = ? AND strftime('%Y-%m', joined_date) = ? {branch_filter}
     """, branch_params)
     new_students_this_month = cur.fetchone()["cnt"]
 
@@ -545,13 +563,14 @@ def _staff_dashboard():
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE ip.status != 'paid'
+        WHERE i.institute_id = ? AND s.institute_id = ?
+          AND ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           {branch_clause}
         ORDER BY parse_date(ip.due_date) ASC
         LIMIT 50
-    """, [today] + branch_param)
+    """, [institute_id, institute_id, today] + branch_param)
     past_dues = cur.fetchall()
     total_past_due = sum(float(r["balance_due"] or 0) for r in past_dues)
 
@@ -565,12 +584,13 @@ def _staff_dashboard():
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE ip.status != 'paid'
+        WHERE i.institute_id = ? AND s.institute_id = ?
+          AND ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           {branch_clause}
         ORDER BY s.full_name ASC
-    """, [today] + branch_param)
+    """, [institute_id, institute_id, today] + branch_param)
     todays_dues = cur.fetchall()
     total_today_due = sum(float(r["balance_due"] or 0) for r in todays_dues)
 
@@ -578,14 +598,19 @@ def _staff_dashboard():
     cur.execute("""
         SELECT al.action_type, al.module_name, al.description, al.created_at
         FROM activity_logs al
-        WHERE al.user_id = ?
+        WHERE al.institute_id = ? AND al.user_id = ?
         ORDER BY al.created_at DESC
         LIMIT 8
-    """, [user_id])
+    """, [institute_id, user_id])
     recent_activity = cur.fetchall()
 
     # ── Pending leave requests ──────────────────────────────────
-    cur.execute("SELECT COUNT(*) AS cnt FROM leave_requests WHERE status = 'pending'")
+    cur.execute(
+        """SELECT COUNT(*) AS cnt FROM leave_requests lr
+           JOIN students s ON lr.student_id = s.id
+           WHERE s.institute_id = ? AND lr.status = 'pending'""",
+        [institute_id],
+    )
     pending_leave_count = cur.fetchone()["cnt"]
 
     conn.close()
@@ -636,6 +661,7 @@ def sidebar_badges():
     user_id = session.get("user_id")
     branch_id = session.get("branch_id")
     can_view_all = session.get("can_view_all_branches", 0)
+    institute_id = get_current_institute_id(default=1)
 
     today = datetime.now().date().isoformat()
 
@@ -651,18 +677,19 @@ def sidebar_badges():
         if role == "admin" or can_view_all:
             cur.execute("""
                 SELECT COUNT(*) AS cnt FROM leads
-                WHERE status = 'active' AND is_deleted = 0
+                WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
                   AND next_followup_date IS NOT NULL
                   AND parse_date(next_followup_date) <= ?
-            """, [today])
+            """, [institute_id, today])
             leads_count = cur.fetchone()["cnt"]
         else:
             cur.execute("""
                 SELECT COUNT(*) AS cnt FROM leads
-                WHERE assigned_to_id = ? AND status = 'active' AND is_deleted = 0
+                WHERE institute_id = ? AND assigned_to_id = ?
+                  AND status = 'active' AND is_deleted = 0
                   AND next_followup_date IS NOT NULL
                   AND parse_date(next_followup_date) <= ?
-            """, [user_id, today])
+            """, [institute_id, user_id, today])
             leads_count = cur.fetchone()["cnt"]
 
         # 2. Billing Badge: count of past due / today due installments
@@ -671,29 +698,38 @@ def sidebar_badges():
                 SELECT COUNT(DISTINCT ip.id) AS cnt
                 FROM installment_plans ip
                 JOIN invoices i ON ip.invoice_id = i.id
-                WHERE ip.status != 'paid'
+                WHERE i.institute_id = ? AND ip.status != 'paid'
                   AND parse_date(ip.due_date) <= ?
                   AND i.status NOT IN ('write_off', 'partially_written_off')
-            """, [today])
+            """, [institute_id, today])
             billing_count = cur.fetchone()["cnt"]
         else:
             cur.execute("""
                 SELECT COUNT(DISTINCT ip.id) AS cnt
                 FROM installment_plans ip
                 JOIN invoices i ON ip.invoice_id = i.id
-                WHERE ip.status != 'paid'
+                WHERE i.institute_id = ? AND ip.status != 'paid'
                   AND parse_date(ip.due_date) <= ?
                   AND i.status NOT IN ('write_off', 'partially_written_off')
                   AND i.branch_id = ?
-            """, [today, branch_id])
+            """, [institute_id, today, branch_id])
             billing_count = cur.fetchone()["cnt"]
 
         # 3. Attendance Badge: count of pending leave requests
-        cur.execute("SELECT COUNT(*) AS cnt FROM leave_requests WHERE status = 'pending'")
+        cur.execute(
+            """SELECT COUNT(*) AS cnt FROM leave_requests lr
+               JOIN students s ON lr.student_id = s.id
+               WHERE s.institute_id = ? AND lr.status = 'pending'""",
+            [institute_id],
+        )
         attendance_count = cur.fetchone()["cnt"]
 
         # 4. LMS Badge: count of pending final exam applications
-        cur.execute("SELECT COUNT(*) AS cnt FROM lms_final_exam_applications WHERE status = 'PENDING'")
+        cur.execute(
+            """SELECT COUNT(*) AS cnt FROM lms_final_exam_applications
+               WHERE institute_id = ? AND status = 'PENDING'""",
+            [institute_id],
+        )
         lms_count = cur.fetchone()["cnt"]
 
     except Exception as e:
