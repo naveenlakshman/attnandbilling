@@ -1,5 +1,6 @@
 {% set ep = request.endpoint or '' %}
 {% set is_admin = session.get('role') == 'admin' %}
+{% set is_platform_owner = session.get('platform_role') == 'platform_owner' %}
 
 {# Reorganized Active States checking #}
 {% set admissions_active = ep.startswith('leads.') and ep != 'leads.reports' %}
@@ -7,7 +8,8 @@
 {% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') or ep.startswith('certificates.') %}
 {% set finance_active = (ep.startswith('billing.') and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
 {% set reports_active = ep.startswith('reports.') or ep == 'leads.reports' or ep in ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
-{% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.') or ep.startswith('platform_admin.')) %}
+{% set platform_active = ep.startswith('platform_admin.') %}
+{% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.')) %}
 
 <div class="erp-master-nav accordion accordion-flush" id="erpSidebarAccordion">
   
@@ -37,11 +39,6 @@
          class="accordion-collapse collapse {{ 'show' if admissions_active else '' }}"
          data-bs-parent="#erpSidebarAccordion">
       <div class="erp-module-menu">
-        {% if session.get('platform_role') == 'platform_owner' %}
-          <div class="erp-subsection">Platform</div>
-          <a class="nav-link {{ 'active' if ep.startswith('platform_admin.') else '' }}" href="{{ url_for('platform_admin.institutes') }}">Institutes</a>
-          <div class="erp-subsection">Current Institute</div>
-        {% endif %}
         <a class="nav-link {{ 'active' if ep == 'leads.dashboard' else '' }}" href="{{ url_for('leads.dashboard') }}">Leads Dashboard</a>
         <a class="nav-link {{ 'active' if ep in ['leads.leads_list', 'leads.lead_detail', 'leads.lead_edit'] and request.args.get('status_filter') != 'converted' else '' }}" href="{{ url_for('leads.leads_list') }}">Leads</a>
         <a class="nav-link {{ 'active' if ep == 'leads.lead_create' else '' }}" href="{{ url_for('leads.lead_create') }}">Add Lead</a>
@@ -211,6 +208,35 @@
       </div>
     </div>
   </div>
+
+  {% if is_platform_owner %}
+  <!-- Platform-wide controls are intentionally separate from institute administration. -->
+  <div class="erp-module" data-module="platform">
+    <button class="erp-module-toggle {{ 'active' if platform_active else '' }}"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#sidebarPlatform"
+            aria-expanded="{{ 'true' if platform_active else 'false' }}"
+            aria-controls="sidebarPlatform">
+      <span>
+        <span class="erp-nav-mark"><i class="bi bi-buildings-fill"></i></span>
+        <span class="nav-text">Platform Administration</span>
+      </span>
+      <span class="erp-module-chevron"><i class="bi bi-chevron-right"></i></span>
+    </button>
+    <div id="sidebarPlatform"
+         class="accordion-collapse collapse {{ 'show' if platform_active else '' }}"
+         data-bs-parent="#erpSidebarAccordion">
+      <div class="erp-module-menu">
+        <div class="erp-subsection">Multi-Institute</div>
+        <a class="nav-link {{ 'active' if ep in ['platform_admin.institutes', 'platform_admin.institute_detail', 'platform_admin.institute_edit', 'platform_admin.institute_subscription'] else '' }}"
+           href="{{ url_for('platform_admin.institutes') }}">Manage Institutes</a>
+        <a class="nav-link {{ 'active' if ep in ['platform_admin.onboarding_new', 'platform_admin.onboarding_step'] else '' }}"
+           href="{{ url_for('platform_admin.onboarding_new') }}">Onboard New Institute</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Administration Section -->
   <div class="erp-module" data-module="admin">

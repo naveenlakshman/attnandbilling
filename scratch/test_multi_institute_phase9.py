@@ -191,6 +191,9 @@ try:
     response = client.get("/platform/onboarding/new")
     assert response.status_code == 200
     assert b"Step 1 of 9" in response.data
+    assert b"Platform Administration" in response.data
+    assert b"Manage Institutes" in response.data
+    assert b"Onboard New Institute" in response.data
     response = client.get(f"/platform/institutes/{institute_id}/subscription")
     assert response.status_code == 200
     assert b"Plan, limits and access" in response.data
