@@ -85,6 +85,17 @@ steps:
       - python
       - scratch/test_lead_form_stage_guard.py
 
+  - id: verify-billing-dashboard-tenant-isolation
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --env
+      - SECRET_KEY=cloud-build-billing-dashboard-only
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
+      - python
+      - scratch/test_billing_dashboard_tenant_isolation.py
+
   - id: push
     name: gcr.io/cloud-builders/docker
     args:

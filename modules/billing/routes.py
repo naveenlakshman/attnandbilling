@@ -821,44 +821,56 @@ def dashboard():
     """, (current_inst,))
     branches = cur.fetchall()
 
-    student_query = "SELECT COUNT(*) AS total_students FROM students WHERE substr(created_at, 1, 10) BETWEEN ? AND ? AND institute_id = ?"
+    student_query = "SELECT COUNT(*) AS total_students FROM students s WHERE substr(s.created_at, 1, 10) BETWEEN ? AND ? AND s.institute_id = ?"
     student_params = [start_date, end_date, current_inst]
 
-    invoice_count_query = "SELECT COUNT(*) AS total_invoices FROM invoices WHERE parse_date(invoice_date) BETWEEN ? AND ? AND institute_id = ?"
+    invoice_count_query = """
+        SELECT COUNT(*) AS total_invoices
+        FROM invoices i
+        JOIN students s ON s.id = i.student_id
+        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ?
+    """
     invoice_count_params = [start_date, end_date, current_inst]
 
-    sales_query = "SELECT IFNULL(SUM(total_amount), 0) AS total_sales FROM invoices WHERE parse_date(invoice_date) BETWEEN ? AND ? AND institute_id = ?"
+    sales_query = """
+        SELECT IFNULL(SUM(i.total_amount), 0) AS total_sales
+        FROM invoices i
+        JOIN students s ON s.id = i.student_id
+        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ?
+    """
     sales_params = [start_date, end_date, current_inst]
 
     receipt_query = """
-        SELECT IFNULL(SUM(amount_received), 0) AS total_receipts
-        FROM receipts
-        JOIN invoices ON receipts.invoice_id = invoices.id
-        WHERE parse_date(receipts.receipt_date) BETWEEN ? AND ? AND (receipts.institute_id = ? OR invoices.institute_id = ?)
+        SELECT IFNULL(SUM(r.amount_received), 0) AS total_receipts
+        FROM receipts r
+        JOIN invoices i ON r.invoice_id = i.id
+        JOIN students s ON s.id = i.student_id
+        WHERE parse_date(r.receipt_date) BETWEEN ? AND ? AND s.institute_id = ?
     """
-    receipt_params = [start_date, end_date, current_inst, current_inst]
+    receipt_params = [start_date, end_date, current_inst]
 
     expense_query = """
-        SELECT IFNULL(SUM(amount), 0) AS total_expenses
-        FROM expenses
-        WHERE expense_date BETWEEN ? AND ? AND institute_id = ?
+        SELECT IFNULL(SUM(e.amount), 0) AS total_expenses
+        FROM expenses e
+        JOIN branches b ON b.id = e.branch_id
+        WHERE e.expense_date BETWEEN ? AND ? AND b.institute_id = ?
     """
     expense_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        student_query += " AND branch_id = ?"
+        student_query += " AND s.branch_id = ?"
         student_params.append(branch_id)
 
-        invoice_count_query += " AND branch_id = ?"
+        invoice_count_query += " AND i.branch_id = ?"
         invoice_count_params.append(branch_id)
 
-        sales_query += " AND (branch_id = ? OR branch_id IS NULL)"
+        sales_query += " AND (i.branch_id = ? OR i.branch_id IS NULL)"
         sales_params.append(branch_id)
 
-        receipt_query += " AND (invoices.branch_id = ? OR invoices.branch_id IS NULL)"
+        receipt_query += " AND (i.branch_id = ? OR i.branch_id IS NULL)"
         receipt_params.append(branch_id)
 
-        expense_query += " AND branch_id = ?"
+        expense_query += " AND e.branch_id = ?"
         expense_params.append(branch_id)
 
     cur.execute(student_query, student_params)
@@ -894,7 +906,8 @@ def dashboard():
             i.branch_id
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        WHERE ip.status IN ('pending', 'partially_paid', 'overdue') AND i.institute_id = ?
+        JOIN students s ON s.id = i.student_id
+        WHERE ip.status IN ('pending', 'partially_paid', 'overdue') AND s.institute_id = ?
     """
     aging_params = [current_inst]
 
@@ -973,15 +986,16 @@ def dashboard():
 
     monthly_sales_query = """
         SELECT
-            invoice_date,
-            total_amount
-        FROM invoices
-        WHERE parse_date(invoice_date) BETWEEN ? AND ? AND institute_id = ?
+            i.invoice_date,
+            i.total_amount
+        FROM invoices i
+        JOIN students s ON s.id = i.student_id
+        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ?
     """
     monthly_sales_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        monthly_sales_query += " AND branch_id = ?"
+        monthly_sales_query += " AND i.branch_id = ?"
         monthly_sales_params.append(branch_id)
 
     cur.execute(monthly_sales_query, monthly_sales_params)
@@ -1008,19 +1022,20 @@ def dashboard():
 
     monthly_receipts_query = """
         SELECT
-            SUBSTR(parse_date(receipts.receipt_date), 1, 7) AS ym,
-            IFNULL(SUM(receipts.amount_received), 0) AS total_amount
-        FROM receipts
-        JOIN invoices ON receipts.invoice_id = invoices.id
-        WHERE parse_date(receipts.receipt_date) BETWEEN ? AND ? AND (receipts.institute_id = ? OR invoices.institute_id = ?)
+            SUBSTR(parse_date(r.receipt_date), 1, 7) AS ym,
+            IFNULL(SUM(r.amount_received), 0) AS total_amount
+        FROM receipts r
+        JOIN invoices i ON r.invoice_id = i.id
+        JOIN students s ON s.id = i.student_id
+        WHERE parse_date(r.receipt_date) BETWEEN ? AND ? AND s.institute_id = ?
     """
-    monthly_receipts_params = [start_date, end_date, current_inst, current_inst]
+    monthly_receipts_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        monthly_receipts_query += " AND invoices.branch_id = ?"
+        monthly_receipts_query += " AND i.branch_id = ?"
         monthly_receipts_params.append(branch_id)
 
-    monthly_receipts_query += " GROUP BY SUBSTR(parse_date(receipts.receipt_date), 1, 7)"
+    monthly_receipts_query += " GROUP BY SUBSTR(parse_date(r.receipt_date), 1, 7)"
 
     cur.execute(monthly_receipts_query, monthly_receipts_params)
     for row in cur.fetchall():
@@ -1030,15 +1045,16 @@ def dashboard():
 
     monthly_expenses_query = """
         SELECT
-            substr(expense_date, 1, 7) AS ym,
-            IFNULL(SUM(amount), 0) AS total_amount
-        FROM expenses
-        WHERE expense_date BETWEEN ? AND ? AND institute_id = ?
+            substr(e.expense_date, 1, 7) AS ym,
+            IFNULL(SUM(e.amount), 0) AS total_amount
+        FROM expenses e
+        JOIN branches b ON b.id = e.branch_id
+        WHERE e.expense_date BETWEEN ? AND ? AND b.institute_id = ?
     """
     monthly_expenses_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        monthly_expenses_query += " AND branch_id = ?"
+        monthly_expenses_query += " AND e.branch_id = ?"
         monthly_expenses_params.append(branch_id)
 
     monthly_expenses_query += " GROUP BY substr(expense_date, 1, 7)"
