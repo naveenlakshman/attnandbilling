@@ -12,6 +12,7 @@ import io
 import csv
 import os
 import base64
+import re
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
 from services.document_numbers import allocate_document_number
@@ -650,7 +651,16 @@ def save_student_photo(photo_data, student_code):
         photo_bytes = base64.b64decode(photo_data)
         # The storage provider applies the current institute namespace. Keep the
         # input path relative so it is not accidentally namespaced twice.
-        dest_path = f"student_photos/{student_code}.jpg"
+        # Student codes commonly contain separators such as ``STG/STU001``.
+        # Never allow those business identifiers to become storage folders.
+        safe_student_code = re.sub(
+            r"[^A-Za-z0-9._-]+",
+            "_",
+            str(student_code or "").strip(),
+        ).strip("._-")
+        if not safe_student_code:
+            raise ValueError("Student code cannot be converted to a safe photo filename.")
+        dest_path = f"student_photos/{safe_student_code}.jpg"
         storage_service = get_storage_service()
         stored_path = storage_service.upload_file(
             photo_bytes,
@@ -3190,8 +3200,12 @@ def student_upload_photo(student_id):
             raise RuntimeError("The student photo could not be stored.")
         now = datetime.now().isoformat(timespec="seconds")
         cur.execute(
-            "UPDATE students SET photo_filename = ?, updated_at = ? WHERE id = ?",
-            (photo_filename, now, student_id)
+            """
+            UPDATE students
+            SET photo_filename = ?, updated_at = ?
+            WHERE id = ? AND institute_id = ?
+            """,
+            (photo_filename, now, student_id, current_inst)
         )
         conn.commit()
         log_activity(

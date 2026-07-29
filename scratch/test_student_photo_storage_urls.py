@@ -19,7 +19,8 @@ STUDENTS = (ROOT / "templates" / "billing" / "students.html").read_text(
 
 
 def test_photo_writer_delegates_tenant_namespace_to_storage_provider():
-    assert 'dest_path = f"student_photos/{student_code}.jpg"' in ROUTES
+    assert 'r"[^A-Za-z0-9._-]+"' in ROUTES
+    assert 'dest_path = f"student_photos/{safe_student_code}.jpg"' in ROUTES
     assert 'dest_path = f"tenants/{current_inst}/student_photos/' not in ROUTES
     assert "return stored_path" in ROUTES
 
@@ -31,7 +32,7 @@ def test_quick_photo_update_is_tenant_scoped_and_returns_renderable_url():
         route_start,
     )
     route = ROUTES[route_start:route_end]
-    assert "WHERE id = ? AND institute_id = ?" in route
+    assert route.count("WHERE id = ? AND institute_id = ?") >= 2
     assert '"photo_url": photo_url' in route
 
 
