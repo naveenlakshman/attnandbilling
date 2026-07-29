@@ -228,7 +228,7 @@
               <div class="text-muted" style="font-size: 11px;">Uploaded: {{ docs_by_cat.qualification.uploaded_at[:10] }}</div>
             </div>
             <div class="mb-3">
-              <a href="/uploads/student_documents/{{ docs_by_cat.qualification.file_path | basename }}" class="btn btn-outline-primary btn-sm w-100" target="_blank">View Uploaded Document</a>
+              <a href="{{ url_for('students.profile_document', document_id=docs_by_cat.qualification.id) }}" class="btn btn-outline-primary btn-sm w-100" target="_blank" rel="noopener">View Uploaded Document</a>
             </div>
           {% else %}
             <p class="text-muted mb-3" style="font-size: 12px; font-style: italic;">No qualification proof uploaded yet.</p>
@@ -270,7 +270,7 @@
               <div class="text-muted" style="font-size: 11px;">Uploaded: {{ docs_by_cat.identity.uploaded_at[:10] }}</div>
             </div>
             <div class="mb-3">
-              <a href="/uploads/student_documents/{{ docs_by_cat.identity.file_path | basename }}" class="btn btn-outline-primary btn-sm w-100" target="_blank">View Uploaded Document</a>
+              <a href="{{ url_for('students.profile_document', document_id=docs_by_cat.identity.id) }}" class="btn btn-outline-primary btn-sm w-100" target="_blank" rel="noopener">View Uploaded Document</a>
             </div>
           {% else %}
             <p class="text-muted mb-3" style="font-size: 12px; font-style: italic;">No identity proof uploaded yet.</p>
@@ -312,7 +312,7 @@
               <div class="text-muted" style="font-size: 11px;">Uploaded: {{ docs_by_cat.address.uploaded_at[:10] }}</div>
             </div>
             <div class="mb-3">
-              <a href="/uploads/student_documents/{{ docs_by_cat.address.file_path | basename }}" class="btn btn-outline-primary btn-sm w-100" target="_blank">View Uploaded Document</a>
+              <a href="{{ url_for('students.profile_document', document_id=docs_by_cat.address.id) }}" class="btn btn-outline-primary btn-sm w-100" target="_blank" rel="noopener">View Uploaded Document</a>
             </div>
           {% else %}
             <p class="text-muted mb-3" style="font-size: 12px; font-style: italic;">No address proof uploaded yet.</p>

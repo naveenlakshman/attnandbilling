@@ -442,6 +442,49 @@
       <section class="profile-section">
         <div class="profile-section-header">
           <div>
+            <div class="profile-section-title">Verification Documents</div>
+            <div class="profile-section-subtitle">Documents uploaded by the student for admission and profile verification.</div>
+          </div>
+          <div class="profile-section-badge">{{ uploaded_docs | length }} documents</div>
+        </div>
+
+        <div class="profile-table-wrapper">
+          <table class="profile-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Document Type</th>
+                <th>Uploaded</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for document in uploaded_docs %}
+              <tr>
+                <td>{{ (document.category or 'document') | replace('_', ' ') | title }}</td>
+                <td>{{ document.document_type or '-' }}</td>
+                <td>{{ format_datetime(document.uploaded_at) }}</td>
+                <td>
+                  <div class="profile-table-actions">
+                    <a href="{{ url_for('students.profile_document', document_id=document.id) }}"
+                       target="_blank" rel="noopener">View</a>
+                    <a href="{{ url_for('students.profile_document', document_id=document.id, download=1) }}">Download</a>
+                  </div>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="4"><div class="empty-state">No verification documents uploaded.</div></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="profile-section">
+        <div class="profile-section-header">
+          <div>
             <div class="profile-section-title">Enrollment Signatures</div>
             <div class="profile-section-subtitle">Student and guardian signatures retained with existing capture flow.</div>
           </div>

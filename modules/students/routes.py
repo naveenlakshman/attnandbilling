@@ -1,5 +1,16 @@
 # pyrefly: ignore [missing-import]
-from flask import render_template, request, redirect, url_for, session, flash, current_app, jsonify
+from flask import (
+    abort,
+    current_app,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -10,9 +21,11 @@ import urllib.parse
 import re
 import os
 import uuid
+import mimetypes
+from io import BytesIO
 from db import get_conn, get_company_profile
 from extensions import limiter, public_auth_limit
-from services.storage import get_storage_service
+from services.storage import get_storage_service, tenant_storage_path
 from services.tenant_context import get_current_institute_id
 import logging
 from . import students_bp
@@ -1824,6 +1837,77 @@ def calculate_profile_score(student, uploaded_docs):
         
     total_items = len(fields_to_check) + 3
     return int((filled_count / total_items) * 100)
+
+
+@students_bp.route('/profile/document/<int:document_id>')
+def profile_document(document_id):
+    """Serve one student document after enforcing owner, tenant and branch access."""
+    student_id = session.get('student_id')
+    staff_user_id = session.get('user_id')
+    is_support_owner = (
+        session.get('platform_role') == 'platform_owner'
+        and session.get('support_session_id')
+    )
+    if not student_id and not staff_user_id and not is_support_owner:
+        abort(401)
+
+    institute_id = get_current_institute_id()
+    if institute_id is None:
+        abort(404)
+
+    conn = get_conn()
+    try:
+        document = conn.execute(
+            """
+            SELECT d.id, d.student_id, d.document_type, d.file_path,
+                   s.institute_id, s.branch_id
+            FROM student_uploaded_documents d
+            JOIN students s ON s.id = d.student_id
+            WHERE d.id = ? AND s.institute_id = ?
+            """,
+            (document_id, institute_id),
+        ).fetchone()
+        if not document:
+            abort(404)
+
+        if student_id:
+            if int(document['student_id']) != int(student_id):
+                abort(403)
+        elif staff_user_id:
+            user = conn.execute(
+                """
+                SELECT role, branch_id, can_view_all_branches
+                FROM users
+                WHERE id = ? AND institute_id = ? AND is_active = 1
+                """,
+                (staff_user_id, institute_id),
+            ).fetchone()
+            if not user or user['role'] not in ('admin', 'staff'):
+                abort(403)
+            if (
+                user['role'] == 'staff'
+                and not int(user['can_view_all_branches'] or 0)
+                and int(user['branch_id'] or 0) != int(document['branch_id'] or 0)
+            ):
+                abort(403)
+    finally:
+        conn.close()
+
+    storage_service = get_storage_service()
+    canonical_path = tenant_storage_path(document['file_path'], institute_id)
+    if not storage_service.file_exists(canonical_path):
+        abort(404)
+
+    data = storage_service.download_file(canonical_path)
+    filename = os.path.basename(document['file_path'])
+    mime_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+    return send_file(
+        BytesIO(data),
+        mimetype=mime_type,
+        download_name=filename,
+        as_attachment=request.args.get('download') == '1',
+        max_age=0,
+    )
 
 
 @students_bp.route('/profile/upload-document', methods=['POST'])
