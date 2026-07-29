@@ -1807,7 +1807,7 @@ def profile():
 
 
 def calculate_profile_score(student, uploaded_docs):
-    """Calculate the profile completion percentage from 0 to 100 based on 22 criteria."""
+    """Calculate profile completion using only education fields applicable to the student."""
     if not student:
         return 0
     
@@ -1817,10 +1817,35 @@ def calculate_profile_score(student, uploaded_docs):
     fields_to_check = [
         'full_name', 'phone', 'email', 'address', 'gender', 'education_level', 
         'qualification', 'employment_status', 'date_of_birth', 'parent_name', 
-        'parent_contact', 'father_name', 'mother_name', 'tenth_institution', 
-        'tenth_percentage', 'puc_institution', 'puc_percentage',
+        'parent_contact', 'father_name', 'mother_name',
         'student_signature_filename', 'parent_signature_filename'
     ]
+
+    education_level = str(student_dict.get('education_level') or '').strip()
+    qualification = str(student_dict.get('qualification') or '').strip().lower()
+    higher_education_levels = {
+        'Diploma', 'Undergraduate', 'Postgraduate', 'Doctoral',
+        'Technical', 'Professional',
+    }
+
+    # School students below completed 10th must not lose points for academic
+    # history they have not reached yet.
+    needs_tenth_details = (
+        (education_level == 'School' and 'completed' in qualification)
+        or (education_level not in {'', 'School'})
+    )
+    needs_puc_details = (
+        (
+            education_level == 'Pre-University'
+            and any(marker in qualification for marker in ('completed', '2nd', '12th'))
+        )
+        or education_level in higher_education_levels
+    )
+
+    if needs_tenth_details:
+        fields_to_check.extend(['tenth_institution', 'tenth_percentage'])
+    if needs_puc_details:
+        fields_to_check.extend(['puc_institution', 'puc_percentage'])
     
     filled_count = 0
     for field in fields_to_check:
