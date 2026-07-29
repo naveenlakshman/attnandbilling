@@ -14,6 +14,7 @@ import os
 import base64
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
+from services.document_numbers import allocate_document_number
 from services.subscriptions import (
     PlanLimitExceeded,
     SubscriptionAccessDenied,
@@ -5148,17 +5149,9 @@ def invoice_new():
             """, (current_inst,))
             inst_settings = cur.fetchone()
             inv_prefix = (inst_settings["invoice_prefix"] if inst_settings and inst_settings["invoice_prefix"] else ("MEI/B/" if current_inst == 16 else "GIT/B/")).strip()
-            if not inv_prefix.endswith('/'):
-                inv_prefix += '/'
-
-            cur.execute("""
-                SELECT MAX(CAST(SUBSTRING_INDEX(invoice_no, '/', -1) AS UNSIGNED)) AS max_seq
-                FROM invoices
-                WHERE institute_id = ? AND invoice_no LIKE ?
-            """, (current_inst, f"{inv_prefix}%"))
-            max_row = cur.fetchone()
-            next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else invoice_id
-            invoice_no = f"{inv_prefix}{next_seq}"
+            invoice_no = allocate_document_number(
+                cur, current_inst, "invoice", inv_prefix
+            )
 
             cur.execute("""
                 UPDATE invoices
@@ -6058,17 +6051,9 @@ def receipt_new():
             """, (current_inst,))
             inst_settings = cur.fetchone()
             rec_prefix = (inst_settings["receipt_prefix"] if inst_settings and inst_settings["receipt_prefix"] else ("MEI/" if current_inst == 16 else "GIT/")).strip()
-            if not rec_prefix.endswith('/'):
-                rec_prefix += '/'
-
-            cur.execute("""
-                SELECT MAX(CAST(SUBSTRING_INDEX(receipt_no, '/', -1) AS UNSIGNED)) AS max_seq
-                FROM receipts
-                WHERE institute_id = ? AND receipt_no LIKE ?
-            """, (current_inst, f"{rec_prefix}%"))
-            max_row = cur.fetchone()
-            next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else receipt_id
-            receipt_no = f"{rec_prefix}{next_seq}"
+            receipt_no = allocate_document_number(
+                cur, current_inst, "receipt", rec_prefix
+            )
 
             cur.execute("""
                 UPDATE receipts

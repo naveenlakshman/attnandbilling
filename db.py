@@ -2026,6 +2026,20 @@ def init_db():
         )
     """)
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_document_sequences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
+            document_type TEXT NOT NULL,
+            series_prefix TEXT NOT NULL,
+            next_value INTEGER NOT NULL DEFAULT 1 CHECK (next_value > 0),
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE (institute_id, document_type, series_prefix),
+            CHECK (document_type IN ('invoice', 'receipt')),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS institute_integrations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             institute_id INTEGER NOT NULL,
