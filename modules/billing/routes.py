@@ -4593,7 +4593,8 @@ def invoice_view(invoice_id):
             students.phone,
             students.email,
             students.address,
-            branches.branch_name
+            branches.branch_name,
+            branches.address AS branch_address
         FROM invoices
         JOIN students ON invoices.student_id = students.id
         LEFT JOIN branches ON invoices.branch_id = branches.id
@@ -4736,7 +4737,8 @@ def invoice_print(invoice_id):
             students.phone AS student_phone,
             students.email,
             students.address,
-            branches.branch_name
+            branches.branch_name,
+            branches.address AS branch_address
         FROM invoices
         JOIN students ON invoices.student_id = students.id
         LEFT JOIN branches ON invoices.branch_id = branches.id
@@ -6571,7 +6573,8 @@ def _load_invoice_print_context(invoice_id, prepared_by_user_id=None):
                 students.phone AS student_phone,
                 students.email,
                 students.address,
-                branches.branch_name
+                branches.branch_name,
+                branches.address AS branch_address
             FROM invoices
             JOIN students ON invoices.student_id = students.id
             LEFT JOIN branches ON invoices.branch_id = branches.id

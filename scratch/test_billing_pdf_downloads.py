@@ -32,6 +32,21 @@ class BillingPdfDownloadRegressionTests(unittest.TestCase):
             2,
         )
 
+    def test_invoice_pdf_uses_tenant_branch_address_as_fallback(self):
+        routes = (ROOT / "modules/billing/routes.py").read_text(encoding="utf-8")
+        template = (ROOT / "templates/billing/invoice_print.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertGreaterEqual(
+            routes.count("branches.address AS branch_address"),
+            3,
+        )
+        self.assertIn(
+            "company.address or invoice.branch_address",
+            template,
+        )
+        self.assertIn("<strong>Branch Address:</strong>", template)
+
 
 if __name__ == "__main__":
     unittest.main()
