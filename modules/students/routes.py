@@ -1984,7 +1984,13 @@ def profile_request_update():
 @students_bp.route('/profile/save-signature', methods=['POST'])
 @student_login_required
 def save_signature():
-    """Save student or parent digital signature from student profile page."""
+    """Reject student-side signature changes; admission signatures are staff-owned records."""
+    return jsonify({
+        "success": False,
+        "error": "Enrollment signatures are read-only. Contact institute staff for corrections.",
+    }), 403
+
+    # Retained temporarily below for migration history; this code is unreachable.
     import os, base64
     student_id = session['student_id']
     conn = get_conn()
@@ -2791,6 +2797,13 @@ def attendance_calendar():
 @students_bp.route('/profile/save-signature', methods=['POST'])
 @student_login_required
 def profile_save_signature():
+    """Reject student-side signature changes; admission signatures are staff-owned records."""
+    return {
+        "success": False,
+        "error": "Enrollment signatures are read-only. Contact institute staff for corrections.",
+    }, 403
+
+    # Retained temporarily below for migration history; this code is unreachable.
     import base64
     student_id = session['student_id']
     sig_type = request.form.get('sig_type')
