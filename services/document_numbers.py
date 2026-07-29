@@ -5,7 +5,7 @@ from datetime import datetime
 from config import Config
 
 
-DOCUMENT_TYPES = {"invoice", "receipt", "writeoff"}
+DOCUMENT_TYPES = {"invoice", "receipt", "writeoff", "asset"}
 
 
 def normalize_document_prefix(prefix):

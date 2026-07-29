@@ -1048,7 +1048,8 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS assets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            asset_code TEXT NOT NULL UNIQUE,
+            institute_id INTEGER NOT NULL,
+            asset_code TEXT NOT NULL,
             asset_name TEXT NOT NULL,
             category TEXT NOT NULL,
             brand TEXT,
@@ -1061,6 +1062,8 @@ def init_db():
             branch_id INTEGER,
             created_at TEXT NOT NULL,
             updated_at TEXT,
+            UNIQUE (institute_id, asset_code),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
             FOREIGN KEY (branch_id) REFERENCES branches(id)
         )
     """)
@@ -1069,6 +1072,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS asset_allocation (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
             asset_id INTEGER NOT NULL,
             assigned_to TEXT NOT NULL,
             assigned_role TEXT NOT NULL
@@ -1079,6 +1083,7 @@ def init_db():
                 CHECK(status IN ('Allocated', 'Returned')),
             created_at TEXT NOT NULL,
             updated_at TEXT,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
             FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
         )
     """)
@@ -1087,12 +1092,14 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS asset_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
             asset_id INTEGER NOT NULL,
             action TEXT NOT NULL
                 CHECK(action IN ('Created', 'Assigned', 'Returned', 'Repaired', 'Disposed', 'Updated')),
             description TEXT,
             done_by INTEGER,
             created_at TEXT NOT NULL,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
             FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
             FOREIGN KEY (done_by) REFERENCES users(id)
         )
@@ -2036,7 +2043,7 @@ def init_db():
             created_at TEXT NOT NULL,
             updated_at TEXT,
             UNIQUE (institute_id, document_type, series_prefix),
-            CHECK (document_type IN ('invoice', 'receipt', 'writeoff')),
+            CHECK (document_type IN ('invoice', 'receipt', 'writeoff', 'asset')),
             FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
         )
     """)
