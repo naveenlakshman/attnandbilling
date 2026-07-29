@@ -17,8 +17,24 @@ def require(fragment: str, message: str) -> None:
 
 
 require(
-    ") AS progress_activity",
-    "The UNION-derived last-activity table must have a MySQL-compatible alias.",
+    ") AS legacy_progress",
+    "Legacy progress aggregation must use a MySQL-compatible derived-table alias.",
+)
+require(
+    ") AS master_progress",
+    "Master progress aggregation must use a MySQL-compatible derived-table alias.",
+)
+if "SELECT MAX(last_act) FROM (" in SOURCE:
+    raise AssertionError(
+        "Last activity must not use a correlated UNION-derived table; MySQL rejects it."
+    )
+require(
+    "legacy_progress.student_id = s.id",
+    "Legacy activity aggregation must join back to the current student.",
+)
+require(
+    "master_progress.program_id = lp.id",
+    "Master activity aggregation must join back to the current program.",
 )
 require(
     "s.institute_id = ?",

@@ -6434,19 +6434,12 @@ def progress_dashboard():
                     WHERE tp.student_id = s.id AND lc.program_id = lp.id AND tp.is_completed = 1
                 ) END AS completed_topics,
                 -- last activity across both progress stores
-                (
-                    SELECT MAX(last_act) FROM (
-                        SELECT MAX(tp.completed_at) AS last_act
-                        FROM lms_topic_progress tp
-                        JOIN lms_topics lt ON tp.topic_id = lt.id
-                        JOIN lms_chapters lc ON lt.chapter_id = lc.id
-                        WHERE tp.student_id = s.id AND lc.program_id = lp.id
-                        UNION ALL
-                        SELECT MAX(mtp.completed_at) AS last_act
-                        FROM lms_master_topic_progress mtp
-                        WHERE mtp.student_id = s.id AND mtp.program_id = lp.id
-                    ) AS progress_activity
-                ) AS last_activity
+                CASE
+                    WHEN COALESCE(legacy_progress.last_activity, '') >=
+                         COALESCE(master_progress.last_activity, '')
+                    THEN legacy_progress.last_activity
+                    ELSE master_progress.last_activity
+                END AS last_activity
             FROM students s
             JOIN lms_programs lp ON lp.is_active = 1 AND lp.is_deleted = 0
             -- Display batch: prefer spa.batch_id, fallback to any active student batch
@@ -6460,6 +6453,22 @@ def progress_dashboard():
             LEFT JOIN branches br  ON br.id  = b.branch_id
             LEFT JOIN branches br2 ON br2.id = s.branch_id
             LEFT JOIN users    u   ON u.id   = b.trainer_id
+            LEFT JOIN (
+                SELECT tp.student_id, lc.program_id, MAX(tp.completed_at) AS last_activity
+                FROM lms_topic_progress tp
+                JOIN lms_topics lt ON lt.id = tp.topic_id
+                JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                GROUP BY tp.student_id, lc.program_id
+            ) AS legacy_progress
+              ON legacy_progress.student_id = s.id
+             AND legacy_progress.program_id = lp.id
+            LEFT JOIN (
+                SELECT mtp.student_id, mtp.program_id, MAX(mtp.completed_at) AS last_activity
+                FROM lms_master_topic_progress mtp
+                GROUP BY mtp.student_id, mtp.program_id
+            ) AS master_progress
+              ON master_progress.student_id = s.id
+             AND master_progress.program_id = lp.id
             WHERE {where_sql}
             ORDER BY s.full_name ASC, lp.program_name ASC
         """
