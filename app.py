@@ -340,6 +340,40 @@ def create_app():
             max_age=300,
         )
 
+    @app.get("/student-signatures/<path:filename>")
+    def student_signature(filename):
+        """Serve institute 1 legacy signatures through authenticated storage."""
+        from services.tenant_context import get_current_institute_id
+
+        if get_current_institute_id() != 1:
+            abort(404)
+        authenticated_tenant = session.get("institute_id") or session.get(
+            "student_institute_id"
+        )
+        if int(authenticated_tenant or 0) != 1:
+            abort(401)
+        normalized_filename = str(filename or "").replace("\\", "/").strip("/")
+        if (
+            not normalized_filename
+            or ".." in normalized_filename.split("/")
+            or normalized_filename.startswith("/")
+        ):
+            abort(404)
+        object_path = f"signatures/{normalized_filename}"
+        storage_service = get_storage_service()
+        if not storage_service.file_exists(object_path):
+            abort(404)
+        data = storage_service.download_file(object_path)
+        download_name = os.path.basename(normalized_filename)
+        mime_type = mimetypes.guess_type(download_name)[0] or "image/png"
+        return send_file(
+            BytesIO(data),
+            mimetype=mime_type,
+            download_name=download_name,
+            as_attachment=False,
+            max_age=0,
+        )
+
     @app.get("/tenant-files/<path:object_path>")
     def tenant_file(object_path):
         from services.storage import parse_tenant_storage_path

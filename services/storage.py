@@ -374,6 +374,9 @@ class GCSStorageProvider:
         if gcs_path.startswith("student_photos/"):
             filename = gcs_path.split("student_photos/", 1)[1]
             return f"/student-photos/{filename}"
+        if gcs_path.startswith("signatures/"):
+            filename = gcs_path.split("signatures/", 1)[1]
+            return f"/student-signatures/{filename}"
         # Legacy Global IT compatibility until its stored objects are migrated.
         return f"https://storage.googleapis.com/{self.bucket_name}/{gcs_path}"
 
