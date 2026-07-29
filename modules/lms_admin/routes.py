@@ -6815,8 +6815,8 @@ def view_student_progress(student_id):
                         'chapter_title': chap['chapter_title'],
                         'chapter_order': chap['chapter_order'],
                         'description': chap['description'],
-                        'total_topics': chap['total_topics'],
-                        'completed_topics': chap['completed_topics'],
+                        'total_topics': int(chap['total_topics'] or 0),
+                        'completed_topics': int(chap['completed_topics'] or 0),
                         'topics': topics
                     })
             else:
@@ -6864,15 +6864,18 @@ def view_student_progress(student_id):
                         'chapter_title': chap['chapter_title'],
                         'chapter_order': chap['chapter_order'],
                         'description': chap['description'],
-                        'total_topics': chap['total_topics'],
-                        'completed_topics': chap['completed_topics'],
+                        'total_topics': int(chap['total_topics'] or 0),
+                        'completed_topics': int(chap['completed_topics'] or 0),
                         'topics': topics
                     })
             
             # Calculate program completion percentage
             total_topics = sum(ch['total_topics'] for ch in chapters_with_topics)
             total_completed = sum(ch['completed_topics'] for ch in chapters_with_topics)
-            program_completion = (total_completed / total_topics * 100) if total_topics > 0 else 0
+            program_completion = (
+                float(total_completed) / float(total_topics) * 100.0
+                if total_topics > 0 else 0.0
+            )
             
             programs_with_details.append({
                 'assignment_id': prog['assignment_id'],
@@ -6956,7 +6959,10 @@ def view_student_progress(student_id):
         # Get overall statistics
         total_topics = sum(p['total_topics'] for p in programs_with_details)
         total_completed = sum(p['total_completed'] for p in programs_with_details)
-        overall_completion = (total_completed / total_topics * 100) if total_topics > 0 else 0
+        overall_completion = (
+            float(total_completed) / float(total_topics) * 100.0
+            if total_topics > 0 else 0.0
+        )
         
         # Get most recent activity
         cur.execute("""

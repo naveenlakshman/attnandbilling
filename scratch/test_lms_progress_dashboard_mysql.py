@@ -71,5 +71,15 @@ if '"lp.institute_id = ?"' not in DETAIL_SOURCE:
     raise AssertionError(
         "Student progress detail must restrict programs to the current institute."
     )
+if DETAIL_SOURCE.count("'total_topics': int(chap['total_topics'] or 0)") < 2:
+    raise AssertionError(
+        "Student detail topic counts from MySQL must be normalized from Decimal to int."
+    )
+if DETAIL_SOURCE.count(
+    "float(total_completed) / float(total_topics) * 100.0"
+) < 2:
+    raise AssertionError(
+        "Student detail percentages must be floats before template arithmetic."
+    )
 
 print("LMS progress dashboard/detail MySQL and tenant-isolation regression checks passed.")
