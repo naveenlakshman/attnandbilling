@@ -20,6 +20,103 @@ def _for_update_clause():
     return " FOR UPDATE" if getattr(Config, "DB_TYPE", "sqlite") == "mysql" else ""
 
 
+def _allocate_installment_coverage(amounts_due, receipt_total, writeoff_total):
+    """Allocate receipts first, then write-offs, across installments in order."""
+    remaining_receipts = float(receipt_total or 0)
+    remaining_writeoffs = float(writeoff_total or 0)
+    allocations = []
+
+    for raw_amount_due in amounts_due:
+        amount_due = float(raw_amount_due or 0)
+        receipt_applied = min(max(remaining_receipts, 0), amount_due)
+        remaining_receipts -= receipt_applied
+        uncovered = amount_due - receipt_applied
+        writeoff_applied = min(max(remaining_writeoffs, 0), uncovered)
+        remaining_writeoffs -= writeoff_applied
+        allocations.append((receipt_applied, writeoff_applied))
+
+    return allocations
+
+
+def _sync_invoice_installments(cur, invoice_id, institute_id, now):
+    """Rebuild installment coverage from tenant-owned receipts and write-offs."""
+    cur.execute("""
+        SELECT i.id,
+               COALESCE((
+                   SELECT SUM(r.amount_received)
+                   FROM receipts r
+                   WHERE r.invoice_id = i.id
+                     AND r.institute_id = i.institute_id
+               ), 0) AS receipt_total,
+               COALESCE((
+                   SELECT SUM(bw.amount_written_off)
+                   FROM bad_debt_writeoffs bw
+                   WHERE bw.invoice_id = i.id
+                     AND bw.institute_id = i.institute_id
+               ), 0) AS writeoff_total
+        FROM invoices i
+        WHERE i.id = ? AND i.institute_id = ?
+    """, (invoice_id, institute_id))
+    invoice = cur.fetchone()
+    if not invoice:
+        return
+
+    receipt_total = float(invoice["receipt_total"] or 0)
+    writeoff_total = float(invoice["writeoff_total"] or 0)
+    cur.execute("""
+        SELECT ip.id, ip.amount_due
+        FROM installment_plans ip
+        JOIN invoices i ON i.id = ip.invoice_id
+        WHERE ip.invoice_id = ? AND i.institute_id = ?
+        ORDER BY ip.installment_no ASC, ip.id ASC
+    """, (invoice_id, institute_id))
+
+    installments = cur.fetchall()
+    allocations = _allocate_installment_coverage(
+        [installment["amount_due"] for installment in installments],
+        receipt_total,
+        writeoff_total,
+    )
+
+    for installment, allocation in zip(installments, allocations):
+        amount_due = float(installment["amount_due"] or 0)
+        receipt_applied, writeoff_applied = allocation
+        covered = round(receipt_applied + writeoff_applied, 2)
+
+        if covered >= round(amount_due, 2):
+            status = "paid"
+        elif covered > 0:
+            status = "partially_paid"
+        else:
+            status = "pending"
+
+        if writeoff_applied > 0 and receipt_applied > 0:
+            remarks = (
+                f"Receipt payment {receipt_applied:.2f}; "
+                f"written off {writeoff_applied:.2f}"
+            )
+        elif writeoff_applied > 0:
+            remarks = f"Written off {writeoff_applied:.2f}"
+        elif receipt_applied >= amount_due and amount_due > 0:
+            remarks = "Fully paid"
+        elif receipt_applied > 0:
+            remarks = f"Partial payment of {receipt_applied:.2f}"
+        else:
+            remarks = None
+
+        cur.execute("""
+            UPDATE installment_plans
+            SET amount_paid = ?, status = ?, remarks = ?, updated_at = ?
+            WHERE id = ?
+              AND EXISTS (
+                  SELECT 1
+                  FROM invoices i
+                  WHERE i.id = installment_plans.invoice_id
+                    AND i.institute_id = ?
+              )
+        """, (covered, status, remarks, now, installment["id"], institute_id))
+
+
 
 @baddebt_bp.route("/")
 @login_required
@@ -314,14 +411,9 @@ def create():
                     WHERE id = ? AND institute_id = ?
                 """, (new_status, now, invoice_id, current_inst))
 
-                # Mark all unpaid installment_plans for this invoice as written_off
-                # so they no longer appear in receivables
-                cur.execute("""
-                    UPDATE installment_plans
-                    SET status = 'paid', amount_paid = amount_due,
-                        remarks = 'Written off', updated_at = ?
-                    WHERE invoice_id = ? AND status != 'paid'
-                """, (now, invoice_id))
+                # Recalculate installment coverage from receipts plus all active
+                # write-offs. This preserves any balance after a partial write-off.
+                _sync_invoice_installments(cur, invoice_id, current_inst, now)
 
                 # Commit transaction
                 conn.commit()
@@ -582,6 +674,10 @@ def delete(writeoff_id):
                 UPDATE invoices SET status = ?, updated_at = ?
                 WHERE id = ? AND institute_id = ?
             """, (new_status, now, invoice_id, current_inst))
+
+            # The deleted write-off no longer covers the invoice. Reallocate the
+            # remaining receipts/write-offs so the restored balance is receivable.
+            _sync_invoice_installments(cur, invoice_id, current_inst, now)
 
         conn.commit()
         conn.close()
