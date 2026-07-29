@@ -494,7 +494,7 @@
             <div class="sig-box-label">Student Signature</div>
             {% if student.student_signature_filename %}
               <img class="sig-preview-img" id="sigImg_student"
-                   src="/static/images/student_signatures/{{ student.student_signature_filename }}"
+                   src="{{ storage_url(student.student_signature_filename) }}"
                    alt="Student Signature">
               <div class="sig-date-info" id="sigDate_student">Signed: {{ format_date(student.student_signature_date) }}</div>
             {% else %}
@@ -513,7 +513,7 @@
             <div class="sig-box-label">Parent / Guardian Signature</div>
             {% if student.parent_signature_filename %}
               <img class="sig-preview-img" id="sigImg_parent"
-                   src="/static/images/student_signatures/{{ student.parent_signature_filename }}"
+                   src="{{ storage_url(student.parent_signature_filename) }}"
                    alt="Parent Signature">
               <div class="sig-date-info" id="sigDate_parent">Signed: {{ format_date(student.parent_signature_date) }}</div>
             {% else %}

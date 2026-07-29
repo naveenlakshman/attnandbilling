@@ -3233,9 +3233,15 @@ def student_upload_photo(student_id):
 def student_save_signature(student_id):
     """Save student or parent digital signature from profile page."""
     import os, base64
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id, student_code, full_name FROM students WHERE id = ?", (student_id,))
+    cur.execute(
+        """SELECT id, student_code, full_name
+           FROM students
+           WHERE id = ? AND institute_id = ?""",
+        (student_id, current_inst),
+    )
     student = cur.fetchone()
     if not student:
         conn.close()
@@ -3260,18 +3266,24 @@ def student_save_signature(student_id):
         filename = f"signatures/{code}_{sig_type}_signature.png"
         
         storage_service = get_storage_service()
-        storage_service.upload_file(sig_bytes, filename, content_type="image/png")
+        stored_path = storage_service.upload_file(
+            sig_bytes, filename, content_type="image/png"
+        )
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if sig_type == "student":
             cur.execute(
-                "UPDATE students SET student_signature_filename=?, student_signature_date=?, updated_at=? WHERE id=?",
-                (filename, now, now, student_id)
+                """UPDATE students
+                   SET student_signature_filename=?, student_signature_date=?, updated_at=?
+                   WHERE id=? AND institute_id=?""",
+                (stored_path, now, now, student_id, current_inst)
             )
         else:
             cur.execute(
-                "UPDATE students SET parent_signature_filename=?, parent_signature_date=?, updated_at=? WHERE id=?",
-                (filename, now, now, student_id)
+                """UPDATE students
+                   SET parent_signature_filename=?, parent_signature_date=?, updated_at=?
+                   WHERE id=? AND institute_id=?""",
+                (stored_path, now, now, student_id, current_inst)
             )
         conn.commit()
         log_activity(
@@ -3283,7 +3295,12 @@ def student_save_signature(student_id):
             description=f"Saved {sig_type} signature for {student['full_name']} ({code})"
         )
         conn.close()
-        return jsonify({"success": True, "filename": filename, "signed_at": now})
+        return jsonify({
+            "success": True,
+            "filename": stored_path,
+            "signature_url": storage_service.generate_public_url(stored_path),
+            "signed_at": now,
+        })
     except Exception as e:
         conn.close()
         return jsonify({"success": False, "error": str(e)}), 500
