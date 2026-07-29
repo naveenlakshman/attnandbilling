@@ -72,7 +72,7 @@
           <div class="profile-avatar-shell">
             <div class="profile-avatar" id="profilePhotoDisplay">
               {% if student.photo_filename %}
-              <img src="/static/images/student_photos/{{ student.photo_filename }}"
+              <img src="{{ storage_url(student.photo_filename) }}"
                    alt="{{ student.full_name }}"
                    id="profilePhotoImg"
                    class="profile-avatar-image"
@@ -1306,7 +1306,7 @@
             handleProfileImageError(photoImage);
             photoImage.onerror = null;
           };
-          photoImage.src = '/static/images/student_photos/' + data.photo_filename + '?t=' + Date.now();
+          photoImage.src = data.photo_url + (data.photo_url.includes('?') ? '&' : '?') + 't=' + Date.now();
         }
 
         if (trigger) {

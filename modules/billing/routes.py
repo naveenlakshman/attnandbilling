@@ -648,20 +648,20 @@ def save_student_photo(photo_data, student_code):
         
         # Decode and save to storage
         photo_bytes = base64.b64decode(photo_data)
-        from services.tenant_context import get_current_institute_id
-        current_inst = get_current_institute_id(default=1)
-        if int(current_inst) == 1:
-            dest_path = f"student_photos/{student_code}.jpg"
-        else:
-            dest_path = f"tenants/{current_inst}/student_photos/{student_code}.jpg"
-        
+        # The storage provider applies the current institute namespace. Keep the
+        # input path relative so it is not accidentally namespaced twice.
+        dest_path = f"student_photos/{student_code}.jpg"
         storage_service = get_storage_service()
-        storage_service.upload_file(photo_bytes, dest_path, content_type="image/jpeg")
+        stored_path = storage_service.upload_file(
+            photo_bytes,
+            dest_path,
+            content_type="image/jpeg",
+        )
         
-        return dest_path
+        return stored_path
     except Exception as e:
         logger.error(f"Error saving photo: {e}", exc_info=True)
-        return None
+        raise RuntimeError("The student photo could not be stored.") from e
 
 @billing_bp.route("/")
 @login_required
@@ -3163,9 +3163,17 @@ def student_edit(student_id):
 @login_required
 def student_upload_photo(student_id):
     """Quick photo upload from student profile page."""
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id, student_code, full_name FROM students WHERE id = ?", (student_id,))
+    cur.execute(
+        """
+        SELECT id, student_code, full_name
+        FROM students
+        WHERE id = ? AND institute_id = ?
+        """,
+        (student_id, current_inst),
+    )
     student = cur.fetchone()
     if not student:
         conn.close()
@@ -3178,6 +3186,8 @@ def student_upload_photo(student_id):
 
     try:
         photo_filename = save_student_photo(photo_data, student["student_code"])
+        if not photo_filename:
+            raise RuntimeError("The student photo could not be stored.")
         now = datetime.now().isoformat(timespec="seconds")
         cur.execute(
             "UPDATE students SET photo_filename = ?, updated_at = ? WHERE id = ?",
@@ -3193,7 +3203,12 @@ def student_upload_photo(student_id):
             description=f"Updated photo for student {student['full_name']} ({student['student_code']})"
         )
         conn.close()
-        return jsonify({"success": True, "photo_filename": photo_filename})
+        photo_url = get_storage_service().generate_public_url(photo_filename)
+        return jsonify({
+            "success": True,
+            "photo_filename": photo_filename,
+            "photo_url": photo_url,
+        })
     except Exception as e:
         conn.close()
         return jsonify({"success": False, "error": str(e)}), 500

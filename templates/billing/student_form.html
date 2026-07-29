@@ -548,7 +548,7 @@
             <div class="form-photo-wrapper">
               <div class="form-photo-display" id="formPhotoDisplay">
                 {% if student and student.photo_filename %}
-                  <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;">
+                  <img src="{{ storage_url(student.photo_filename) }}" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;">
                 {% elif form_data and form_data.get('photo_data') %}
                   <img src="{{ form_data.get('photo_data') }}" alt="Student Photo" style="width:100%;height:100%;object-fit:cover;" id="restoredPhotoPreview">
                 {% else %}

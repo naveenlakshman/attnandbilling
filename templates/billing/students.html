@@ -690,7 +690,7 @@
     {% for s in students %}
     <div class="student-card">
       {% if s.photo_filename %}
-        <img src="/static/images/student_photos/{{ s.photo_filename }}" alt="" class="student-card-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <img src="{{ storage_url(s.photo_filename) }}" alt="" class="student-card-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
         <div class="student-card-avatar" style="display:none;">{{ (s.full_name or '?')[0] | upper }}</div>
       {% else %}
         <div class="student-card-avatar">{{ (s.full_name or '?')[0] | upper }}</div>
@@ -800,7 +800,7 @@
           <td data-sort-key="name" data-sort-value="{{ s.full_name or '' }}">
             <div class="table-cell-stack">
               {% if s.photo_filename %}
-                <img src="/static/images/student_photos/{{ s.photo_filename }}"
+                <img src="{{ storage_url(s.photo_filename) }}"
                      alt=""
                      class="table-avatar-photo"
                      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">

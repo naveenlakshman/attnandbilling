@@ -311,6 +311,35 @@ def create_app():
             
     app.jinja_env.globals['storage_url'] = storage_url
 
+    @app.get("/student-photos/<path:filename>")
+    def student_photo(filename):
+        """Serve institute 1 legacy photos without making the bucket public."""
+        from services.tenant_context import get_current_institute_id
+
+        if get_current_institute_id() != 1:
+            abort(404)
+        authenticated_tenant = session.get("institute_id") or session.get(
+            "student_institute_id"
+        )
+        if int(authenticated_tenant or 0) != 1:
+            abort(401)
+        safe_filename = os.path.basename(filename)
+        if not safe_filename or safe_filename != filename:
+            abort(404)
+        object_path = f"student_photos/{safe_filename}"
+        storage_service = get_storage_service()
+        if not storage_service.file_exists(object_path):
+            abort(404)
+        data = storage_service.download_file(object_path)
+        mime_type = mimetypes.guess_type(safe_filename)[0] or "image/jpeg"
+        return send_file(
+            BytesIO(data),
+            mimetype=mime_type,
+            download_name=safe_filename,
+            as_attachment=False,
+            max_age=300,
+        )
+
     @app.get("/tenant-files/<path:object_path>")
     def tenant_file(object_path):
         from services.storage import parse_tenant_storage_path

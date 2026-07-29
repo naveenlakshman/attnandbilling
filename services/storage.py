@@ -371,6 +371,9 @@ class GCSStorageProvider:
         tenant_id, _ = parse_tenant_storage_path(gcs_path)
         if tenant_id is not None:
             return f"/tenant-files/{gcs_path}"
+        if gcs_path.startswith("student_photos/"):
+            filename = gcs_path.split("student_photos/", 1)[1]
+            return f"/student-photos/{filename}"
         # Legacy Global IT compatibility until its stored objects are migrated.
         return f"https://storage.googleapis.com/{self.bucket_name}/{gcs_path}"
 

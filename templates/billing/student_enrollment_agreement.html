@@ -845,7 +845,7 @@
     <div class="student-info-wrapper">
       <div class="student-photo">
         {% if student.photo_filename and student.photo_filename != '' %}
-          <img src="/static/images/student_photos/{{ student.photo_filename }}" alt="{{ student.full_name }}">
+          <img src="{{ storage_url(student.photo_filename) }}" alt="{{ student.full_name }}">
         {% else %}
           <div class="student-photo-placeholder">No Photo</div>
         {% endif %}
