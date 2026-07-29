@@ -192,21 +192,19 @@
     <table border="1" width="100%" cellpadding="10" class="activity-table">
       <thead>
       <tr>
-        <th style="width: 70px;">ID</th>
-        <th style="width: 170px;">Date & Time</th>
+        <th style="width: 190px;">Date & Time (IST)</th>
         <th style="width: 180px;">User</th>
         <th style="width: 140px;">Branch</th>
         <th style="width: 110px;">Action</th>
         <th style="width: 140px;">Module</th>
-        <th style="width: 100px;">Record ID</th>
+        <th style="width: 150px;">Reference</th>
         <th>Description</th>
       </tr>
     </thead>
     <tbody>
       {% for log in logs %}
       <tr>
-        <td>{{ log.id }}</td>
-        <td>{{ log.created_at }}</td>
+        <td>{{ log.created_at | format_ist_datetime('%d-%b-%Y %I:%M %p') }}</td>
         <td>
           {% if log.full_name %}
             {{ log.full_name }} ({{ log.username }})
@@ -226,12 +224,12 @@
           </span>
         </td>
         <td>{{ log.module_name }}</td>
-        <td>{{ log.record_id or "-" }}</td>
+        <td>{{ log.record_reference or "—" }}</td>
         <td>{{ log.description }}</td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="8" style="text-align:center; padding: 24px;">No activity logs found.</td>
+        <td colspan="7" style="text-align:center; padding: 24px;">No activity logs found.</td>
       </tr>
       {% endfor %}
     </tbody>

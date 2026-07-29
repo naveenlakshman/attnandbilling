@@ -7705,16 +7705,59 @@ def activity_logs():
             activity_logs.*,
             users.full_name,
             users.username,
-            branches.branch_name
+            branches.branch_name,
+            COALESCE(
+                writeoffs.reference_no,
+                invoices.invoice_no,
+                receipts.receipt_no,
+                expenses.reference_no,
+                students.student_code
+            ) AS record_reference
         FROM activity_logs
         LEFT JOIN users
             ON activity_logs.user_id = users.id
+           AND users.institute_id = ?
         LEFT JOIN branches
             ON activity_logs.branch_id = branches.id
+           AND branches.institute_id = ?
+        LEFT JOIN bad_debt_writeoffs writeoffs
+            ON activity_logs.record_id = writeoffs.id
+           AND LOWER(activity_logs.module_name) IN (
+               'bad debt write-off', 'bad debt write-offs', 'bad_debt_writeoffs'
+           )
+           AND writeoffs.institute_id = ?
+        LEFT JOIN invoices
+            ON activity_logs.record_id = invoices.id
+           AND LOWER(activity_logs.module_name) IN ('invoice', 'invoices')
+           AND invoices.institute_id = ?
+        LEFT JOIN receipts
+            ON activity_logs.record_id = receipts.id
+           AND LOWER(activity_logs.module_name) IN ('receipt', 'receipts')
+           AND receipts.institute_id = ?
+        LEFT JOIN expenses
+            ON activity_logs.record_id = expenses.id
+           AND LOWER(activity_logs.module_name) IN ('expense', 'expenses')
+           AND expenses.institute_id = ?
+        LEFT JOIN students
+            ON activity_logs.record_id = students.id
+           AND LOWER(activity_logs.module_name) IN ('student', 'students')
+           AND students.institute_id = ?
         WHERE substr(activity_logs.created_at, 1, 10) BETWEEN ? AND ?
           AND (activity_logs.institute_id = ? OR (activity_logs.institute_id IS NULL AND users.institute_id = ?))
     """
-    params = [from_date, to_date, current_inst, current_inst]
+    params = [
+        current_inst,
+        current_inst,
+        current_inst,
+        current_inst,
+        current_inst,
+        current_inst,
+        current_inst,
+        from_date,
+        to_date,
+        current_inst,
+        current_inst,
+    ]
 
     if user_id:
         query += " AND activity_logs.user_id = ? "
