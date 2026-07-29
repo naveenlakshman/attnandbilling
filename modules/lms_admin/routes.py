@@ -6317,6 +6317,7 @@ def progress_dashboard():
                 SELECT 1 FROM invoices inv
                 JOIN invoice_items ii ON ii.invoice_id = inv.id
                 WHERE inv.student_id = s.id AND ii.course_id = lp.course_id
+                  AND inv.institute_id = s.institute_id
                   AND lp.course_id IS NOT NULL
             )
             OR EXISTS (
@@ -6325,6 +6326,7 @@ def progress_dashboard():
                 JOIN lms_course_program_map cpm ON cpm.course_id = ii.course_id
                   AND cpm.program_id = lp.id
                 WHERE inv.student_id = s.id
+                  AND inv.institute_id = s.institute_id
             )
         )"""
 
@@ -6443,7 +6445,7 @@ def progress_dashboard():
                         SELECT MAX(mtp.completed_at) AS last_act
                         FROM lms_master_topic_progress mtp
                         WHERE mtp.student_id = s.id AND mtp.program_id = lp.id
-                    )
+                    ) AS progress_activity
                 ) AS last_activity
             FROM students s
             JOIN lms_programs lp ON lp.is_active = 1 AND lp.is_deleted = 0

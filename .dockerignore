@@ -22,6 +22,7 @@ scratch/*
 !scratch/test_student_password_change.py
 !scratch/test_lms_create_and_attach_master.py
 !scratch/test_student_profile_readonly_signatures.py
+!scratch/test_lms_progress_dashboard_mysql.py
 scripts/*
 !scripts/test_domain_verification.py
 *.log
