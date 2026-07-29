@@ -107,6 +107,15 @@ steps:
       - python
       - scratch/test_student_password_change.py
 
+  - id: verify-lms-create-and-attach-master
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
+      - python
+      - scratch/test_lms_create_and_attach_master.py
+
   - id: push
     name: gcr.io/cloud-builders/docker
     args:

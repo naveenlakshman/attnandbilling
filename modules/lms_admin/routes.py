@@ -1203,6 +1203,25 @@ def master_chapter_new():
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
+        source_program_id = _strict_positive_int(
+            request.form.get('source_program_id')
+            if request.method == 'POST'
+            else request.args.get('source_program_id')
+        )
+        source_program = None
+        if source_program_id is not None:
+            source_program = cur.execute(
+                """
+                    SELECT id, program_name
+                    FROM lms_programs
+                    WHERE id = ? AND institute_id = ? AND is_deleted = 0
+                """,
+                (source_program_id, current_inst),
+            ).fetchone()
+            if not source_program:
+                flash('The originating program was not found for this institute.', 'danger')
+                return redirect(url_for('lms_admin.list_programs'))
 
         if request.method == 'POST':
             title = request.form.get('title', '').strip()
@@ -1211,12 +1230,20 @@ def master_chapter_new():
 
             if not title:
                 flash('Chapter title is required.', 'danger')
-                return redirect(url_for('lms_admin.master_chapter_new'))
+                return redirect(url_for(
+                    'lms_admin.master_chapter_new',
+                    source_program_id=source_program_id,
+                ))
 
             if status not in ('active', 'archived'):
                 status = 'active'
+            if source_program and status != 'active':
+                flash('A chapter created for a program must be active so it can be linked.', 'danger')
+                return redirect(url_for(
+                    'lms_admin.master_chapter_new',
+                    source_program_id=source_program_id,
+                ))
 
-            current_inst = get_current_institute_id(default=1)
             is_shared = 1 if (current_inst == 1 and request.form.get('is_shared') == '1') else (1 if current_inst == 1 and 'is_shared' not in request.form else 0)
 
             now = datetime.now().isoformat(timespec='seconds')
@@ -1236,6 +1263,32 @@ def master_chapter_new():
                 (title, description, status, session.get('user_id'), current_inst, is_shared, now, now)
             )
             chapter_id = cur.lastrowid
+
+            link_id = None
+            if source_program:
+                max_row = cur.execute(
+                    """
+                        SELECT MAX(chapter_order) AS max_order
+                        FROM lms_program_chapters
+                        WHERE program_id = ?
+                    """,
+                    (source_program_id,),
+                ).fetchone()
+                chapter_order = (max_row['max_order'] or 0) + 1
+                cur.execute(
+                    """
+                        INSERT INTO lms_program_chapters (
+                            program_id,
+                            master_chapter_id,
+                            chapter_order,
+                            custom_title,
+                            is_visible,
+                            created_at
+                        ) VALUES (?, ?, ?, NULL, 1, ?)
+                    """,
+                    (source_program_id, chapter_id, chapter_order, now),
+                )
+                link_id = cur.lastrowid
             conn.commit()
 
             log_activity(
@@ -1246,10 +1299,35 @@ def master_chapter_new():
                 record_id=chapter_id,
                 description=f'Created master chapter: {title}'
             )
+            if source_program:
+                log_activity(
+                    user_id=session['user_id'],
+                    branch_id=session.get('branch_id'),
+                    action_type='create',
+                    module_name='lms_program_chapters',
+                    record_id=link_id,
+                    description=(
+                        f'Created and attached master chapter {title} '
+                        f'to program {source_program["program_name"]}'
+                    ),
+                )
+                flash(
+                    f'Master chapter created and linked to {source_program["program_name"]}.',
+                    'success',
+                )
+                return redirect(url_for(
+                    'lms_admin.list_chapters',
+                    program_id=source_program_id,
+                ))
+
             flash('Master chapter created successfully.', 'success')
             return redirect(url_for('lms_admin.list_master_chapters'))
 
-        return render_template('master_chapter_form.html', chapter=None)
+        return render_template(
+            'master_chapter_form.html',
+            chapter=None,
+            source_program=source_program,
+        )
     finally:
         conn.close()
 
@@ -1325,7 +1403,11 @@ def master_chapter_edit(master_chapter_id):
             flash('Master chapter updated successfully.', 'success')
             return redirect(url_for('lms_admin.list_master_chapters'))
 
-        return render_template('master_chapter_form.html', chapter=chapter)
+        return render_template(
+            'master_chapter_form.html',
+            chapter=chapter,
+            source_program=None,
+        )
     finally:
         conn.close()
 
