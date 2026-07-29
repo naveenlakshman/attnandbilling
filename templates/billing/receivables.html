@@ -450,7 +450,7 @@
            class="receivable-student-link"
            title="Open {{ item.student_name }} profile">
         {% if item.photo_filename %}
-        <img src="{{ url_for('static', filename='images/student_photos/' ~ item.photo_filename) }}"
+        <img src="{{ storage_url(item.photo_filename) }}"
              alt="{{ item.student_name }}"
              class="receivable-avatar"
              style="border-color: {{ border_color }};"
