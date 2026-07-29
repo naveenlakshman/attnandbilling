@@ -6472,7 +6472,8 @@ def receipt_view(receipt_id):
         LEFT JOIN branches
             ON invoices.branch_id = branches.id
         WHERE receipts.id = ?
-    """, (receipt_id,))
+          AND students.institute_id = ?
+    """, (receipt_id, get_current_institute_id(default=1)))
     receipt = cur.fetchone()
 
     if not receipt:
@@ -6507,7 +6508,8 @@ def receipt_print(receipt_id):
         JOIN students ON invoices.student_id = students.id
         LEFT JOIN users ON receipts.created_by = users.id
         WHERE receipts.id = ?
-    """, (receipt_id,))
+          AND students.institute_id = ?
+    """, (receipt_id, get_current_institute_id(default=1)))
     receipt = cur.fetchone()
     conn.close()
 
