@@ -1,11 +1,11 @@
-"""Transaction-safe, tenant-owned invoice and receipt numbering."""
+"""Transaction-safe, tenant-owned financial document numbering."""
 
 from datetime import datetime
 
 from config import Config
 
 
-DOCUMENT_TYPES = {"invoice", "receipt"}
+DOCUMENT_TYPES = {"invoice", "receipt", "writeoff"}
 
 
 def normalize_document_prefix(prefix):
@@ -13,6 +13,22 @@ def normalize_document_prefix(prefix):
     if not value:
         raise ValueError("A document prefix is required.")
     return f"{value}/"
+
+
+def derive_writeoff_prefix(invoice_prefix):
+    """Derive a tenant's write-off series from its invoice series.
+
+    MCT/INV becomes MCT/WO. Less conventional invoice prefixes retain their
+    complete prefix and receive a WO suffix.
+    """
+    parts = [part for part in (invoice_prefix or "").strip().strip("/").split("/") if part]
+    if not parts:
+        return "WO"
+    if parts[-1].upper() in {"INV", "INVOICE"}:
+        parts[-1] = "WO"
+    else:
+        parts.append("WO")
+    return "/".join(parts)
 
 
 def allocate_document_number(cursor, institute_id, document_type, prefix):

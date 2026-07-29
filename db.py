@@ -978,6 +978,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS bad_debt_writeoffs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference_no TEXT,
             invoice_id INTEGER NOT NULL,
             amount_written_off REAL NOT NULL,
             paid_amount REAL NOT NULL DEFAULT 0,
@@ -2035,7 +2036,7 @@ def init_db():
             created_at TEXT NOT NULL,
             updated_at TEXT,
             UNIQUE (institute_id, document_type, series_prefix),
-            CHECK (document_type IN ('invoice', 'receipt')),
+            CHECK (document_type IN ('invoice', 'receipt', 'writeoff')),
             FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
         )
     """)

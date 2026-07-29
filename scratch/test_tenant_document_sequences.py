@@ -8,7 +8,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import Config
-from services.document_numbers import allocate_document_number
+from services.document_numbers import allocate_document_number, derive_writeoff_prefix
 
 
 SCHEMA = """
@@ -41,11 +41,17 @@ def run():
         conn.executescript(SCHEMA)
         cur = conn.cursor()
 
+        assert derive_writeoff_prefix("MCT/INV") == "MCT/WO"
+        assert derive_writeoff_prefix("HCT/INVOICE/") == "HCT/WO"
+        assert derive_writeoff_prefix("GIT/B") == "GIT/B/WO"
+
         assert allocate_document_number(cur, 1, "invoice", "MCT/INV") == "MCT/INV/001"
         assert allocate_document_number(cur, 1, "invoice", "MCT/INV/") == "MCT/INV/002"
         assert allocate_document_number(cur, 1, "receipt", "MCT/RCP") == "MCT/RCP/001"
         assert allocate_document_number(cur, 7, "invoice", "HCT/INV") == "HCT/INV/001"
         assert allocate_document_number(cur, 7, "receipt", "HCT/RCP") == "HCT/RCP/001"
+        assert allocate_document_number(cur, 1, "writeoff", "MCT/WO") == "MCT/WO/001"
+        assert allocate_document_number(cur, 7, "writeoff", "HCT/WO") == "HCT/WO/001"
 
         # A changed prefix starts a distinct series without affecting the old one.
         assert allocate_document_number(cur, 1, "invoice", "NEW/INV") == "NEW/INV/001"

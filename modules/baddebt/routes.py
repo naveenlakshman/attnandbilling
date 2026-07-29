@@ -4,6 +4,7 @@ from db import get_conn, log_activity
 from config import Config
 from modules.core.utils import login_required, admin_required
 from services.tenant_context import get_current_institute_id
+from services.document_numbers import allocate_document_number, derive_writeoff_prefix
 
 baddebt_bp = Blueprint("baddebt", __name__)
 
@@ -33,6 +34,7 @@ def dashboard():
     cur.execute("""
         SELECT
             bw.id,
+            bw.reference_no,
             bw.invoice_id,
             bw.amount_written_off,
             bw.paid_amount,
@@ -202,10 +204,29 @@ def create():
                         f"exceed balance (₹{balance:.2f})."
                     )
 
+                cur.execute("""
+                    SELECT invoice_prefix
+                    FROM institute_settings
+                    WHERE institute_id = ?
+                """, (current_inst,))
+                institute_settings = cur.fetchone()
+                invoice_prefix = (
+                    institute_settings["invoice_prefix"]
+                    if institute_settings and institute_settings["invoice_prefix"]
+                    else "INV"
+                )
+                writeoff_reference = allocate_document_number(
+                    cur,
+                    current_inst,
+                    "writeoff",
+                    derive_writeoff_prefix(invoice_prefix),
+                )
+
                 # Insert write-off record
                 cur.execute("""
                     INSERT INTO bad_debt_writeoffs (
                         institute_id,
+                        reference_no,
                         invoice_id,
                         amount_written_off,
                         paid_amount,
@@ -217,9 +238,10 @@ def create():
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     current_inst,
+                    writeoff_reference,
                     invoice_id,
                     amount_written_off,
                     paid_amount,
@@ -273,7 +295,7 @@ def create():
                         f"Bad Debt Write-off - {invoice['invoice_no']}",
                         amount_written_off,
                         "cash",
-                        f"WO-{write_off_id}",
+                        writeoff_reference,
                         expense_description,
                         user_id,
                         now,
@@ -393,6 +415,7 @@ def view(writeoff_id):
     cur.execute("""
         SELECT
             bw.id,
+            bw.reference_no,
             bw.invoice_id,
             bw.amount_written_off,
             bw.paid_amount,
@@ -439,7 +462,7 @@ def view(writeoff_id):
             notes
         FROM expenses
         WHERE reference_no = ? AND institute_id = ?
-    """, (f"WO-{writeoff_id}", current_inst))
+    """, (write_off["reference_no"], current_inst))
     expense = cur.fetchone()
 
     conn.close()
@@ -509,7 +532,7 @@ def delete(writeoff_id):
     _begin_write_transaction(cur)
 
     cur.execute("""
-        SELECT invoice_id, amount_written_off
+        SELECT invoice_id, amount_written_off, reference_no
         FROM bad_debt_writeoffs
         WHERE id = ? AND institute_id = ?
     """ + _for_update_clause(), (writeoff_id, current_inst))
@@ -533,7 +556,7 @@ def delete(writeoff_id):
         # Delete related expense
         cur.execute(
             "DELETE FROM expenses WHERE reference_no = ? AND institute_id = ?",
-            (f"WO-{writeoff_id}", current_inst),
+            (write_off["reference_no"], current_inst),
         )
 
         # Update invoice status back to original
