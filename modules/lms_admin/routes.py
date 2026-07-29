@@ -6657,6 +6657,7 @@ def view_student_progress(student_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         requested_program_id = _strict_positive_int(request.args.get('program_id'))
         
         # Get student info
@@ -6664,8 +6665,8 @@ def view_student_progress(student_id):
             SELECT id, full_name as first_name, '' as last_name,
                    student_code as roll_number, email
             FROM students
-            WHERE id = ?
-        """, (student_id,))
+            WHERE id = ? AND institute_id = ?
+        """, (student_id, current_inst))
         student = cur.fetchone()
         
         if not student:
@@ -6704,9 +6705,10 @@ def view_student_progress(student_id):
         program_where = [
             "lp.is_active = 1",
             "lp.is_deleted = 0",
+            "lp.institute_id = ?",
             enroll_check,
         ]
-        program_params = [student_id, student_id, student_id, student_id]
+        program_params = [current_inst, student_id, student_id, student_id, student_id]
         if requested_program_id:
             program_where.append("lp.id = ?")
             program_params.append(requested_program_id)
@@ -6978,7 +6980,7 @@ def view_student_progress(student_id):
                 JOIN lms_chapters lc ON lc.id = lt.chapter_id
                 WHERE stp.student_id = ?
                   AND (? IS NULL OR lc.program_id = ?)
-            )
+            ) AS recent_activity
             WHERE last_accessed IS NOT NULL
             ORDER BY last_accessed DESC
             LIMIT 5

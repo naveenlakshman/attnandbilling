@@ -10,6 +10,12 @@ START = ROUTES.index("def progress_dashboard():")
 END = ROUTES.index("\n@lms_admin_bp.route('/student/<int:student_id>/progress'", START)
 SOURCE = ROUTES[START:END]
 
+DETAIL_START = ROUTES.index("def view_student_progress(student_id):")
+DETAIL_END = ROUTES.index(
+    "\n@lms_admin_bp.route('/batch/<int:batch_id>/progress'", DETAIL_START
+)
+DETAIL_SOURCE = ROUTES[DETAIL_START:DETAIL_END]
+
 
 def require(fragment: str, message: str) -> None:
     if fragment not in SOURCE:
@@ -53,4 +59,17 @@ require(
     "The branch filter must only list branches belonging to the current institute.",
 )
 
-print("LMS progress dashboard MySQL and tenant-isolation regression checks passed.")
+if ") AS recent_activity" not in DETAIL_SOURCE:
+    raise AssertionError(
+        "Student progress recent activity UNION must have a MySQL derived-table alias."
+    )
+if "WHERE id = ? AND institute_id = ?" not in DETAIL_SOURCE:
+    raise AssertionError(
+        "Student progress detail must restrict the requested student to the current institute."
+    )
+if '"lp.institute_id = ?"' not in DETAIL_SOURCE:
+    raise AssertionError(
+        "Student progress detail must restrict programs to the current institute."
+    )
+
+print("LMS progress dashboard/detail MySQL and tenant-isolation regression checks passed.")
