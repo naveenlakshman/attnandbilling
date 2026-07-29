@@ -582,7 +582,7 @@ def create_app():
             response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
             response.headers.setdefault(
                 "Permissions-Policy",
-                "camera=(), microphone=(), geolocation=(), payment=()",
+                "camera=(self), microphone=(), geolocation=(), payment=()",
             )
             if request.is_secure:
                 response.headers.setdefault(

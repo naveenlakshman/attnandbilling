@@ -50,6 +50,11 @@ def test_private_legacy_photos_are_served_through_authenticated_app_route():
     assert 'return f"/student-photos/{filename}"' in STORAGE
 
 
+def test_security_policy_allows_only_same_origin_camera_access():
+    assert '"camera=(self), microphone=(), geolocation=(), payment=()"' in APP
+    assert '"camera=(), microphone=(), geolocation=(), payment=()"' not in APP
+
+
 if __name__ == "__main__":
     tests = [
         value
