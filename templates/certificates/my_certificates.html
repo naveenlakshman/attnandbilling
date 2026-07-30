@@ -14,7 +14,7 @@
           <div class="col-md-6 col-lg-4">
             <div class="card h-100 border-0 shadow-sm overflow-hidden" style="border-radius: 12px;">
               <!-- Mini layout preview of the certificate background -->
-              <div style="background-image: url('{{ url_for('static', filename='images/certificate_templates/' ~ cert.background_filename) }}'); 
+              <div style="background-image: url('{{ storage_url(cert.background_filename) }}');
                           background-size: cover; background-position: center; height: 160px; position: relative;">
                 <div class="position-absolute bottom-0 end-0 m-2 bg-dark text-white bg-opacity-75 rounded px-2 py-1 small fw-bold">
                   {{ cert.certificate_number }}

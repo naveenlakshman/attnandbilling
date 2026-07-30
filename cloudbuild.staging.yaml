@@ -143,6 +143,15 @@ steps:
       - python
       - scratch/test_student_photo_storage_urls.py
 
+  - id: verify-certificate-template-preview-storage
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
+      - python
+      - scratch/test_certificate_template_preview_storage.py
+
   - id: verify-lms-progress-dashboard-mysql
     name: gcr.io/cloud-builders/docker
     args:

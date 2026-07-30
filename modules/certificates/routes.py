@@ -565,6 +565,7 @@ def admin_templates():
     conn = get_conn()
     try:
         cur = conn.cursor()
+        institute_id = get_current_institute_id(default=1)
         
         if request.method == "POST":
             # Action: Create or edit a template or field positioning
@@ -588,7 +589,9 @@ def admin_templates():
                     bg_filename = f"certificates/{safe_name}"
                     try:
                         storage_service = get_storage_service()
-                        storage_service.upload_file(bg_file, bg_filename, content_type=bg_file.content_type)
+                        bg_filename = storage_service.upload_file(
+                            bg_file, bg_filename, content_type=bg_file.content_type
+                        )
                     except Exception as e:
                         logger.error(f"Failed to upload background image: {e}", exc_info=True)
                         flash(f"Failed to upload background image: {str(e)}", "danger")
@@ -603,11 +606,15 @@ def admin_templates():
                 cur.execute(
                     """
                     INSERT INTO certificate_templates (
-                        template_name, template_code, background_filename, version, effective_from, is_default, is_active,
+                        institute_id, template_name, template_code, background_filename, version, effective_from, is_default, is_active,
                         authorized_signature_name, authorized_signature_designation, orientation, created_at
-                    ) VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?, ?, datetime('now'))
+                    ) VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, datetime('now'))
                     """,
-                    (name, code, bg_filename, version, datetime.date.today().isoformat(), sig_name, sig_desig, orientation)
+                    (
+                        institute_id, name, code, bg_filename, version,
+                        datetime.date.today().isoformat(), sig_name, sig_desig,
+                        orientation,
+                    )
                 )
                 template_id = cur.lastrowid
                 
@@ -644,7 +651,10 @@ def admin_templates():
                 sig_desig = request.form.get("authorized_signature_designation", "").strip()
                 
                 # Check template
-                template = cur.execute("SELECT * FROM certificate_templates WHERE id = ?", (template_id,)).fetchone()
+                template = cur.execute(
+                    "SELECT * FROM certificate_templates WHERE id = ? AND institute_id = ?",
+                    (template_id, institute_id),
+                ).fetchone()
                 if not template:
                     flash("Template not found.", "danger")
                     return redirect(url_for("certificates.admin_templates"))
@@ -658,8 +668,10 @@ def admin_templates():
                     safe_name = secure_filename(bg_file.filename)
                     new_bg_filename = f"certificates/{safe_name}"
                     try:
-                        storage_service.replace_file(bg_file, bg_filename, new_bg_filename, content_type=bg_file.content_type)
-                        bg_filename = new_bg_filename
+                        bg_filename = storage_service.replace_file(
+                            bg_file, bg_filename, new_bg_filename,
+                            content_type=bg_file.content_type,
+                        )
                     except Exception as e:
                         logger.error(f"Failed to upload background image: {e}", exc_info=True)
                         flash(f"Failed to upload background image: {str(e)}", "danger")
@@ -674,8 +686,10 @@ def admin_templates():
                     safe_name = secure_filename(sig_file.filename)
                     new_sig_filename = f"certificates/{safe_name}"
                     try:
-                        storage_service.replace_file(sig_file, sig_filename, new_sig_filename, content_type=sig_file.content_type)
-                        sig_filename = new_sig_filename
+                        sig_filename = storage_service.replace_file(
+                            sig_file, sig_filename, new_sig_filename,
+                            content_type=sig_file.content_type,
+                        )
                     except Exception as e:
                         logger.error(f"Failed to upload signature image: {e}", exc_info=True)
                         flash(f"Failed to upload signature image: {str(e)}", "danger")
@@ -690,8 +704,10 @@ def admin_templates():
                     safe_name = secure_filename(seal_file.filename)
                     new_seal_filename = f"certificates/{safe_name}"
                     try:
-                        storage_service.replace_file(seal_file, seal_filename, new_seal_filename, content_type=seal_file.content_type)
-                        seal_filename = new_seal_filename
+                        seal_filename = storage_service.replace_file(
+                            seal_file, seal_filename, new_seal_filename,
+                            content_type=seal_file.content_type,
+                        )
                     except Exception as e:
                         logger.error(f"Failed to upload seal image: {e}", exc_info=True)
                         flash(f"Failed to upload seal image: {str(e)}", "danger")
@@ -707,9 +723,13 @@ def admin_templates():
                     SET template_name = ?, template_code = ?, background_filename = ?,
                         authorized_signature_name = ?, authorized_signature_designation = ?,
                         authorized_signature_image = ?, seal_image = ?, orientation = ?, updated_at = datetime('now')
-                    WHERE id = ?
+                    WHERE id = ? AND institute_id = ?
                     """,
-                    (name, code, bg_filename, sig_name, sig_desig, sig_filename, seal_filename, orientation, template_id)
+                    (
+                        name, code, bg_filename, sig_name, sig_desig,
+                        sig_filename, seal_filename, orientation, template_id,
+                        institute_id,
+                    )
                 )
                 conn.commit()
                 flash("Template details updated successfully.", "success")
@@ -730,6 +750,14 @@ def admin_templates():
                 visible = 1 if request.form.get("is_visible") else 0
                 rotation = request.form.get("rotation", type=int, default=0)
 
+                owned_template = cur.execute(
+                    "SELECT 1 FROM certificate_templates WHERE id = ? AND institute_id = ?",
+                    (template_id, institute_id),
+                ).fetchone()
+                if not owned_template:
+                    flash("Template not found.", "danger")
+                    return redirect(url_for("certificates.admin_templates"))
+
                 cur.execute(
                     """
                     UPDATE certificate_template_fields
@@ -744,7 +772,15 @@ def admin_templates():
                 flash("Field position coordinates updated successfully.", "success")
                 return redirect(url_for("certificates.admin_templates", selected_id=template_id))
 
-        templates = cur.execute("SELECT * FROM certificate_templates ORDER BY template_name, version DESC").fetchall()
+        templates = cur.execute(
+            """
+            SELECT *
+            FROM certificate_templates
+            WHERE institute_id = ?
+            ORDER BY template_name, version DESC
+            """,
+            (institute_id,),
+        ).fetchall()
         
         selected_template_id = request.args.get("selected_id", type=int)
         if not selected_template_id and templates:
@@ -753,8 +789,23 @@ def admin_templates():
         selected_fields = []
         sel_template = None
         if selected_template_id:
-            selected_fields = cur.execute("SELECT * FROM certificate_template_fields WHERE template_id = ?", (selected_template_id,)).fetchall()
-            sel_template = cur.execute("SELECT * FROM certificate_templates WHERE id = ?", (selected_template_id,)).fetchone()
+            sel_template = cur.execute(
+                "SELECT * FROM certificate_templates WHERE id = ? AND institute_id = ?",
+                (selected_template_id, institute_id),
+            ).fetchone()
+            if sel_template:
+                selected_fields = cur.execute(
+                    "SELECT * FROM certificate_template_fields WHERE template_id = ?",
+                    (selected_template_id,),
+                ).fetchall()
+            else:
+                selected_template_id = templates[0]["id"] if templates else None
+                if selected_template_id:
+                    sel_template = templates[0]
+                    selected_fields = cur.execute(
+                        "SELECT * FROM certificate_template_fields WHERE template_id = ?",
+                        (selected_template_id,),
+                    ).fetchall()
 
         return render_template("certificates/admin_templates.html", templates=templates, selected_id=selected_template_id, fields=selected_fields, sel_template=sel_template)
     finally:

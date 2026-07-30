@@ -146,7 +146,7 @@
             
             <div style="overflow-x: auto; width: 100%; border: 2px solid #cbd5e1; border-radius: 8px;" class="p-2 mb-3 bg-dark">
               <div id="designerCanvas" 
-                   style="position: relative; {% if sel_template.orientation == 'Portrait' %}width: 707px; height: 1000px;{% else %}width: 1000px; height: 707px;{% endif %} background-image: url('{{ url_for('static', filename='images/certificate_templates/' ~ sel_template.background_filename) }}'); background-size: 100% 100%; background-repeat: no-repeat; margin: 0 auto; user-select: none; background-color:#fff;">
+                   style="position: relative; {% if sel_template.orientation == 'Portrait' %}width: 707px; height: 1000px;{% else %}width: 1000px; height: 707px;{% endif %} background-image: url('{{ storage_url(sel_template.background_filename) }}'); background-size: 100% 100%; background-repeat: no-repeat; margin: 0 auto; user-select: none; background-color:#fff;">
                 
                 {% for f in fields %}
                   {% if f.is_visible == 1 %}
