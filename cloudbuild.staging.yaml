@@ -152,6 +152,19 @@ steps:
       - python
       - scratch/test_certificate_template_preview_storage.py
 
+  - id: verify-certificate-preview-url-fix
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --env
+      - SECRET_KEY=cloud-build-cert-preview-only
+      - --env
+      - PYTHONPATH=/app
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
+      - python
+      - scratch/test_certificate_preview_url_fix.py
+
   - id: verify-lms-progress-dashboard-mysql
     name: gcr.io/cloud-builders/docker
     args:

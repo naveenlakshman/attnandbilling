@@ -30,67 +30,85 @@ def get_month_year_from_date(date_str):
 
 def ensure_template_preview(bg_filename):
     import os
+    import io
     from flask import current_app
     from PIL import Image
-    from services.storage import get_storage_service, map_local_path_to_gcs_path
+    from services.storage import (
+        get_storage_service,
+        map_local_path_to_gcs_path,
+        parse_tenant_storage_path
+    )
     
-    bg_filename = map_local_path_to_gcs_path(bg_filename)
-    if "/" in bg_filename:
-        bg_filename = bg_filename.split("/")[-1]
+    if not bg_filename:
+        return ""
         
-    dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates')
-    original_path = os.path.join(dest_dir, bg_filename)
-    preview_name = os.path.splitext(bg_filename)[0] + "_preview.webp"
-    preview_path = os.path.join(dest_dir, preview_name)
+    canonical_bg = map_local_path_to_gcs_path(bg_filename)
+    tenant_id, tenant_relative = parse_tenant_storage_path(canonical_bg)
     
+    bg_basename = os.path.basename(tenant_relative or canonical_bg)
+    preview_basename = os.path.splitext(bg_basename)[0] + "_preview.webp"
+    
+    if tenant_id is not None:
+        rel_dir = os.path.dirname(tenant_relative) or "certificates"
+        canonical_preview = f"tenants/{tenant_id}/{rel_dir}/{preview_basename}"
+    else:
+        rel_dir = os.path.dirname(canonical_bg) if "/" in canonical_bg else "certificates"
+        canonical_preview = f"{rel_dir}/{preview_basename}" if rel_dir else f"certificates/{preview_basename}"
+        
     storage_service = get_storage_service()
-    if current_app.config.get("STORAGE_PROVIDER", "local") == "gcs":
-        gcs_preview_path = f"certificates/{preview_name}"
-        try:
-            # 1. Check if the preview image already exists in GCS
-            if storage_service.file_exists(gcs_preview_path):
-                return preview_name
+    
+    try:
+        if storage_service.file_exists(canonical_preview):
+            return canonical_preview
+    except Exception as e:
+        print("Error checking template preview existence:", e)
+        
+    try:
+        bg_bytes = None
+        if storage_service.file_exists(canonical_bg):
+            bg_bytes = storage_service.download_file(canonical_bg)
+        else:
+            # Check local fallback paths
+            dest_dir = os.path.join(current_app.root_path, 'static', 'images', 'certificate_templates')
+            local_path = os.path.join(dest_dir, bg_basename)
+            if os.path.exists(local_path):
+                with open(local_path, "rb") as f:
+                    bg_bytes = f.read()
+            else:
+                alt_dir = os.path.join(current_app.root_path, 'static', 'certificates')
+                alt_path = os.path.join(alt_dir, bg_basename)
+                if os.path.exists(alt_path):
+                    with open(alt_path, "rb") as f:
+                        bg_bytes = f.read()
+                        
+        if not bg_bytes:
+            return canonical_bg
             
-            # 2. Otherwise download and generate the preview from the original background
-            gcs_bg_path = f"certificates/{bg_filename}"
-            if not storage_service.file_exists(gcs_bg_path):
-                return bg_filename
-                
-            bg_bytes = storage_service.download_file(gcs_bg_path)
-            import io
-            img = Image.open(io.BytesIO(bg_bytes))
-            
-            # Resize image
-            resample_mode = getattr(Image, 'Resampling', None)
-            mode = resample_mode.LANCZOS if (resample_mode and hasattr(resample_mode, 'LANCZOS')) else Image.BICUBIC
-            img.thumbnail((1200, 1200), mode)
-            
-            # Save resampled image to memory and upload to GCS
-            out_io = io.BytesIO()
-            img.save(out_io, "WEBP", quality=80)
-            out_io.seek(0)
-            storage_service.upload_file(out_io.read(), gcs_preview_path, content_type="image/webp")
-            return preview_name
-        except Exception as e:
-            print("Error creating template preview in GCS mode:", e)
-            return bg_filename
-
-    # Local fallback mode
-    if os.path.exists(original_path):
-        if os.path.exists(preview_path):
-            return preview_name
-        try:
-            img = Image.open(original_path)
-            resample_mode = getattr(Image, 'Resampling', None)
-            mode = resample_mode.LANCZOS if (resample_mode and hasattr(resample_mode, 'LANCZOS')) else Image.BICUBIC
-            img.thumbnail((1200, 1200), mode)
-            img.save(preview_path, "WEBP", quality=80)
-            return preview_name
-        except Exception as e:
-            print("Error creating local template preview:", e)
-            return bg_filename
-
-    return bg_filename
+        img = Image.open(io.BytesIO(bg_bytes))
+        resample_mode = getattr(Image, 'Resampling', None)
+        mode = resample_mode.LANCZOS if (resample_mode and hasattr(resample_mode, 'LANCZOS')) else Image.BICUBIC
+        img.thumbnail((1200, 1200), mode)
+        
+        out_io = io.BytesIO()
+        img.save(out_io, "WEBP", quality=80)
+        preview_bytes = out_io.getvalue()
+        
+        storage_service.upload_file(preview_bytes, canonical_preview, content_type="image/webp")
+        
+        # Save to local static folders if present
+        for subfolder in ['images/certificate_templates', 'certificates']:
+            dest_dir = os.path.join(current_app.root_path, 'static', subfolder)
+            if os.path.exists(dest_dir):
+                try:
+                    with open(os.path.join(dest_dir, preview_basename), "wb") as f:
+                        f.write(preview_bytes)
+                except Exception:
+                    pass
+                    
+        return canonical_preview
+    except Exception as e:
+        print("Error creating template preview:", e)
+        return canonical_bg
 
 def get_certificate_render_data(cur, cert_id, base_url):
     """

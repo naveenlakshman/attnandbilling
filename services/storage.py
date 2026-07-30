@@ -116,7 +116,7 @@ def map_local_path_to_gcs_path(path):
     if "static/images/certificate_templates/" in path:
         filename = path.split("static/images/certificate_templates/")[-1]
         return f"certificates/{filename}"
-    elif "certificate.png" in path or "default.png" in path:
+    elif "certificate" in path or "cert_" in path or "default.png" in path:
         filename = path.split("/")[-1]
         return f"certificates/{filename}"
     elif "static/images/student_photos/" in path:
@@ -155,6 +155,8 @@ def map_local_path_to_gcs_path(path):
             return f"signatures/{path}"
         elif "company_logo" in path:
             return f"logos/{path}"
+        elif "cert" in path or "certificate" in path or path == "default.png":
+            return f"certificates/{path}"
         elif path.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.svg')):
             return f"student_photos/{path}"
         else:
