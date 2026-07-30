@@ -17,6 +17,8 @@ VIEW = (ROOT / "templates" / "certificates" / "view.html").read_text(
 MY_CERTIFICATES = (
     ROOT / "templates" / "certificates" / "my_certificates.html"
 ).read_text(encoding="utf-8")
+STORAGE = (ROOT / "services" / "storage.py").read_text(encoding="utf-8")
+APP = (ROOT / "app.py").read_text(encoding="utf-8")
 
 
 class CertificateTemplatePreviewStorageTests(unittest.TestCase):
@@ -62,6 +64,11 @@ class CertificateTemplatePreviewStorageTests(unittest.TestCase):
         self.assertIn("bg_filename = storage_service.replace_file(", route)
         self.assertIn("sig_filename = storage_service.replace_file(", route)
         self.assertIn("seal_filename = storage_service.replace_file(", route)
+
+    def test_private_legacy_certificate_assets_use_application_proxy(self):
+        self.assertIn('if gcs_path.startswith("certificates/"):', STORAGE)
+        self.assertIn('return f"/certificate-files/{filename}"', STORAGE)
+        self.assertIn('@app.get("/certificate-files/<path:filename>")', APP)
 
 
 if __name__ == "__main__":

@@ -421,6 +421,33 @@ def create_app():
             max_age=300 if is_public_branding else 0,
         )
 
+    @app.get("/certificate-files/<path:filename>")
+    def certificate_file(filename):
+        """Serve legacy institute-1 certificate assets from private storage."""
+        from services.tenant_context import get_current_institute_id
+
+        normalized_filename = str(filename or "").replace("\\", "/").strip("/")
+        if (
+            not normalized_filename
+            or any(part in {"", ".", ".."} for part in normalized_filename.split("/"))
+            or get_current_institute_id(default=1) != 1
+        ):
+            abort(404)
+        object_path = f"certificates/{normalized_filename}"
+        storage_service = get_storage_service()
+        if not storage_service.file_exists(object_path):
+            abort(404)
+        data = storage_service.download_file(object_path)
+        download_name = os.path.basename(normalized_filename)
+        mime_type = mimetypes.guess_type(download_name)[0] or "image/png"
+        return send_file(
+            BytesIO(data),
+            mimetype=mime_type,
+            download_name=download_name,
+            as_attachment=request.args.get("download") == "1",
+            max_age=300,
+        )
+
     # Backward compatibility fallback routes to redirect old static file URLs to GCS
     def redirect_with_query(url):
         if request.query_string:

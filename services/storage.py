@@ -371,6 +371,12 @@ class GCSStorageProvider:
         tenant_id, _ = parse_tenant_storage_path(gcs_path)
         if tenant_id is not None:
             return f"/tenant-files/{gcs_path}"
+        if gcs_path.startswith("certificates/"):
+            # Certificate backgrounds are private GCS objects. Proxy legacy
+            # institute-1 assets through Flask instead of returning a direct
+            # storage.googleapis.com URL that browsers receive as HTTP 403.
+            filename = gcs_path.split("certificates/", 1)[1]
+            return f"/certificate-files/{filename}"
         if gcs_path.startswith("student_photos/"):
             filename = gcs_path.split("student_photos/", 1)[1]
             return f"/student-photos/{filename}"
