@@ -165,6 +165,19 @@ steps:
       - python
       - scratch/test_certificate_preview_url_fix.py
 
+  - id: verify-auth-rate-limit
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --env
+      - SECRET_KEY=cloud-build-auth-limit-only
+      - --env
+      - PYTHONPATH=/app
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
+      - python
+      - scratch/test_auth_rate_limit.py
+
   - id: verify-lms-progress-dashboard-mysql
     name: gcr.io/cloud-builders/docker
     args:
