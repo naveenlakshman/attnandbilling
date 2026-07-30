@@ -194,7 +194,7 @@ class EligibilityService:
             "completion_date": completion_date,
             "course_id": course_id,
             "course_name": course["course_name"],
-            "course_duration": course["duration"],
+            "course_duration": (course.get("duration") or "").strip() or (f"{course['duration_hours']} Hours" if course.get("duration_hours") else ""),
             "is_profile_verified": is_profile_verified
         }
 

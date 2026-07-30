@@ -4374,6 +4374,14 @@ def course_edit(id):
             current_inst,
         ))
 
+        if duration or duration_hours:
+            dur_text = (duration or "").strip() or (f"{duration_hours} Hours" if duration_hours else "")
+            cur.execute("""
+                UPDATE certificates
+                SET snapshot_course_duration = ?
+                WHERE course_id = ? AND (snapshot_course_duration IS NULL OR TRIM(snapshot_course_duration) = '')
+            """, (dur_text, id))
+
         conn.commit()
         conn.close()
 

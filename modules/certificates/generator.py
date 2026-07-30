@@ -117,10 +117,11 @@ def get_certificate_render_data(cur, cert_id, base_url):
     """
     cert = cur.execute(
         """
-        SELECT c.*, s.photo_filename, b.branch_name
+        SELECT c.*, s.photo_filename, b.branch_name, cr.duration AS course_live_duration, cr.duration_hours AS course_live_duration_hours
         FROM certificates c
         JOIN students s ON s.id = c.student_id
         LEFT JOIN branches b ON b.id = s.branch_id
+        LEFT JOIN courses cr ON cr.id = c.course_id
         WHERE c.id = ?
         """,
         (cert_id,)
@@ -181,6 +182,12 @@ def get_certificate_render_data(cur, cert_id, base_url):
         overlay_styles[f["field_name"]] = " ".join(style_parts)
 
     cert_dict = dict(cert)
+    if not (cert_dict.get("snapshot_course_duration") or "").strip():
+        live_dur = (cert_dict.get("course_live_duration") or "").strip()
+        if not live_dur and cert_dict.get("course_live_duration_hours"):
+            live_dur = f"{cert_dict['course_live_duration_hours']} Hours"
+        cert_dict["snapshot_course_duration"] = live_dur
+
     if cert_dict.get("issue_date"):
         try:
             dt = datetime.datetime.strptime(cert_dict["issue_date"], "%Y-%m-%d")
