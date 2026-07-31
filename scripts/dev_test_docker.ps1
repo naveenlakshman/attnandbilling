@@ -15,14 +15,25 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "`nWaiting for web container health check..." -ForegroundColor Yellow
 $timeout = 60
 $elapsed = 0
+$isHealthy = $false
+
 while ($elapsed -lt $timeout) {
-    $status = (docker inspect --format='{{json .State.Health.Status}}' attn_billing_web 2>$null) | ConvertFrom-Json
-    if ($status -eq "healthy") {
-        Write-Host "[+] Local environment is healthy and running!" -ForegroundColor Green
-        break
+    $rawStatus = (docker inspect --format='{{json .State.Health.Status}}' attn_billing_web 2>$null)
+    if ($rawStatus) {
+        $status = $rawStatus | ConvertFrom-Json
+        if ($status -eq "healthy") {
+            Write-Host "[+] Local environment is healthy and running!" -ForegroundColor Green
+            $isHealthy = $true
+            break
+        }
     }
     Start-Sleep -Seconds 2
     $elapsed += 2
+}
+
+if (-not $isHealthy) {
+    Write-Host "[!] Web container failed to reach healthy state. Check docker logs attn_billing_web." -ForegroundColor Red
+    exit 1
 }
 
 # 2. Apply database migrations to local MySQL container
