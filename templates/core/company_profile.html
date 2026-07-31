@@ -93,13 +93,13 @@
       <div class="form-text">Optional subtitle shown below the company name in the sidebar.</div>
     </div>
 
-    <div class="section-heading">Logo</div>
+    <div class="section-heading">Logo & Favicon</div>
 
     <div class="mb-3">
       <label class="form-label fw-semibold">Upload Logo</label>
       <input type="file" class="form-control" name="logo_file"
-             accept=".png,.jpg,.jpeg,.svg,.webp">
-      <div class="form-text">PNG, JPG, SVG or WEBP. Max 2 MB. Displayed in sidebar and PDF print headers.</div>
+             accept=".png,.jpg,.jpeg,.svg,.webp,.ico">
+      <div class="form-text">PNG, JPG, SVG, WEBP or ICO. Max 2 MB. Displayed in sidebar and PDF print headers.</div>
     </div>
 
     {% if profile.logo_path or profile.logo_filename %}
@@ -107,6 +107,28 @@
       <button type="button" class="btn btn-sm btn-outline-danger"
               onclick="if(confirm('Remove the current logo?')) document.getElementById('removeLogoForm').submit()">
         🗑 Remove Current Logo
+      </button>
+    </div>
+    {% endif %}
+
+    <div class="mb-3 mt-4">
+      <label class="form-label fw-semibold">Upload Favicon (Browser Icon)</label>
+      {% if profile.favicon_path %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <img src="{{ storage_url(profile.favicon_path) }}" alt="Favicon" style="width: 24px; height: 24px; object-fit: contain;">
+          <span class="text-muted small">Current Favicon Icon</span>
+        </div>
+      {% endif %}
+      <input type="file" class="form-control" name="favicon_file"
+             accept=".png,.ico,.jpg,.jpeg,.svg,.webp">
+      <div class="form-text">PNG, ICO, JPG, SVG or WEBP. Max 2 MB. Displayed in browser tab header.</div>
+    </div>
+
+    {% if profile.favicon_path %}
+    <div class="mb-3">
+      <button type="button" class="btn btn-sm btn-outline-danger"
+              onclick="if(confirm('Remove the current favicon icon?')) document.getElementById('removeFaviconForm').submit()">
+        🗑 Remove Current Favicon
       </button>
     </div>
     {% endif %}
@@ -187,6 +209,14 @@
   {% if profile.logo_path or profile.logo_filename %}
   <form id="removeLogoForm" method="POST"
         action="{{ url_for('core.company_profile_remove_logo') }}"
+        style="display:none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  </form>
+  {% endif %}
+
+  {% if profile.favicon_path %}
+  <form id="removeFaviconForm" method="POST"
+        action="{{ url_for('core.company_profile_remove_favicon') }}"
         style="display:none;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   </form>

@@ -1435,12 +1435,12 @@ def company_profile():
             return redirect(url_for("core.company_profile"))
 
         # Handle logo upload
-        logo_filename = profile.get("logo_filename")
+        logo_filename = profile.get("logo_filename") or profile.get("logo_path")
         logo_file = request.files.get("logo_file")
         if logo_file and logo_file.filename:
             ext = os.path.splitext(logo_file.filename)[1].lower()
             if ext not in ALLOWED_LOGO_EXTENSIONS:
-                flash("Invalid logo format. Allowed: PNG, JPG, SVG, WEBP.", "danger")
+                flash("Invalid logo format. Allowed: PNG, JPG, SVG, WEBP, ICO.", "danger")
                 return redirect(url_for("core.company_profile"))
             logo_bytes = logo_file.read()
             if len(logo_bytes) > MAX_LOGO_SIZE_BYTES:
@@ -1456,6 +1456,30 @@ def company_profile():
             except Exception as e:
                 logger.error(f"Failed to upload logo: {e}", exc_info=True)
                 flash(f"Failed to upload logo: {str(e)}", "danger")
+                return redirect(url_for("core.company_profile"))
+
+        # Handle favicon upload
+        favicon_path = profile.get("favicon_path")
+        favicon_file = request.files.get("favicon_file")
+        if favicon_file and favicon_file.filename:
+            ext = os.path.splitext(favicon_file.filename)[1].lower()
+            if ext not in ALLOWED_LOGO_EXTENSIONS:
+                flash("Invalid favicon format. Allowed: PNG, JPG, ICO, SVG, WEBP.", "danger")
+                return redirect(url_for("core.company_profile"))
+            favicon_bytes = favicon_file.read()
+            if len(favicon_bytes) > MAX_LOGO_SIZE_BYTES:
+                flash("Favicon file too large. Maximum size is 2 MB.", "danger")
+                return redirect(url_for("core.company_profile"))
+
+            safe_filename = f"company_favicon{ext}"
+            dest_path = f"favicons/{safe_filename}"
+            try:
+                storage_service = get_storage_service()
+                storage_service.replace_file(favicon_bytes, favicon_path, dest_path, content_type=favicon_file.content_type)
+                favicon_path = dest_path
+            except Exception as e:
+                logger.error(f"Failed to upload favicon: {e}", exc_info=True)
+                flash(f"Failed to upload favicon: {str(e)}", "danger")
                 return redirect(url_for("core.company_profile"))
 
         now = datetime.now().isoformat(timespec="seconds")
@@ -1475,13 +1499,14 @@ def company_profile():
 
         cur.execute("""
             INSERT INTO institute_branding
-                (institute_id, display_name, short_name, tagline, logo_path, address, phone, email, website, registration_number, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (institute_id, display_name, short_name, tagline, logo_path, favicon_path, address, phone, email, website, registration_number, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 display_name = VALUES(display_name),
                 short_name = VALUES(short_name),
                 tagline = VALUES(tagline),
                 logo_path = VALUES(logo_path),
+                favicon_path = VALUES(favicon_path),
                 address = VALUES(address),
                 phone = VALUES(phone),
                 email = VALUES(email),
@@ -1489,7 +1514,7 @@ def company_profile():
                 registration_number = VALUES(registration_number),
                 updated_at = VALUES(updated_at)
         """, (
-            current_inst, company_name, company_short_name, tagline, logo_filename,
+            current_inst, company_name, company_short_name, tagline, logo_filename, favicon_path,
             address, phone, email, website, reg_number, now
         ))
 
@@ -1557,6 +1582,35 @@ def company_profile_remove_logo():
     conn.close()
     clear_company_cache()
     flash("Logo removed.", "success")
+    return redirect(url_for("core.company_profile"))
+
+
+@core_bp.route("/company-profile/remove-favicon", methods=["POST"])
+@login_required
+@admin_required
+def company_profile_remove_favicon():
+    """Remove the current company favicon."""
+    profile = get_company_profile()
+    current_inst = get_current_institute_id(default=1)
+    old_favicon = profile.get("favicon_path")
+    if old_favicon:
+        try:
+            storage_service = get_storage_service()
+            storage_service.delete_file(old_favicon)
+        except Exception as e:
+            logger.error(f"Failed to delete favicon: {e}", exc_info=True)
+
+    now = datetime.now().isoformat(timespec="seconds")
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE institute_branding SET favicon_path = NULL, updated_at = ? WHERE institute_id = ?",
+        (now, current_inst)
+    )
+    conn.commit()
+    conn.close()
+    clear_company_cache()
+    flash("Favicon removed.", "success")
     return redirect(url_for("core.company_profile"))
 
 
