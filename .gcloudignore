@@ -1,0 +1,33 @@
+# .gcloudignore - Explicit Cloud Build Source Exclusions
+.gcloudignore
+.git
+.gitignore
+
+# Environment & Credentials
+.env
+.env.*
+!.env.example
+!.env.docker.example
+!.env.mysql.example
+!.env.cloudsql.example
+!.env.production.example
+gcp-key.json
+*.key
+*.pem
+
+# Database Dumps & Large Binaries
+*.sql
+!migrations/*.sql
+backup_test_attn_billing.sql
+scratch/*.sql
+database.db
+cloud-sql-proxy.exe
+*.tar.gz
+*.zip
+
+# Virtual Environments & Caches
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+scratch/

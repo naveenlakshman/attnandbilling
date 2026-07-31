@@ -7,50 +7,46 @@ services:
     ports:
       - "3308:3306"
     volumes:
-      - ./scratch/production_dump.sql:/docker-entrypoint-initdb.d/production_dump.sql:ro
       - mysql_data:/var/lib/mysql
     restart: always
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "--password=$$MYSQL_ROOT_PASSWORD"]
-      interval: 10s
-      timeout: 5s
+      interval: 5s
+      timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: attn_billing_local_redis
+    ports:
+      - "6379:6379"
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: attn_billing_web
     ports:
       - "8080:8080"
-    volumes:
-      - ./gcp-key.json:/app/gcp-key.json:ro
     env_file:
       - .env.docker
     depends_on:
       local-db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: always
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/healthz"]
-      interval: 30s
+      interval: 10s
       timeout: 5s
       retries: 3
-
-  cloud-sql-proxy:
-    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.22.0
-    container_name: attn_billing_cloud_sql_proxy
-    command:
-      - "--auto-iam-authn"
-      - "--address=0.0.0.0"
-      - "--port=3306"
-      - "global-it-edu-app:asia-south1:attn-billing-local-test-db"
-    ports:
-      - "3307:3306"
-    volumes:
-      # Windows Docker Desktop ADC path. Set GCLOUD_CONFIG_DIR explicitly if needed.
-      - "${GCLOUD_CONFIG_DIR:-${APPDATA}/gcloud}:/home/nonroot/.config/gcloud:ro"
-    profiles:
-      - cloudsql
-    restart: unless-stopped
 
 volumes:
   mysql_data:
