@@ -48,8 +48,8 @@
 <div class="profile-card">
   <div class="d-flex align-items-center gap-3 mb-2">
     <div class="logo-preview">
-      {% if profile.logo_filename %}
-        <img src="{{ url_for('static', filename='images/company_logo/' + profile.logo_filename) }}"
+      {% if profile.logo_path or profile.logo_filename %}
+        <img src="{{ storage_url(profile.logo_path) if profile.logo_path else url_for('static', filename='images/company_logo/' + profile.logo_filename) }}"
              alt="{{ profile.company_name }} Logo">
       {% else %}
         <div class="no-logo">No Logo</div>
@@ -102,7 +102,7 @@
       <div class="form-text">PNG, JPG, SVG or WEBP. Max 2 MB. Displayed in sidebar and PDF print headers.</div>
     </div>
 
-    {% if profile.logo_filename %}
+    {% if profile.logo_path or profile.logo_filename %}
     <div class="mb-3">
       <button type="button" class="btn btn-sm btn-outline-danger"
               onclick="if(confirm('Remove the current logo?')) document.getElementById('removeLogoForm').submit()">
@@ -184,7 +184,7 @@
     </div>
   </form>
 
-  {% if profile.logo_filename %}
+  {% if profile.logo_path or profile.logo_filename %}
   <form id="removeLogoForm" method="POST"
         action="{{ url_for('core.company_profile_remove_logo') }}"
         style="display:none;">

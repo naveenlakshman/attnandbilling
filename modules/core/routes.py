@@ -1474,6 +1474,26 @@ def company_profile():
             """, (current_inst, invoice_prefix, receipt_prefix, student_prefix, now))
 
         cur.execute("""
+            INSERT INTO institute_branding
+                (institute_id, display_name, short_name, tagline, logo_path, address, phone, email, website, registration_number, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                display_name = VALUES(display_name),
+                short_name = VALUES(short_name),
+                tagline = VALUES(tagline),
+                logo_path = VALUES(logo_path),
+                address = VALUES(address),
+                phone = VALUES(phone),
+                email = VALUES(email),
+                website = VALUES(website),
+                registration_number = VALUES(registration_number),
+                updated_at = VALUES(updated_at)
+        """, (
+            current_inst, company_name, company_short_name, tagline, logo_filename,
+            address, phone, email, website, reg_number, now
+        ))
+
+        cur.execute("""
             INSERT INTO company_profile
                 (id, company_name, company_short_name, tagline, address, phone,
                  email, website, logo_filename, reg_number, updated_at)
@@ -1513,7 +1533,8 @@ def company_profile():
 def company_profile_remove_logo():
     """Remove the current company logo."""
     profile = get_company_profile()
-    old_logo = profile.get("logo_filename")
+    current_inst = get_current_institute_id(default=1)
+    old_logo = profile.get("logo_filename") or profile.get("logo_path")
     if old_logo:
         try:
             storage_service = get_storage_service()
@@ -1527,6 +1548,10 @@ def company_profile_remove_logo():
     cur.execute(
         "UPDATE company_profile SET logo_filename = NULL, updated_at = ? WHERE id = 1",
         (now,)
+    )
+    cur.execute(
+        "UPDATE institute_branding SET logo_path = NULL, updated_at = ? WHERE institute_id = ?",
+        (now, current_inst)
     )
     conn.commit()
     conn.close()
