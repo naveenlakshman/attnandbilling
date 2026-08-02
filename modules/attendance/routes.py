@@ -1812,19 +1812,27 @@ def daily_report():
 def monthly_summary():
     """View monthly attendance summary by student"""
     user_id = session.get('user_id')
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     cur = conn.cursor()
     
     try:
         # Get user info
-        cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
+        cur.execute("""
+            SELECT id, branch_id, can_view_all_branches
+            FROM users
+            WHERE id = ? AND institute_id = ? AND is_active = 1
+        """, (user_id, current_inst))
         user = cur.fetchone()
+        if not user:
+            session.clear()
+            return redirect(url_for('core.login'))
         
         # Get filter parameters
         from_date = request.args.get('from_date')
         to_date = request.args.get('to_date')
-        branch_id = request.args.get('branch_id')
-        batch_id = request.args.get('batch_id')
+        branch_id = request.args.get('branch_id', type=int)
+        batch_id = request.args.get('batch_id', type=int)
         
         # Default date range: current month
         today = datetime.now()
@@ -1838,7 +1846,6 @@ def monthly_summary():
                 to_date = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
             to_date = to_date.strftime("%Y-%m-%d")
         
-        current_inst = get_current_institute_id(default=1)
         # Get branches
         if user['can_view_all_branches']:
             cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
@@ -1847,35 +1854,43 @@ def monthly_summary():
                        (user['branch_id'], current_inst))
         
         branches = cur.fetchall()
+        accessible_branch_ids = {row['id'] for row in branches}
         
         # Default branch
         if not branch_id:
-            branch_id = user['branch_id']
-        else:
-            branch_id = int(branch_id)
+            branch_id = (user['branch_id'] if user['branch_id'] in accessible_branch_ids
+                         else (branches[0]['id'] if branches else None))
+
+        if not accessible_branch_ids:
+            branch_id = None
         
-        # Check branch access
-        if not user['can_view_all_branches'] and branch_id != user['branch_id']:
+        # The selected branch must belong to the current institute and be
+        # accessible to this user. This also protects all downstream queries.
+        if accessible_branch_ids and branch_id not in accessible_branch_ids:
+            flash('The selected branch is not available for this institute.', 'warning')
             return redirect(url_for('attendance.monthly_summary'))
         
         # Get batches for branch
         cur.execute("""
-            SELECT id, batch_name, course_id
-            FROM batches
-            WHERE branch_id = ? AND status = 'active'
+            SELECT b.id, b.batch_name, b.course_id
+            FROM batches b
+            JOIN branches br ON br.id = b.branch_id
+            WHERE b.branch_id = ? AND b.status = 'active' AND br.institute_id = ?
             ORDER BY batch_name ASC
-        """, (branch_id,))
+        """, (branch_id, current_inst))
         
         batches = cur.fetchall()
+        accessible_batch_ids = {row['id'] for row in batches}
         
         # Build student summary
         summary_data = []
         
-        # Convert batch_id to int if provided (check for non-empty string)
-        if batch_id and batch_id.strip() and batch_id != 'None':
-            batch_id = int(batch_id)
-        else:
-            batch_id = None
+        if batch_id is not None and batch_id not in accessible_batch_ids:
+            flash('The selected batch is not available for this branch.', 'warning')
+            return redirect(url_for('attendance.monthly_summary',
+                                    branch_id=branch_id,
+                                    from_date=from_date,
+                                    to_date=to_date))
         
         # Get all active students in branch (and optionally filtered by batch)
         if batch_id:
@@ -1883,16 +1898,20 @@ def monthly_summary():
                 SELECT DISTINCT s.id, s.student_code, s.full_name, s.phone
                 FROM students s
                 JOIN student_batches sb ON s.id = sb.student_id
-                WHERE s.branch_id = ? AND sb.batch_id = ? AND sb.status = 'active'
+                JOIN batches b ON b.id = sb.batch_id
+                JOIN branches br ON br.id = b.branch_id
+                WHERE s.branch_id = ? AND s.institute_id = ?
+                  AND sb.batch_id = ? AND sb.status = 'active'
+                  AND b.branch_id = ? AND br.institute_id = ?
                 ORDER BY s.full_name ASC
-            """, (branch_id, batch_id))
+            """, (branch_id, current_inst, batch_id, branch_id, current_inst))
         else:
             cur.execute("""
                 SELECT s.id, s.student_code, s.full_name, s.phone
                 FROM students s
-                WHERE s.branch_id = ? AND s.status = 'active'
+                WHERE s.branch_id = ? AND s.institute_id = ? AND s.status = 'active'
                 ORDER BY s.full_name ASC
-            """, (branch_id,))
+            """, (branch_id, current_inst))
         
         students = cur.fetchall()
         
@@ -1913,11 +1932,14 @@ def monthly_summary():
             
             stats = cur.fetchone()
             
-            total_marked = stats['total_marked'] or 0
-            present_count = stats['present_count'] or 0
-            absent_count = stats['absent_count'] or 0
-            late_count = stats['late_count'] or 0
-            leave_count = stats['leave_count'] or 0
+            # MySQL SUM() values are Decimal while COUNT() is an integer.
+            # Normalize aggregate counts before arithmetic so an empty/mixed
+            # result set cannot produce Decimal + float TypeError failures.
+            total_marked = int(stats['total_marked'] or 0)
+            present_count = int(stats['present_count'] or 0)
+            absent_count = int(stats['absent_count'] or 0)
+            late_count = int(stats['late_count'] or 0)
+            leave_count = int(stats['leave_count'] or 0)
             
             # Calculate percentage
             attendance_percentage = 0
