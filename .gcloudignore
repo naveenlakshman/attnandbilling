@@ -32,3 +32,6 @@ __pycache__/
 venv/
 .pytest_cache/
 scratch/
+
+# Production LMS assets are served from GCS, not from the container image.
+static/lms/
