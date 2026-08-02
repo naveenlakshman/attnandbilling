@@ -101,6 +101,7 @@
         </a>
         <a class="nav-link {{ 'active' if ep == 'lms_admin.profile_update_requests' else '' }}" href="{{ url_for('lms_admin.profile_update_requests') }}">
           Profile Update Requests
+          <span class="badge rounded-pill bg-danger ms-auto sidebar-badge" id="badge-profile-updates" style="display: none;">0</span>
         </a>
         <div class="erp-subsection">Batches</div>
         <a class="nav-link {{ 'active' if ep in ['attendance.list_batches', 'attendance.view_batch', 'attendance.edit_batch', 'attendance.assign_students'] else '' }}" href="{{ url_for('attendance.list_batches') }}">Manage Batches</a>

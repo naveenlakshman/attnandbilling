@@ -27,6 +27,7 @@ from db import get_conn, get_company_profile
 from extensions import limiter, public_auth_limit
 from services.storage import get_storage_service, tenant_storage_path
 from services.tenant_context import get_current_institute_id
+from services.profile_updates import profile_changes_from_form
 import logging
 from . import students_bp
 
@@ -2029,10 +2030,18 @@ def profile_upload_document():
 @student_login_required
 def profile_request_update():
     student_id = session['student_id']
+    institute_id = get_current_institute_id()
+    if institute_id is None:
+        abort(404)
     conn = get_conn()
     try:
         # 1. Fetch current student details
-        student = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+        student = conn.execute(
+            "SELECT * FROM students WHERE id = ? AND institute_id = ?",
+            (student_id, institute_id),
+        ).fetchone()
+        if not student:
+            abort(404)
         
         # Check 3 approved updates limit
         if student.get('profile_approved_updates_count', 0) >= 3:
@@ -2041,29 +2050,16 @@ def profile_request_update():
             
         # Check if there is already a PENDING request
         pending = conn.execute(
-            "SELECT id FROM student_profile_update_requests WHERE student_id = ? AND status = 'PENDING' LIMIT 1",
-            (student_id,)
+            """SELECT id FROM student_profile_update_requests
+               WHERE student_id = ? AND institute_id = ? AND status = 'PENDING' LIMIT 1""",
+            (student_id, institute_id)
         ).fetchone()
         if pending:
             flash('You already have a pending profile update request.', 'warning')
             return redirect(url_for('students.profile'))
             
         # 2. Gather allowed fields from form
-        allowed_fields = [
-            'full_name', 'phone', 'email', 'address', 'gender', 'education_level', 
-            'qualification', 'employment_status', 'date_of_birth', 'parent_name', 
-            'parent_contact', 'father_name', 'mother_name', 'tenth_institution', 
-            'tenth_board', 'tenth_year', 'tenth_percentage', 'puc_institution', 
-            'puc_board', 'puc_stream', 'puc_year', 'puc_percentage'
-        ]
-        
-        requested_data = {}
-        for field in allowed_fields:
-            val = request.form.get(field, '').strip()
-            # Compare with current value to only request changes for modified fields
-            curr_val = str(student[field]) if student[field] is not None else ''
-            if val != curr_val:
-                requested_data[field] = val
+        requested_data = profile_changes_from_form(student, request.form)
                 
         if not requested_data:
             flash('No changes were made to your profile.', 'info')
@@ -2071,13 +2067,12 @@ def profile_request_update():
             
         # 3. Save pending request
         import json
-        inst_id = student['institute_id'] if student['institute_id'] else 1
         conn.execute(
             """
             INSERT INTO student_profile_update_requests (student_id, requested_data, status, institute_id)
             VALUES (?, ?, 'PENDING', ?)
             """,
-            (student_id, json.dumps(requested_data), inst_id)
+            (student_id, json.dumps(requested_data), institute_id)
         )
         conn.commit()
         flash('Your profile update request has been submitted for staff approval.', 'success')

@@ -294,12 +294,23 @@
           // Attendance Badge
           var attendanceToggle = document.getElementById('badge-attendance-toggle');
           var attendanceSub = document.getElementById('badge-attendance-leaves');
-          if (data.attendance > 0) {
-            if (attendanceToggle) { attendanceToggle.textContent = data.attendance; attendanceToggle.style.display = 'inline-block'; }
-            if (attendanceSub) { attendanceSub.textContent = data.attendance; attendanceSub.style.display = 'inline-block'; }
+          var profileUpdatesSub = document.getElementById('badge-profile-updates');
+          var profileUpdatesCount = Number(data.profile_updates || 0);
+          var studentsTotal = Number(data.attendance || 0) + profileUpdatesCount;
+          if (studentsTotal > 0) {
+            if (attendanceToggle) { attendanceToggle.textContent = studentsTotal; attendanceToggle.style.display = 'inline-block'; }
           } else {
             if (attendanceToggle) attendanceToggle.style.display = 'none';
+          }
+          if (data.attendance > 0) {
+            if (attendanceSub) { attendanceSub.textContent = data.attendance; attendanceSub.style.display = 'inline-block'; }
+          } else {
             if (attendanceSub) attendanceSub.style.display = 'none';
+          }
+          if (profileUpdatesCount > 0) {
+            if (profileUpdatesSub) { profileUpdatesSub.textContent = profileUpdatesCount; profileUpdatesSub.style.display = 'inline-block'; }
+          } else if (profileUpdatesSub) {
+            profileUpdatesSub.style.display = 'none';
           }
 
           // LMS Badge

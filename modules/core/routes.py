@@ -672,6 +672,7 @@ def sidebar_badges():
     billing_count = 0
     attendance_count = 0
     lms_count = 0
+    profile_updates_count = 0
 
     conn = get_conn()
     cur = conn.cursor()
@@ -737,6 +738,17 @@ def sidebar_badges():
         )
         lms_count = cur.fetchone()["cnt"]
 
+        # 5. Student profile updates awaiting institute review.
+        cur.execute(
+            """SELECT COUNT(*) AS cnt
+               FROM student_profile_update_requests req
+               JOIN students s ON s.id = req.student_id
+               WHERE req.institute_id = ? AND s.institute_id = ?
+                 AND req.status = 'PENDING'""",
+            [institute_id, institute_id],
+        )
+        profile_updates_count = cur.fetchone()["cnt"]
+
     except Exception as e:
         print(f"Error querying sidebar badges: {e}")
     finally:
@@ -746,7 +758,8 @@ def sidebar_badges():
         "leads": leads_count,
         "billing": billing_count,
         "attendance": attendance_count,
-        "lms": lms_count
+        "lms": lms_count,
+        "profile_updates": profile_updates_count,
     })
 
 

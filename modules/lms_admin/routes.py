@@ -20,6 +20,7 @@ from config import Config, DB_PATH
 from modules.core.utils import login_required, admin_required, lms_content_manager_required
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
+from services.profile_updates import PROFILE_UPDATE_FIELDS, material_profile_changes
 from modules.lms_admin.publishing import get_program_publishing_readiness
 from modules.lms_admin.editorial import (
     apply_revision_snapshot, decode_revision, ensure_baseline_revision,
@@ -9612,7 +9613,7 @@ def profile_update_requests():
                     SELECT req.*, s.full_name AS student_name, s.profile_approved_updates_count
                     FROM student_profile_update_requests req
                     JOIN students s ON s.id = req.student_id
-                    WHERE req.id = ? AND (req.institute_id = ? OR s.institute_id = ?)
+                    WHERE req.id = ? AND req.institute_id = ? AND s.institute_id = ?
                     """,
                     (req_id, current_inst, current_inst)
                 ).fetchone()
@@ -9623,11 +9624,31 @@ def profile_update_requests():
                     flash(f"This request has already been processed ({request_row['status']}).", "warning")
                 elif action == "approve":
                     import json
-                    requested_data = json.loads(request_row["requested_data"] or "{}")
                     student_id = request_row["student_id"]
+                    student = cur.execute(
+                        f"""SELECT {', '.join(f'`{field}`' for field in PROFILE_UPDATE_FIELDS)}
+                            FROM students WHERE id = ? AND institute_id = ?""",
+                        (student_id, current_inst),
+                    ).fetchone()
+                    requested_data = material_profile_changes(
+                        student,
+                        json.loads(request_row["requested_data"] or "{}"),
+                    ) if student else {}
                     
                     if request_row["profile_approved_updates_count"] >= 3:
                         flash("Student has already reached the maximum limit of 3 approved profile updates.", "danger")
+                    elif not requested_data:
+                        now = datetime.now().isoformat(timespec="seconds")
+                        cur.execute(
+                            """UPDATE student_profile_update_requests
+                               SET status = 'REJECTED',
+                                   rejection_reason = ?, processed_at = ?
+                               WHERE id = ? AND institute_id = ?""",
+                            ("Automatically closed: no material profile changes", now,
+                             req_id, current_inst),
+                        )
+                        conn.commit()
+                        flash("Request closed because it contains no material profile changes.", "info")
                     else:
                         if requested_data:
                             fields = []
@@ -9637,16 +9658,20 @@ def profile_update_requests():
                                 params.append(val)
                             fields.append("profile_approved_updates_count = profile_approved_updates_count + 1")
                             params.append(student_id)
-                            cur.execute(f"UPDATE students SET {', '.join(fields)} WHERE id = ?", params)
+                            params.append(current_inst)
+                            cur.execute(
+                                f"UPDATE students SET {', '.join(fields)} WHERE id = ? AND institute_id = ?",
+                                params,
+                            )
                             
                         now = datetime.now().isoformat(timespec="seconds")
                         cur.execute(
                             """
                             UPDATE student_profile_update_requests
                             SET status = 'APPROVED', processed_by = ?, processed_at = ?
-                            WHERE id = ?
+                            WHERE id = ? AND institute_id = ?
                             """,
-                            (session.get("user_id"), now, req_id)
+                            (session.get("user_id"), now, req_id, current_inst)
                         )
                         conn.commit()
                         flash(f"Approved profile update request for {request_row['student_name']}.", "success")
@@ -9666,9 +9691,9 @@ def profile_update_requests():
                         """
                         UPDATE student_profile_update_requests
                         SET status = 'REJECTED', rejection_reason = ?, processed_by = ?, processed_at = ?
-                        WHERE id = ?
+                        WHERE id = ? AND institute_id = ?
                         """,
-                        (rejection_reason, session.get("user_id"), now, req_id)
+                        (rejection_reason, session.get("user_id"), now, req_id, current_inst)
                     )
                     conn.commit()
                     flash(f"Rejected profile update request for {request_row['student_name']}.", "info")
@@ -9687,7 +9712,7 @@ def profile_update_requests():
         if status_filter not in ("PENDING", "APPROVED", "REJECTED", "ALL"):
             status_filter = "PENDING"
             
-        where_clauses = ["(req.institute_id = ? OR s.institute_id = ?)"]
+        where_clauses = ["req.institute_id = ? AND s.institute_id = ?"]
         params = [current_inst, current_inst]
         
         if status_filter != "ALL":
@@ -9720,7 +9745,10 @@ def profile_update_requests():
         formatted_requests = []
         for r in requests_rows:
             r_dict = dict(r)
-            req_data = json.loads(r_dict.get("requested_data") or "{}")
+            req_data = material_profile_changes(
+                r_dict,
+                json.loads(r_dict.get("requested_data") or "{}"),
+            )
             diffs = []
             for field, new_val in req_data.items():
                 old_val = r_dict.get(field, "")
@@ -9743,7 +9771,7 @@ def profile_update_requests():
                 COUNT(*) AS total_count
             FROM student_profile_update_requests req
             JOIN students s ON s.id = req.student_id
-            WHERE (req.institute_id = ? OR s.institute_id = ?)
+            WHERE req.institute_id = ? AND s.institute_id = ?
             """,
             (current_inst, current_inst)
         ).fetchone()
