@@ -21,6 +21,7 @@ gcp-key.json
 backup_test_attn_billing.sql
 scratch/*.sql
 database.db
+instance/
 cloud-sql-proxy.exe
 *.tar.gz
 *.zip
