@@ -8505,7 +8505,8 @@ def review_submission_detail(submission_id):
                    a.rubric_id, a.completion_rule, a.allow_late_submission,
                    a.max_attempts, a.is_required,
                    mt.title AS topic_title, mc.title AS chapter_title,
-                   st.full_name AS student_name, st.student_code
+                   st.full_name AS student_name, st.student_code,
+                   st.photo_filename
             FROM lms_assignment_submissions s
             JOIN lms_assignments a ON a.id = s.assignment_id
             JOIN lms_master_topics mt ON mt.id = a.master_topic_id
