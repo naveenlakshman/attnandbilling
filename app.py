@@ -21,6 +21,7 @@ from modules.exams.routes import exams_bp
 from modules.students import students_bp
 from modules.website import website_bp
 from modules.platform_admin import platform_admin_bp
+from modules.notifications import notifications_bp
 from modules.core.utils import login_required
 from services.tenant_context import init_tenant_context
 
@@ -141,6 +142,9 @@ def create_app():
     app.register_blueprint(exams_bp)
     app.register_blueprint(students_bp)
     app.register_blueprint(platform_admin_bp)
+    app.register_blueprint(notifications_bp)
+    from modules.notifications.database import init_notification_database
+    init_notification_database()
     from modules.certificates.routes import certificates_bp
     app.register_blueprint(certificates_bp)
     init_tenant_context(app)

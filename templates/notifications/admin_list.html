@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Notifications{% endblock %}
+{% block page_title %}Student Notifications{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1">Student notifications</h1>
+    <p class="text-muted mb-0">Create scheduled, targeted messages shown when students sign in.</p>
+  </div>
+  <a class="btn btn-primary" href="{{ url_for('notifications.admin_form') }}"><i class="bi bi-plus-lg me-1"></i>New notification</a>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light"><tr><th>Notification</th><th>Audience</th><th>Schedule</th><th>Priority</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+      <tbody>
+      {% for notice in notices %}
+        <tr>
+          <td>
+            <div class="d-flex align-items-center gap-3">
+              <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-{{ notice.color }} text-white" style="width:42px;height:42px"><i class="bi {{ notice.icon }}"></i></span>
+              <div><strong>{{ notice.title }}</strong><div class="small text-muted">{{ type_options[notice.notification_type].label }}</div></div>
+            </div>
+          </td>
+          <td>{{ audience_options[notice.audience_type] }}{% if notice.targets %}<span class="badge text-bg-light ms-1">{{ notice.targets|length }}</span>{% endif %}</td>
+          <td class="small">{{ notice.starts_at|format_ist_datetime('%d-%b-%Y %I:%M %p') }}<br>{% if notice.ends_at %}<span class="text-muted">to {{ notice.ends_at|format_ist_datetime('%d-%b-%Y %I:%M %p') }}</span>{% else %}<span class="text-muted">No end date</span>{% endif %}</td>
+          <td><span class="badge text-bg-dark">{{ notice.priority }}</span></td>
+          <td><span class="badge text-bg-{{ 'success' if notice.is_active else 'secondary' }}">{{ 'Active' if notice.is_active else 'Inactive' }}</span></td>
+          <td class="text-end text-nowrap">
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('notifications.admin_form', notification_id=notice.id) }}">Edit</a>
+            <form class="d-inline" method="post" action="{{ url_for('notifications.admin_toggle', notification_id=notice.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-{{ 'danger' if notice.is_active else 'success' }}" type="submit">{{ 'Deactivate' if notice.is_active else 'Activate' }}</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-center py-5 text-muted">No notifications have been created.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

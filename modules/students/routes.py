@@ -88,6 +88,7 @@ def _mark_student_logged_in(student, mode='lab'):
     session['student_institute_id'] = inst_id
     session['student_login_at'] = int(datetime.utcnow().timestamp())
     session['student_session_mode'] = mode
+    session['student_notifications_pending'] = True
     session['student_force_password_change'] = (
         (not _is_demo()) and _is_default_student_password(student)
     )
