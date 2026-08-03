@@ -31,6 +31,7 @@ scratch/*
 !scratch/apply_production_migrations_v4.py
 scripts/*
 !scripts/test_domain_verification.py
+!scripts/run_fee_reminders.py
 *.log
 uploads/
 # Production LMS assets are served from GCS, not from the container image.

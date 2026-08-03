@@ -7497,6 +7497,144 @@ def reminder_send_sms():
     }), 502
 
 
+def _classify_fee_reminder(due_date, logs, today=None):
+    """Return the admin-facing reminder status for one installment."""
+    today = today or date.today()
+    successful = next(
+        (log for log in logs if str(log.get("status") or "").lower() in {"sent", "delivered"}),
+        None,
+    )
+    if successful:
+        return "sent", successful
+
+    latest = logs[0] if logs else None
+    if latest and str(latest.get("status") or "").lower() == "failed":
+        return "failed", latest
+
+    days_until_due = (due_date - today).days
+    if days_until_due <= 3:
+        return "pending", latest
+    return "upcoming", latest
+
+
+@billing_bp.route("/admin/fee-reminders")
+@admin_required
+def reminder_dashboard():
+    """Tenant-scoped visibility into sent and pending fee reminders."""
+    current_inst = get_current_institute_id(default=1)
+    today = _ist_now().date()
+    status_filter = (request.args.get("status") or "all").strip().lower()
+    if status_filter not in {"all", "sent", "pending", "failed", "upcoming"}:
+        status_filter = "all"
+    search = (request.args.get("q") or "").strip().lower()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    per_page = 25
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                ip.id AS installment_id,
+                parse_date(ip.due_date) AS due_date_iso,
+                ip.amount_due,
+                ip.amount_paid,
+                (ip.amount_due - ip.amount_paid) AS balance_due,
+                i.id AS invoice_id,
+                i.invoice_no,
+                i.branch_id,
+                s.id AS student_id,
+                s.student_code,
+                s.full_name AS student_name,
+                s.phone AS student_phone,
+                b.branch_name
+            FROM installment_plans ip
+            JOIN invoices i ON i.id = ip.invoice_id
+            JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
+            LEFT JOIN branches b ON b.id = i.branch_id AND b.institute_id = i.institute_id
+            WHERE i.institute_id = ?
+              AND ip.status != 'paid'
+              AND (ip.amount_due - ip.amount_paid) > 0
+              AND i.status NOT IN ('paid', 'cancelled', 'write_off', 'partially_written_off')
+              AND parse_date(ip.due_date) <= ?
+            ORDER BY parse_date(ip.due_date), s.full_name
+        """, (current_inst, (today + timedelta(days=30)).isoformat()))
+        installments = [dict(row) for row in cur.fetchall()]
+
+        installment_ids = [row["installment_id"] for row in installments]
+        logs_by_installment = {}
+        if installment_ids:
+            placeholders = ",".join(["?"] * len(installment_ids))
+            cur.execute(f"""
+                SELECT id, installment_id, reminder_type, status, sent_via,
+                       sent_by, sent_at, message_text, phone_number
+                FROM reminder_logs
+                WHERE institute_id = ?
+                  AND installment_id IN ({placeholders})
+                ORDER BY sent_at DESC, id DESC
+            """, [current_inst] + installment_ids)
+            for log_row in cur.fetchall():
+                log = dict(log_row)
+                logs_by_installment.setdefault(log["installment_id"], []).append(log)
+    finally:
+        conn.close()
+
+    rows = []
+    for installment in installments:
+        try:
+            due_date = date.fromisoformat(str(installment["due_date_iso"])[:10])
+        except (TypeError, ValueError):
+            continue
+        logs = logs_by_installment.get(installment["installment_id"], [])
+        reminder_status, latest_log = _classify_fee_reminder(due_date, logs, today=today)
+        installment.update({
+            "due_date": due_date,
+            "days_until_due": (due_date - today).days,
+            "reminder_status": reminder_status,
+            "latest_log": latest_log,
+            "reminder_count": len(logs),
+        })
+        rows.append(installment)
+
+    summary = {
+        key: sum(1 for row in rows if row["reminder_status"] == key)
+        for key in ("sent", "pending", "failed", "upcoming")
+    }
+    summary["all"] = len(rows)
+
+    if status_filter != "all":
+        rows = [row for row in rows if row["reminder_status"] == status_filter]
+    if search:
+        rows = [
+            row for row in rows
+            if search in " ".join([
+                str(row.get("student_name") or ""),
+                str(row.get("student_code") or ""),
+                str(row.get("invoice_no") or ""),
+                str(row.get("student_phone") or ""),
+            ]).lower()
+        ]
+
+    total = len(rows)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    start = (page - 1) * per_page
+    return render_template(
+        "billing/reminder_dashboard.html",
+        reminders=rows[start:start + per_page],
+        summary=summary,
+        status_filter=status_filter,
+        search=request.args.get("q", ""),
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        today=today,
+    )
+
+
 @billing_bp.route("/expenses")
 @login_required
 def expenses():

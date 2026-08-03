@@ -6,9 +6,9 @@
 {% set admissions_active = ep.startswith('leads.') and ep != 'leads.reports' %}
 {% set students_active = ep.startswith('attendance.') or ep.startswith('billing.students') or ep.startswith('billing.student_') or ep == 'billing.institute_day_overview' %}
 {% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') or ep.startswith('certificates.') %}
-{% set finance_active = (ep.startswith('billing.') and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
+{% set finance_active = (ep.startswith('billing.') and ep != 'billing.reminder_dashboard' and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
 {% set reports_active = ep.startswith('reports.') or ep == 'leads.reports' or ep in ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
-{% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.')) %}
+{% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.') or ep == 'billing.reminder_dashboard') %}
 
 <div class="erp-master-nav accordion accordion-flush" id="erpSidebarAccordion">
 
@@ -250,7 +250,11 @@
         {% if is_admin %}
           <a class="nav-link {{ 'active' if ep in ['core.users', 'core.user_new', 'core.user_edit'] else '' }}" href="{{ url_for('core.users') }}">Users</a>
           <a class="nav-link {{ 'active' if ep in ['core.branches', 'core.branch_new', 'core.branch_edit'] else '' }}" href="{{ url_for('core.branches') }}">Branches</a>
-          <a class="nav-link {{ 'active' if ep and ep.startswith('notifications.') else '' }}" href="{{ url_for('notifications.admin_list') }}">Notifications</a>
+           <a class="nav-link {{ 'active' if ep and ep.startswith('notifications.') else '' }}" href="{{ url_for('notifications.admin_list') }}">Notifications</a>
+          <a class="nav-link {{ 'active' if ep == 'billing.reminder_dashboard' else '' }}" href="{{ url_for('billing.reminder_dashboard') }}">
+            Fee Reminders
+            <span class="badge rounded-pill bg-warning text-dark ms-auto sidebar-badge" id="badge-fee-reminders" style="display: none;">0</span>
+          </a>
         {% endif %}
         {% if session.get('institute_id', 1)|int == 1 %}
           <a class="nav-link {{ 'active' if ep == 'core.company_profile' else '' }}" href="{{ url_for('core.company_profile') }}">Company Profile</a>

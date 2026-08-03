@@ -135,10 +135,10 @@ def _is_bad_phone_error(error):
 
 def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
     run_date = run_date or date.today()
-    company = get_company_profile()
     conn = get_conn()
     cur = conn.cursor()
     now = datetime.now().isoformat(timespec="seconds")
+    company_profiles = {}
     summary = {
         "date": run_date.isoformat(),
         "dry_run": dry_run,
@@ -180,6 +180,11 @@ def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
                 })
                 continue
 
+            institute_id = int(row["institute_id"])
+            company = company_profiles.get(institute_id)
+            if company is None:
+                company = get_company_profile(institute_id)
+                company_profiles[institute_id] = company
             message = _build_message(row, reminder_type, company)
             summary["eligible"] += 1
 

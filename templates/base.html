@@ -313,6 +313,14 @@
             profileUpdatesSub.style.display = 'none';
           }
 
+          var feeReminders = document.getElementById('badge-fee-reminders');
+          var feeReminderCount = Number(data.fee_reminders || 0);
+          if (feeReminderCount > 0) {
+            if (feeReminders) { feeReminders.textContent = feeReminderCount; feeReminders.style.display = 'inline-block'; }
+          } else if (feeReminders) {
+            feeReminders.style.display = 'none';
+          }
+
           // LMS Badge
           var lmsToggle = document.getElementById('badge-lms-toggle');
           var lmsSub = document.getElementById('badge-lms-exams');

@@ -673,6 +673,7 @@ def sidebar_badges():
     attendance_count = 0
     lms_count = 0
     profile_updates_count = 0
+    fee_reminders_count = 0
 
     conn = get_conn()
     cur = conn.cursor()
@@ -749,6 +750,28 @@ def sidebar_badges():
         )
         profile_updates_count = cur.fetchone()["cnt"]
 
+        # 6. Fee reminders currently eligible for automatic sending but not sent.
+        reminder_window_end = (datetime.now().date() + timedelta(days=3)).isoformat()
+        cur.execute(
+            """SELECT COUNT(DISTINCT ip.id) AS cnt
+               FROM installment_plans ip
+               JOIN invoices i ON i.id = ip.invoice_id
+               JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
+               WHERE i.institute_id = ?
+                 AND ip.status != 'paid'
+                 AND (ip.amount_due - ip.amount_paid) > 0
+                 AND i.status NOT IN ('paid', 'cancelled', 'write_off', 'partially_written_off')
+                 AND parse_date(ip.due_date) <= ?
+                 AND NOT EXISTS (
+                     SELECT 1 FROM reminder_logs rl
+                     WHERE rl.institute_id = i.institute_id
+                       AND rl.installment_id = ip.id
+                       AND rl.status IN ('sent', 'delivered')
+                 )""",
+            [institute_id, reminder_window_end],
+        )
+        fee_reminders_count = cur.fetchone()["cnt"]
+
     except Exception as e:
         print(f"Error querying sidebar badges: {e}")
     finally:
@@ -760,6 +783,7 @@ def sidebar_badges():
         "attendance": attendance_count,
         "lms": lms_count,
         "profile_updates": profile_updates_count,
+        "fee_reminders": fee_reminders_count,
     })
 
 
