@@ -85,6 +85,7 @@ def _load_due_installments(cur, run_date):
             ip.amount_paid,
             (ip.amount_due - ip.amount_paid) AS balance_due,
             i.id AS invoice_id,
+            i.institute_id,
             i.invoice_no,
             i.branch_id,
             i.total_amount,
@@ -95,7 +96,7 @@ def _load_due_installments(cur, run_date):
         JOIN invoices i
             ON ip.invoice_id = i.id
         JOIN students s
-            ON i.student_id = s.id
+            ON i.student_id = s.id AND s.institute_id = i.institute_id
         WHERE ip.status != 'paid'
           AND (ip.amount_due - ip.amount_paid) > 0
           AND parse_date(ip.due_date) >= ?
@@ -110,17 +111,21 @@ def _load_due_installments(cur, run_date):
     return cur.fetchall()
 
 
-def _already_processed_today(cur, installment_id, reminder_type, run_date):
+def _already_processed_today(cur, institute_id, installment_id, reminder_type, run_date):
     cur.execute("""
         SELECT 1
         FROM reminder_logs
-        WHERE installment_id = ?
+        WHERE institute_id = ?
+          AND installment_id = ?
           AND reminder_type = ?
           AND sent_via = ?
           AND status IN ('queued', 'sent', 'skipped_bad_phone')
           AND substr(sent_at, 1, 10) = ?
         LIMIT 1
-    """, (installment_id, reminder_type, AUTO_SMS_SENT_VIA, run_date.isoformat()))
+    """, (
+        institute_id, installment_id, reminder_type,
+        AUTO_SMS_SENT_VIA, run_date.isoformat(),
+    ))
     return cur.fetchone() is not None
 
 
@@ -157,7 +162,9 @@ def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
                 summary["skipped"] += 1
                 continue
 
-            if _already_processed_today(cur, row["installment_id"], reminder_type, run_date):
+            if _already_processed_today(
+                cur, row["institute_id"], row["installment_id"], reminder_type, run_date
+            ):
                 summary["skipped"] += 1
                 continue
 
@@ -188,10 +195,11 @@ def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
             else:
                 cur.execute("""
                     INSERT INTO reminder_logs (
-                        student_id, invoice_id, installment_id, phone_number,
+                        institute_id, student_id, invoice_id, installment_id, phone_number,
                         reminder_type, message_text, status, sent_via, sent_by, sent_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
+                    row["institute_id"],
                     row["student_id"],
                     row["invoice_id"],
                     row["installment_id"],

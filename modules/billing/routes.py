@@ -7310,9 +7310,10 @@ def receivables():
         cur.execute(f"""
             SELECT installment_id, COUNT(*) as count, MAX(sent_at) as last_sent_at
             FROM reminder_logs
-            WHERE installment_id IN ({placeholders})
+            WHERE institute_id = ?
+              AND installment_id IN ({placeholders})
             GROUP BY installment_id
-        """, all_ids)
+        """, [current_inst] + all_ids)
         reminder_stats = {row['installment_id']: dict(row) for row in cur.fetchall()}
 
     conn.close()
@@ -7360,15 +7361,33 @@ def reminder_log():
 
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
     now = datetime.now().isoformat(timespec="seconds")
     user_id = session.get("user_id")
 
     cur.execute("""
+        SELECT ip.id AS installment_id, i.id AS invoice_id, s.id AS student_id
+        FROM installment_plans ip
+        JOIN invoices i ON i.id = ip.invoice_id
+        JOIN students s ON s.id = i.student_id
+        WHERE ip.id = ?
+          AND i.id = ?
+          AND s.id = ?
+          AND i.institute_id = ?
+          AND s.institute_id = ?
+        LIMIT 1
+    """, (installment_id, invoice_id, student_id, current_inst, current_inst))
+    reminder = cur.fetchone()
+    if not reminder:
+        conn.close()
+        return jsonify({"success": False, "error": "Reminder target not found"}), 404
+
+    cur.execute("""
         INSERT INTO reminder_logs (
-            student_id, invoice_id, installment_id, phone_number,
+            institute_id, student_id, invoice_id, installment_id, phone_number,
             reminder_type, message_text, status, sent_via, sent_by, sent_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (student_id, invoice_id, installment_id, phone_number,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (current_inst, student_id, invoice_id, installment_id, phone_number,
           reminder_type, message_text, status, sent_via, user_id, now))
     conn.commit()
     log_id = cur.lastrowid
@@ -7393,6 +7412,7 @@ def reminder_send_sms():
 
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT
@@ -7409,7 +7429,9 @@ def reminder_send_sms():
         JOIN students s
             ON i.student_id = s.id
         WHERE ip.id = ?
-    """, (installment_id,))
+          AND i.institute_id = ?
+          AND s.institute_id = ?
+    """, (installment_id, current_inst, current_inst))
     reminder = cur.fetchone()
 
     if not reminder:
@@ -7428,10 +7450,11 @@ def reminder_send_sms():
 
     cur.execute("""
         INSERT INTO reminder_logs (
-            student_id, invoice_id, installment_id, phone_number,
+            institute_id, student_id, invoice_id, installment_id, phone_number,
             reminder_type, message_text, status, sent_via, sent_by, sent_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
+        current_inst,
         reminder["student_id"],
         reminder["invoice_id"],
         reminder["installment_id"],

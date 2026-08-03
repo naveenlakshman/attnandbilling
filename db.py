@@ -1101,6 +1101,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS reminder_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             student_id INTEGER NOT NULL,
             invoice_id INTEGER NOT NULL,
             installment_id INTEGER NOT NULL,
@@ -1112,6 +1113,7 @@ def init_db():
             followup_note TEXT,
             sent_by INTEGER,
             sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
             FOREIGN KEY(student_id) REFERENCES students(id),
             FOREIGN KEY(invoice_id) REFERENCES invoices(id),
             FOREIGN KEY(installment_id) REFERENCES installment_plans(id),
