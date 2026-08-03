@@ -637,7 +637,7 @@ def reset_portal_password(student_id):
     return redirect(url_for('billing.student_profile', student_id=student_id))
 
 
-def save_student_photo(photo_data, student_code):
+def save_student_photo(photo_data, student_code, transaction_conn=None):
     """Save student photo from base64 data"""
     if not photo_data:
         return None
@@ -666,6 +666,7 @@ def save_student_photo(photo_data, student_code):
             photo_bytes,
             dest_path,
             content_type="image/jpeg",
+            transaction_conn=transaction_conn,
         )
         
         return stored_path
@@ -2679,7 +2680,12 @@ def student_new():
         # Save photo if provided
         photo_filename = None
         if photo_data:
-            photo_filename = save_student_photo(photo_data, student_code)
+            # Reuse the registration transaction. It already owns the
+            # subscription row lock for the student-limit check; opening a
+            # second quota connection here would self-deadlock on that row.
+            photo_filename = save_student_photo(
+                photo_data, student_code, transaction_conn=conn
+            )
 
         now = datetime.now().isoformat(timespec="seconds")
 

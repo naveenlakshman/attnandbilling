@@ -25,7 +25,7 @@ def _payload_size(file_data):
     raise ValueError("Unable to determine upload size for quota enforcement.")
 
 
-def _storage_write_guard(canonical_path, file_data):
+def _storage_write_guard(canonical_path, file_data, transaction_conn=None):
     """Lock subscription capacity until storage metadata is committed."""
     from db import get_conn
     from services.subscriptions import lock_and_check_limit
@@ -34,7 +34,8 @@ def _storage_write_guard(canonical_path, file_data):
     tenant_id, _ = parse_tenant_storage_path(canonical_path)
     institute_id = tenant_id or get_current_institute_id(default=1)
     size_bytes = _payload_size(file_data)
-    conn = get_conn()
+    conn = transaction_conn or get_conn()
+    owns_connection = transaction_conn is None
     try:
         existing = conn.execute(
             "SELECT size_bytes FROM tenant_storage_objects WHERE object_path = ?",
@@ -43,14 +44,18 @@ def _storage_write_guard(canonical_path, file_data):
         previous_size = int(existing["size_bytes"] or 0) if existing else 0
         requested = max(0, size_bytes - previous_size)
         lock_and_check_limit(conn, institute_id, "storage", requested)
-        return conn, int(institute_id), size_bytes
+        return conn, int(institute_id), size_bytes, owns_connection
     except Exception:
         conn.rollback()
-        conn.close()
+        if owns_connection:
+            conn.close()
         raise
 
 
-def _commit_storage_write(conn, institute_id, canonical_path, size_bytes, content_type):
+def _commit_storage_write(
+    conn, institute_id, canonical_path, size_bytes, content_type,
+    owns_connection=True,
+):
     conn.execute(
         """
         INSERT INTO tenant_storage_objects (
@@ -62,8 +67,9 @@ def _commit_storage_write(conn, institute_id, canonical_path, size_bytes, conten
         """,
         (institute_id, canonical_path, size_bytes, content_type),
     )
-    conn.commit()
-    conn.close()
+    if owns_connection:
+        conn.commit()
+        conn.close()
 
 
 def _remove_storage_record(canonical_path):
@@ -231,11 +237,11 @@ class LocalStorageProvider:
         # Default fallback folder is uploads/
         return os.path.join(self.base_dir, "uploads", destination_path)
 
-    def upload_file(self, file_data, destination_path, content_type=None):
+    def upload_file(self, file_data, destination_path, content_type=None, transaction_conn=None):
         logger.info(f"LocalUpload: {destination_path}")
         canonical_path = tenant_storage_path(destination_path)
-        quota_conn, institute_id, size_bytes = _storage_write_guard(
-            canonical_path, file_data
+        quota_conn, institute_id, size_bytes, owns_quota_connection = _storage_write_guard(
+            canonical_path, file_data, transaction_conn=transaction_conn
         )
         local_path = self._resolve_local_path(canonical_path)
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
@@ -255,12 +261,14 @@ class LocalStorageProvider:
                 file_data.seek(0)
                 file_data.save(local_path)
             _commit_storage_write(
-                quota_conn, institute_id, canonical_path, size_bytes, content_type
+                quota_conn, institute_id, canonical_path, size_bytes, content_type,
+                owns_connection=owns_quota_connection,
             )
             return canonical_path
         except Exception:
             quota_conn.rollback()
-            quota_conn.close()
+            if owns_quota_connection:
+                quota_conn.close()
             raise
 
     def delete_file(self, destination_path):
@@ -321,10 +329,12 @@ class GCSStorageProvider:
         self.bucket_name = getattr(Config, "GCS_BUCKET_NAME", "global-it-erp-storage")
         self.bucket = self.client.bucket(self.bucket_name)
 
-    def upload_file(self, file_data, destination_path, content_type=None):
+    def upload_file(self, file_data, destination_path, content_type=None, transaction_conn=None):
         logger.info(f"GCSUpload: {destination_path}")
         gcs_path = tenant_storage_path(destination_path)
-        quota_conn, institute_id, size_bytes = _storage_write_guard(gcs_path, file_data)
+        quota_conn, institute_id, size_bytes, owns_quota_connection = _storage_write_guard(
+            gcs_path, file_data, transaction_conn=transaction_conn
+        )
         blob = self.bucket.blob(gcs_path)
         try:
             if isinstance(file_data, str) and (file_data.startswith("data:") or "," in file_data):
@@ -344,12 +354,14 @@ class GCSStorageProvider:
                 else:
                     file_data.save(blob)
             _commit_storage_write(
-                quota_conn, institute_id, gcs_path, size_bytes, content_type
+                quota_conn, institute_id, gcs_path, size_bytes, content_type,
+                owns_connection=owns_quota_connection,
             )
             return gcs_path
         except Exception:
             quota_conn.rollback()
-            quota_conn.close()
+            if owns_quota_connection:
+                quota_conn.close()
             raise
 
     def delete_file(self, destination_path):
