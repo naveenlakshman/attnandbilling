@@ -1443,21 +1443,38 @@ def onboarding_step(institute_id, step):
                     (branch_id, institute_id),
                 ).fetchone():
                     abort(400)
+                if conn.execute(
+                    "SELECT id FROM users WHERE institute_id = ? AND username = ?",
+                    (institute_id, username),
+                ).fetchone():
+                    flash("That username is already used by this institute.", "danger")
+                    return redirect(request.url)
                 lock_and_check_limit(conn, institute_id, "staff")
                 cur = conn.cursor()
-                cur.execute(
-                    """
-                    INSERT INTO users (
-                        institute_id, full_name, username, password_hash, role,
-                        platform_role, branch_id, can_view_all_branches, is_active,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, 'admin', NULL, ?, 1, 1, ?, ?)
-                    """,
-                    (
-                        institute_id, full_name, username,
-                        generate_password_hash(password), branch_id, now, now,
-                    ),
-                )
+                try:
+                    cur.execute(
+                        """
+                        INSERT INTO users (
+                            institute_id, full_name, username, password_hash, role,
+                            platform_role, branch_id, can_view_all_branches, is_active,
+                            created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, 'admin', NULL, ?, 1, 1, ?, ?)
+                        """,
+                        (
+                            institute_id, full_name, username,
+                            generate_password_hash(password), branch_id, now, now,
+                        ),
+                    )
+                except Exception as exc:
+                    # Preserve a friendly response if two requests race to create
+                    # the same tenant-scoped username. MySQL reports error 1062;
+                    # SQLite includes UNIQUE constraint in the error message.
+                    error_code = exc.args[0] if exc.args else None
+                    if error_code == 1062 or "UNIQUE constraint" in str(exc):
+                        conn.rollback()
+                        flash("That username is already used by this institute.", "danger")
+                        return redirect(request.url)
+                    raise
                 user_id = cur.lastrowid
                 cur.execute(
                     """
