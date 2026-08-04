@@ -13,6 +13,7 @@ import csv
 import os
 import base64
 import re
+import hashlib
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
 from services.document_numbers import allocate_document_number
@@ -26,6 +27,87 @@ logger = logging.getLogger("app.billing")
 
 
 IST_OFFSET = timedelta(hours=5, minutes=30)
+
+_STUDENT_FORM_TOKENS_KEY = "student_form_tokens"
+_STUDENT_FORM_TOKEN_LIMIT = 5
+_student_creation_ledger_ready = False
+
+
+def _issue_student_form_token():
+    tokens = [str(value) for value in session.get(_STUDENT_FORM_TOKENS_KEY, []) if value]
+    token = str(uuid.uuid4())
+    tokens.append(token)
+    session[_STUDENT_FORM_TOKENS_KEY] = tokens[-_STUDENT_FORM_TOKEN_LIMIT:]
+    session["student_form_token"] = token  # Compatibility with already-rendered forms.
+    return token
+
+
+def _valid_student_form_token(token):
+    tokens = session.get(_STUDENT_FORM_TOKENS_KEY, [])
+    return bool(token and (token in tokens or token == session.get("student_form_token")))
+
+
+def _retire_student_form_token(token):
+    session[_STUDENT_FORM_TOKENS_KEY] = [
+        value for value in session.get(_STUDENT_FORM_TOKENS_KEY, []) if value != token
+    ]
+    if session.get("student_form_token") == token:
+        session.pop("student_form_token", None)
+
+
+def _ensure_student_creation_ledger(cur):
+    global _student_creation_ledger_ready
+    if _student_creation_ledger_ready:
+        return
+    ddl = """
+        CREATE TABLE IF NOT EXISTS student_creation_requests (
+            token VARCHAR(64) PRIMARY KEY,
+            institute_id BIGINT NOT NULL,
+            user_id BIGINT NOT NULL,
+            request_fingerprint VARCHAR(64) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'processing',
+            student_id BIGINT,
+            created_at VARCHAR(32) NOT NULL,
+            completed_at VARCHAR(32),
+            UNIQUE (institute_id, request_fingerprint)
+        )
+    """
+    # The MySQL compatibility cursor intentionally ignores SQLite schema DDL;
+    # execute this one portable CREATE directly on its underlying cursor.
+    raw_cursor = getattr(cur, "_cursor", None)
+    if raw_cursor is not None:
+        mysql_ddl = ddl.replace(
+            "UNIQUE (institute_id, request_fingerprint)",
+            "UNIQUE KEY uq_student_creation_fingerprint (institute_id, request_fingerprint)",
+        )
+        raw_cursor.execute(mysql_ddl)
+        try:
+            raw_cursor.execute("""
+                ALTER TABLE student_creation_requests
+                ADD UNIQUE KEY uq_student_creation_fingerprint (institute_id, request_fingerprint)
+            """)
+        except Exception as exc:
+            if getattr(exc, "args", [None])[0] != 1061:  # duplicate key name
+                raise
+    else:
+        cur.execute(ddl)
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_student_creation_fingerprint
+            ON student_creation_requests(institute_id, request_fingerprint)
+        """)
+    _student_creation_ledger_ready = True
+
+
+def _student_creation_fingerprint(institute_id, form):
+    normalized = "|".join((
+        str(institute_id),
+        (form.get("full_name") or "").strip().casefold(),
+        re.sub(r"\D", "", form.get("phone") or ""),
+        (form.get("email") or "").strip().casefold(),
+        (form.get("date_of_birth") or "").strip(),
+        (form.get("lead_id") or "").strip(),
+    ))
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _ist_now():
@@ -2375,15 +2457,16 @@ def student_check_duplicate():
 
     conn = get_conn()
     cur = conn.cursor()
+    institute_id = get_current_institute_id(default=1)
     if exclude_id:
         cur.execute(
-            "SELECT id, student_code, full_name, phone FROM students WHERE phone = ? AND id != ?",
-            (phone, exclude_id)
+            "SELECT id, student_code, full_name, phone FROM students WHERE institute_id = ? AND phone = ? AND id != ?",
+            (institute_id, phone, exclude_id)
         )
     else:
         cur.execute(
-            "SELECT id, student_code, full_name, phone FROM students WHERE phone = ?",
-            (phone,)
+            "SELECT id, student_code, full_name, phone FROM students WHERE institute_id = ? AND phone = ?",
+            (institute_id, phone)
         )
     existing = cur.fetchone()
     conn.close()
@@ -2460,15 +2543,31 @@ def pincode_lookup():
 def student_new():
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
+    _ensure_student_creation_ledger(cur)
 
     if request.method == "POST":
-        # Duplicate Prevention Token Check
         form_token = request.form.get("form_token")
-        saved_token = session.get("student_form_token")
-        if not form_token or form_token != saved_token:
+        completed = cur.execute("""
+            SELECT scr.student_id, s.student_code, s.full_name
+            FROM student_creation_requests scr
+            JOIN students s ON s.id=scr.student_id AND s.institute_id=scr.institute_id
+            WHERE scr.token=? AND scr.institute_id=? AND scr.user_id=?
+              AND scr.status='completed'
+        """, (form_token, current_inst, session["user_id"])).fetchone() if form_token else None
+        if completed:
             conn.close()
-            flash("This student has already been registered or the request is no longer valid.", "warning")
-            return redirect(url_for("billing.students"))
+            _retire_student_form_token(form_token)
+            flash(
+                f"This registration was already completed for {completed['full_name']} "
+                f"({completed['student_code']}). No duplicate student was created.",
+                "info",
+            )
+            return redirect(url_for("billing.student_profile", student_id=completed["student_id"]))
+        if not _valid_student_form_token(form_token):
+            conn.close()
+            flash("This form expired or belongs to an earlier login. No student was created. Please open Add Student and try again.", "warning")
+            return redirect(url_for("billing.student_new"))
         branch_id = request.form.get("branch_id", "").strip()
         full_name = request.form.get("full_name", "").strip()
         phone = request.form.get("phone", "").strip()
@@ -2479,7 +2578,7 @@ def student_new():
         import re as _re
         _phone_digits = _re.sub(r'[\s\-\+]', '', phone)
         if not _phone_digits.isdigit() or len(_phone_digits) != 10:
-            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (current_inst,))
             branches = cur.fetchall()
             conn.close()
             return render_template(
@@ -2489,7 +2588,8 @@ def student_new():
                 education_levels=QUALIFICATION_LEVELS.keys(),
                 qualification_levels=QUALIFICATION_LEVELS,
                 error="Invalid phone number. Please enter a valid 10-digit mobile number.",
-                form_data=request.form
+                form_data=request.form,
+                form_token=form_token,
             )
 
         gender = request.form.get("gender", "").strip()
@@ -2542,7 +2642,7 @@ def student_new():
             has_photo=bool(photo_data),
         )
         if missing_required:
-            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (current_inst,))
             branches = cur.fetchall()
             conn.close()
             return render_template(
@@ -2552,7 +2652,8 @@ def student_new():
                 education_levels=QUALIFICATION_LEVELS.keys(),
                 qualification_levels=QUALIFICATION_LEVELS,
                 error=_student_required_error_message(missing_required),
-                form_data=request.form
+                form_data=request.form,
+                form_token=form_token,
             )
 
         # Validate date_of_birth is a real calendar date
@@ -2560,7 +2661,7 @@ def student_new():
             try:
                 datetime.strptime(date_of_birth, "%Y-%m-%d")
             except ValueError:
-                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (current_inst,))
                 branches = cur.fetchall()
                 conn.close()
                 return render_template(
@@ -2570,14 +2671,15 @@ def student_new():
                     education_levels=QUALIFICATION_LEVELS.keys(),
                     qualification_levels=QUALIFICATION_LEVELS,
                     error="Invalid date of birth. Please enter a valid calendar date.",
-                    form_data=request.form
+                    form_data=request.form,
+                    form_token=form_token,
                 )
 
         # Photo is required for new students
         if not photo_data:
             cur.execute("""
-                SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name
-            """)
+                SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name
+            """, (current_inst,))
             branches = cur.fetchall()
             conn.close()
             return render_template(
@@ -2587,19 +2689,20 @@ def student_new():
                 education_levels=QUALIFICATION_LEVELS.keys(),
                 qualification_levels=QUALIFICATION_LEVELS,
                 error="Student photo is required.",
-                form_data=request.form
+                form_data=request.form,
+                form_token=form_token,
             )
 
         # Duplicate phone check
         force_save = request.form.get("force_save") == "1"
         if not force_save:
             cur.execute(
-                "SELECT id, student_code, full_name FROM students WHERE phone = ?",
-                (phone,)
+                "SELECT id, student_code, full_name FROM students WHERE institute_id = ? AND phone = ?",
+                (current_inst, phone)
             )
             dup = cur.fetchone()
             if dup:
-                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (current_inst,))
                 branches = cur.fetchall()
                 conn.close()
                 return render_template(
@@ -2614,13 +2717,12 @@ def student_new():
                         "full_name": dup["full_name"],
                         "phone": phone,
                     },
-                    form_data=request.form
+                    form_data=request.form,
+                    form_token=form_token,
                 )
 
 
 
-
-        current_inst = get_current_institute_id(default=1)
 
         # Get tenant student prefix from institute_settings
         cur.execute("""
@@ -2666,6 +2768,50 @@ def student_new():
             max_row = cur.fetchone()
             next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else 1
             student_code = f"{stu_prefix}{next_seq:03d}"
+
+        # Claim this browser submission in the database. Unlike the signed
+        # session cookie, this unique token serializes double-clicks and
+        # concurrent/replayed POST requests across workers and devices.
+        request_fingerprint = _student_creation_fingerprint(current_inst, request.form)
+        try:
+            cur.execute("""
+                INSERT INTO student_creation_requests (
+                    token, institute_id, user_id, request_fingerprint, status, created_at
+                ) VALUES (?, ?, ?, ?, 'processing', ?)
+            """, (
+                form_token, current_inst, session["user_id"], request_fingerprint,
+                datetime.now().isoformat(timespec="seconds"),
+            ))
+        except Exception:
+            conn.rollback()
+            conn.close()
+            replay_conn = get_conn()
+            try:
+                replay = replay_conn.execute("""
+                    SELECT scr.student_id, scr.request_fingerprint, scr.status,
+                           s.student_code, s.full_name
+                    FROM student_creation_requests scr
+                    LEFT JOIN students s ON s.id=scr.student_id AND s.institute_id=scr.institute_id
+                    WHERE scr.institute_id=? AND scr.user_id=?
+                      AND (scr.token=? OR scr.request_fingerprint=?)
+                    ORDER BY CASE WHEN scr.token=? THEN 0 ELSE 1 END
+                    LIMIT 1
+                """, (
+                    current_inst, session["user_id"], form_token,
+                    request_fingerprint, form_token,
+                )).fetchone()
+            finally:
+                replay_conn.close()
+            if replay and replay["status"] == "completed" and replay["student_id"]:
+                _retire_student_form_token(form_token)
+                flash(
+                    f"This registration was already completed for {replay['full_name']} "
+                    f"({replay['student_code']}). No duplicate student was created.",
+                    "info",
+                )
+                return redirect(url_for("billing.student_profile", student_id=replay["student_id"]))
+            flash("Another request is processing this registration. Please check the Students list before retrying.", "warning")
+            return redirect(url_for("billing.students"))
 
         # Serialize student creation on the subscription row. The student INSERT
         # below is committed in this same transaction.
@@ -2786,6 +2932,15 @@ def student_new():
 
         student_id = cur.lastrowid
 
+        cur.execute("""
+            UPDATE student_creation_requests
+            SET status='completed', student_id=?, completed_at=?
+            WHERE token=? AND institute_id=? AND user_id=?
+        """, (
+            student_id, datetime.now().isoformat(timespec="seconds"),
+            form_token, current_inst, session["user_id"],
+        ))
+
         # ── Lead linkage ────────────────────────────────────────────
         if form_lead_id:
             # Mark the originating lead as converted
@@ -2856,7 +3011,7 @@ def student_new():
             pass  # Never block registration if SMS fails
 
         # Invalidate the token only after successful database commit
-        session.pop("student_form_token", None)
+        _retire_student_form_token(form_token)
         flash("Student added successfully.", "success")
         return redirect(url_for("billing.students"))
 
@@ -2878,9 +3033,9 @@ def student_new():
         )
         prefill_lead = cur.fetchone()
 
-    # Generate unique idempotency token for new student registration
-    import uuid
-    session["student_form_token"] = str(uuid.uuid4())
+    # Keep several tokens valid so separate Add Student tabs do not invalidate
+    # one another. Each token is also claimed durably in the database on POST.
+    form_token = _issue_student_form_token()
 
     conn.close()
 
@@ -2890,7 +3045,8 @@ def student_new():
         branches=branches,
         education_levels=QUALIFICATION_LEVELS.keys(),
         qualification_levels=QUALIFICATION_LEVELS,
-        prefill_lead=prefill_lead
+        prefill_lead=prefill_lead,
+        form_token=form_token,
     )
 
 @billing_bp.route("/student/<int:student_id>/edit", methods=["GET", "POST"])

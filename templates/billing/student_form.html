@@ -363,10 +363,10 @@
     </div>
     {% endif %}
     <form method="post" id="studentForm">
-      {% if not student and session.get('student_form_token') %}
-      <input type="hidden" name="form_token" value="{{ session.get('student_form_token') }}">
+      {% if not student and (form_token or session.get('student_form_token')) %}
+      <input type="hidden" name="form_token" value="{{ form_token or session.get('student_form_token') }}">
       {% endif %}
-      <input type="hidden" name="force_save" id="force_save" value="{{ '1' if duplicate_warning else '0' }}">
+      <input type="hidden" name="force_save" id="force_save" value="0">
       {% if prefill_lead %}
       <div style="background:#eff6ff; border:1px solid #93c5fd; color:#1e40af; border-radius:7px; padding:12px 16px; margin-bottom:18px; font-size:13px;">
         <strong>🔄 Converting Lead to Student</strong><br>
@@ -970,10 +970,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Photo required validation (new student only)
   const studentForm = document.getElementById('studentForm');
+  let studentSubmitInProgress = false;
   const isNewStudent = !{{ 'true' if student else 'false' }};
   const hasExistingPhoto = {{ 'true' if student and student.photo_filename else 'false' }};
   if (studentForm) {
     studentForm.addEventListener('submit', function(e) {
+      if (studentSubmitInProgress) {
+        e.preventDefault();
+        return false;
+      }
       // Phone validation on submit
       const phoneVal = document.getElementById('phoneInput').value.trim();
       const phoneErr = validatePhone(phoneVal);
@@ -1023,8 +1028,27 @@ document.addEventListener('DOMContentLoaded', function() {
           return false;
         }
       }
+      studentSubmitInProgress = true;
+      const primaryButton = document.getElementById('saveBtnPrimary');
+      const anywayButton = document.getElementById('saveAnywayBtn');
+      if (primaryButton) {
+        primaryButton.disabled = true;
+        primaryButton.textContent = 'Saving…';
+      }
+      if (anywayButton) {
+        anywayButton.disabled = true;
+        anywayButton.textContent = 'Saving…';
+      }
     });
   }
+
+  window.addEventListener('pageshow', function() {
+    studentSubmitInProgress = false;
+    const primaryButton = document.getElementById('saveBtnPrimary');
+    const anywayButton = document.getElementById('saveAnywayBtn');
+    if (primaryButton) { primaryButton.disabled = false; primaryButton.textContent = 'Save Student'; }
+    if (anywayButton) { anywayButton.disabled = false; anywayButton.textContent = 'Save Anyway'; }
+  });
 
   // Phone number validation
   const phoneFormatError = document.getElementById('phoneFormatError');
@@ -1110,7 +1134,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function forceSaveStudent() {
   document.getElementById('force_save').value = '1';
-  document.getElementById('studentForm').submit();
+  document.getElementById('studentForm').requestSubmit();
 }
 </script>
 
