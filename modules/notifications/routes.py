@@ -93,8 +93,8 @@ def fee_reminder_admin():
                 max_days = int(request.form.get("extension_max_days", 5))
                 if not 1 <= days_before <= 14:
                     raise ValueError("Reminder lead time must be between 1 and 14 days.")
-                if not 6 <= repeat_hours <= 168:
-                    raise ValueError("Repeat interval must be between 6 and 168 hours.")
+                if not 1 <= repeat_hours <= 168:
+                    raise ValueError("Repeat interval must be between 1 and 168 hours.")
                 if not 1 <= overdue_grace_days <= 14:
                     raise ValueError("Overdue grace period must be between 1 and 14 days.")
                 if not (1 <= min_days <= max_days <= 14):
