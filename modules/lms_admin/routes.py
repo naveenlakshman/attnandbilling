@@ -139,15 +139,17 @@ def _current_lms_actor(conn):
     user_id = session.get('user_id')
     if not user_id:
         return None
+    current_inst = get_current_institute_id(default=1)
     return conn.execute(
         """
-        SELECT id, role, branch_id, can_view_all_branches
+        SELECT id, role, branch_id, can_view_all_branches, institute_id
         FROM users
         WHERE id = ?
+          AND institute_id = ?
           AND is_active = 1
           AND role IN ('admin', 'staff')
         """,
-        (user_id,),
+        (user_id, current_inst),
     ).fetchone()
 
 
@@ -161,10 +163,16 @@ def _can_access_submission(conn, submission_id):
     actor = _current_lms_actor(conn)
     if not actor:
         return False
+    current_inst = get_current_institute_id(default=1)
     if actor['role'] == 'admin' and int(actor['can_view_all_branches'] or 0) == 1:
         return bool(conn.execute(
-            "SELECT 1 FROM lms_assignment_submissions WHERE id = ?",
-            (submission_id,),
+            """SELECT 1
+               FROM lms_assignment_submissions s
+               JOIN students st ON st.id = s.student_id
+               WHERE s.id = ?
+                 AND st.institute_id = ?
+                 AND (s.institute_id = ? OR s.institute_id IS NULL)""",
+            (submission_id, current_inst, current_inst),
         ).fetchone())
     if actor['role'] == 'admin':
         return bool(conn.execute(
@@ -173,6 +181,8 @@ def _can_access_submission(conn, submission_id):
             FROM lms_assignment_submissions s
             JOIN students st ON st.id = s.student_id
             WHERE s.id = ?
+              AND st.institute_id = ?
+              AND (s.institute_id = ? OR s.institute_id IS NULL)
               AND (
                     st.branch_id = ?
                     OR EXISTS (
@@ -182,17 +192,28 @@ def _can_access_submission(conn, submission_id):
                         WHERE sb.student_id = s.student_id
                           AND sb.status = 'active'
                           AND LOWER(COALESCE(b.status, '')) = 'active'
+                          AND b.branch_id IN (
+                              SELECT id FROM branches WHERE institute_id = ?
+                          )
                           AND b.branch_id = ?
                     )
               )
             """,
-            (submission_id, actor['branch_id'], actor['branch_id']),
+            (
+                submission_id, current_inst, current_inst,
+                actor['branch_id'], current_inst, actor['branch_id'],
+            ),
         ).fetchone())
     return bool(conn.execute(
         """
         SELECT 1
         FROM lms_assignment_submissions s
+        JOIN lms_assignments a ON a.id = s.assignment_id
+        JOIN lms_master_topics mt ON mt.id = a.master_topic_id
+        JOIN students st ON st.id = s.student_id
         WHERE s.id = ?
+          AND st.institute_id = ?
+          AND (s.institute_id = ? OR s.institute_id IS NULL)
           AND EXISTS (
               SELECT 1
               FROM student_batches sb
@@ -201,9 +222,39 @@ def _can_access_submission(conn, submission_id):
                 AND sb.status = 'active'
                 AND LOWER(COALESCE(b.status, '')) = 'active'
                 AND b.trainer_id = ?
+                AND b.branch_id IN (
+                    SELECT id FROM branches WHERE institute_id = ?
+                )
+                AND (
+                    EXISTS (
+                        SELECT 1 FROM lms_program_chapters pc
+                        JOIN lms_programs lp ON lp.id = pc.program_id
+                        LEFT JOIN lms_course_program_map cpm ON cpm.program_id = lp.id
+                        WHERE pc.master_chapter_id = mt.master_chapter_id
+                          AND pc.is_visible = 1
+                          AND lp.is_active = 1
+                          AND lp.is_deleted = 0
+                          AND lp.institute_id = ?
+                          AND (b.course_id = lp.course_id OR b.course_id = cpm.course_id)
+                    )
+                    OR NOT EXISTS (
+                        SELECT 1 FROM lms_program_chapters pc_chk
+                        JOIN lms_programs lp_chk ON lp_chk.id = pc_chk.program_id
+                        LEFT JOIN lms_course_program_map cpm_chk ON cpm_chk.program_id = lp_chk.id
+                        WHERE pc_chk.master_chapter_id = mt.master_chapter_id
+                          AND pc_chk.is_visible = 1
+                          AND lp_chk.is_active = 1
+                          AND lp_chk.is_deleted = 0
+                          AND lp_chk.institute_id = ?
+                          AND (lp_chk.course_id IS NOT NULL OR cpm_chk.course_id IS NOT NULL)
+                    )
+                )
           )
         """,
-        (submission_id, actor['id']),
+        (
+            submission_id, current_inst, current_inst, actor['id'],
+            current_inst, current_inst, current_inst,
+        ),
     ).fetchone())
 
 
@@ -8286,8 +8337,32 @@ def review_queue():
                   AND sb_scope.status = 'active'
                   AND LOWER(COALESCE(b_scope.status, '')) = 'active'
                   AND b_scope.trainer_id = ?
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM lms_program_chapters pc_scope
+                          JOIN lms_programs lp_scope ON lp_scope.id = pc_scope.program_id
+                          LEFT JOIN lms_course_program_map cpm_scope ON cpm_scope.program_id = lp_scope.id
+                          WHERE pc_scope.master_chapter_id = mt.master_chapter_id
+                            AND pc_scope.is_visible = 1
+                            AND lp_scope.is_active = 1
+                            AND lp_scope.is_deleted = 0
+                            AND lp_scope.institute_id = ?
+                            AND (b_scope.course_id = lp_scope.course_id OR b_scope.course_id = cpm_scope.course_id)
+                      )
+                      OR NOT EXISTS (
+                          SELECT 1 FROM lms_program_chapters pc_chk
+                          JOIN lms_programs lp_chk ON lp_chk.id = pc_chk.program_id
+                          LEFT JOIN lms_course_program_map cpm_chk ON cpm_chk.program_id = lp_chk.id
+                          WHERE pc_chk.master_chapter_id = mt.master_chapter_id
+                            AND pc_chk.is_visible = 1
+                            AND lp_chk.is_active = 1
+                            AND lp_chk.is_deleted = 0
+                            AND lp_chk.institute_id = ?
+                            AND (lp_chk.course_id IS NOT NULL OR cpm_chk.course_id IS NOT NULL)
+                      )
+                  )
             )""")
-            scope_params.append(selected_trainer_id)
+            scope_params.extend([selected_trainer_id, current_inst, current_inst])
         if selected_batch_id:
             scope_where.append("""EXISTS (
                 SELECT 1 FROM student_batches sb_scope
@@ -8296,8 +8371,32 @@ def review_queue():
                   AND sb_scope.status = 'active'
                   AND LOWER(COALESCE(b_scope.status, '')) = 'active'
                   AND b_scope.id = ?
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM lms_program_chapters pc_scope
+                          JOIN lms_programs lp_scope ON lp_scope.id = pc_scope.program_id
+                          LEFT JOIN lms_course_program_map cpm_scope ON cpm_scope.program_id = lp_scope.id
+                          WHERE pc_scope.master_chapter_id = mt.master_chapter_id
+                            AND pc_scope.is_visible = 1
+                            AND lp_scope.is_active = 1
+                            AND lp_scope.is_deleted = 0
+                            AND lp_scope.institute_id = ?
+                            AND (b_scope.course_id = lp_scope.course_id OR b_scope.course_id = cpm_scope.course_id)
+                      )
+                      OR NOT EXISTS (
+                          SELECT 1 FROM lms_program_chapters pc_chk
+                          JOIN lms_programs lp_chk ON lp_chk.id = pc_chk.program_id
+                          LEFT JOIN lms_course_program_map cpm_chk ON cpm_chk.program_id = lp_chk.id
+                          WHERE pc_chk.master_chapter_id = mt.master_chapter_id
+                            AND pc_chk.is_visible = 1
+                            AND lp_chk.is_active = 1
+                            AND lp_chk.is_deleted = 0
+                            AND lp_chk.institute_id = ?
+                            AND (lp_chk.course_id IS NOT NULL OR cpm_chk.course_id IS NOT NULL)
+                      )
+                  )
             )""")
-            scope_params.append(selected_batch_id)
+            scope_params.extend([selected_batch_id, current_inst, current_inst])
         if admin_branch_limited:
             scope_where.append("""(
                 st.branch_id = ? OR EXISTS (
@@ -8331,12 +8430,64 @@ def review_queue():
                    (SELECT GROUP_CONCAT(DISTINCT b_names.batch_name ORDER BY b_names.batch_name SEPARATOR ', ')
                     FROM student_batches sb_names
                     JOIN batches b_names ON b_names.id = sb_names.batch_id
-                    WHERE sb_names.student_id = s.student_id AND sb_names.status = 'active') AS batch_names,
+                    WHERE sb_names.student_id = s.student_id
+                      AND sb_names.status = 'active'
+                      AND LOWER(COALESCE(b_names.status, '')) = 'active'
+                      AND (
+                          EXISTS (
+                              SELECT 1 FROM lms_program_chapters pc_m
+                              JOIN lms_programs lp_m ON lp_m.id = pc_m.program_id
+                              LEFT JOIN lms_course_program_map cpm_m ON cpm_m.program_id = lp_m.id
+                              WHERE pc_m.master_chapter_id = mt.master_chapter_id
+                                AND pc_m.is_visible = 1
+                                AND lp_m.is_active = 1
+                                AND lp_m.is_deleted = 0
+                                AND lp_m.institute_id = {current_inst}
+                                AND (b_names.course_id = lp_m.course_id OR b_names.course_id = cpm_m.course_id)
+                          )
+                          OR NOT EXISTS (
+                              SELECT 1 FROM lms_program_chapters pc_chk
+                              JOIN lms_programs lp_chk ON lp_chk.id = pc_chk.program_id
+                              LEFT JOIN lms_course_program_map cpm_chk ON cpm_chk.program_id = lp_chk.id
+                              WHERE pc_chk.master_chapter_id = mt.master_chapter_id
+                                AND pc_chk.is_visible = 1
+                                AND lp_chk.is_active = 1
+                                AND lp_chk.is_deleted = 0
+                                AND lp_chk.institute_id = {current_inst}
+                                AND (lp_chk.course_id IS NOT NULL OR cpm_chk.course_id IS NOT NULL)
+                          )
+                      )) AS batch_names,
                    (SELECT GROUP_CONCAT(DISTINCT u_names.full_name ORDER BY u_names.full_name SEPARATOR ', ')
                     FROM student_batches sb_names
                     JOIN batches b_names ON b_names.id = sb_names.batch_id
                     JOIN users u_names ON u_names.id = b_names.trainer_id
-                    WHERE sb_names.student_id = s.student_id AND sb_names.status = 'active') AS trainer_names,
+                    WHERE sb_names.student_id = s.student_id
+                      AND sb_names.status = 'active'
+                      AND LOWER(COALESCE(b_names.status, '')) = 'active'
+                      AND (
+                          EXISTS (
+                              SELECT 1 FROM lms_program_chapters pc_m
+                              JOIN lms_programs lp_m ON lp_m.id = pc_m.program_id
+                              LEFT JOIN lms_course_program_map cpm_m ON cpm_m.program_id = lp_m.id
+                              WHERE pc_m.master_chapter_id = mt.master_chapter_id
+                                AND pc_m.is_visible = 1
+                                AND lp_m.is_active = 1
+                                AND lp_m.is_deleted = 0
+                                AND lp_m.institute_id = {current_inst}
+                                AND (b_names.course_id = lp_m.course_id OR b_names.course_id = cpm_m.course_id)
+                          )
+                          OR NOT EXISTS (
+                              SELECT 1 FROM lms_program_chapters pc_chk
+                              JOIN lms_programs lp_chk ON lp_chk.id = pc_chk.program_id
+                              LEFT JOIN lms_course_program_map cpm_chk ON cpm_chk.program_id = lp_chk.id
+                              WHERE pc_chk.master_chapter_id = mt.master_chapter_id
+                                AND pc_chk.is_visible = 1
+                                AND lp_chk.is_active = 1
+                                AND lp_chk.is_deleted = 0
+                                AND lp_chk.institute_id = {current_inst}
+                                AND (lp_chk.course_id IS NOT NULL OR cpm_chk.course_id IS NOT NULL)
+                          )
+                      )) AS trainer_names,
                    (SELECT GROUP_CONCAT(DISTINCT lp_names.program_name ORDER BY lp_names.program_name SEPARATOR ', ')
                     FROM lms_program_chapters pc_names
                     JOIN lms_programs lp_names ON lp_names.id = pc_names.program_id
