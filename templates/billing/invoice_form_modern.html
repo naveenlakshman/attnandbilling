@@ -1307,6 +1307,13 @@
   function createItemRow(item = null) {
     const row = document.createElement('div');
     row.className = 'item-row';
+
+    // MySQL DECIMAL values are serialized to JSON as strings. Normalize them
+    // before formatting so one existing item cannot stop the entire editor.
+    const quantity = Number(item?.quantity ?? 1);
+    const unitPrice = Number(item?.unit_price ?? 0);
+    const lineTotal = Number(item?.line_total ?? 0);
+    const storedDiscount = Number(item?.discount ?? 0);
     
     const courseSelectOptions = `
       <option value="">💬 Custom Item</option>
@@ -1317,7 +1324,10 @@
       {% endfor %}
     `;
 
-    const discount = item ? (item.quantity * item.unit_price - (item.line_total || 0)) : 0;
+    const calculatedDiscount = (quantity * unitPrice) - lineTotal;
+    const discount = item
+      ? Math.max(0, Number.isFinite(storedDiscount) ? storedDiscount : calculatedDiscount)
+      : 0;
     const discountDisplayValue = discount > 0 ? discount.toFixed(2) : '';
 
     row.innerHTML = `
@@ -1333,14 +1343,14 @@
       <div class="item-field-group">
         <label>Qty</label>
         <input type="number" name="item_qty[]" class="item-qty" min="1" step="1" 
-               value="${item?.quantity || 1}" oninput="calculateInvoiceTotals()">
+               value="${Number.isFinite(quantity) && quantity > 0 ? quantity : 1}" oninput="calculateInvoiceTotals()">
       </div>
 
       <div class="item-field-group">
         <label>Rate</label>
         <div class="currency-wrapper">
           <input type="number" name="item_rate[]" class="item-rate" min="0" step="0.01"
-                 value="${item ? item.unit_price.toFixed(2) : 0}" oninput="calculateInvoiceTotals()">
+                 value="${item && Number.isFinite(unitPrice) ? unitPrice.toFixed(2) : '0.00'}" oninput="calculateInvoiceTotals()">
         </div>
       </div>
 
@@ -1362,7 +1372,7 @@
         <label>Amount</label>
         <div class="currency-wrapper">
           <input type="number" name="item_amount[]" class="item-amount" readonly
-                 value="${item ? item.line_total.toFixed(2) : 0}">
+                 value="${item && Number.isFinite(lineTotal) ? lineTotal.toFixed(2) : '0.00'}">
         </div>
       </div>
 

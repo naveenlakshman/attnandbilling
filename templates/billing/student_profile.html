@@ -279,6 +279,50 @@
         {% endif %}
       </section>
 
+      {% if session.get('role') == 'admin' and available_lms_programs %}
+      <section class="profile-section">
+        <div class="profile-section-header">
+          <div>
+            <div class="profile-section-title">Grant LMS Program Access</div>
+            <div class="profile-section-subtitle">
+              Select additional programs for this student. This grants LMS access without changing paid invoice totals.
+            </div>
+          </div>
+          <div class="profile-section-badge">{{ available_lms_programs | length }} available</div>
+        </div>
+
+        <form method="post" action="{{ url_for('billing.student_grant_program_access', student_id=student.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+            <button type="button" class="profile-inline-link" style="border:0; background:transparent; cursor:pointer;"
+                    onclick="document.querySelectorAll('.lms-program-grant-checkbox').forEach(function(box){ box.checked = true; });">
+              Select all available
+            </button>
+            <button type="button" class="profile-inline-link" style="border:0; background:transparent; cursor:pointer;"
+                    onclick="document.querySelectorAll('.lms-program-grant-checkbox').forEach(function(box){ box.checked = false; });">
+              Clear selection
+            </button>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:10px; max-height:360px; overflow:auto; padding:4px;">
+            {% for program in available_lms_programs %}
+            <label style="display:flex; gap:10px; align-items:flex-start; padding:12px; border:1px solid #dbe3ef; border-radius:10px; cursor:pointer; background:#fff;">
+              <input class="lms-program-grant-checkbox" type="checkbox" name="program_ids[]" value="{{ program.id }}" style="margin-top:4px;">
+              <span>
+                <strong>{{ program.course_name }}</strong>
+                {% if program.program_name != program.course_name %}<br><small>{{ program.program_name }}</small>{% endif %}
+                {% if program.was_suspended %}<br><small style="color:#b45309;">Previously suspended — selecting will restore access</small>{% endif %}
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary" style="margin-top:16px;"
+                  onclick="return confirm('Grant the selected LMS programs to this student?');">
+            Grant selected programs
+          </button>
+        </form>
+      </section>
+      {% endif %}
+
       <section class="profile-section profile-course-panel">
         <div class="profile-section-header">
           <div>

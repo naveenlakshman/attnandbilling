@@ -3547,7 +3547,7 @@ def student_add_to_batch(student_id):
     return jsonify({"success": True, "batch_name": batch["batch_name"]})
 
 
-def _student_lms_progress_rows(cur, student_id):
+def _student_lms_progress_rows(cur, student_id, institute_id):
     """Return per-program LMS progress summaries for the student profile."""
     cur.execute("""
         SELECT DISTINCT
@@ -3581,6 +3581,7 @@ def _student_lms_progress_rows(cur, student_id):
         LEFT JOIN courses c ON c.id = lp.course_id
         WHERE lp.is_active = 1
           AND COALESCE(lp.is_deleted, 0) = 0
+          AND lp.institute_id = ?
           AND EXISTS (
               SELECT 1
               FROM lms_student_program_access spa
@@ -3588,7 +3589,7 @@ def _student_lms_progress_rows(cur, student_id):
                 AND spa.program_id = lp.id
           )
         ORDER BY course_name, lp.program_name
-    """, (student_id, student_id, student_id))
+    """, (student_id, student_id, institute_id, student_id))
     programs = cur.fetchall()
 
     progress_rows = []
@@ -3727,6 +3728,7 @@ def _student_lms_progress_rows(cur, student_id):
 def student_profile(student_id):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT
@@ -3736,7 +3738,7 @@ def student_profile(student_id):
         LEFT JOIN branches
             ON students.branch_id = branches.id
         WHERE students.id = ? AND students.institute_id = ?
-    """, (student_id, get_current_institute_id(default=1)))
+    """, (student_id, current_inst))
     student = cur.fetchone()
 
     if not student:
@@ -4028,7 +4030,31 @@ def student_profile(student_id):
     if current_course is None and student_invoiced_courses:
         current_course = student_invoiced_courses[0]
 
-    lms_progress_rows = _student_lms_progress_rows(cur, student_id)
+    lms_progress_rows = _student_lms_progress_rows(cur, student_id, current_inst)
+
+    # Programs that can be granted directly without changing billing records.
+    cur.execute("""
+        SELECT lp.id, lp.program_name,
+               COALESCE(c.course_name, lp.program_name) AS course_name,
+               CASE WHEN EXISTS (
+                   SELECT 1 FROM lms_student_program_access spa
+                   WHERE spa.student_id = ? AND spa.program_id = lp.id
+                     AND spa.is_active = 0
+               ) THEN 1 ELSE 0 END AS was_suspended
+        FROM lms_programs lp
+        LEFT JOIN courses c
+          ON c.id = lp.course_id AND c.institute_id = ?
+        WHERE lp.institute_id = ?
+          AND lp.is_active = 1
+          AND COALESCE(lp.is_deleted, 0) = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM lms_student_program_access spa
+              WHERE spa.student_id = ? AND spa.program_id = lp.id
+                AND spa.is_active = 1
+          )
+        ORDER BY course_name, lp.program_name
+    """, (student_id, current_inst, current_inst, student_id))
+    available_lms_programs = cur.fetchall()
 
     student_batch_courses = []
     for b in student_batches:
@@ -4126,6 +4152,7 @@ def student_profile(student_id):
         attendance_summary=attendance_summary,
         attendance_percentage=attendance_percentage,
         lms_progress_rows=lms_progress_rows,
+        available_lms_programs=available_lms_programs,
         recent_activity=recent_activity,
         origin_lead=origin_lead,
         exam_applications=exam_applications,
@@ -8180,15 +8207,23 @@ def activity_logs():
 def student_toggle_program_access(student_id, program_id):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
     
-    cur.execute("SELECT id, full_name, branch_id FROM students WHERE id = ?", (student_id,))
+    cur.execute(
+        "SELECT id, full_name, branch_id FROM students WHERE id = ? AND institute_id = ?",
+        (student_id, current_inst),
+    )
     student = cur.fetchone()
     if not student:
         conn.close()
         flash("Student not found.", "danger")
         return redirect(url_for("billing.students"))
         
-    cur.execute("SELECT id, program_name FROM lms_programs WHERE id = ?", (program_id,))
+    cur.execute(
+        """SELECT id, program_name FROM lms_programs
+           WHERE id = ? AND institute_id = ? AND COALESCE(is_deleted, 0) = 0""",
+        (program_id, current_inst),
+    )
     program = cur.fetchone()
     if not program:
         conn.close()
@@ -8234,5 +8269,92 @@ def student_toggle_program_access(student_id, program_id):
     
     flash(f"LMS Access for '{program['program_name']}' was {action} successfully.", "success")
     return redirect(url_for("billing.student_profile", student_id=student_id))
+
+
+@billing_bp.post("/student/<int:student_id>/grant-program-access")
+@login_required
+@admin_required
+def student_grant_program_access(student_id):
+    """Grant or restore selected direct LMS program access within the tenant."""
+    conn = get_conn()
+    cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
+    try:
+        cur.execute(
+            """SELECT id, full_name, branch_id FROM students
+               WHERE id = ? AND institute_id = ?""",
+            (student_id, current_inst),
+        )
+        student = cur.fetchone()
+        if not student:
+            flash("Student not found.", "danger")
+            return redirect(url_for("billing.students"))
+
+        requested_ids = sorted({
+            int(value) for value in request.form.getlist("program_ids[]")
+            if value.isdigit() and int(value) > 0
+        })
+        if not requested_ids:
+            flash("Select at least one LMS program.", "warning")
+            return redirect(url_for("billing.student_profile", student_id=student_id))
+
+        placeholders = ",".join("?" for _ in requested_ids)
+        cur.execute(
+            f"""SELECT id, program_name FROM lms_programs
+                WHERE institute_id = ? AND is_active = 1
+                  AND COALESCE(is_deleted, 0) = 0
+                  AND id IN ({placeholders})""",
+            [current_inst, *requested_ids],
+        )
+        programs = cur.fetchall()
+        if len(programs) != len(requested_ids):
+            flash("One or more selected programs are unavailable for this institute.", "danger")
+            return redirect(url_for("billing.student_profile", student_id=student_id))
+
+        now_date = datetime.now().strftime("%Y-%m-%d")
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        granted = 0
+        for program in programs:
+            cur.execute(
+                """SELECT id, is_active FROM lms_student_program_access
+                   WHERE student_id = ? AND program_id = ?""",
+                (student_id, program["id"]),
+            )
+            existing = cur.fetchone()
+            if existing:
+                if not existing["is_active"]:
+                    cur.execute(
+                        """UPDATE lms_student_program_access
+                           SET is_active = 1, access_status = 'active', updated_at = ?
+                           WHERE id = ?""",
+                        (now_iso, existing["id"]),
+                    )
+                    granted += 1
+            else:
+                cur.execute(
+                    """INSERT INTO lms_student_program_access (
+                           student_id, program_id, access_start_date,
+                           access_status, is_active, created_at, updated_at
+                       ) VALUES (?, ?, ?, 'active', 1, ?, ?)""",
+                    (student_id, program["id"], now_date, now_iso, now_iso),
+                )
+                granted += 1
+
+        conn.commit()
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=student["branch_id"] or session.get("branch_id"),
+            action_type="update",
+            module_name="students",
+            record_id=student_id,
+            description=f"Granted direct LMS access to {granted} program(s) for {student['full_name']}",
+        )
+        flash(f"LMS access granted for {granted} program(s).", "success")
+        return redirect(url_for("billing.student_profile", student_id=student_id))
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
