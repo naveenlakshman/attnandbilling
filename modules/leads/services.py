@@ -190,8 +190,14 @@ def get_next_stages(current_stage):
 
 
 def log_lead_activity(conn, lead_id, user_id, action_type, description):
+    from services.tenant_context import get_current_institute_id
+
+    current_inst = get_current_institute_id(default=1)
     cur = conn.cursor()
-    cur.execute("SELECT branch_id FROM users WHERE id = ?", (user_id,))
+    cur.execute(
+        "SELECT branch_id FROM users WHERE id = ? AND institute_id = ?",
+        (user_id, current_inst),
+    )
     user_row = cur.fetchone()
     branch_id = user_row["branch_id"] if user_row else None
 
@@ -207,11 +213,18 @@ def log_lead_activity(conn, lead_id, user_id, action_type, description):
 
 
 def update_lead_stage(conn, lead_id, new_stage, user_id):
+    from services.tenant_context import get_current_institute_id
+
     if new_stage not in VALID_STAGES:
         raise ValueError("Invalid stage selected.")
 
     cur = conn.cursor()
-    cur.execute("SELECT id, name, stage, next_followup_date FROM leads WHERE id = ?", (lead_id,))
+    current_inst = get_current_institute_id(default=1)
+    cur.execute(
+        """SELECT id, name, stage, next_followup_date
+           FROM leads WHERE id = ? AND institute_id = ?""",
+        (lead_id, current_inst),
+    )
     lead = cur.fetchone()
     if not lead:
         return None
@@ -228,9 +241,9 @@ def update_lead_stage(conn, lead_id, new_stage, user_id):
             status = ?,
             next_followup_date = ?,
             updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND institute_id = ?
         """,
-        (new_stage, status, next_followup_date, now, lead_id),
+        (new_stage, status, next_followup_date, now, lead_id, current_inst),
     )
 
     log_lead_activity(

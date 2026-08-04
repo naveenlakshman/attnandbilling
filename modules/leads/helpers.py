@@ -28,16 +28,18 @@ def get_lead_or_404_with_access(conn, lead_id: int, session_obj, include_deleted
     cur = conn.cursor()
 
     if include_deleted:
-        cur.execute("SELECT * FROM leads WHERE id = ?", (lead_id,))
+        cur.execute(
+            "SELECT * FROM leads WHERE id = ? AND institute_id = ?",
+            (lead_id, current_institute_id),
+        )
     else:
-        cur.execute("SELECT * FROM leads WHERE id = ? AND is_deleted = 0", (lead_id,))
+        cur.execute(
+            "SELECT * FROM leads WHERE id = ? AND institute_id = ? AND is_deleted = 0",
+            (lead_id, current_institute_id),
+        )
 
     lead = cur.fetchone()
     if not lead:
-        return None, "not_found"
-
-    lead_inst = lead["institute_id"] if "institute_id" in lead.keys() else 1
-    if int(lead_inst or 1) != int(current_institute_id):
         return None, "not_found"
 
     if not can_access_lead(

@@ -289,7 +289,7 @@ def dashboard():
     cur.execute(f"""
         SELECT l.*, u.full_name AS owner_name, u.username AS owner_username
         FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
+        LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
         WHERE l.status = 'active'
           AND l.is_deleted = 0
           AND l.next_followup_date IS NOT NULL
@@ -820,7 +820,7 @@ def lead_detail(lead_id):
             b.branch_name AS branch_name,
             b.branch_code AS branch_code
         FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
+        LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
         LEFT JOIN branches b ON l.branch_id = b.id
         WHERE l.id = ?
     """, (lead_id,))
@@ -851,10 +851,10 @@ def lead_detail(lead_id):
             u.username AS user_username,
             u.full_name AS user_full_name
         FROM followups f
-        LEFT JOIN users u ON f.user_id = u.id
+        LEFT JOIN users u ON f.user_id = u.id AND u.institute_id = ?
         WHERE f.lead_id = ?
         ORDER BY f.created_at DESC
-    """, (lead_id,))
+    """, (get_current_institute_id(default=1), lead_id))
     followups = cur.fetchall()
 
     cur.execute("""
@@ -1600,6 +1600,7 @@ def lead_reassign(lead_id):
         return redirect(url_for("leads.leads_list"))
 
     assigned_to_id = request.form.get("assigned_to_id", "").strip() or None
+    current_inst = get_current_institute_id(default=1)
     now = datetime.now().isoformat(timespec="seconds")
 
     if assigned_to_id:
@@ -1607,8 +1608,8 @@ def lead_reassign(lead_id):
         cur.execute("""
             SELECT id, full_name, username, is_active
             FROM users
-            WHERE id = ?
-        """, (assigned_to_id,))
+            WHERE id = ? AND institute_id = ?
+        """, (assigned_to_id, current_inst))
         user = cur.fetchone()
 
         if not user or user["is_active"] != 1:
@@ -1619,8 +1620,8 @@ def lead_reassign(lead_id):
         cur.execute("""
             UPDATE leads
             SET assigned_to_id = ?, updated_at = ?
-            WHERE id = ?
-        """, (assigned_to_id, now, lead_id))
+            WHERE id = ? AND institute_id = ?
+        """, (assigned_to_id, now, lead_id, current_inst))
 
         conn.commit()
         conn.close()
@@ -1640,8 +1641,8 @@ def lead_reassign(lead_id):
         cur.execute("""
             UPDATE leads
             SET assigned_to_id = NULL, updated_at = ?
-            WHERE id = ?
-        """, (now, lead_id))
+            WHERE id = ? AND institute_id = ?
+        """, (now, lead_id, current_inst))
 
         conn.commit()
         conn.close()
@@ -1990,12 +1991,16 @@ def pipeline():
         cur.execute("""
             SELECT id, full_name, username
             FROM users
-            WHERE institute_id = ?
+            WHERE institute_id = ? AND is_active = 1
             ORDER BY full_name
         """, (current_inst,))
         all_users = cur.fetchall()
     else:
         all_users = []
+
+    allowed_user_ids = {str(user["id"]) for user in all_users}
+    if current_user_role == "admin" and selected_user_id not in allowed_user_ids:
+        selected_user_id = ""
 
     data = {}
 
@@ -2006,7 +2011,7 @@ def pipeline():
                 u.full_name AS owner_name,
                 u.username AS owner_username
             FROM leads l
-            LEFT JOIN users u ON l.assigned_to_id = u.id
+            LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
             WHERE l.is_deleted = 0
               AND l.stage = ?
               AND l.institute_id = ?
