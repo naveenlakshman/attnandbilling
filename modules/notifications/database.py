@@ -51,7 +51,7 @@ def init_notification_database():
             # DDL inspection/creation so workers cannot race on DESCRIBE/CREATE.
             with _engine.connect() as connection:
                 acquired = connection.execute(
-                    text("SELECT GET_LOCK('global_it_erp_notifications_schema_v1', 30)")
+                    text("SELECT GET_LOCK('global_it_erp_notifications_schema_v2', 30)")
                 ).scalar()
                 if acquired != 1:
                     raise RuntimeError("Timed out waiting for notification schema lock")
@@ -60,7 +60,7 @@ def init_notification_database():
                     connection.commit()
                 finally:
                     connection.execute(
-                        text("SELECT RELEASE_LOCK('global_it_erp_notifications_schema_v1')")
+                        text("SELECT RELEASE_LOCK('global_it_erp_notifications_schema_v2')")
                     )
         else:
             Base.metadata.create_all(_engine)

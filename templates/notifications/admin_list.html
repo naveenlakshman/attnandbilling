@@ -8,7 +8,20 @@
     <h1 class="h3 mb-1">Student notifications</h1>
     <p class="text-muted mb-0">Create scheduled, targeted messages shown when students sign in.</p>
   </div>
-  <a class="btn btn-primary" href="{{ url_for('notifications.admin_form') }}"><i class="bi bi-plus-lg me-1"></i>New notification</a>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-warning" href="{{ url_for('notifications.fee_reminder_admin') }}">
+      <i class="bi bi-wallet2 me-1"></i>Automatic fee reminders
+      {% if pending_extensions %}<span class="badge text-bg-danger ms-1">{{ pending_extensions }}</span>{% endif %}
+    </a>
+    <a class="btn btn-primary" href="{{ url_for('notifications.admin_form') }}"><i class="bi bi-plus-lg me-1"></i>New notification</a>
+  </div>
+</div>
+
+<div class="alert alert-info border-0 shadow-sm d-flex align-items-start gap-3">
+  <i class="bi bi-info-circle-fill fs-4"></i>
+  <div><strong>Fee reminders are automated separately.</strong><br>
+    <span class="small">Configure the 3-day reminder, 12-hour repeat interval, preview the student modal, and review due-date requests under Automatic fee reminders.</span>
+  </div>
 </div>
 
 <div class="card border-0 shadow-sm">
