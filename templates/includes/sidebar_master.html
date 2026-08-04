@@ -219,6 +219,7 @@
         <a class="nav-link {{ 'active' if ep == 'reports.dashboard' else '' }}" href="{{ url_for('reports.dashboard') }}">Analytics</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.daily_report' else '' }}" href="{{ url_for('attendance.daily_report') }}">Attendance Daily Report</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.monthly_summary' else '' }}" href="{{ url_for('attendance.monthly_summary') }}">Attendance Monthly Summary</a>
+        <a class="nav-link {{ 'active' if ep in ['reports.attendance_monthly_report', 'reports.attendance_unmarked_details'] else '' }}" href="{{ url_for('reports.attendance_monthly_report') }}">Attendance Monthly Report</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.defaulters' else '' }}" href="{{ url_for('attendance.defaulters') }}">Defaulters</a>
         <a class="nav-link {{ 'active' if ep == 'reports.lms_attendance_gap' else '' }}" href="{{ url_for('reports.lms_attendance_gap') }}">LMS vs Attendance Defaulters</a>
         {% if is_admin %}

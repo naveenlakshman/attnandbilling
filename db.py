@@ -862,6 +862,30 @@ def init_db():
         )
     """)
 
+    # Tenant-scoped calendar rules used by the Reports attendance module.
+    # The legacy singleton tables above remain for backward compatibility.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_attendance_calendar_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL UNIQUE,
+            working_days TEXT NOT NULL DEFAULT '0,1,2,3,4,5',
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_attendance_holidays (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
+            holiday_date TEXT NOT NULL,
+            title TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE(institute_id, holiday_date)
+        )
+    """)
+
     # ---------- ATTENDANCE FOLLOWUPS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS attendance_followups (

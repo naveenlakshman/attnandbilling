@@ -476,17 +476,26 @@ def daily_report_download():
 
 def _resolve_report_branch(cur):
     """Return branch filter details using the same access rules as daily reports."""
-    cur.execute("SELECT id, branch_name, branch_code FROM branches WHERE is_active = 1 ORDER BY branch_name")
+    current_inst = get_current_institute_id(default=1)
+    cur.execute(
+        """SELECT id, branch_name, branch_code
+           FROM branches
+           WHERE is_active = 1 AND institute_id = ?
+           ORDER BY branch_name""",
+        (current_inst,),
+    )
     branches = cur.fetchall()
 
     can_view_all = session.get("can_view_all_branches", False) or session.get("role") == "admin"
     user_branch_id = session.get("branch_id")
     branch_param = request.args.get("branch_id", "").strip()
 
+    allowed_branch_ids = {branch["id"] for branch in branches}
     if can_view_all:
-        selected_branch_id = int(branch_param) if branch_param.isdigit() else None
+        requested_branch_id = int(branch_param) if branch_param.isdigit() else None
+        selected_branch_id = requested_branch_id if requested_branch_id in allowed_branch_ids else None
     else:
-        selected_branch_id = user_branch_id
+        selected_branch_id = user_branch_id if user_branch_id in allowed_branch_ids else None
 
     selected_branch_name = "All Branches"
     if selected_branch_id:
@@ -534,14 +543,18 @@ def _calculation_window(start_date, end_date):
 
 
 def _attendance_where(selected_branch_id):
-    where = ["ar.attendance_date BETWEEN ? AND ?"]
+    where = [
+        "ar.attendance_date BETWEEN ? AND ?",
+        "EXISTS (SELECT 1 FROM branches tenant_branch "
+        "WHERE tenant_branch.id = ar.branch_id AND tenant_branch.institute_id = ?)",
+    ]
     if selected_branch_id:
         where.append("ar.branch_id = ?")
     return " AND ".join(where)
 
 
 def _attendance_params(start_date, end_date, selected_branch_id):
-    params = [start_date, end_date]
+    params = [start_date, end_date, get_current_institute_id(default=1)]
     if selected_branch_id:
         params.append(selected_branch_id)
     return params
@@ -560,33 +573,45 @@ def _date_range(start_date, end_date):
 def _ensure_attendance_calendar_tables(cur):
     now = datetime.now(REPORT_IST).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS attendance_calendar_settings (
-            id INTEGER PRIMARY KEY CHECK(id = 1),
+        CREATE TABLE IF NOT EXISTS tenant_attendance_calendar_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL UNIQUE,
             working_days TEXT NOT NULL DEFAULT '0,1,2,3,4,5',
             created_at TEXT NOT NULL,
             updated_at TEXT
         )
     """)
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS attendance_holidays (
+        CREATE TABLE IF NOT EXISTS tenant_attendance_holidays (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            holiday_date TEXT NOT NULL UNIQUE,
+            institute_id INTEGER NOT NULL,
+            holiday_date TEXT NOT NULL,
             title TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            updated_at TEXT
+            updated_at TEXT,
+            UNIQUE(institute_id, holiday_date)
         )
     """)
-    cur.execute("SELECT id FROM attendance_calendar_settings WHERE id = 1")
+    current_inst = get_current_institute_id(default=1)
+    cur.execute(
+        "SELECT id FROM tenant_attendance_calendar_settings WHERE institute_id = ?",
+        (current_inst,),
+    )
     if not cur.fetchone():
         cur.execute("""
-            INSERT INTO attendance_calendar_settings (id, working_days, created_at)
-            VALUES (1, '0,1,2,3,4,5', ?)
-        """, (now,))
+            INSERT INTO tenant_attendance_calendar_settings
+                (institute_id, working_days, created_at)
+            VALUES (?, '0,1,2,3,4,5', ?)
+        """, (current_inst, now))
 
 
 def _get_attendance_calendar(cur, start_date=None, end_date=None):
     _ensure_attendance_calendar_tables(cur)
-    row = cur.execute("SELECT working_days FROM attendance_calendar_settings WHERE id = 1").fetchone()
+    current_inst = get_current_institute_id(default=1)
+    row = cur.execute(
+        "SELECT working_days FROM tenant_attendance_calendar_settings WHERE institute_id = ?",
+        (current_inst,),
+    ).fetchone()
     raw_days = (row["working_days"] if row else "0,1,2,3,4,5") or "0,1,2,3,4,5"
     working_days = {
         int(day)
@@ -599,16 +624,17 @@ def _get_attendance_calendar(cur, start_date=None, end_date=None):
     if start_date and end_date:
         cur.execute("""
             SELECT id, holiday_date, title
-            FROM attendance_holidays
-            WHERE holiday_date BETWEEN ? AND ?
+            FROM tenant_attendance_holidays
+            WHERE institute_id = ? AND holiday_date BETWEEN ? AND ?
             ORDER BY holiday_date
-        """, (start_date, end_date))
+        """, (current_inst, start_date, end_date))
     else:
         cur.execute("""
             SELECT id, holiday_date, title
-            FROM attendance_holidays
+            FROM tenant_attendance_holidays
+            WHERE institute_id = ?
             ORDER BY holiday_date DESC
-        """)
+        """, (current_inst,))
     holidays = [dict(row) for row in cur.fetchall()]
     holiday_map = {row["holiday_date"]: row["title"] for row in holidays}
 
@@ -662,10 +688,13 @@ def _load_expected_attendance(cur, start_date, end_date, selected_branch_id, cal
         LEFT JOIN users u ON b.trainer_id = u.id
         WHERE sb.status = 'active'
           AND b.status = 'active'
+          AND s.institute_id = ?
+          AND br.institute_id = ?
           AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
           AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
     """
-    params = [end_date, start_date]
+    current_inst = get_current_institute_id(default=1)
+    params = [current_inst, current_inst, end_date, start_date]
     if selected_branch_id:
         query += " AND b.branch_id = ?"
         params.append(selected_branch_id)
@@ -1059,7 +1088,6 @@ def attendance_monthly_report():
 @login_required
 def attendance_unmarked_details():
     date_str = request.args.get("date")
-    branch_id_str = request.args.get("branch_id")
     
     if not date_str:
         return redirect(url_for("reports.attendance_monthly_report"))
@@ -1068,26 +1096,21 @@ def attendance_unmarked_details():
     cur = conn.cursor()
     try:
         branches, selected_branch_id, selected_branch_name, can_view_all = _resolve_report_branch(cur)
-        if branch_id_str:
-            try:
-                selected_branch_id = int(branch_id_str)
-                selected_branch_row = next((b for b in branches if b["id"] == selected_branch_id), None)
-                selected_branch_name = selected_branch_row["branch_name"] if selected_branch_row else "Selected Branch"
-            except ValueError:
-                pass
 
         calendar_settings = _get_attendance_calendar(cur, date_str, date_str)
         expected_data = _load_expected_attendance(cur, date_str, date_str, selected_branch_id, calendar_settings)
         marked_keys = _load_marked_keys(cur, date_str, date_str, selected_branch_id)
         
         # Get active trainers for dropdown
+        current_inst = get_current_institute_id(default=1)
         trainers_rows = cur.execute("""
             SELECT DISTINCT u.id, u.full_name
             FROM batches b
             JOIN users u ON b.trainer_id = u.id
-            WHERE b.status = 'active'
+            JOIN branches br ON br.id = b.branch_id
+            WHERE b.status = 'active' AND br.institute_id = ?
             ORDER BY u.full_name
-        """).fetchall()
+        """, (current_inst,)).fetchall()
         trainers = [dict(r) for r in trainers_rows]
 
         selected_trainer_id = request.args.get("trainer_id")
@@ -1186,16 +1209,37 @@ def attendance_quick_mark():
     conn = get_conn()
     cur = conn.cursor()
     try:
+        current_inst = get_current_institute_id(default=1)
         cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
         if not user:
             return jsonify({"success": False, "error": "Unauthorized"}), 401
 
+        # Never trust object IDs supplied by the browser. Verify that the complete
+        # student/batch/branch relationship belongs to the active tenant.
+        cur.execute("""
+            SELECT sb.student_id
+            FROM student_batches sb
+            JOIN students s ON s.id = sb.student_id
+            JOIN batches b ON b.id = sb.batch_id
+            JOIN branches br ON br.id = b.branch_id
+            WHERE sb.student_id = ? AND sb.batch_id = ? AND b.branch_id = ?
+              AND s.institute_id = ? AND br.institute_id = ?
+        """, (student_id, batch_id, branch_id, current_inst, current_inst))
+        if not cur.fetchone():
+            return jsonify({"success": False, "error": "Invalid tenant attendance target"}), 403
+
+        can_view_all = bool(user["can_view_all_branches"]) or session.get("role") == "admin"
+        if not can_view_all and int(user["branch_id"] or 0) != int(branch_id):
+            return jsonify({"success": False, "error": "Branch access denied"}), 403
+
         # Check if record already exists
         cur.execute("""
-            SELECT id FROM attendance_records
-            WHERE batch_id = ? AND student_id = ? AND attendance_date = ?
-        """, (batch_id, student_id, attendance_date))
+            SELECT ar.id FROM attendance_records ar
+            JOIN branches br ON br.id = ar.branch_id
+            WHERE ar.batch_id = ? AND ar.student_id = ? AND ar.attendance_date = ?
+              AND br.institute_id = ?
+        """, (batch_id, student_id, attendance_date, current_inst))
         existing = cur.fetchone()
 
         now = datetime.now().isoformat(timespec="seconds")
@@ -1203,8 +1247,8 @@ def attendance_quick_mark():
             cur.execute("""
                 UPDATE attendance_records
                 SET status = ?, remarks = ?, marked_by = ?, updated_at = ?
-                WHERE batch_id = ? AND student_id = ? AND attendance_date = ?
-            """, (status, remarks, user_id, now, batch_id, student_id, attendance_date))
+                WHERE id = ?
+            """, (status, remarks, user_id, now, existing["id"]))
         else:
             cur.execute("""
                 INSERT INTO attendance_records (
@@ -1341,6 +1385,7 @@ def attendance_calendar_settings():
     cur = conn.cursor()
     try:
         _ensure_attendance_calendar_tables(cur)
+        current_inst = get_current_institute_id(default=1)
         now = datetime.now(REPORT_IST).strftime("%Y-%m-%d %H:%M:%S")
 
         if request.method == "POST":
@@ -1357,10 +1402,10 @@ def attendance_calendar_settings():
 
                 working_days = ",".join(sorted(set(selected_days), key=int))
                 cur.execute("""
-                    UPDATE attendance_calendar_settings
+                    UPDATE tenant_attendance_calendar_settings
                     SET working_days = ?, updated_at = ?
-                    WHERE id = 1
-                """, (working_days, now))
+                    WHERE institute_id = ?
+                """, (working_days, now, current_inst))
                 conn.commit()
                 flash("Attendance working days updated.", "success")
                 return redirect(url_for("reports.attendance_calendar_settings"))
@@ -1378,12 +1423,13 @@ def attendance_calendar_settings():
                     return redirect(url_for("reports.attendance_calendar_settings"))
 
                 cur.execute("""
-                    INSERT INTO attendance_holidays (holiday_date, title, created_at, updated_at)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(holiday_date) DO UPDATE SET
+                    INSERT INTO tenant_attendance_holidays
+                        (institute_id, holiday_date, title, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(institute_id, holiday_date) DO UPDATE SET
                         title = excluded.title,
                         updated_at = excluded.updated_at
-                """, (holiday_date, title, now, now))
+                """, (current_inst, holiday_date, title, now, now))
                 conn.commit()
                 flash("Holiday saved.", "success")
                 return redirect(url_for("reports.attendance_calendar_settings"))
@@ -1391,7 +1437,10 @@ def attendance_calendar_settings():
             if action == "delete_holiday":
                 holiday_id = request.form.get("holiday_id")
                 if holiday_id and holiday_id.isdigit():
-                    cur.execute("DELETE FROM attendance_holidays WHERE id = ?", (int(holiday_id),))
+                    cur.execute(
+                        "DELETE FROM tenant_attendance_holidays WHERE id = ? AND institute_id = ?",
+                        (int(holiday_id), current_inst),
+                    )
                     conn.commit()
                     flash("Holiday deleted.", "success")
                 return redirect(url_for("reports.attendance_calendar_settings"))
