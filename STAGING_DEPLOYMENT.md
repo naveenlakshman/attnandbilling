@@ -33,15 +33,13 @@ infrastructure changes.
 
 ## 2. Important repository warnings
 
-### 2.1 Do not run the production YAML without reviewing it
+### 2.1 Reconciled Cloud Build YAML and Database Settings
 
-The current `cloudbuild.yaml` still defaults to the historical service
-`attn-billing-testing`. The live service is `global-it-erp-production`. Running
-that file without correct substitutions can deploy the wrong service or apply
-stale environment variables.
+`cloudbuild.yaml` and `cloudbuild.staging.yaml` are formally reconciled:
+- **Production (`cloudbuild.yaml`)**: Targets service `global-it-erp-production`, Cloud SQL instance `global-it-erp-production-db`, and database `global_it_erp_production`.
+- **Staging (`cloudbuild.staging.yaml`)**: Targets service `global-it-erp-staging`, Cloud SQL instance `global-it-erp-staging-db`, and database `global_it_erp_staging`.
 
-For production, use the explicit image-build and Cloud Run commands in this
-runbook until `cloudbuild.yaml` is formally reconciled and reviewed.
+Automated daily backups and point-in-time recovery (PITR) are enabled on both Cloud SQL instances (`global-it-erp-production-db` retains 8 daily backups with 7-day binary log PITR; `global-it-erp-staging-db` retains 7 daily backups).
 
 ### 2.2 Cloud Build source is controlled by `.gcloudignore`
 
