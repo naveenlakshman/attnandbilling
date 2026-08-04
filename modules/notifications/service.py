@@ -31,11 +31,17 @@ DEFAULT_FEE_REMINDER_SETTINGS = {
     "is_enabled": True,
     "days_before_due": 3,
     "repeat_hours": 12,
+    "overdue_grace_days": 2,
+    "restrict_content_on_overdue": True,
     "extension_min_days": 3,
     "extension_max_days": 5,
     "allow_extension_requests": True,
     "title_template": "Fee payment reminder",
     "message_template": "Your installment of {amount} for {invoice_no} is due on {due_date}.",
+    "overdue_title_template": "Payment overdue",
+    "overdue_message_template": "Your payment of {amount} was due on {due_date}. Pay by {lock_date} to avoid losing access to course content.",
+    "locked_title_template": "Course content access restricted",
+    "locked_message_template": "Your payment of {amount} remains overdue. You can sign in, but course content is unavailable until payment is recorded.",
     "icon": "bi-wallet2",
     "color": "warning",
 }
@@ -61,14 +67,8 @@ def fee_reminder_settings(db, institute_id, create=False):
     return settings
 
 
-def _automatic_fee_notifications(db, student_id, institute_id, now):
-    settings = fee_reminder_settings(db, institute_id)
-    values = settings or type("DefaultFeeSettings", (), DEFAULT_FEE_REMINDER_SETTINGS)()
-    if not values.is_enabled:
-        return []
-
-    today = (now + timedelta(hours=5, minutes=30)).date()
-    rows = db.execute(text("""
+def _outstanding_installments(db, student_id, institute_id):
+    return db.execute(text("""
         SELECT ip.id AS installment_id, ip.due_date, ip.amount_due, ip.amount_paid,
                i.id AS invoice_id, i.invoice_no
         FROM installment_plans ip
@@ -79,6 +79,47 @@ def _automatic_fee_notifications(db, student_id, institute_id, now):
           AND i.status NOT IN ('paid','cancelled','write_off')
         ORDER BY ip.due_date, ip.id
     """), {"student_id": student_id, "institute_id": institute_id}).mappings().all()
+
+
+def student_fee_access_status(student_id, institute_id, now=None):
+    """Return the tenant-scoped overdue state used by both UI and access control."""
+    now = now or datetime.utcnow()
+    today = (now + timedelta(hours=5, minutes=30)).date()
+    with notification_session() as db:
+        settings = fee_reminder_settings(db, institute_id)
+        values = settings or type("DefaultFeeSettings", (), DEFAULT_FEE_REMINDER_SETTINGS)()
+        if not values.is_enabled:
+            return {"locked": False, "overdue": False}
+        overdue = []
+        for row in _outstanding_installments(db, student_id, institute_id):
+            due_date = _parse_due_date(row["due_date"])
+            if due_date and due_date < today:
+                overdue.append((due_date, row))
+        if not overdue:
+            return {"locked": False, "overdue": False}
+        due_date, row = overdue[0]
+        lock_date = due_date + timedelta(days=int(values.overdue_grace_days) + 1)
+        locked = bool(values.restrict_content_on_overdue) and today >= lock_date
+        return {
+            "locked": locked,
+            "overdue": True,
+            "installment_id": int(row["installment_id"]),
+            "invoice_no": row["invoice_no"],
+            "due_date": due_date,
+            "lock_date": lock_date,
+            "amount": float(row["amount_due"] or 0) - float(row["amount_paid"] or 0),
+            "grace_days": int(values.overdue_grace_days),
+        }
+
+
+def _automatic_fee_notifications(db, student_id, institute_id, now):
+    settings = fee_reminder_settings(db, institute_id)
+    values = settings or type("DefaultFeeSettings", (), DEFAULT_FEE_REMINDER_SETTINGS)()
+    if not values.is_enabled:
+        return []
+
+    today = (now + timedelta(hours=5, minutes=30)).date()
+    rows = _outstanding_installments(db, student_id, institute_id)
     if not rows:
         return []
 
@@ -103,33 +144,45 @@ def _automatic_fee_notifications(db, student_id, institute_id, now):
     repeat_cutoff = now - timedelta(hours=int(values.repeat_hours))
     for row in rows:
         due_date = _parse_due_date(row["due_date"])
-        if not due_date or not (today <= due_date <= today + timedelta(days=int(values.days_before_due))):
+        if not due_date or due_date > today + timedelta(days=int(values.days_before_due)):
             continue
         impression = impressions.get(int(row["installment_id"]))
         if impression and impression.last_shown_at > repeat_cutoff:
             continue
         balance = float(row["amount_due"] or 0) - float(row["amount_paid"] or 0)
+        lock_date = due_date + timedelta(days=int(values.overdue_grace_days) + 1)
+        is_overdue = due_date < today
+        is_locked = is_overdue and bool(values.restrict_content_on_overdue) and today >= lock_date
         template_values = {
             "amount": f"Rs.{balance:,.0f}",
             "invoice_no": row["invoice_no"],
             "due_date": due_date.strftime("%d-%b-%Y"),
+            "lock_date": lock_date.strftime("%d-%b-%Y"),
         }
         try:
-            title = values.title_template.format(**template_values)
-            message = values.message_template.format(**template_values)
+            if is_locked:
+                title = values.locked_title_template.format(**template_values)
+                message = values.locked_message_template.format(**template_values)
+            elif is_overdue:
+                title = values.overdue_title_template.format(**template_values)
+                message = values.overdue_message_template.format(**template_values)
+            else:
+                title = values.title_template.format(**template_values)
+                message = values.message_template.format(**template_values)
         except (KeyError, ValueError):
-            title = DEFAULT_FEE_REMINDER_SETTINGS["title_template"]
-            message = DEFAULT_FEE_REMINDER_SETTINGS["message_template"].format(**template_values)
+            key = "locked" if is_locked else ("overdue" if is_overdue else "")
+            title = DEFAULT_FEE_REMINDER_SETTINGS[f"{key + '_' if key else ''}title_template"]
+            message = DEFAULT_FEE_REMINDER_SETTINGS[f"{key + '_' if key else ''}message_template"].format(**template_values)
         extension = requests.get(int(row["installment_id"]))
         result.append({
             "id": f"fee-{row['installment_id']}",
             "source": "automatic_fee",
-            "type": "fee_due_reminder",
+            "type": "payment_overdue" if is_overdue else "fee_due_reminder",
             "title": title,
             "message": message,
             "icon": values.icon,
-            "color": values.color,
-            "priority": 95,
+            "color": "danger" if is_overdue else values.color,
+            "priority": 100 if is_locked else (98 if is_overdue else 95),
             "action_label": None,
             "action_url": None,
             "fee": {
@@ -137,7 +190,10 @@ def _automatic_fee_notifications(db, student_id, institute_id, now):
                 "invoice_no": row["invoice_no"],
                 "amount": template_values["amount"],
                 "due_date": due_date.isoformat(),
-                "extension_allowed": bool(values.allow_extension_requests) and not (
+                "lock_date": lock_date.isoformat(),
+                "overdue": is_overdue,
+                "access_locked": is_locked,
+                "extension_allowed": not is_overdue and bool(values.allow_extension_requests) and not (
                     extension and extension.status in {"pending", "approved"}
                 ),
                 "extension_min_days": int(values.extension_min_days),

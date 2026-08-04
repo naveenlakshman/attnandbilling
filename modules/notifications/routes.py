@@ -88,29 +88,46 @@ def fee_reminder_admin():
             try:
                 days_before = int(request.form.get("days_before_due", 3))
                 repeat_hours = int(request.form.get("repeat_hours", 12))
+                overdue_grace_days = int(request.form.get("overdue_grace_days", 2))
                 min_days = int(request.form.get("extension_min_days", 3))
                 max_days = int(request.form.get("extension_max_days", 5))
                 if not 1 <= days_before <= 14:
                     raise ValueError("Reminder lead time must be between 1 and 14 days.")
                 if not 6 <= repeat_hours <= 168:
                     raise ValueError("Repeat interval must be between 6 and 168 hours.")
+                if not 1 <= overdue_grace_days <= 14:
+                    raise ValueError("Overdue grace period must be between 1 and 14 days.")
                 if not (1 <= min_days <= max_days <= 14):
                     raise ValueError("Extension range must be between 1 and 14 days.")
                 title = request.form.get("title_template", "").strip()
                 message = request.form.get("message_template", "").strip()
                 if not title or not message:
                     raise ValueError("Reminder title and message are required.")
-                allowed = {"amount": "Rs.1,000", "invoice_no": "INV-001", "due_date": "05-Aug-2026"}
+                allowed = {"amount": "Rs.1,000", "invoice_no": "INV-001", "due_date": "05-Aug-2026", "lock_date": "08-Aug-2026"}
                 title.format(**allowed)
                 message.format(**allowed)
+                overdue_title = request.form.get("overdue_title_template", "").strip()
+                overdue_message = request.form.get("overdue_message_template", "").strip()
+                locked_title = request.form.get("locked_title_template", "").strip()
+                locked_message = request.form.get("locked_message_template", "").strip()
+                if not all((overdue_title, overdue_message, locked_title, locked_message)):
+                    raise ValueError("Overdue warning and content restriction messages are required.")
+                for template in (overdue_title, overdue_message, locked_title, locked_message):
+                    template.format(**allowed)
                 settings.is_enabled = "1" in request.form.getlist("is_enabled")
                 settings.days_before_due = days_before
                 settings.repeat_hours = repeat_hours
+                settings.overdue_grace_days = overdue_grace_days
+                settings.restrict_content_on_overdue = "1" in request.form.getlist("restrict_content_on_overdue")
                 settings.extension_min_days = min_days
                 settings.extension_max_days = max_days
                 settings.allow_extension_requests = "1" in request.form.getlist("allow_extension_requests")
                 settings.title_template = title
                 settings.message_template = message
+                settings.overdue_title_template = overdue_title
+                settings.overdue_message_template = overdue_message
+                settings.locked_title_template = locked_title
+                settings.locked_message_template = locked_message
                 settings.icon = "bi-wallet2"
                 settings.color = "warning"
                 settings.updated_by = session.get("user_id")
@@ -139,14 +156,22 @@ def fee_reminder_admin():
         preview = {
             "title": settings.title_template,
             "message": settings.message_template,
+            "overdue_title": settings.overdue_title_template,
+            "overdue_message": settings.overdue_message_template,
+            "locked_title": settings.locked_title_template,
+            "locked_message": settings.locked_message_template,
         }
-        sample = {"amount": "Rs.4,150", "invoice_no": "GIT/B/459", "due_date": "05-Aug-2026"}
+        sample = {"amount": "Rs.4,150", "invoice_no": "GIT/B/459", "due_date": "05-Aug-2026", "lock_date": "08-Aug-2026"}
         try:
             preview = {key: value.format(**sample) for key, value in preview.items()}
         except (KeyError, ValueError):
             preview = {
                 "title": DEFAULT_FEE_REMINDER_SETTINGS["title_template"],
                 "message": DEFAULT_FEE_REMINDER_SETTINGS["message_template"].format(**sample),
+                "overdue_title": DEFAULT_FEE_REMINDER_SETTINGS["overdue_title_template"],
+                "overdue_message": DEFAULT_FEE_REMINDER_SETTINGS["overdue_message_template"].format(**sample),
+                "locked_title": DEFAULT_FEE_REMINDER_SETTINGS["locked_title_template"],
+                "locked_message": DEFAULT_FEE_REMINDER_SETTINGS["locked_message_template"].format(**sample),
             }
         return render_template(
             "notifications/fee_reminder_admin.html",

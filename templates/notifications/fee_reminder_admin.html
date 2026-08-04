@@ -19,12 +19,20 @@
         <div class="row g-3">
           <div class="col-sm-6"><label class="form-label">Show before due date</label><div class="input-group"><input class="form-control" type="number" name="days_before_due" min="1" max="14" value="{{ settings.days_before_due }}" required><span class="input-group-text">days</span></div></div>
           <div class="col-sm-6"><label class="form-label">Show again after</label><div class="input-group"><input class="form-control" type="number" name="repeat_hours" min="6" max="168" value="{{ settings.repeat_hours }}" required><span class="input-group-text">hours</span></div></div>
+          <div class="col-sm-6"><label class="form-label">Overdue warning period</label><div class="input-group"><input class="form-control" type="number" name="overdue_grace_days" min="1" max="14" value="{{ settings.overdue_grace_days }}" required><span class="input-group-text">days</span></div><div class="form-text">Content locks on the following day.</div></div>
           <div class="col-sm-6"><label class="form-label">Minimum extension</label><div class="input-group"><input class="form-control" type="number" name="extension_min_days" min="1" max="14" value="{{ settings.extension_min_days }}" required><span class="input-group-text">days</span></div></div>
           <div class="col-sm-6"><label class="form-label">Maximum extension</label><div class="input-group"><input class="form-control" type="number" name="extension_max_days" min="1" max="14" value="{{ settings.extension_max_days }}" required><span class="input-group-text">days</span></div></div>
           <div class="col-12"><label class="form-label">Title</label><input class="form-control" name="title_template" maxlength="160" value="{{ settings.title_template }}" required></div>
           <div class="col-12"><label class="form-label">Message</label><textarea class="form-control" name="message_template" rows="3" required>{{ settings.message_template }}</textarea><div class="form-text">Available placeholders: <code>{amount}</code>, <code>{invoice_no}</code>, <code>{due_date}</code>.</div></div>
+          <div class="col-12"><hr><h3 class="h6">Payment overdue warning</h3></div>
+          <div class="col-12"><label class="form-label">Warning title</label><input class="form-control" name="overdue_title_template" maxlength="160" value="{{ settings.overdue_title_template }}" required></div>
+          <div class="col-12"><label class="form-label">Warning message</label><textarea class="form-control" name="overdue_message_template" rows="3" required>{{ settings.overdue_message_template }}</textarea></div>
+          <div class="col-12"><hr><h3 class="h6">Content restricted notice</h3></div>
+          <div class="col-12"><label class="form-label">Restricted title</label><input class="form-control" name="locked_title_template" maxlength="160" value="{{ settings.locked_title_template }}" required></div>
+          <div class="col-12"><label class="form-label">Restricted message</label><textarea class="form-control" name="locked_message_template" rows="3" required>{{ settings.locked_message_template }}</textarea><div class="form-text">Overdue templates may also use <code>{lock_date}</code>.</div></div>
           <div class="col-sm-6"><div class="form-check form-switch mt-2"><input type="hidden" name="is_enabled" value="0"><input class="form-check-input" type="checkbox" role="switch" id="isEnabled" name="is_enabled" value="1" {% if settings.is_enabled %}checked{% endif %}><label class="form-check-label" for="isEnabled">Automatic reminders active</label></div></div>
           <div class="col-sm-6"><div class="form-check form-switch mt-2"><input type="hidden" name="allow_extension_requests" value="0"><input class="form-check-input" type="checkbox" role="switch" id="allowExtensions" name="allow_extension_requests" value="1" {% if settings.allow_extension_requests %}checked{% endif %}><label class="form-check-label" for="allowExtensions">Allow extension requests</label></div></div>
+          <div class="col-sm-6"><div class="form-check form-switch mt-2"><input type="hidden" name="restrict_content_on_overdue" value="0"><input class="form-check-input" type="checkbox" role="switch" id="restrictContent" name="restrict_content_on_overdue" value="1" {% if settings.restrict_content_on_overdue %}checked{% endif %}><label class="form-check-label" for="restrictContent">Restrict LMS content after grace period</label></div></div>
           <div class="col-12"><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg me-1"></i>Save rules</button></div>
         </div>
       </form>
@@ -45,6 +53,9 @@
         </div>
       </div>
       <p class="small text-muted mt-3 mb-0"><i class="bi bi-clock me-1"></i>Appears {{ settings.days_before_due }} days before due date, then at most once every {{ settings.repeat_hours }} hours on portal visits.</p>
+      <hr>
+      <div class="rounded-3 border border-danger bg-danger-subtle p-3 mb-2"><strong class="text-danger">{{ preview.overdue_title }}</strong><div class="small mt-1">{{ preview.overdue_message }}</div></div>
+      <div class="rounded-3 border border-danger bg-light p-3"><strong><i class="bi bi-lock-fill me-1"></i>{{ preview.locked_title }}</strong><div class="small mt-1">{{ preview.locked_message }}</div></div>
     </div></div>
   </div>
 </div>

@@ -66,6 +66,8 @@ class FeeReminderSettings(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     days_before_due: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     repeat_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
+    overdue_grace_days: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    restrict_content_on_overdue: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     extension_min_days: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     extension_max_days: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     allow_extension_requests: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -74,6 +76,18 @@ class FeeReminderSettings(Base):
         Text,
         nullable=False,
         default="Your installment of {amount} for {invoice_no} is due on {due_date}.",
+    )
+    overdue_title_template: Mapped[str] = mapped_column(String(160), nullable=False, default="Payment overdue")
+    overdue_message_template: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="Your payment of {amount} was due on {due_date}. Pay by {lock_date} to avoid losing access to course content.",
+    )
+    locked_title_template: Mapped[str] = mapped_column(String(160), nullable=False, default="Course content access restricted")
+    locked_message_template: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="Your payment of {amount} remains overdue. You can sign in, but course content is unavailable until payment is recorded.",
     )
     icon: Mapped[str] = mapped_column(String(60), nullable=False, default="bi-wallet2")
     color: Mapped[str] = mapped_column(String(20), nullable=False, default="warning")

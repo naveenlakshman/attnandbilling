@@ -51,7 +51,9 @@ document.addEventListener('DOMContentLoaded',function(){
       if(item.fee){const fee=item.fee,status=fee.extension_status;
         details.hidden=false;details.innerHTML='<div class="d-flex justify-content-between gap-3"><span>Invoice</span><strong></strong></div><div class="d-flex justify-content-between gap-3"><span>Balance due</span><strong></strong></div><div class="d-flex justify-content-between gap-3"><span>Due date</span><strong></strong></div>';
         const strong=details.querySelectorAll('strong');strong[0].textContent=fee.invoice_no;strong[1].textContent=fee.amount;strong[2].textContent=fee.due_date;
-        if(status){const state=document.createElement('div');state.className='alert alert-'+(status==='approved'?'success':'info')+' py-2 mt-3 mb-0';state.textContent=status==='approved'?'Extension approved. New due date: '+fee.requested_due_date:'Extension request pending administrator review. Requested date: '+fee.requested_due_date;details.appendChild(state);}
+        if(fee.access_locked){const state=document.createElement('div');state.className='alert alert-danger py-2 mt-3 mb-0';state.innerHTML='<strong><i class="bi bi-lock-fill me-1"></i>Course content restricted</strong><br>Access will resume after payment is recorded.';details.appendChild(state);}
+        else if(fee.overdue){const state=document.createElement('div');state.className='alert alert-danger py-2 mt-3 mb-0';state.textContent='Pay before '+fee.lock_date+' to prevent course content restriction.';details.appendChild(state);}
+        else if(status){const state=document.createElement('div');state.className='alert alert-'+(status==='approved'?'success':'info')+' py-2 mt-3 mb-0';state.textContent=status==='approved'?'Extension approved. New due date: '+fee.requested_due_date:'Extension request pending administrator review. Requested date: '+fee.requested_due_date;details.appendChild(state);}
         else open.hidden=!fee.extension_allowed;
       }else details.hidden=true;
       const next=document.getElementById('studentNotificationNext');next.textContent=index<queue.length-1?'Next':'Close';modal.show();};

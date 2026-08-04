@@ -1,4 +1,4 @@
-from sqlalchemy import URL, create_engine, text
+from sqlalchemy import URL, create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -7,6 +7,29 @@ from .models import Base
 
 _engine = None
 SessionLocal = sessionmaker(expire_on_commit=False)
+
+
+def _ensure_fee_reminder_columns(connection):
+    """Apply additive columns for installations that already have the settings table."""
+    columns = {column["name"] for column in inspect(connection).get_columns("fee_reminder_settings")}
+    additions = {
+        "overdue_grace_days": "INTEGER NOT NULL DEFAULT 2",
+        "restrict_content_on_overdue": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "overdue_title_template": "VARCHAR(160) NOT NULL DEFAULT 'Payment overdue'",
+        "overdue_message_template": "TEXT",
+        "locked_title_template": "VARCHAR(160) NOT NULL DEFAULT 'Course content access restricted'",
+        "locked_message_template": "TEXT",
+    }
+    for name, definition in additions.items():
+        if name not in columns:
+            connection.execute(text(f"ALTER TABLE fee_reminder_settings ADD COLUMN {name} {definition}"))
+    connection.execute(text("""
+        UPDATE fee_reminder_settings
+        SET overdue_message_template=COALESCE(overdue_message_template,
+              'Your payment of {amount} was due on {due_date}. Pay by {lock_date} to avoid losing access to course content.'),
+            locked_message_template=COALESCE(locked_message_template,
+              'Your payment of {amount} remains overdue. You can sign in, but course content is unavailable until payment is recorded.')
+    """))
 
 
 def _build_engine():
@@ -57,6 +80,7 @@ def init_notification_database():
                     raise RuntimeError("Timed out waiting for notification schema lock")
                 try:
                     Base.metadata.create_all(connection)
+                    _ensure_fee_reminder_columns(connection)
                     connection.commit()
                 finally:
                     connection.execute(
@@ -64,6 +88,8 @@ def init_notification_database():
                     )
         else:
             Base.metadata.create_all(_engine)
+            with _engine.begin() as connection:
+                _ensure_fee_reminder_columns(connection)
     return _engine
 
 

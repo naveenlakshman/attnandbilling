@@ -3,6 +3,7 @@ from flask import (
     abort,
     current_app,
     flash,
+    g,
     jsonify,
     redirect,
     render_template,
@@ -263,6 +264,27 @@ def student_login_required(f):
         ):
             flash('Please change your password before continuing.', 'warning')
             return redirect(url_for('students.change_password'))
+
+        if not _is_demo():
+            from modules.notifications.service import student_fee_access_status
+            fee_access = student_fee_access_status(
+                int(session['student_id']), int(current_institute_id)
+            )
+            g.student_fee_access = fee_access
+            allowed_while_locked = {
+                'students.dashboard', 'students.profile', 'students.profile_document',
+                'students.profile_upload_document', 'students.profile_request_update',
+                'students.profile_save_signature', 'students.change_password',
+                'students.leave_apply', 'students.leave_history', 'students.attendance',
+                'students.logout',
+            }
+            if fee_access.get('locked') and request.endpoint not in allowed_while_locked:
+                flash(
+                    'Course content is temporarily restricted because a fee installment is overdue. '
+                    'Access will resume after payment is recorded.',
+                    'danger',
+                )
+                return redirect(url_for('students.dashboard'))
 
         return f(*args, **kwargs)
     return decorated

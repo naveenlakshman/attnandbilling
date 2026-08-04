@@ -273,6 +273,18 @@
     {% endif %}
   {% endwith %}
 
+  {% if g.student_fee_access and g.student_fee_access.locked %}
+    <div class="alert alert-danger border-danger shadow-sm" role="alert">
+      <div class="d-flex gap-3 align-items-start">
+        <i class="bi bi-lock-fill fs-4"></i>
+        <div>
+          <strong>Course content access is temporarily restricted</strong>
+          <div>Your installment for invoice {{ g.student_fee_access.invoice_no }} was due on {{ g.student_fee_access.due_date.strftime('%d-%b-%Y') }}. You can continue to sign in and access your profile, attendance, and leave pages. Course content will reopen after payment is recorded.</div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
   {% block content %}{% endblock %}
 </div>
 

@@ -120,6 +120,17 @@ def _student_required_redirect():
     if "student_id" not in session:
         flash("Please login first.", "warning")
         return redirect(url_for("students.login"))
+    if not session.get("demo_mode"):
+        from modules.notifications.service import student_fee_access_status
+        institute_id = int(get_current_institute_id(default=1))
+        access = student_fee_access_status(int(session["student_id"]), institute_id)
+        if access.get("locked"):
+            flash(
+                "Exams are temporarily unavailable because a fee installment is overdue. "
+                "Access will resume after payment is recorded.",
+                "danger",
+            )
+            return redirect(url_for("students.dashboard"))
     return None
 
 
