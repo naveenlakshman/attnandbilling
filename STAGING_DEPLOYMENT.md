@@ -17,10 +17,10 @@ Never deploy an unreviewed working directory directly to production.
 |---|---|---|
 | Google Cloud project | `global-it-erp-staging` | `global-it-edu-app` |
 | Region | `asia-south1` | `asia-south1` |
-| Cloud Run service | `attn-billing-staging` | `global-it-erp-production` |
+| Cloud Run service | `global-it-erp-staging` | `global-it-erp-production` |
 | Artifact Registry repository | `cloud-run-source-deploy` | `cloud-run-source-deploy` |
-| Cloud SQL instance | `attn-billing-staging-db` | `attn-billing-testing-db` |
-| Database | `attn_billing_staging` | `attn_billing_testing` |
+| Cloud SQL instance | `global-it-erp-staging-db` | `global-it-erp-production-db` |
+| Database | `global_it_erp_staging` | `global_it_erp_production` |
 | Runtime service account | `attn-billing-staging-runtime@global-it-erp-staging.iam.gserviceaccount.com` | `attn-billing-runtime@global-it-edu-app.iam.gserviceaccount.com` |
 | Public domain | `https://staging.globaliterp.com` | `https://www.globaliterp.com` |
 | Platform-control domain | Staging Cloud Run/control host | `https://admin.globaliteducation.com` |
