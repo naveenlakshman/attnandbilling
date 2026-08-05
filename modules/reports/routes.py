@@ -2007,9 +2007,12 @@ def upload_csv():
                 
                 elif table_name == "courses":
                     cur.execute("""
-                        INSERT INTO courses (course_name, duration, fee, course_type, is_active, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO courses (
+                            institute_id, course_name, duration, fee, course_type, is_active, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("course_name", "").strip(),
                         row.get("duration", "").strip(),
                         float(row.get("fee", 0)) if row.get("fee") else 0,
@@ -2181,25 +2184,41 @@ def upload_csv():
                             errors.append(f"Row {idx}: invalid number format - {str(e)}")
                             continue
                         
-                        # Convert IDs
+                        # Convert IDs and validate tenant scoping
                         try:
                             student_id = int(student_id)
-                            created_by = int(created_by)
+                            created_by = int(created_by) if created_by else session.get("user_id")
                             branch_id = int(branch_id)
                         except ValueError:
                             errors.append(f"Row {idx}: student_id, created_by, and branch_id must be valid integers")
                             continue
+
+                        # Verify student_id belongs to current institute
+                        if not conn.execute(
+                            "SELECT id FROM students WHERE id = ? AND institute_id = ?",
+                            (student_id, current_inst),
+                        ).fetchone():
+                            errors.append(f"Row {idx}: student_id {student_id} does not exist in this institute")
+                            continue
+
+                        # Verify branch_id belongs to current institute
+                        if not conn.execute(
+                            "SELECT id FROM branches WHERE id = ? AND institute_id = ?",
+                            (branch_id, current_inst),
+                        ).fetchone():
+                            errors.append(f"Row {idx}: branch_id {branch_id} does not exist in this institute")
+                            continue
                         
-                        # Insert invoice with all 13 columns
+                        # Insert invoice with institute_id
                         cur.execute("""
                             INSERT INTO invoices (
-                                invoice_no, student_id, invoice_date, subtotal, 
+                                institute_id, invoice_no, student_id, invoice_date, subtotal, 
                                 discount_type, discount_value, discount_amount, total_amount,
                                 installment_type, notes, status, created_by, branch_id, created_at
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (
-                            invoice_number, student_id, invoice_date, subtotal,
+                            current_inst, invoice_number, student_id, invoice_date, subtotal,
                             discount_type, discount_value, discount_amount, total_amount,
                             installment_type, notes, status, created_by, branch_id,
                             datetime.now().isoformat(timespec="seconds")
@@ -2213,12 +2232,20 @@ def upload_csv():
                     receipt_invoice_id = int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0
                     receipt_amount = float(row.get("amount_received", 0)) if row.get("amount_received") else 0
                     
+                    if receipt_invoice_id <= 0 or not conn.execute(
+                        "SELECT id FROM invoices WHERE id = ? AND institute_id = ?",
+                        (receipt_invoice_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: invoice_id {receipt_invoice_id} does not exist in this institute")
+                        continue
+
                     cur.execute("""
                         INSERT INTO receipts (
-                            receipt_no, invoice_id, receipt_date, amount_received, payment_mode, notes, created_by, created_at
+                            institute_id, receipt_no, invoice_id, receipt_date, amount_received, payment_mode, notes, created_by, created_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("receipt_number", "").strip(),
                         receipt_invoice_id,
                         parse_date(row.get("receipt_date", "")) or None,
@@ -2230,69 +2257,61 @@ def upload_csv():
                     ))
                     
                     # Update invoice status based on total receipts
-                    if receipt_invoice_id > 0:
-                        cur.execute("""
-                            SELECT total_amount FROM invoices WHERE id = ?
-                        """, (receipt_invoice_id,))
-                        invoice_row = cur.fetchone()
+                    cur.execute("""
+                        SELECT total_amount FROM invoices WHERE id = ? AND institute_id = ?
+                    """, (receipt_invoice_id, current_inst))
+                    invoice_row = cur.fetchone()
+                    
+                    if invoice_row:
+                        invoice_total = float(invoice_row["total_amount"] or 0)
                         
-                        if invoice_row:
-                            invoice_total = float(invoice_row["total_amount"] or 0)
-                            
-                            cur.execute("""
-                                SELECT IFNULL(SUM(amount_received), 0) AS total_received
-                                FROM receipts
-                                WHERE invoice_id = ?
-                            """, (receipt_invoice_id,))
-                            total_received = float(cur.fetchone()["total_received"] or 0)
-                            
-                            # Determine new status
-                            if total_received >= invoice_total:
-                                new_status = "paid"
-                            elif total_received > 0:
-                                new_status = "partially_paid"
-                            else:
-                                new_status = "unpaid"
-                            
-                            cur.execute("""
-                                UPDATE invoices
-                                SET status = ?, updated_at = ?
-                                WHERE id = ?
-                            """, (new_status, datetime.now().isoformat(timespec="seconds"), receipt_invoice_id))
+                        cur.execute("""
+                            SELECT IFNULL(SUM(amount_received), 0) AS total_received
+                            FROM receipts
+                            WHERE invoice_id = ? AND institute_id = ?
+                        """, (receipt_invoice_id, current_inst))
+                        total_received = float(cur.fetchone()["total_received"] or 0)
+                        
+                        # Determine new status
+                        if total_received >= invoice_total:
+                            new_status = "paid"
+                        elif total_received > 0:
+                            new_status = "partially_paid"
+                        else:
+                            new_status = "unpaid"
+                        
+                        cur.execute("""
+                            UPDATE invoices
+                            SET status = ?, updated_at = ?
+                            WHERE id = ? AND institute_id = ?
+                        """, (new_status, datetime.now().isoformat(timespec="seconds"), receipt_invoice_id, current_inst))
                     
                     rows_imported += 1
                 
-                elif table_name == "installments":
+                elif table_name == "installments" or table_name == "installment_plans":
+                    inv_id = int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0
+                    if inv_id <= 0 or not conn.execute(
+                        "SELECT id FROM invoices WHERE id = ? AND institute_id = ?",
+                        (inv_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: invoice_id {inv_id} does not exist in this institute")
+                        continue
+
+                    inst_no = int(row.get("installment_number") or row.get("installment_no") or 0)
+                    amt_due = float(row.get("amount") or row.get("amount_due") or 0)
+                    amt_paid = float(row.get("amount_paid", 0)) if row.get("amount_paid") else 0
+                    
                     cur.execute("""
                         INSERT INTO installment_plans (
                             invoice_id, installment_no, due_date, amount_due, amount_paid, status, remarks, created_at, updated_at
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
-                        int(row.get("installment_number", 0)) if row.get("installment_number") else 0,
-                        row.get("due_date", "").strip() or None,
-                        float(row.get("amount", 0)) if row.get("amount") else 0,
-                        float(row.get("amount_paid", 0)) if row.get("amount_paid") else 0,
-                        row.get("status", "pending").strip() or "pending",
-                        row.get("remarks", "").strip() or None,
-                        datetime.now().isoformat(timespec="seconds"),
-                        datetime.now().isoformat(timespec="seconds")
-                    ))
-                    rows_imported += 1
-                
-                elif table_name == "installment_plans":
-                    cur.execute("""
-                        INSERT INTO installment_plans (
-                            invoice_id, installment_no, due_date, amount_due, amount_paid, status, remarks, created_at, updated_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
-                        int(row.get("installment_no", 0)) if row.get("installment_no") else 0,
+                        inv_id,
+                        inst_no,
                         parse_date(row.get("due_date", "")) or None,
-                        float(row.get("amount_due", 0)) if row.get("amount_due") else 0,
-                        float(row.get("amount_paid", 0)) if row.get("amount_paid") else 0,
+                        amt_due,
+                        amt_paid,
                         row.get("status", "pending").strip() or "pending",
                         row.get("remarks", "").strip() or None,
                         datetime.now().isoformat(timespec="seconds"),
@@ -2301,14 +2320,16 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "activity_logs":
+                    log_branch_id = int(row.get("branch_id", session.get("branch_id") or 1)) if row.get("branch_id") else session.get("branch_id")
                     cur.execute("""
                         INSERT INTO activity_logs (
-                            user_id, branch_id, action_type, module_name, record_id, description, created_at
+                            institute_id, user_id, branch_id, action_type, module_name, record_id, description, created_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         int(row.get("user_id", session.get("user_id"))) if row.get("user_id") else session.get("user_id"),
-                        int(row.get("branch_id", session.get("branch_id"))) if row.get("branch_id") else session.get("branch_id"),
+                        log_branch_id,
                         row.get("action_type", "").strip() or "import",
                         row.get("module_name", "").strip() or "import_export",
                         int(row.get("record_id", 0)) if row.get("record_id") else None,
@@ -2319,9 +2340,10 @@ def upload_csv():
                 
                 elif table_name == "expense_categories":
                     cur.execute("""
-                        INSERT INTO expense_categories (category_name, is_active, created_at)
-                        VALUES (?, ?, ?)
+                        INSERT INTO expense_categories (institute_id, category_name, is_active, created_at)
+                        VALUES (?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("category_name", "").strip(),
                         int(row.get("is_active", 1)),
                         datetime.now().isoformat(timespec="seconds")
@@ -2336,7 +2358,6 @@ def upload_csv():
                     # Validate lead_id exists
                     lead_id_str = row.get("lead_id", "").strip()
                     if not lead_id_str:
-                        # Show available columns for debugging
                         available_cols = ", ".join([k for k in row.keys() if k])
                         non_empty_values = {k: v for k, v in row.items() if v and v.strip()}
                         error_msg = f"Row {idx}: lead_id is required (available: {available_cols} | data: {non_empty_values})"
@@ -2350,10 +2371,10 @@ def upload_csv():
                         errors.append(error_msg)
                         continue
                     
-                    # Check if lead exists
-                    cur.execute("SELECT id FROM leads WHERE id = ? AND is_deleted = 0", (lead_id,))
+                    # Check if lead exists in current institute
+                    cur.execute("SELECT id FROM leads WHERE id = ? AND institute_id = ? AND is_deleted = 0", (lead_id, current_inst))
                     if not cur.fetchone():
-                        error_msg = f"Row {idx + 1}: Lead ID {lead_id} not found or is deleted"
+                        error_msg = f"Row {idx + 1}: Lead ID {lead_id} not found in this institute"
                         errors.append(error_msg)
                         continue
                     
@@ -2362,9 +2383,9 @@ def upload_csv():
                     if row.get("user_id", "").strip():
                         try:
                             user_id = int(row.get("user_id"))
-                            cur.execute("SELECT id FROM users WHERE id = ? AND is_active = 1", (user_id,))
+                            cur.execute("SELECT id FROM users WHERE id = ? AND institute_id = ? AND is_active = 1", (user_id, current_inst))
                             if not cur.fetchone():
-                                error_msg = f"Row {idx + 1}: User ID {user_id} not found or is inactive"
+                                error_msg = f"Row {idx + 1}: User ID {user_id} not found in this institute"
                                 errors.append(error_msg)
                                 continue
                         except ValueError:
@@ -2373,48 +2394,40 @@ def upload_csv():
                             continue
                     
                     # Insert followup
-                    # Handle created_at: parse from CSV if provided, otherwise use current time
                     created_at_str = row.get("created_at", "").strip()
                     if created_at_str:
-                        # Try to parse datetime from CSV (multiple formats supported)
                         try:
-                            # Try format with time: DD-MM-YYYY HH:MM AM/PM
                             created_at_parsed = datetime.strptime(created_at_str, "%d-%m-%Y %I:%M %p")
                             created_at_value = created_at_parsed.isoformat()
                         except ValueError:
                             try:
-                                # Try format with time: DD-MM-YYYY HH:MM
                                 created_at_parsed = datetime.strptime(created_at_str, "%d-%m-%Y %H:%M")
                                 created_at_value = created_at_parsed.isoformat()
                             except ValueError:
                                 try:
-                                    # Try abbreviated month format: DD-Mon-YYYY HH:MM (e.g., 03-Mar-2026 15:09)
                                     created_at_parsed = datetime.strptime(created_at_str, "%d-%b-%Y %H:%M")
                                     created_at_value = created_at_parsed.isoformat()
                                 except ValueError:
                                     try:
-                                        # Try abbreviated month format with AM/PM: DD-Mon-YYYY HH:MM AM/PM (e.g., 03-Mar-2026 3:09 PM)
                                         created_at_parsed = datetime.strptime(created_at_str, "%d-%b-%Y %I:%M %p")
                                         created_at_value = created_at_parsed.isoformat()
                                     except ValueError:
-                                        # Try date only: DD-MM-YYYY
                                         try:
                                             created_at_parsed = datetime.strptime(created_at_str, "%d-%m-%Y")
                                             created_at_value = created_at_parsed.isoformat()
                                         except ValueError:
-                                            # Invalid format, use current time
                                             errors.append(f"Row {rows_imported + 1}: Invalid created_at format '{created_at_str}', using current timestamp")
                                             created_at_value = datetime.now().isoformat(timespec="seconds")
                     else:
-                        # Empty created_at, use current time
                         created_at_value = datetime.now().isoformat(timespec="seconds")
                     
                     cur.execute("""
                         INSERT INTO followups (
-                            lead_id, user_id, method, outcome, note, next_followup_date, created_at
+                            institute_id, lead_id, user_id, method, outcome, note, next_followup_date, created_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         lead_id,
                         user_id,
                         row.get("method", "").strip() or None,
@@ -2426,14 +2439,30 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "invoice_items":
+                    inv_id = int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0
+                    if inv_id <= 0 or not conn.execute(
+                        "SELECT id FROM invoices WHERE id = ? AND institute_id = ?",
+                        (inv_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: invoice_id {inv_id} does not exist in this institute")
+                        continue
+
+                    course_id = int(row.get("course_id")) if row.get("course_id") else None
+                    if course_id and not conn.execute(
+                        "SELECT id FROM courses WHERE id = ? AND institute_id = ?",
+                        (course_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: course_id {course_id} does not exist in this institute")
+                        continue
+
                     cur.execute("""
                         INSERT INTO invoice_items (
                             invoice_id, course_id, description, quantity, unit_price, discount, line_total, created_at
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
-                        int(row.get("course_id")) if row.get("course_id") else None,
+                        inv_id,
+                        course_id,
                         row.get("description", "").strip(),
                         int(row.get("quantity", 1)) if row.get("quantity") else 1,
                         float(row.get("unit_price", 0)) if row.get("unit_price") else 0,
@@ -2494,18 +2523,27 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "expenses":
+                    exp_branch_id = int(row.get("branch_id", session.get("branch_id") or 1)) if row.get("branch_id") else session.get("branch_id")
+                    if exp_branch_id and not conn.execute(
+                        "SELECT id FROM branches WHERE id = ? AND institute_id = ?",
+                        (exp_branch_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: branch_id {exp_branch_id} does not exist in this institute")
+                        continue
+
                     cur.execute("""
                         INSERT INTO expenses (
-                            expense_type, category, amount, description, expense_date, branch_id, created_at, updated_at
+                            institute_id, expense_type, category, amount, description, expense_date, branch_id, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("expense_type", "").strip() or "other",
                         row.get("category", "").strip() or None,
                         float(row.get("amount", 0)) if row.get("amount") else 0,
                         row.get("description", "").strip() or None,
                         parse_date(row.get("expense_date", "")) or datetime.now().isoformat(timespec="seconds"),
-                        int(row.get("branch_id", 1)) if row.get("branch_id") else 1,
+                        exp_branch_id,
                         datetime.now().isoformat(timespec="seconds"),
                         datetime.now().isoformat(timespec="seconds")
                     ))

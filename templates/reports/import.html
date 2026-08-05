@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}CSV Import - {{ company.company_short_name }}{% endblock %}
 
@@ -364,36 +364,28 @@
     <div class="section-title">How to Import</div>
 
     <ol class="instructions-list">
-      <li><strong>Download Sample:</strong> Click the sample link for the table you want to import</li>
-      <li><strong>Prepare Data:</strong> Update the sample file with your own data (keep column names)</li>
-      <li><strong>Select Table:</strong> Choose which table from the dropdown above</li>
-      <li><strong>Upload:</strong> Select your CSV file and click Import</li>
-      <li><strong>Check Results:</strong> View success/error count in the notification message</li>
+      <li><strong>Download Sample:</strong> Click the sample link for the table you want to import.</li>
+      <li><strong>Prepare Data:</strong> Update the sample file with your own data (keep column headers exact).</li>
+      <li><strong>Select Table:</strong> Choose which table from the dropdown above.</li>
+      <li><strong>Upload:</strong> Select your CSV file and click <strong>Import</strong>.</li>
+      <li><strong>Check Results:</strong> View success/error count in the notification message.</li>
     </ol>
 
     <div class="warning-box">
-      <strong>⚠️ Important:</strong>
+      <strong>⚠️ Multi-Tenant & Data Safety Rules:</strong>
       <ul>
-        <li>Column names must exactly match the samples</li>
-        <li>Dates should be in DD-MM-YYYY format (e.g., 21-03-2026)</li>
-        <li>Numbers without currency symbols (e.g., 5000, not $5,000)</li>
-        <li>Empty cells are allowed and become NULL</li>
+        <li><strong>Automatic Institute Scoping:</strong> All imported records are automatically isolated and assigned to your current active institute.</li>
+        <li><strong>Referential Integrity:</strong> ID columns (such as <code>branch_id</code>, <code>student_id</code>, <code>invoice_id</code>, <code>lead_id</code>, <code>user_id</code>) must exist and belong to your active institute.</li>
+        <li><strong>Date Format:</strong> Use <code>DD-MM-YYYY</code> format (e.g., <code>21-03-2026</code>) or <code>YYYY-MM-DD</code>.</li>
+        <li><strong>Numbers & Currency:</strong> Use raw numbers without currency symbols (e.g. <code>5000</code>, not <code>₹5,000</code>).</li>
+        <li><strong>Plan Limits:</strong> Bulk imports respect active student, branch, and staff user limits for your institute's subscription plan.</li>
         <li><strong>CSV Export Tips:</strong>
           <ul>
-            <li>Save Excel/Sheets as "CSV UTF-8 (.csv)" format</li>
-            <li>Multi-line text in cells must be enclosed in quotes</li>
-            <li>Avoid trailing spaces in column headers</li>
-            <li>If text contains commas, Excel will auto-quote—this is normal</li>
+            <li>Save Excel/Sheets as "CSV UTF-8 (.csv)" format.</li>
+            <li>Multi-line text in cells must be enclosed in quotes.</li>
+            <li>Avoid trailing spaces in column headers.</li>
           </ul>
         </li>
-      </ul>
-    </div>
-
-    <div class="warning-box">
-      <strong>ℹ️ Additional Notes:</strong>
-      <ul>
-        <li>Failed rows are reported with error messages</li>
-        <li>Data is inserted in order, so relationships may fail if referenced data doesn't exist</li>
       </ul>
     </div>
   </div>
