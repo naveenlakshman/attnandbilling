@@ -91,7 +91,11 @@ steps:
       - run
       - --rm
       - --env
+      - APP_ENV=testing
+      - --env
       - SECRET_KEY=cloud-build-billing-dashboard-only
+      - --env
+      - PYTHONPATH=/app
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:${_IMAGE_TAG}
       - python
       - scratch/test_billing_dashboard_tenant_isolation.py
