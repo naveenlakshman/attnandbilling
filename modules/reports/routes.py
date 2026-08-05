@@ -2215,8 +2215,14 @@ def upload_csv():
                         if b_chk:
                             branch_id = b_chk["id"]
 
+                    if not branch_id and raw_b_name:
+                        search_pat = f"%{raw_b_name.lower()}%"
+                        b_chk = conn.execute("SELECT id FROM branches WHERE (LOWER(branch_name) LIKE ? OR LOWER(branch_code) LIKE ? OR LOWER(address) LIKE ?) AND institute_id = ?", (search_pat, search_pat, search_pat, current_inst)).fetchone()
+                        if b_chk:
+                            branch_id = b_chk["id"]
+
                     if not branch_id and raw_b_code:
-                        b_chk = conn.execute("SELECT id FROM branches WHERE LOWER(branch_code) = LOWER(?) AND institute_id = ?", (raw_b_code, current_inst)).fetchone()
+                        b_chk = conn.execute("SELECT id FROM branches WHERE (LOWER(branch_code) = LOWER(?) OR LOWER(branch_name) LIKE ?) AND institute_id = ?", (raw_b_code, f"%{raw_b_code.lower()}%", current_inst)).fetchone()
                         if b_chk:
                             branch_id = b_chk["id"]
 
