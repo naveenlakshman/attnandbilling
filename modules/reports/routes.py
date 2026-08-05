@@ -1,6 +1,8 @@
 import io
 import csv
 import calendar
+import openpyxl
+import openpyxl.styles
 from collections import defaultdict
 from flask import Blueprint, render_template, send_file, flash, redirect, url_for, session, request, jsonify
 from db import get_conn, log_activity
@@ -1774,7 +1776,8 @@ def import_page():
 @login_required
 @admin_required
 def download_sample(table_name):
-    """Download sample CSV file for a table"""
+    """Generate sample CSV or Excel file for data import with automatic Reference Sheets."""
+    file_type = request.args.get("file_type", "xlsx").strip().lower()
     
     samples = {
         "branches": {
@@ -1799,10 +1802,37 @@ def download_sample(table_name):
             ]
         },
         "students": {
-            "headers": ["student_code", "full_name", "phone", "email", "gender", "address", "education_level", "qualification", "student_location", "employment_status", "status", "branch_id", "joined_date"],
+            "headers": [
+                "branch_name", "student_code", "full_name", "phone", "email", "gender", "date_of_birth",
+                "father_name", "mother_name", "parent_name", "parent_contact",
+                "address", "locality", "city", "state", "pincode", "landmark", "alternate_phone", "address_type",
+                "education_level", "qualification",
+                "tenth_institution", "tenth_board", "tenth_year", "tenth_percentage",
+                "puc_institution", "puc_board", "puc_stream", "puc_year", "puc_percentage",
+                "degree_institution", "degree_university", "degree_course", "degree_year", "degree_percentage",
+                "student_location", "employment_status", "status", "joined_date"
+            ],
             "rows": [
-                ["1515001", "Student Name", "9876543210", "student@example.com", "Male", "Address", "Undergraduate", "BE", "urban", "student", "active", "1", "21-03-2026"],
-                ["1515002", "Another Student", "9123456789", "student2@example.com", "Female", "Address", "School", "12th", "rural", "unemployed", "active", "1", "21-03-2026"],
+                [
+                    "Main Branch", "1515001", "Student Name", "9876543210", "student@example.com", "Male", "2002-05-15",
+                    "Father Name", "Mother Name", "Parent Name", "9876543211",
+                    "MG Road, 4th Cross", "Indiranagar", "Bengaluru", "Karnataka", "560038", "Near Metro Station", "9876543212", "Home",
+                    "Undergraduate", "BE",
+                    "St. Joseph High School", "SSLC", "2018", "85%",
+                    "National PU College", "PU Board", "Science", "2020", "88%",
+                    "PES University", "VTU", "B.E Computer Science", "2024", "8.5 CGPA",
+                    "urban", "student", "active", "21-03-2026"
+                ],
+                [
+                    "Main Branch", "1515002", "Another Student", "9123456789", "student2@example.com", "Female", "2004-08-20",
+                    "Father Name 2", "Mother Name 2", "Parent Name 2", "9123456780",
+                    "Station Road", "Town Area", "Mysore", "Karnataka", "570001", "Opposite Bus Stand", "9123456781", "Home",
+                    "Pre-University", "12th",
+                    "Government School", "State Board", "2020", "78%",
+                    "Government PU College", "PU Board", "Commerce", "2022", "80%",
+                    "", "", "", "", "",
+                    "rural", "unemployed", "active", "21-03-2026"
+                ],
             ]
         },
         "invoices": {
@@ -1885,88 +1915,164 @@ def download_sample(table_name):
         return redirect(url_for("reports.import_page"))
     
     sample = samples[table_name]
-    
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    # Write headers
-    writer.writerow(sample["headers"])
-    
-    # Write sample rows
-    for row in sample["rows"]:
-        writer.writerow(row)
-    
-    csv_data = output.getvalue()
-    output.close()
-    
-    response_file = io.BytesIO()
-    response_file.write(csv_data.encode())
-    response_file.seek(0)
-    
-    filename = f"{table_name}_sample.csv"
-    
-    return send_file(
-        response_file,
-        mimetype="text/csv",
-        as_attachment=True,
-        download_name=filename
-    )
+    conn = get_conn()
+    current_inst = get_current_institute_id(default=1)
+
+    if file_type == "xlsx":
+        wb = openpyxl.Workbook()
+        ws_data = wb.active
+        ws_data.title = f"{table_name.capitalize()} Data"
+        
+        # Style headers
+        ws_data.append(sample["headers"])
+        header_fill = openpyxl.styles.PatternFill(start_color="0D6EFD", end_color="0D6EFD", fill_type="solid")
+        header_font = openpyxl.styles.Font(bold=True, color="FFFFFF")
+        for cell in ws_data[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+        for row in sample["rows"]:
+            ws_data.append(row)
+            
+        # Add Reference Sheet for Branches
+        branches = conn.execute("SELECT id, branch_name, branch_code, address FROM branches WHERE institute_id = ? ORDER BY id", (current_inst,)).fetchall()
+        if branches:
+            ws_b = wb.create_sheet(title="Branches Reference")
+            ws_b.append(["Branch ID", "Branch Name", "Branch Code", "Address"])
+            ref_fill = openpyxl.styles.PatternFill(start_color="198754", end_color="198754", fill_type="solid")
+            for cell in ws_b[1]:
+                cell.fill = ref_fill
+                cell.font = header_font
+            for b in branches:
+                ws_b.append([b["id"], b["branch_name"], b["branch_code"], b["address"]])
+
+        # Add Reference Sheet for Courses
+        courses = conn.execute("SELECT id, course_name, duration, fee FROM courses WHERE institute_id = ? ORDER BY id", (current_inst,)).fetchall()
+        if courses:
+            ws_c = wb.create_sheet(title="Courses Reference")
+            ws_c.append(["Course ID", "Course Name", "Duration", "Fee"])
+            course_fill = openpyxl.styles.PatternFill(start_color="6F42C1", end_color="6F42C1", fill_type="solid")
+            for cell in ws_c[1]:
+                cell.fill = course_fill
+                cell.font = header_font
+            for c in courses:
+                ws_c.append([c["id"], c["course_name"], c["duration"], c["fee"]])
+
+        conn.close()
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"{table_name}_sample.xlsx"
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=filename
+        )
+    else:
+        conn.close()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(sample["headers"])
+        for row in sample["rows"]:
+            writer.writerow(row)
+        
+        csv_data = output.getvalue()
+        output.close()
+        
+        response_file = io.BytesIO()
+        response_file.write(csv_data.encode("utf-8"))
+        response_file.seek(0)
+        
+        filename = f"{table_name}_sample.csv"
+        return send_file(
+            response_file,
+            mimetype="text/csv",
+            as_attachment=True,
+            download_name=filename
+        )
 
 
 @reports_bp.route("/upload", methods=["POST"])
 @login_required
 @admin_required
 def upload_csv():
-    """Handle CSV file upload and import"""
+    """Handle Excel (.xlsx/.xls) or CSV file upload and import"""
     
-    if "csv_file" not in request.files:
-        flash("No file selected", "danger")
-        return redirect(url_for("reports.import_page"))
-    
-    file = request.files["csv_file"]
-    table_name = request.form.get("table_name", "").strip()
-    
+    file = request.files.get("csv_file") or request.files.get("file")
     if not file or not file.filename:
         flash("No file selected", "danger")
         return redirect(url_for("reports.import_page"))
     
+    table_name = request.form.get("table_name", "").strip()
     if not table_name:
         flash("No table selected", "danger")
         return redirect(url_for("reports.import_page"))
     
-    # Allowed tables for import
     allowed_tables = ["activity_logs", "branches", "courses", "expense_categories", "expenses", "followups", "installment_plans", "invoice_items", "invoices", "leads", "receipts", "students", "users"]
-    
     if table_name not in allowed_tables:
         flash(f"Invalid table: {table_name}", "danger")
         return redirect(url_for("reports.import_page"))
     
     try:
-        # Read file content as bytes and decode to string
         file_content = file.read()
         if not file_content:
-            flash("❌ CSV file is empty. Please upload a file with data.", "danger")
+            flash("❌ Uploaded file is empty. Please select a valid Excel or CSV file.", "danger")
             return redirect(url_for("reports.import_page"))
         
-        # Decode bytes to string
-        try:
-            text_content = file_content.decode('utf-8')
-        except UnicodeDecodeError:
-            flash("❌ File encoding error. Please save your CSV file as UTF-8 format.", "danger")
+        raw_rows = []
+        filename_lower = file.filename.lower()
+
+        if filename_lower.endswith(".xlsx") or filename_lower.endswith(".xls"):
+            try:
+                wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
+                sheet = wb.active  # Uses the primary data sheet
+                rows_iter = list(sheet.iter_rows(values_only=True))
+                if not rows_iter or len(rows_iter) < 2:
+                    flash("❌ Excel file has no data rows. First row must be headers.", "danger")
+                    return redirect(url_for("reports.import_page"))
+                
+                raw_headers = [str(h).replace('\ufeff', '').strip() if h is not None else '' for h in rows_iter[0]]
+                for row_vals in rows_iter[1:]:
+                    if not any(v is not None and str(v).strip() for v in row_vals):
+                        continue
+                    row_dict = {}
+                    for idx, h in enumerate(raw_headers):
+                        if h:
+                            val = row_vals[idx] if idx < len(row_vals) else None
+                            row_dict[h] = str(val).strip() if val is not None else ""
+                    raw_rows.append(row_dict)
+            except Exception as e:
+                flash(f"❌ Unable to parse Excel file: {str(e)}", "danger")
+                return redirect(url_for("reports.import_page"))
+        else:
+            try:
+                text_content = file_content.decode('utf-8')
+            except UnicodeDecodeError:
+                try:
+                    text_content = file_content.decode('latin-1')
+                except UnicodeDecodeError:
+                    flash("❌ File encoding error. Please save your file in UTF-8 format.", "danger")
+                    return redirect(url_for("reports.import_page"))
+            
+            stream = io.StringIO(text_content)
+            reader = csv.DictReader(stream)
+            if not reader.fieldnames:
+                flash("❌ CSV file has no headers. First row must contain column names.", "danger")
+                return redirect(url_for("reports.import_page"))
+            
+            fieldnames = [name.replace('\ufeff', '').strip() if name else name for name in reader.fieldnames]
+            for row in reader:
+                normalized_row = {k.replace('\ufeff', '').strip() if k else k: (v.strip() if v else "") for k, v in row.items()}
+                if any(normalized_row.values()):
+                    raw_rows.append(normalized_row)
+
+        if not raw_rows:
+            flash("❌ No valid data rows found in uploaded file.", "danger")
             return redirect(url_for("reports.import_page"))
-        
-        # Parse CSV from string content
-        stream = io.StringIO(text_content)
-        reader = csv.DictReader(stream)
-        
-        if not reader.fieldnames:
-            flash("❌ CSV file has no headers. First row must contain column names.", "danger")
-            return redirect(url_for("reports.import_page"))
-        
-        # Normalize fieldnames (strip whitespace and BOM from headers)
-        if reader.fieldnames:
-            reader.fieldnames = [name.replace('\ufeff', '').strip() if name else name for name in reader.fieldnames]
-        
+
         conn = get_conn()
         cur = conn.cursor()
         current_inst = get_current_institute_id(default=1)
@@ -1974,15 +2080,8 @@ def upload_csv():
         rows_imported = 0
         errors = []
         
-        for idx, row in enumerate(reader, start=2):  # Start from row 2 (row 1 is headers)
-            # Normalize row keys (in case of whitespace or BOM in headers)
-            normalized_row = {k.replace('\ufeff', '').strip() if k else k: v for k, v in row.items()} if row else {}
-            row = normalized_row
-            
-            # Debug: Log raw row data if empty
+        for idx, row in enumerate(raw_rows, start=2):
             if not row or not any(row.values()):
-                error_msg = f"Row {idx}: Empty/blank row detected - skipping"
-                errors.append(error_msg)
                 continue
             
             try:
@@ -2088,47 +2187,117 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "students":
-                    # Validate student_location field
                     student_location = row.get("student_location", "").strip() if row.get("student_location") else None
                     if student_location and student_location.lower() not in ['rural', 'urban']:
-                        error_msg = f"Row {idx + 1}: student_location must be 'rural' or 'urban' (got '{student_location}')"
+                        error_msg = f"Row {idx}: student_location must be 'rural' or 'urban' (got '{student_location}')"
                         errors.append(error_msg)
                         continue
-                    
-                    # Normalize location to lowercase
                     if student_location:
                         student_location = student_location.lower()
                     
                     student_status = row.get("status", "active").strip() or "active"
                     if student_status == "active":
                         lock_and_check_limit(conn, current_inst, "students")
-                    branch_id = (
-                        int(row.get("branch_id"))
-                        if row.get("branch_id") else session.get("branch_id")
-                    )
-                    if not branch_id or not conn.execute(
-                        "SELECT id FROM branches WHERE id = ? AND institute_id = ?",
-                        (branch_id, current_inst),
-                    ).fetchone():
-                        errors.append(f"Row {idx}: branch_id must belong to this institute")
+
+                    # Smart Branch Resolution (branch_id, branch_name, or branch_code)
+                    branch_id = None
+                    raw_b_id = str(row.get("branch_id", "")).strip()
+                    raw_b_name = str(row.get("branch_name", "")).strip()
+                    raw_b_code = str(row.get("branch_code", "")).strip()
+
+                    if raw_b_id and raw_b_id.isdigit():
+                        b_chk = conn.execute("SELECT id FROM branches WHERE id = ? AND institute_id = ?", (int(raw_b_id), current_inst)).fetchone()
+                        if b_chk:
+                            branch_id = b_chk["id"]
+
+                    if not branch_id and raw_b_name:
+                        b_chk = conn.execute("SELECT id FROM branches WHERE (LOWER(branch_name) = LOWER(?) OR LOWER(branch_code) = LOWER(?)) AND institute_id = ?", (raw_b_name, raw_b_name, current_inst)).fetchone()
+                        if b_chk:
+                            branch_id = b_chk["id"]
+
+                    if not branch_id and raw_b_code:
+                        b_chk = conn.execute("SELECT id FROM branches WHERE LOWER(branch_code) = LOWER(?) AND institute_id = ?", (raw_b_code, current_inst)).fetchone()
+                        if b_chk:
+                            branch_id = b_chk["id"]
+
+                    if not branch_id:
+                        branch_id = session.get("branch_id")
+                        if branch_id:
+                            b_chk = conn.execute("SELECT id FROM branches WHERE id = ? AND institute_id = ?", (branch_id, current_inst)).fetchone()
+                            if not b_chk:
+                                branch_id = None
+                        if not branch_id:
+                            b_first = conn.execute("SELECT id FROM branches WHERE institute_id = ? ORDER BY id ASC LIMIT 1", (current_inst,)).fetchone()
+                            if b_first:
+                                branch_id = b_first["id"]
+
+                    if not branch_id:
+                        errors.append(f"Row {idx}: Unable to determine valid branch for this institute")
                         continue
+
+                    full_name = row.get("full_name", "").strip()
+                    phone = row.get("phone", "").strip()
+                    if not full_name:
+                        errors.append(f"Row {idx}: full_name is required")
+                        continue
+                    if not phone:
+                        errors.append(f"Row {idx}: phone is required")
+                        continue
+
+                    student_code = row.get("student_code", "").strip()
+                    if not student_code:
+                        max_id_row = conn.execute("SELECT MAX(id) AS max_id FROM students").fetchone()
+                        next_seq = (max_id_row["max_id"] or 0) + 1
+                        student_code = f"S{current_inst}{next_seq:04d}"
+
                     cur.execute("""
                         INSERT INTO students (
-                            institute_id, student_code, full_name, phone, email, gender, address,
-                            education_level, qualification, student_location, employment_status,
-                            status, branch_id, joined_date, created_at, updated_at
+                            institute_id, student_code, full_name, phone, email, gender, date_of_birth,
+                            father_name, mother_name, parent_name, parent_contact,
+                            address, locality, city, state, pincode, landmark, alternate_phone, address_type,
+                            education_level, qualification,
+                            tenth_institution, tenth_board, tenth_year, tenth_percentage,
+                            puc_institution, puc_board, puc_stream, puc_year, puc_percentage,
+                            degree_institution, degree_university, degree_course, degree_year, degree_percentage,
+                            student_location, employment_status, status, branch_id, joined_date, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         current_inst,
-                        row.get("student_code", "").strip(),
-                        row.get("full_name", "").strip(),
-                        row.get("phone", "").strip(),
+                        student_code,
+                        full_name,
+                        phone,
                         row.get("email", "").strip() or None,
                         row.get("gender", "").strip() or None,
+                        parse_date(row.get("date_of_birth", "")) or None,
+                        row.get("father_name", "").strip() or None,
+                        row.get("mother_name", "").strip() or None,
+                        row.get("parent_name", "").strip() or None,
+                        row.get("parent_contact", "").strip() or None,
                         row.get("address", "").strip() or None,
+                        row.get("locality", "").strip() or None,
+                        row.get("city", "").strip() or None,
+                        row.get("state", "").strip() or None,
+                        row.get("pincode", "").strip() or None,
+                        row.get("landmark", "").strip() or None,
+                        row.get("alternate_phone", "").strip() or None,
+                        row.get("address_type", "Home").strip() or "Home",
                         row.get("education_level", "").strip() or None,
                         row.get("qualification", "").strip() or None,
+                        row.get("tenth_institution", "").strip() or None,
+                        row.get("tenth_board", "").strip() or None,
+                        row.get("tenth_year", "").strip() or None,
+                        row.get("tenth_percentage", "").strip() or None,
+                        row.get("puc_institution", "").strip() or None,
+                        row.get("puc_board", "").strip() or None,
+                        row.get("puc_stream", "").strip() or None,
+                        row.get("puc_year", "").strip() or None,
+                        row.get("puc_percentage", "").strip() or None,
+                        row.get("degree_institution", "").strip() or None,
+                        row.get("degree_university", "").strip() or None,
+                        row.get("degree_course", "").strip() or None,
+                        row.get("degree_year", "").strip() or None,
+                        row.get("degree_percentage", "").strip() or None,
                         student_location,
                         row.get("employment_status", "unemployed").strip() or "unemployed",
                         student_status,

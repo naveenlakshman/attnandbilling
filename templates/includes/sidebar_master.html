@@ -7,7 +7,7 @@
 {% set students_active = ep.startswith('attendance.') or ep.startswith('billing.students') or ep.startswith('billing.student_') or ep == 'billing.institute_day_overview' %}
 {% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') or ep.startswith('certificates.') %}
 {% set finance_active = (ep.startswith('billing.') and ep != 'billing.reminder_dashboard' and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
-{% set reports_active = ep.startswith('reports.') or ep == 'leads.reports' or ep in ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
+{% set reports_active = (ep.startswith('reports.') and ep != 'reports.import_page') or ep == 'leads.reports' or ep in ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
 {% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.') or ep == 'billing.reminder_dashboard' or ep == 'reports.import_page') %}
 
 <div class="erp-master-nav accordion accordion-flush" id="erpSidebarAccordion">
@@ -224,7 +224,6 @@
         <a class="nav-link {{ 'active' if ep == 'reports.lms_attendance_gap' else '' }}" href="{{ url_for('reports.lms_attendance_gap') }}">LMS vs Attendance Defaulters</a>
         {% if is_admin %}
           <a class="nav-link {{ 'active' if ep == 'reports.attendance_calendar_settings' else '' }}" href="{{ url_for('reports.attendance_calendar_settings') }}">Attendance Calendar Settings</a>
-          <a class="nav-link {{ 'active' if ep == 'reports.import_page' else '' }}" href="{{ url_for('reports.import_page') }}">Import Data</a>
         {% endif %}
       </div>
     </div>
