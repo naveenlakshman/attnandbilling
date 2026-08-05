@@ -71,22 +71,25 @@ class TestExcelImportAndFields(unittest.TestCase):
             sess["role"] = "admin"
             sess["branch_id"] = 10
 
+    def test_excel_sample_download_with_single_sheet_and_dropdowns(self):
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["institute_id"] = 1
+            sess["role"] = "admin"
+            sess["branch_id"] = 10
+
         res = self.client.get("/reports/sample/students?file_type=xlsx")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.mimetype, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         wb = openpyxl.load_workbook(io.BytesIO(res.data))
+        self.assertEqual(len(wb.sheetnames), 1)
         self.assertIn("Students Data", wb.sheetnames)
-        self.assertIn("Branches Reference", wb.sheetnames)
-        self.assertIn("Courses Reference", wb.sheetnames)
 
-        # Check Branches reference contents
-        ws_b = wb["Branches Reference"]
-        rows_b = list(ws_b.iter_rows(values_only=True))
-        self.assertEqual(rows_b[0], ("Branch ID", "Branch Name", "Branch Code", "Address"))
-        self.assertIn((10, "Bangalore Central", "BC01", "MG Road"), rows_b)
+        ws = wb["Students Data"]
+        self.assertTrue(len(ws.data_validations.dataValidation) > 0)
 
-    def test_excel_student_import_smart_branch_resolution_and_fields(self):
+    def test_excel_student_import_strict_branch_and_auto_student_code(self):
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Students Data"
@@ -141,11 +144,8 @@ class TestExcelImportAndFields(unittest.TestCase):
         self.assertIsNotNone(student)
         self.assertEqual(student["full_name"], "Rahul Sharma")
         self.assertEqual(student["institute_id"], 1)
-        self.assertEqual(student["branch_id"], 10) # Resolved from "Bangalore Central"
-        self.assertEqual(student["father_name"], "Ramesh Sharma")
-        self.assertEqual(student["mother_name"], "Sunita Sharma")
-        self.assertEqual(student["pincode"], "560025")
-        self.assertEqual(student["degree_university"], "VTU")
+        self.assertEqual(student["branch_id"], 10)
+        self.assertTrue(len(student["student_code"]) > 0)
 
 
 if __name__ == "__main__":

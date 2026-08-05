@@ -5,7 +5,7 @@ import openpyxl
 import openpyxl.styles
 from collections import defaultdict
 from flask import Blueprint, render_template, send_file, flash, redirect, url_for, session, request, jsonify
-from db import get_conn, log_activity
+from db import get_conn, get_company_profile, log_activity
 from modules.core.utils import login_required, admin_required
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta, timezone
@@ -1919,6 +1919,7 @@ def download_sample(table_name):
     current_inst = get_current_institute_id(default=1)
 
     if file_type == "xlsx":
+        from openpyxl.worksheet.datavalidation import DataValidation
         wb = openpyxl.Workbook()
         ws_data = wb.active
         ws_data.title = f"{table_name.capitalize()} Data"
@@ -1933,30 +1934,62 @@ def download_sample(table_name):
 
         for row in sample["rows"]:
             ws_data.append(row)
-            
-        # Add Reference Sheet for Branches
-        branches = conn.execute("SELECT id, branch_name, branch_code, address FROM branches WHERE institute_id = ? ORDER BY id", (current_inst,)).fetchall()
-        if branches:
-            ws_b = wb.create_sheet(title="Branches Reference")
-            ws_b.append(["Branch ID", "Branch Name", "Branch Code", "Address"])
-            ref_fill = openpyxl.styles.PatternFill(start_color="198754", end_color="198754", fill_type="solid")
-            for cell in ws_b[1]:
-                cell.fill = ref_fill
-                cell.font = header_font
-            for b in branches:
-                ws_b.append([b["id"], b["branch_name"], b["branch_code"], b["address"]])
 
-        # Add Reference Sheet for Courses
-        courses = conn.execute("SELECT id, course_name, duration, fee FROM courses WHERE institute_id = ? ORDER BY id", (current_inst,)).fetchall()
-        if courses:
-            ws_c = wb.create_sheet(title="Courses Reference")
-            ws_c.append(["Course ID", "Course Name", "Duration", "Fee"])
-            course_fill = openpyxl.styles.PatternFill(start_color="6F42C1", end_color="6F42C1", fill_type="solid")
-            for cell in ws_c[1]:
-                cell.fill = course_fill
-                cell.font = header_font
-            for c in courses:
-                ws_c.append([c["id"], c["course_name"], c["duration"], c["fee"]])
+        # Fetch active branches for logged-in institute to build dynamic dropdown
+        b_rows = conn.execute("SELECT branch_name FROM branches WHERE institute_id = ? AND is_active = 1 ORDER BY id", (current_inst,)).fetchall()
+        branch_names = [b["branch_name"] for b in b_rows] if b_rows else ["Main Branch"]
+        branch_formula = f'"{", ".join(branch_names)}"'
+
+        # Add DataValidation dropdown for branch_name (Column A) if header starts with branch_name
+        if sample["headers"][0] == "branch_name":
+            dv_branch = DataValidation(type="list", formula1=branch_formula, allow_blank=True)
+            ws_data.add_data_validation(dv_branch)
+            dv_branch.add("A2:A5000")
+
+        # Specific Data Validation Dropdowns for Students sheet
+        if table_name == "students":
+            # Gender (Col F)
+            dv_gender = DataValidation(type="list", formula1='"Male, Female, Other"', allow_blank=True)
+            ws_data.add_data_validation(dv_gender)
+            dv_gender.add("F2:F5000")
+
+            # State (Col O)
+            states = [
+                'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
+                'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
+                'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
+                'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
+                'Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi','Puducherry'
+            ]
+            dv_state = DataValidation(type="list", formula1=f'"{", ".join(states)}"', allow_blank=True)
+            ws_data.add_data_validation(dv_state)
+            dv_state.add("O2:O5000")
+
+            # Address Type (Col S)
+            dv_addr = DataValidation(type="list", formula1='"Home, Office, Other"', allow_blank=True)
+            ws_data.add_data_validation(dv_addr)
+            dv_addr.add("S2:S5000")
+
+            # Education Level (Col T)
+            edu_levels = ['School','Pre-University','Diploma','Undergraduate','Postgraduate','Doctoral','Technical','Professional']
+            dv_edu = DataValidation(type="list", formula1=f'"{", ".join(edu_levels)}"', allow_blank=True)
+            ws_data.add_data_validation(dv_edu)
+            dv_edu.add("T2:T5000")
+
+            # Student Location (Col AJ)
+            dv_loc = DataValidation(type="list", formula1='"urban, rural"', allow_blank=True)
+            ws_data.add_data_validation(dv_loc)
+            dv_loc.add("AJ2:AJ5000")
+
+            # Employment Status (Col AK)
+            dv_emp = DataValidation(type="list", formula1='"student, unemployed, employed, self_employed"', allow_blank=True)
+            ws_data.add_data_validation(dv_emp)
+            dv_emp.add("AK2:AK5000")
+
+            # Status (Col AL)
+            dv_stat = DataValidation(type="list", formula1='"active, completed, dropped"', allow_blank=True)
+            ws_data.add_data_validation(dv_stat)
+            dv_stat.add("AL2:AL5000")
 
         conn.close()
 
@@ -2205,6 +2238,12 @@ def upload_csv():
                     raw_b_name = str(row.get("branch_name", "")).strip()
                     raw_b_code = str(row.get("branch_code", "")).strip()
 
+                    # Strict Branch Resolution (exact branch_id, branch_name, or branch_code)
+                    branch_id = None
+                    raw_b_id = str(row.get("branch_id", "")).strip()
+                    raw_b_name = str(row.get("branch_name", "")).strip()
+                    raw_b_code = str(row.get("branch_code", "")).strip()
+
                     if raw_b_id and raw_b_id.isdigit():
                         b_chk = conn.execute("SELECT id FROM branches WHERE id = ? AND institute_id = ?", (int(raw_b_id), current_inst)).fetchone()
                         if b_chk:
@@ -2215,14 +2254,8 @@ def upload_csv():
                         if b_chk:
                             branch_id = b_chk["id"]
 
-                    if not branch_id and raw_b_name:
-                        search_pat = f"%{raw_b_name.lower()}%"
-                        b_chk = conn.execute("SELECT id FROM branches WHERE (LOWER(branch_name) LIKE ? OR LOWER(branch_code) LIKE ? OR LOWER(address) LIKE ?) AND institute_id = ?", (search_pat, search_pat, search_pat, current_inst)).fetchone()
-                        if b_chk:
-                            branch_id = b_chk["id"]
-
                     if not branch_id and raw_b_code:
-                        b_chk = conn.execute("SELECT id FROM branches WHERE (LOWER(branch_code) = LOWER(?) OR LOWER(branch_name) LIKE ?) AND institute_id = ?", (raw_b_code, f"%{raw_b_code.lower()}%", current_inst)).fetchone()
+                        b_chk = conn.execute("SELECT id FROM branches WHERE LOWER(branch_code) = LOWER(?) AND institute_id = ?", (raw_b_code, current_inst)).fetchone()
                         if b_chk:
                             branch_id = b_chk["id"]
 
@@ -2250,11 +2283,35 @@ def upload_csv():
                         errors.append(f"Row {idx}: phone is required")
                         continue
 
+                    # Auto-generate Student Code using Company Profile Prefix if missing/blank
                     student_code = row.get("student_code", "").strip()
                     if not student_code:
-                        max_id_row = conn.execute("SELECT MAX(id) AS max_id FROM students").fetchone()
-                        next_seq = (max_id_row["max_id"] or 0) + 1
-                        student_code = f"S{current_inst}{next_seq:04d}"
+                        company = get_company_profile(current_inst)
+                        raw_prefix = company.get("student_prefix", "").strip() if company else ""
+                        existing_codes = conn.execute(
+                            "SELECT student_code FROM students WHERE institute_id = ?",
+                            (current_inst,)
+                        ).fetchall()
+
+                        stu_prefix = raw_prefix if raw_prefix else ("" if current_inst == 1 else "STU")
+                        max_seq = 0
+                        for sc in existing_codes:
+                            code_str = sc["student_code"] or ""
+                            if stu_prefix and code_str.startswith(stu_prefix):
+                                num_part = code_str[len(stu_prefix):]
+                                if num_part.isdigit():
+                                    max_seq = max(max_seq, int(num_part))
+                            elif not stu_prefix and code_str.isdigit():
+                                max_seq = max(max_seq, int(code_str))
+
+                        if not stu_prefix and current_inst == 1 and max_seq < 1515000:
+                            max_seq = 1515000
+
+                        next_seq = max_seq + 1
+                        if stu_prefix:
+                            student_code = f"{stu_prefix}{next_seq:03d}"
+                        else:
+                            student_code = str(next_seq)
 
                     cur.execute("""
                         INSERT INTO students (
