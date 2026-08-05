@@ -18,20 +18,33 @@ reports_bp = Blueprint("reports", __name__)
 def parse_date(date_str):
     if not date_str:
         return None
-    date_str = date_str.strip()
+    date_str = str(date_str).strip()
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return date_str
+
+
+def _auto_enable_portal(student_id):
+    """Set portal_enabled=1 and default password (=student_code) if not already set."""
     try:
-        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y-%m-%d")
-    except ValueError:
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT student_code, portal_enabled, password_hash FROM students WHERE id = ?",
+            (student_id,)
+        ).fetchone()
+        if row and not row['portal_enabled']:
+            ph = generate_password_hash(row['student_code'])
+            conn.execute(
+                "UPDATE students SET portal_enabled = 1, password_hash = ? WHERE id = ?",
+                (ph, student_id)
+            )
+            conn.commit()
+        conn.close()
+    except Exception:
         pass
-    try:
-        return datetime.strptime(date_str, "%d-%m-%Y").strftime("%Y-%m-%d")
-    except ValueError:
-        pass
-    try:
-        return datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m-%d")
-    except ValueError:
-        pass
-    return None
 
 
 @reports_bp.route("/")
@@ -1803,7 +1816,7 @@ def download_sample(table_name):
         },
         "students": {
             "headers": [
-                "branch_name", "student_code", "full_name", "phone", "email", "gender", "date_of_birth",
+                "branch_name", "full_name", "phone", "email", "gender", "date_of_birth",
                 "father_name", "mother_name", "parent_name", "parent_contact",
                 "address", "locality", "city", "state", "pincode", "landmark", "alternate_phone", "address_type",
                 "education_level", "qualification",
@@ -1814,7 +1827,7 @@ def download_sample(table_name):
             ],
             "rows": [
                 [
-                    "Main Branch", "1515001", "Student Name", "9876543210", "student@example.com", "Male", "2002-05-15",
+                    "Main Branch", "Student Name", "9876543210", "student@example.com", "Male", "2002-05-15",
                     "Father Name", "Mother Name", "Parent Name", "9876543211",
                     "MG Road, 4th Cross", "Indiranagar", "Bengaluru", "Karnataka", "560038", "Near Metro Station", "9876543212", "Home",
                     "Undergraduate", "BE",
@@ -1824,7 +1837,7 @@ def download_sample(table_name):
                     "urban", "student", "active", "21-03-2026"
                 ],
                 [
-                    "Main Branch", "1515002", "Another Student", "9123456789", "student2@example.com", "Female", "2004-08-20",
+                    "Main Branch", "Another Student", "9123456789", "student2@example.com", "Female", "2004-08-20",
                     "Father Name 2", "Mother Name 2", "Parent Name 2", "9123456780",
                     "Station Road", "Town Area", "Mysore", "Karnataka", "570001", "Opposite Bus Stand", "9123456781", "Home",
                     "Pre-University", "12th",
@@ -1932,13 +1945,17 @@ def download_sample(table_name):
             cell.fill = header_fill
             cell.font = header_font
 
-        for row in sample["rows"]:
-            ws_data.append(row)
-
-        # Fetch active branches for logged-in institute to build dynamic dropdown
+        # Fetch active branches for logged-in institute to build dynamic dropdown & pre-fill sample rows
         b_rows = conn.execute("SELECT branch_name FROM branches WHERE institute_id = ? AND is_active = 1 ORDER BY id", (current_inst,)).fetchall()
         branch_names = [b["branch_name"] for b in b_rows] if b_rows else ["Main Branch"]
         branch_formula = f'"{", ".join(branch_names)}"'
+        primary_branch = branch_names[0]
+
+        for row in sample["rows"]:
+            row_copy = list(row)
+            if sample["headers"][0] == "branch_name":
+                row_copy[0] = primary_branch
+            ws_data.append(row_copy)
 
         # Add DataValidation dropdown for branch_name (Column A) if header starts with branch_name
         if sample["headers"][0] == "branch_name":
@@ -1946,14 +1963,14 @@ def download_sample(table_name):
             ws_data.add_data_validation(dv_branch)
             dv_branch.add("A2:A5000")
 
-        # Specific Data Validation Dropdowns for Students sheet
+        # Specific Data Validation Dropdowns for Students sheet (without student_code)
         if table_name == "students":
-            # Gender (Col F)
+            # Gender (Col E)
             dv_gender = DataValidation(type="list", formula1='"Male, Female, Other"', allow_blank=True)
             ws_data.add_data_validation(dv_gender)
-            dv_gender.add("F2:F5000")
+            dv_gender.add("E2:E5000")
 
-            # State (Col O)
+            # State (Col N)
             states = [
                 'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
                 'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
@@ -1963,33 +1980,33 @@ def download_sample(table_name):
             ]
             dv_state = DataValidation(type="list", formula1=f'"{", ".join(states)}"', allow_blank=True)
             ws_data.add_data_validation(dv_state)
-            dv_state.add("O2:O5000")
+            dv_state.add("N2:N5000")
 
-            # Address Type (Col S)
+            # Address Type (Col R)
             dv_addr = DataValidation(type="list", formula1='"Home, Office, Other"', allow_blank=True)
             ws_data.add_data_validation(dv_addr)
-            dv_addr.add("S2:S5000")
+            dv_addr.add("R2:R5000")
 
-            # Education Level (Col T)
+            # Education Level (Col S)
             edu_levels = ['School','Pre-University','Diploma','Undergraduate','Postgraduate','Doctoral','Technical','Professional']
             dv_edu = DataValidation(type="list", formula1=f'"{", ".join(edu_levels)}"', allow_blank=True)
             ws_data.add_data_validation(dv_edu)
-            dv_edu.add("T2:T5000")
+            dv_edu.add("S2:S5000")
 
-            # Student Location (Col AJ)
+            # Student Location (Col AI)
             dv_loc = DataValidation(type="list", formula1='"urban, rural"', allow_blank=True)
             ws_data.add_data_validation(dv_loc)
-            dv_loc.add("AJ2:AJ5000")
+            dv_loc.add("AI2:AI5000")
 
-            # Employment Status (Col AK)
+            # Employment Status (Col AJ)
             dv_emp = DataValidation(type="list", formula1='"student, unemployed, employed, self_employed"', allow_blank=True)
             ws_data.add_data_validation(dv_emp)
-            dv_emp.add("AK2:AK5000")
+            dv_emp.add("AJ2:AJ5000")
 
-            # Status (Col AL)
+            # Status (Col AK)
             dv_stat = DataValidation(type="list", formula1='"active, completed, dropped"', allow_blank=True)
             ws_data.add_data_validation(dv_stat)
-            dv_stat.add("AL2:AL5000")
+            dv_stat.add("AK2:AK5000")
 
         conn.close()
 
@@ -2455,6 +2472,7 @@ def upload_csv():
                             installment_type, notes, status, created_by, branch_id,
                             datetime.now().isoformat(timespec="seconds")
                         ))
+                        _auto_enable_portal(student_id)
                         rows_imported += 1
                     except Exception as e:
                         errors.append(f"Row {idx}: {str(e)}")

@@ -14,7 +14,28 @@
   <div class="row g-3 mb-4">
     <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Status</span><strong class="fs-5">{{ institute.status|title }}</strong></div></div>
     <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Brand</span><strong class="fs-5">{{ branding.display_name if branding else institute.name }}</strong><span>{{ branding.tagline if branding else '' }}</span></div></div>
-    <div class="col-md-4"><div class="card h-100 p-3"><span class="text-muted">Primary domain</span><strong class="fs-6">{{ domains[0].hostname if domains else 'Not configured' }}</strong><span>{{ domains[0].status|title if domains else '' }}</span>{% if domains %}<a class="mt-2" href="{{ url_for('platform_admin.institute_domain_verification', institute_id=institute.id, domain_id=domains[0].id) }}">{{ 'View verification' if domains[0].status == 'active' else 'Verify domain' }}</a>{% endif %}</div></div>
+    <div class="col-md-4">
+      <div class="card h-100 p-3">
+        <span class="text-muted">Primary domain</span>
+        {% if domains %}
+          {% set current_port = request.host.split(':')[1] if ':' in request.host else '' %}
+          {% set scheme = request.scheme or 'http' %}
+          {% set full_url = scheme + '://' + domains[0].hostname + (':' + current_port if current_port else '') %}
+          <strong class="fs-6 mb-1">{{ domains[0].hostname }}</strong>
+          <div class="my-1">
+            <a href="{{ full_url }}" target="_blank" class="badge bg-primary-subtle text-primary text-decoration-none p-2 border border-primary-subtle d-inline-block text-truncate" style="max-width: 100%; font-family: monospace; font-size: 13px;" title="Open {{ full_url }}">
+              🔗 {{ full_url }} ↗
+            </a>
+          </div>
+          <span class="small text-muted">{{ domains[0].status|title }}</span>
+          <a class="mt-2 small" href="{{ url_for('platform_admin.institute_domain_verification', institute_id=institute.id, domain_id=domains[0].id) }}">
+            {{ 'View verification' if domains[0].status == 'active' else 'Verify domain' }}
+          </a>
+        {% else %}
+          <strong class="fs-6">Not configured</strong>
+        {% endif %}
+      </div>
+    </div>
   </div>
   {% if routing_dns %}
   <div class="card border-primary shadow-sm mb-4">

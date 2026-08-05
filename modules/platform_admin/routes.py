@@ -159,8 +159,8 @@ def institutes():
                     WHERE im.institute_id = i.id AND im.membership_role = 'institute_admin'
                       AND im.is_active = 1) AS admin_count,
                    (SELECT hostname FROM institute_domains d
-                    WHERE d.institute_id = i.id AND d.is_primary = 1
-                    ORDER BY d.id LIMIT 1) AS primary_hostname,
+                    WHERE d.institute_id = i.id
+                    ORDER BY d.is_primary DESC, d.id DESC LIMIT 1) AS primary_hostname,
                    (SELECT p.name FROM institute_subscriptions s
                     JOIN subscription_plans p ON p.id = s.plan_id
                     WHERE s.institute_id = i.id LIMIT 1) AS plan_name,
@@ -300,7 +300,7 @@ def institute_detail(institute_id):
             (institute_id,),
         ).fetchone()
         domains = conn.execute(
-            "SELECT * FROM institute_domains WHERE institute_id = ? ORDER BY is_primary DESC, hostname",
+            "SELECT * FROM institute_domains WHERE institute_id = ? ORDER BY is_primary DESC, id DESC",
             (institute_id,),
         ).fetchall()
         branches = conn.execute(
@@ -1661,7 +1661,11 @@ def institute_subscription(institute_id):
                 "SELECT * FROM subscription_plans WHERE id = ?",
                 (plan_id,),
             ).fetchone()
-            _, current_usage = usage_summary(conn, institute_id)
+            try:
+                _, current_usage = usage_summary(conn, institute_id)
+            except SubscriptionAccessDenied:
+                current_usage = {"branches": 0, "staff": 0, "students": 0, "storage": 0}
+
             proposed_limits = {
                 "branches": branch_limit if branch_limit is not None else plan["branch_limit"],
                 "staff": staff_limit if staff_limit is not None else plan["staff_limit"],
@@ -1684,7 +1688,7 @@ def institute_subscription(institute_id):
                 return redirect(request.url)
             over_limit = [
                 resource for resource, limit in proposed_limits.items()
-                if limit is not None and current_usage[resource] > int(limit)
+                if limit is not None and current_usage.get(resource, 0) > int(limit)
             ]
             if over_limit:
                 flash(
@@ -1694,27 +1698,56 @@ def institute_subscription(institute_id):
                 )
                 return redirect(request.url)
             now = _now()
-            conn.execute(
-                """
-                UPDATE institute_subscriptions SET
-                    plan_id = ?, branch_limit_override = ?,
-                    staff_limit_override = ?, student_limit_override = ?,
-                    storage_limit_bytes_override = ?, feature_overrides_json = ?,
-                    updated_at = ?
-                WHERE institute_id = ?
-                """,
-                (
-                    plan_id, branch_limit, staff_limit, student_limit,
-                    storage_mb * 1024 * 1024 if storage_mb is not None else None,
-                    json.dumps(features), now, institute_id,
-                ),
-            )
+
+            sub_existing = conn.execute(
+                "SELECT id FROM institute_subscriptions WHERE institute_id = ?",
+                (institute_id,),
+            ).fetchone()
+
+            if sub_existing:
+                conn.execute(
+                    """
+                    UPDATE institute_subscriptions SET
+                        plan_id = ?, branch_limit_override = ?,
+                        staff_limit_override = ?, student_limit_override = ?,
+                        storage_limit_bytes_override = ?, feature_overrides_json = ?,
+                        status = 'active', updated_at = ?
+                    WHERE institute_id = ?
+                    """,
+                    (
+                        plan_id, branch_limit, staff_limit, student_limit,
+                        storage_mb * 1024 * 1024 if storage_mb is not None else None,
+                        json.dumps(features), now, institute_id,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO institute_subscriptions (
+                        institute_id, plan_id, status, starts_at,
+                        branch_limit_override, staff_limit_override, student_limit_override,
+                        storage_limit_bytes_override, feature_overrides_json,
+                        created_at, updated_at
+                    ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        institute_id, plan_id, now,
+                        branch_limit, staff_limit, student_limit,
+                        storage_mb * 1024 * 1024 if storage_mb is not None else None,
+                        json.dumps(features), now, now,
+                    ),
+                )
             conn.commit()
             flash("Subscription and limits updated.", "success")
             return redirect(
                 url_for("platform_admin.institute_subscription", institute_id=institute_id)
             )
-        entitlement, usage = usage_summary(conn, institute_id)
+
+        try:
+            entitlement, usage = usage_summary(conn, institute_id)
+        except SubscriptionAccessDenied:
+            entitlement, usage = None, {"branches": 0, "staff": 0, "students": 0, "storage": 0}
+
         subscription = conn.execute(
             "SELECT * FROM institute_subscriptions WHERE institute_id = ?",
             (institute_id,),

@@ -50,6 +50,8 @@ def normalize_hostname(raw_host):
     value = (raw_host or "").strip().lower().rstrip(".")
     if not value:
         return ""
+    if "://" in value:
+        value = value.split("://", 1)[1]
     if value.startswith("[") and "]" in value:
         value = value[1:value.index("]")]
     elif value.count(":") == 1:

@@ -6,17 +6,20 @@
   <a href="{{ url_for('platform_admin.institute_detail', institute_id=institute.id) }}" class="small">← {{ institute.name }}</a>
   <div class="d-flex justify-content-between align-items-start mt-2 mb-4">
     <div><h2 class="mb-1">Plan, limits and access</h2><p class="text-muted mb-0">Server-side entitlements for {{ institute.name }}.</p></div>
-    <span class="badge fs-6 bg-{{ 'success' if entitlement.status in ['active','trialing'] else ('warning text-dark' if entitlement.status == 'grace' else 'danger') }}">{{ entitlement.status|title }}</span>
+    {% set sub_status = entitlement.status if entitlement else 'unassigned' %}
+    <span class="badge fs-6 bg-{{ 'success' if sub_status in ['active','trialing'] else ('warning text-dark' if sub_status == 'grace' else 'secondary') }}">{{ sub_status|title }}</span>
   </div>
 
   <div class="row g-3 mb-4">
     {% for resource, label in [('branches','Branches'),('staff','Staff'),('students','Students'),('storage','Storage')] %}
+    {% set limit_val = entitlement.limits[resource] if (entitlement and entitlement.limits and resource in entitlement.limits) else None %}
+    {% set current_val = usage[resource] if (usage and resource in usage) else 0 %}
     <div class="col-md-3"><div class="card h-100 p-3">
       <span class="text-muted">{{ label }}</span>
       {% if resource == 'storage' %}
-        <strong class="fs-5">{{ (usage[resource] / 1024 / 1024)|round(1) }} MB / {{ ((entitlement.limits[resource] / 1024 / 1024)|round(1)) ~ ' MB' if entitlement.limits[resource] is not none else 'Unlimited' }}</strong>
+        <strong class="fs-5">{{ ((current_val or 0) / 1024 / 1024)|round(1) }} MB / {{ (((limit_val / 1024 / 1024)|round(1)) ~ ' MB') if limit_val is not none else 'Unlimited' }}</strong>
       {% else %}
-        <strong class="fs-5">{{ usage[resource] }} / {{ entitlement.limits[resource] if entitlement.limits[resource] is not none else 'Unlimited' }}</strong>
+        <strong class="fs-5">{{ current_val or 0 }} / {{ limit_val if limit_val is not none else 'Unlimited' }}</strong>
       {% endif %}
     </div></div>
     {% endfor %}
@@ -26,16 +29,16 @@
     <h3>Assignment and overrides</h3>
     <form method="post">
       <div class="row g-3">
-        <div class="col-md-4"><label class="form-label">Plan</label><select class="form-select" name="plan_id">{% for plan in plans %}<option value="{{ plan.id }}" {% if subscription.plan_id == plan.id %}selected{% endif %}>{{ plan.name }}</option>{% endfor %}</select></div>
-        <div class="col-md-2"><label class="form-label">Branch override</label><input class="form-control" type="number" min="0" name="branch_limit_override" value="{{ subscription.branch_limit_override if subscription.branch_limit_override is not none else '' }}" placeholder="Plan default"></div>
-        <div class="col-md-2"><label class="form-label">Staff override</label><input class="form-control" type="number" min="0" name="staff_limit_override" value="{{ subscription.staff_limit_override if subscription.staff_limit_override is not none else '' }}" placeholder="Plan default"></div>
-        <div class="col-md-2"><label class="form-label">Student override</label><input class="form-control" type="number" min="0" name="student_limit_override" value="{{ subscription.student_limit_override if subscription.student_limit_override is not none else '' }}" placeholder="Plan default"></div>
-        <div class="col-md-2"><label class="form-label">Storage override MB</label><input class="form-control" type="number" min="0" name="storage_limit_mb_override" value="{{ (subscription.storage_limit_bytes_override / 1024 / 1024)|int if subscription.storage_limit_bytes_override is not none else '' }}" placeholder="Plan default"></div>
+        <div class="col-md-4"><label class="form-label">Plan</label><select class="form-select" name="plan_id">{% for plan in plans %}<option value="{{ plan.id }}" {% if subscription and subscription.plan_id == plan.id %}selected{% endif %}>{{ plan.name }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><label class="form-label">Branch override</label><input class="form-control" type="number" min="0" name="branch_limit_override" value="{{ subscription.branch_limit_override if subscription and subscription.branch_limit_override is not none else '' }}" placeholder="Plan default"></div>
+        <div class="col-md-2"><label class="form-label">Staff override</label><input class="form-control" type="number" min="0" name="staff_limit_override" value="{{ subscription.staff_limit_override if subscription and subscription.staff_limit_override is not none else '' }}" placeholder="Plan default"></div>
+        <div class="col-md-2"><label class="form-label">Student override</label><input class="form-control" type="number" min="0" name="student_limit_override" value="{{ subscription.student_limit_override if subscription and subscription.student_limit_override is not none else '' }}" placeholder="Plan default"></div>
+        <div class="col-md-2"><label class="form-label">Storage override MB</label><input class="form-control" type="number" min="0" name="storage_limit_mb_override" value="{{ (subscription.storage_limit_bytes_override / 1024 / 1024)|int if subscription and subscription.storage_limit_bytes_override is not none else '' }}" placeholder="Plan default"></div>
       </div>
       <h5 class="mt-4">Feature flags</h5>
       <div class="row g-2">
         {% for feature in ['crm','students','finance','attendance','reports','lms','certificates','integrations'] %}
-        <div class="col-md-3"><div class="form-check"><input type="hidden" name="feature_{{ feature }}" value="0"><input class="form-check-input" type="checkbox" name="feature_{{ feature }}" value="1" id="feature{{ feature }}" {% if entitlement.features.get(feature) %}checked{% endif %}><label class="form-check-label" for="feature{{ feature }}">{{ feature|replace('_',' ')|title }}</label></div></div>
+        <div class="col-md-3"><div class="form-check"><input type="hidden" name="feature_{{ feature }}" value="0"><input class="form-check-input" type="checkbox" name="feature_{{ feature }}" value="1" id="feature{{ feature }}" {% if entitlement and entitlement.features and entitlement.features.get(feature) %}checked{% endif %}><label class="form-check-label" for="feature{{ feature }}">{{ feature|replace('_',' ')|title }}</label></div></div>
         {% endfor %}
       </div>
       <button class="btn btn-primary mt-4">Save subscription</button>

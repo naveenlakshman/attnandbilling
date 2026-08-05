@@ -18,7 +18,18 @@
         {% for institute in institutes %}
           <tr>
             <td><strong>{{ institute.name }}</strong><div class="small text-muted">{{ institute.slug }}</div></td>
-            <td>{{ institute.primary_hostname or 'Not configured' }}</td>
+            <td>
+              {% if institute.primary_hostname %}
+                {% set current_port = request.host.split(':')[1] if ':' in request.host else '' %}
+                {% set scheme = request.scheme or 'http' %}
+                {% set full_url = scheme + '://' + institute.primary_hostname + (':' + current_port if current_port else '') %}
+                <a href="{{ full_url }}" target="_blank" class="text-decoration-none fw-semibold" title="Open {{ full_url }}">
+                  🔗 {{ full_url }} ↗
+                </a>
+              {% else %}
+                <span class="text-muted">Not configured</span>
+              {% endif %}
+            </td>
             <td>{{ institute.plan_name or 'Not assigned' }}<div class="small text-muted">{{ institute.subscription_status|title if institute.subscription_status else '' }}</div></td>
             <td>{{ institute.branch_count }}</td>
             <td>{{ institute.admin_count }}</td>
