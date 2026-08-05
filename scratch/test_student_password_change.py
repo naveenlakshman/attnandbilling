@@ -69,6 +69,29 @@ def main():
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE invoices (
+                id INTEGER PRIMARY KEY,
+                student_id INTEGER NOT NULL,
+                institute_id INTEGER NOT NULL,
+                invoice_no TEXT,
+                status TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE installment_plans (
+                id INTEGER PRIMARY KEY,
+                invoice_id INTEGER NOT NULL,
+                due_date TEXT,
+                amount_due REAL,
+                amount_paid REAL,
+                status TEXT
+            )
+            """
+        )
         old_hash = generate_password_hash("Current@123")
         conn.executemany(
             "INSERT INTO students VALUES (?, ?, ?, ?, ?, ?, ?)",
