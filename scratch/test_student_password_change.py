@@ -20,15 +20,18 @@ def connect(path):
 
 
 def call_change_password(app, database_path, form_data):
+    import modules.notifications.service as notif_service
     original_get_conn = routes.get_conn
     original_company = routes.get_company_profile
     original_institute = routes.get_current_institute_id
     original_demo = routes._is_demo
+    original_fee_status = getattr(notif_service, "student_fee_access_status", None)
     try:
         routes.get_conn = lambda: connect(database_path)
         routes.get_company_profile = lambda: {"company_name": "Institute Seven"}
         routes.get_current_institute_id = lambda default=None: 7
         routes._is_demo = lambda: False
+        notif_service.student_fee_access_status = lambda *args, **kwargs: {"status": "ok", "locked": False}
         with app.test_request_context(
             "/student/change-password",
             method="POST",
@@ -46,6 +49,8 @@ def call_change_password(app, database_path, form_data):
         routes.get_company_profile = original_company
         routes.get_current_institute_id = original_institute
         routes._is_demo = original_demo
+        if original_fee_status:
+            notif_service.student_fee_access_status = original_fee_status
 
 
 def main():
