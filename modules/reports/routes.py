@@ -3061,12 +3061,12 @@ def lms_attendance_gap():
             if gap >= min_gap:
                 progress_pct = round((completed / total * 100), 1) if total > 0 else 0.0
                 
-                # Format last activity date
+                # Format last activity date in IST
                 last_act_str = "—"
                 if r["last_activity"]:
                     try:
-                        from datetime import datetime as _dt
-                        last_act_str = _dt.fromisoformat(str(r["last_activity"]).replace('T', ' ').split('.')[0]).strftime('%d %b %Y %I:%M %p')
+                        from app import format_ist_datetime
+                        last_act_str = format_ist_datetime(r["last_activity"], '%d %b %Y, %I:%M %p')
                     except Exception:
                         last_act_str = str(r["last_activity"])[:16]
 

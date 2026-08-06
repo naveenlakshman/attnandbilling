@@ -7054,8 +7054,8 @@ def view_student_progress(student_id):
                 return "Not started"
             try:
                 from datetime import datetime
-                date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
-                return date_obj.strftime('%d %b %Y, %I:%M %p')
+                from app import format_ist_datetime
+                return format_ist_datetime(date_str, '%d %b %Y, %I:%M %p')
             except:
                 return date_str
         
@@ -7251,8 +7251,8 @@ def view_batch_progress(batch_id):
                 return "—"
             try:
                 from datetime import datetime
-                date_obj = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
-                return date_obj.strftime('%d %b %Y, %I:%M %p')
+                from app import format_ist_datetime
+                return format_ist_datetime(date_str, '%d %b %Y, %I:%M %p')
             except:
                 return date_str
         

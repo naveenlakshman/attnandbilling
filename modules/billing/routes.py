@@ -246,12 +246,18 @@ def _parse_display_datetime(value):
 
 
 def _format_display_datetime(value):
-    parsed, has_time = _parse_display_datetime(value)
-    if not parsed:
-        return value or "-"
-    if not has_time:
-        return parsed.strftime("%d %b %Y")
-    return parsed.strftime("%d %b %Y, %I:%M %p")
+    if not value:
+        return ""
+    try:
+        from app import format_ist_datetime
+        return format_ist_datetime(value, "%d %b %Y, %I:%M %p")
+    except Exception:
+        parsed, has_time = _parse_display_datetime(value)
+        if not parsed:
+            return str(value) or "-"
+        if not has_time:
+            return parsed.strftime("%d %b %Y")
+        return parsed.strftime("%d %b %Y, %I:%M %p")
 
 
 def _format_display_date(value):
