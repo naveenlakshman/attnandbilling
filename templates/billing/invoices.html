@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}{{ company.company_short_name }} - Invoices{% endblock %}
 
@@ -120,9 +120,9 @@
   }
   .invoice-table th.sortable { cursor: pointer; user-select: none; }
   .invoice-table th.sortable:hover { background: #e8e9ea; }
-  .invoice-table th.sortable::after { content: ' â†•'; color: #bbb; font-size: 11px; }
-  .invoice-table th.sorted-asc::after { content: ' â†‘'; color: #0056b3; font-weight: bold; }
-  .invoice-table th.sorted-desc::after { content: ' â†“'; color: #0056b3; font-weight: bold; }
+  .invoice-table th.sortable::after { content: ' \2195'; color: #bbb; font-size: 11px; margin-left: 3px; }
+  .invoice-table th.sorted-asc::after { content: ' \2191'; color: #0056b3; font-weight: bold; margin-left: 3px; }
+  .invoice-table th.sorted-desc::after { content: ' \2193'; color: #0056b3; font-weight: bold; margin-left: 3px; }
 
   .invoice-table td {
     padding: 9px 10px;
@@ -261,7 +261,7 @@
 
 <!-- Search -->
 <form method="get" class="search-row">
-  <input type="text" name="search" value="{{ search or '' }}" placeholder="Search by bill no, student name or codeâ€¦">
+  <input type="text" name="search" value="{{ search or '' }}" placeholder="Search by bill no, student name or code...">
   <button type="submit" class="btn btn-primary">Search</button>
   {% if search %}<a href="{{ url_for('billing.invoices') }}" class="btn btn-outline-secondary">Clear</a>{% endif %}
 </form>

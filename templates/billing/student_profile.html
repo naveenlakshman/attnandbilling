@@ -130,7 +130,7 @@
                 <span class="profile-priority-label">Current Batch</span>
                 <div class="profile-priority-value">
                   {% if current_batch %}
-                  <a class="profile-inline-link profile-link-inherit" href="{{ url_for('attendance.view_batch', batch_id=current_batch.batch_id) }}">{{ current_batch.batch_name }}</a>
+                  <a class="profile-inline-link profile-link-inherit" href="{{ url_for('attendance.view_batch', batch_id=current_batch.batch_id) }}" target="_blank" rel="noopener noreferrer">{{ current_batch.batch_name }} ↗</a>
                   {% else %}
                   -
                   {% endif %}
@@ -797,7 +797,7 @@
           {% for batch in student_batches %}
           <article class="profile-batch-card">
             <div>
-              <a class="profile-batch-name" href="{{ url_for('attendance.view_batch', batch_id=batch.batch_id) }}">{{ batch.batch_name }}</a>
+              <a class="profile-batch-name" href="{{ url_for('attendance.view_batch', batch_id=batch.batch_id) }}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">{{ batch.batch_name }} <span style="font-size: 0.85em; opacity: 0.7;">↗</span></a>
               <div class="profile-batch-meta">
                 {% if batch.start_time %}{{ batch.start_time }}{% if batch.end_time %} - {{ batch.end_time }}{% endif %}{% else %}Schedule not available{% endif %}
               </div>
