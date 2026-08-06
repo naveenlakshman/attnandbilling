@@ -6752,6 +6752,16 @@ def view_student_progress(student_id):
                   AND cpm.program_id = lp.id
                 WHERE inv.student_id = ?
             )
+            OR EXISTS (
+                SELECT 1 FROM lms_master_topic_progress mtp
+                WHERE mtp.student_id = ? AND mtp.program_id = lp.id
+            )
+            OR EXISTS (
+                SELECT 1 FROM lms_topic_progress tp
+                JOIN lms_topics lt ON lt.id = tp.topic_id
+                JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                WHERE tp.student_id = ? AND lc.program_id = lp.id
+            )
         )"""
 
         program_where = [
@@ -6760,7 +6770,7 @@ def view_student_progress(student_id):
             "lp.institute_id = ?",
             enroll_check,
         ]
-        program_params = [current_inst, student_id, student_id, student_id, student_id]
+        program_params = [current_inst, student_id, student_id, student_id, student_id, student_id, student_id]
         if requested_program_id:
             program_where.append("lp.id = ?")
             program_params.append(requested_program_id)

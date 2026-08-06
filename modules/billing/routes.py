@@ -1639,7 +1639,7 @@ def student_batch_progress_monitor():
     )"""
 
     where_clauses = ["sb.status IN ('active', 'completed')", "b.status IN ('active', 'completed')", "s.institute_id = ?"]
-    params = [current_inst]
+    params = [current_inst, current_inst, current_inst, current_inst]
 
     if filters["course_id"].isdigit():
         where_clauses.append("c.id = ?")
@@ -1676,7 +1676,7 @@ def student_batch_progress_monitor():
             SELECT b.id AS batch_id, lp.id AS program_id
             FROM batches b
             JOIN lms_programs lp ON lp.course_id = b.course_id
-            WHERE lp.is_active = 1 AND lp.is_deleted = 0
+            WHERE lp.is_active = 1 AND lp.is_deleted = 0 AND lp.institute_id = ?
             UNION
             SELECT bpa.batch_id, bpa.program_id
             FROM lms_batch_program_access bpa
@@ -1684,13 +1684,14 @@ def student_batch_progress_monitor():
             WHERE bpa.is_active = 1
               AND lp.is_active = 1
               AND lp.is_deleted = 0
+              AND lp.institute_id = ?
               AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
             UNION
             SELECT b.id AS batch_id, cpm.program_id
             FROM batches b
             JOIN lms_course_program_map cpm ON cpm.course_id = b.course_id
             JOIN lms_programs lp ON lp.id = cpm.program_id
-            WHERE lp.is_active = 1 AND lp.is_deleted = 0
+            WHERE lp.is_active = 1 AND lp.is_deleted = 0 AND lp.institute_id = ?
         )
         SELECT
             s.id AS student_id,
@@ -1999,9 +2000,13 @@ def student_batch_progress_monitor():
             lms_programs_list = []
 
         photo_filename = _existing_photo_filename(row["photo_filename"])
-        program_ids = group["program_ids"]
+        if lms_programs_list:
+            active_p_ids = [p["program_id"] for p in lms_programs_list if p.get("program_id")]
+            program_id = active_p_ids[0] if len(active_p_ids) == 1 else None
+        else:
+            program_ids = group["program_ids"]
+            program_id = program_ids[0] if len(program_ids) == 1 else None
         program_names = group["program_names"]
-        program_id = program_ids[0] if len(program_ids) == 1 else None
         program_name = " / ".join(program_names) if program_names else "LMS not mapped"
         course_name = " / ".join(group["course_names"]) if group["course_names"] else row["course_name"]
         batch_name = " / ".join(group["batch_names"]) if group["batch_names"] else row["batch_name"]
