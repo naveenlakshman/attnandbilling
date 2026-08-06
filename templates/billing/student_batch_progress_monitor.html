@@ -157,13 +157,28 @@
               <td>{{ row.branch_name }}</td>
               <td>{{ row.trainer_name }}</td>
               <td>
-                <div class="sbpm-progress-row">
-                  <span>{{ row.progress_pct }}%</span>
-                  <div class="sbpm-progress-track">
-                    <div class="sbpm-progress-fill progress-{{ row.progress_class }}" data-progress="{{ row.progress_pct }}"></div>
+                {% if row.lms_programs_list %}
+                  {% for prog in row.lms_programs_list %}
+                  <div class="{% if not loop.last %}mb-2 pb-1 border-bottom{% endif %}" style="border-color: #e2e8f0;">
+                    <div style="font-size: 0.78rem; font-weight: 600; color: #334155;">{{ prog.course_name or prog.program_name }}</div>
+                    <div class="sbpm-progress-row">
+                      <span>{{ prog.progress_pct }}%</span>
+                      <div class="sbpm-progress-track">
+                        <div class="sbpm-progress-fill progress-{{ prog.progress_class }}" data-progress="{{ prog.progress_pct }}"></div>
+                      </div>
+                    </div>
+                    <div class="sbpm-muted" style="font-size: 0.75rem;">{{ prog.completed_topics }}/{{ prog.total_topics }} lessons</div>
                   </div>
-                </div>
-                <div class="sbpm-muted">{{ row.completed_topics }}/{{ row.total_topics }} lessons</div>
+                  {% endfor %}
+                {% else %}
+                  <div class="sbpm-progress-row">
+                    <span>{{ row.progress_pct }}%</span>
+                    <div class="sbpm-progress-track">
+                      <div class="sbpm-progress-fill progress-{{ row.progress_class }}" data-progress="{{ row.progress_pct }}"></div>
+                    </div>
+                  </div>
+                  <div class="sbpm-muted">{{ row.completed_topics }}/{{ row.total_topics }} lessons</div>
+                {% endif %}
               </td>
               <td>{{ row.last_activity }}</td>
               <td>
@@ -227,17 +242,35 @@
         </div>
 
         <div class="sbpm-lms-box">
-          <div class="sbpm-lms-head">
-            <span>LMS Progress</span>
-            <strong>{{ row.progress_pct }}%</strong>
-          </div>
-          <div class="sbpm-progress-track">
-            <div class="sbpm-progress-fill progress-{{ row.progress_class }}" data-progress="{{ row.progress_pct }}"></div>
-          </div>
-          <div class="sbpm-lms-foot">
-            <span>{{ row.completed_topics }}/{{ row.total_topics }} lessons</span>
-            <span>{{ row.progress_label }}</span>
-          </div>
+          {% if row.lms_programs_list %}
+            {% for prog in row.lms_programs_list %}
+            <div class="sbpm-lms-item {% if not loop.last %}mb-3 pb-2 border-bottom{% endif %}" style="border-color: #e2e8f0;">
+              <div class="sbpm-lms-head" style="margin-bottom: 4px;">
+                <span style="font-weight: 600; color: #1e293b; font-size: 0.88rem;">{{ prog.course_name or prog.program_name }}</span>
+                <strong style="color: #2563eb; font-size: 0.9rem;">{{ prog.progress_pct }}%</strong>
+              </div>
+              <div class="sbpm-progress-track">
+                <div class="sbpm-progress-fill progress-{{ prog.progress_class }}" data-progress="{{ prog.progress_pct }}"></div>
+              </div>
+              <div class="sbpm-lms-foot" style="margin-top: 4px; font-size: 0.8rem;">
+                <span>{{ prog.completed_topics }}/{{ prog.total_topics }} lessons</span>
+                <span>{{ prog.progress_label }}</span>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="sbpm-lms-head">
+              <span>LMS Progress</span>
+              <strong>{{ row.progress_pct }}%</strong>
+            </div>
+            <div class="sbpm-progress-track">
+              <div class="sbpm-progress-fill progress-{{ row.progress_class }}" data-progress="{{ row.progress_pct }}"></div>
+            </div>
+            <div class="sbpm-lms-foot">
+              <span>{{ row.completed_topics }}/{{ row.total_topics }} lessons</span>
+              <span>{{ row.progress_label }}</span>
+            </div>
+          {% endif %}
         </div>
 
         <div class="sbpm-card-last">

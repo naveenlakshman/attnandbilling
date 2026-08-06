@@ -1818,8 +1818,6 @@ def student_batch_progress_monitor():
         for sid, names in trainer_names_by_student.items():
             student_trainer_map[sid] = " / ".join(names) if len(names) > 1 else names[0]
 
-    conn.close()
-
     def _batch_time(row):
         start_time = row["start_time"] or ""
         end_time = row["end_time"] or ""
@@ -1946,13 +1944,54 @@ def student_batch_progress_monitor():
             not group["last_activity"] or str(last_activity) > str(group["last_activity"])
         ):
             group["last_activity"] = last_activity
-
     monitor_rows = []
     for group in grouped_rows.values():
         row = group["row"]
-        total = group["total_topics"]
-        done = group["completed_topics"]
-        pct = round((done / total) * 100, 1) if total > 0 else 0.0
+        sid = row["student_id"]
+        
+        # Retrieve actual student program progress matching student profile
+        lms_prog_rows = _student_lms_progress_rows(cur, sid, current_inst)
+        
+        if lms_prog_rows:
+            enhanced_progs = []
+            sum_total = 0
+            sum_done = 0
+            latest_act = None
+            for p in lms_prog_rows:
+                p_tot = p.get("total_topics", 0)
+                p_done = p.get("completed_topics", 0)
+                p_pct = p.get("progress_pct", 0.0)
+                p_act = p.get("last_activity")
+                
+                sum_total += p_tot
+                sum_done += p_done
+                if p_act and (not latest_act or str(p_act) > str(latest_act)):
+                    latest_act = p_act
+                
+                enhanced_progs.append({
+                    "program_id": p.get("program_id"),
+                    "program_name": p.get("program_name"),
+                    "course_name": p.get("course_name"),
+                    "total_topics": p_tot,
+                    "completed_topics": p_done,
+                    "progress_pct": p_pct,
+                    "progress_class": _progress_class(p_pct, p_tot, p_done),
+                    "progress_label": _progress_label(p_pct, p_tot, p_done),
+                    "last_activity": _format_display_datetime(p_act) if p_act else "Not Started"
+                })
+            
+            total = sum_total
+            done = sum_done
+            pct = round((done / total) * 100, 1) if total > 0 else 0.0
+            lms_programs_list = enhanced_progs
+            if latest_act and (not group["last_activity"] or str(latest_act) > str(group["last_activity"])):
+                group["last_activity"] = latest_act
+        else:
+            total = group["total_topics"]
+            done = group["completed_topics"]
+            pct = round((done / total) * 100, 1) if total > 0 else 0.0
+            lms_programs_list = []
+
         photo_filename = _existing_photo_filename(row["photo_filename"])
         program_ids = group["program_ids"]
         program_names = group["program_names"]
@@ -1984,9 +2023,12 @@ def student_batch_progress_monitor():
             "progress_pct": pct,
             "progress_class": _progress_class(pct, total, done),
             "progress_label": _progress_label(pct, total, done),
+            "lms_programs_list": lms_programs_list,
             "last_activity": _format_display_datetime(group["last_activity"]) if group["last_activity"] else "Not Started",
         }
         monitor_rows.append(item)
+
+    conn.close()
 
     progress_filter = filters["progress"]
     if progress_filter:
