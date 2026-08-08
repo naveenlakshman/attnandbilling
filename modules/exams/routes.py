@@ -1,6 +1,6 @@
 import random
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import flash, redirect, render_template, request, session, url_for
 
@@ -481,7 +481,10 @@ def _is_final_exam_unlocked(application):
     if not application or application["status"] != "APPROVED":
         return False
     try:
-        return date.fromisoformat(application["requested_exam_date"]) <= date.today()
+        exam_date = date.fromisoformat(application["requested_exam_date"])
+        today = date.today()
+        # Exam is unlocked on requested_exam_date and valid for 1 grace day
+        return exam_date <= today <= (exam_date + timedelta(days=1))
     except (TypeError, ValueError):
         return False
 
@@ -1385,6 +1388,83 @@ def reject_final_exam_application(application_id):
         )
         conn.commit()
         flash("Final exam application rejected.", "warning")
+    finally:
+        conn.close()
+
+    return redirect(url_for("exams.final_exam_applications"))
+
+
+@exams_bp.route("/lms_admin/final-exam/applications/<int:application_id>/reschedule", methods=["POST"])
+@lms_content_manager_required
+def reschedule_final_exam_application(application_id):
+    new_date = request.form.get("requested_exam_date", "").strip()
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        application = _get_final_exam_application(cur, application_id)
+        if not application:
+            flash("Final exam application not found.", "warning")
+            return redirect(url_for("exams.final_exam_applications"))
+
+        if not new_date:
+            flash("Please provide a valid exam date for rescheduling.", "warning")
+            return redirect(url_for("exams.final_exam_applications"))
+
+        cur.execute(
+            """
+                UPDATE lms_final_exam_applications
+                SET requested_exam_date = ?, status = 'APPROVED'
+                WHERE id = ?
+            """,
+            (new_date, application_id),
+        )
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=session.get("branch_id"),
+            action_type="reschedule",
+            module_name="lms_final_exam_applications",
+            record_id=application_id,
+            description=f"Rescheduled final exam for {application['verified_name']} to {new_date}",
+            conn=conn,
+        )
+        conn.commit()
+        flash(f"Final exam rescheduled to {new_date} and approved.", "success")
+    finally:
+        conn.close()
+
+    return redirect(url_for("exams.final_exam_applications"))
+
+
+@exams_bp.route("/lms_admin/final-exam/applications/<int:application_id>/expire", methods=["POST"])
+@lms_content_manager_required
+def expire_final_exam_application(application_id):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        application = _get_final_exam_application(cur, application_id)
+        if not application:
+            flash("Final exam application not found.", "warning")
+            return redirect(url_for("exams.final_exam_applications"))
+
+        cur.execute(
+            """
+                UPDATE lms_final_exam_applications
+                SET status = 'EXPIRED'
+                WHERE id = ?
+            """,
+            (application_id,),
+        )
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=session.get("branch_id"),
+            action_type="expire",
+            module_name="lms_final_exam_applications",
+            record_id=application_id,
+            description=f"Marked final exam application as expired for {application['verified_name']}",
+            conn=conn,
+        )
+        conn.commit()
+        flash("Final exam application marked as expired and locked.", "info")
     finally:
         conn.close()
 
