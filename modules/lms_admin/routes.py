@@ -3,7 +3,7 @@ from . import lms_admin_bp
 from db import get_conn, log_activity, _ensure_lms_batch_topic_progress_table
 from flask import session, redirect, url_for, flash, abort
 from extensions import csrf
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 import re
@@ -10271,6 +10271,16 @@ def classroom_teach_mode(batch_id):
         """, (batch_id,))
         student_rows = cur.fetchall()
 
+        IST = timezone(timedelta(hours=5, minutes=30))
+        today_date = datetime.now(IST).strftime("%Y-%m-%d")
+
+        cur.execute("""
+            SELECT student_id, status, remarks
+            FROM attendance_records
+            WHERE batch_id = ? AND attendance_date = ?
+        """, (batch_id, today_date))
+        today_att_map = {row['student_id']: row for row in cur.fetchall()}
+
         students_progress = []
         for srow in student_rows:
             sid = srow['student_id']
@@ -10372,6 +10382,7 @@ def classroom_teach_mode(batch_id):
                 p_class = 'not_started'
                 p_label = 'Not Started'
 
+            att_row = today_att_map.get(sid)
             students_progress.append({
                 'student_id': sid,
                 'full_name': fname,
@@ -10387,8 +10398,30 @@ def classroom_teach_mode(batch_id):
                 'total_assignments': total_assignments,
                 'assg_pct': assg_pct,
                 'progress_class': p_class,
-                'progress_label': p_label
+                'progress_label': p_label,
+                'today_status': att_row['status'] if att_row else 'present',
+                'today_remarks': att_row['remarks'] if (att_row and att_row['remarks']) else '',
+                'is_marked_today': att_row is not None,
             })
+
+        cur.execute("""
+            SELECT student_id, attendance_date, status, remarks
+            FROM attendance_records
+            WHERE batch_id = ?
+        """, (batch_id,))
+        att_rows = cur.fetchall()
+
+        all_attendance_map = {}
+        for r in att_rows:
+            d = r['attendance_date']
+            if d not in all_attendance_map:
+                all_attendance_map[d] = {}
+            all_attendance_map[d][r['student_id']] = {
+                'status': r['status'],
+                'remarks': r['remarks'] or ''
+            }
+
+        all_attendance_json = json.dumps(all_attendance_map)
 
         return render_template(
             "lms_admin/classroom_teach_mode.html",
@@ -10400,9 +10433,117 @@ def classroom_teach_mode(batch_id):
             taught_count=taught_count,
             taught_pct=taught_pct,
             students_progress=students_progress,
+            today_date=today_date,
+            all_attendance_json=all_attendance_json,
         )
     finally:
         conn.close()
+
+
+@lms_admin_bp.route('/batch/<int:batch_id>/save-attendance', methods=['POST'])
+@login_required
+def save_batch_attendance_from_teach(batch_id):
+    user_id = session.get('user_id')
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id, branch_id, start_time, end_time FROM batches WHERE id = ?", (batch_id,))
+        batch = cur.fetchone()
+        if not batch:
+            flash("Batch not found.", "warning")
+            return redirect(url_for("lms_admin.classroom_teaching_dashboard"))
+
+        branch_id = batch['branch_id']
+        attendance_date = request.form.get('attendance_date', '').strip()
+        time_warn_reason = request.form.get('time_warn_reason', '').strip()
+
+        IST = timezone(timedelta(hours=5, minutes=30))
+        now_ist = datetime.now(IST)
+        today_date = now_ist.strftime("%Y-%m-%d")
+        actual_time = now_ist.strftime("%H:%M")
+        marked_at = now_ist.isoformat(timespec="seconds")
+
+        if not attendance_date:
+            attendance_date = today_date
+
+        batch_start_time = batch['start_time'] if batch else None
+        batch_end_time   = batch['end_time']   if batch else None
+
+        warning_type = None
+        if attendance_date != today_date:
+            warning_type = 'backdated' if attendance_date < today_date else 'future_dated'
+        elif batch_start_time and batch_end_time:
+            if actual_time < batch_start_time:
+                warning_type = 'before_start'
+            elif actual_time > batch_end_time:
+                warning_type = 'after_end'
+
+        cur.execute("""
+            SELECT s.id AS student_id
+            FROM student_batches sb
+            JOIN students s ON s.id = sb.student_id
+            WHERE sb.batch_id = ? AND sb.status IN ('active', 'completed')
+        """, (batch_id,))
+        students = cur.fetchall()
+
+        now = datetime.now().isoformat(timespec="seconds")
+        for s in students:
+            sid = s['student_id']
+            status = request.form.get(f'status_{sid}', 'present')
+            remarks = request.form.get(f'remarks_{sid}', '').strip()
+
+            if status not in ['present', 'absent', 'late', 'leave']:
+                status = 'present'
+
+            cur.execute("""
+                SELECT id FROM attendance_records
+                WHERE batch_id = ? AND student_id = ? AND attendance_date = ?
+            """, (batch_id, sid, attendance_date))
+            existing = cur.fetchone()
+
+            if existing:
+                cur.execute("""
+                    UPDATE attendance_records
+                    SET status = ?, remarks = ?, marked_by = ?, updated_at = ?
+                    WHERE id = ?
+                """, (status, remarks, user_id, now, existing['id']))
+            else:
+                cur.execute("""
+                    INSERT INTO attendance_records (
+                        attendance_date, student_id, batch_id, branch_id,
+                        status, remarks, marked_by, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (attendance_date, sid, batch_id, branch_id,
+                      status, remarks, user_id, now, now))
+
+            if warning_type:
+                cur.execute("""
+                    INSERT INTO attendance_time_warnings (
+                        batch_id, branch_id, student_id, attendance_date,
+                        attendance_status, marked_at, actual_time,
+                        batch_start_time, batch_end_time, warning_type, reason, marked_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (batch_id, branch_id, sid, attendance_date,
+                      status, marked_at, actual_time,
+                      batch_start_time, batch_end_time, warning_type,
+                      time_warn_reason or None, user_id))
+
+        conn.commit()
+        log_activity(
+            user_id=user_id,
+            branch_id=branch_id,
+            action_type="save_attendance",
+            module_name="attendance_records",
+            record_id=batch_id,
+            description=f"Marked attendance for batch {batch_id} on {attendance_date} (Scrutiny: {warning_type or 'None'})",
+            conn=conn,
+        )
+        flash(f"Attendance for {attendance_date} saved successfully! ✓", "success")
+    finally:
+        conn.close()
+
+    return redirect(url_for('lms_admin.classroom_teach_mode', batch_id=batch_id))
 
 
 @lms_admin_bp.route('/batch/<int:batch_id>/mark-topic-taught', methods=['POST'])

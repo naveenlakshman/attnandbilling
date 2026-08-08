@@ -201,21 +201,48 @@
   }
 
   /* ── SYLLABUS SIDEBAR — scoped to .teach-syllabus-wrap ── */
+  #syllabus-sidebar-col {
+    position: sticky;
+    top: 15px;
+    align-self: flex-start;
+    z-index: 100;
+  }
+
   .teach-syllabus-wrap {
     border: 1px solid #e9ecef;
     border-radius: 0.5rem;
     overflow: hidden;
     background: #fff;
     box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 30px);
   }
 
   .teach-syllabus-header {
     background: #fff;
     border-bottom: 1px solid #e9ecef;
     padding: 10px 14px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .syllabus-scroll-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 100px);
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f8fafc;
+  }
+
+  .syllabus-scroll-body::-webkit-scrollbar {
+    width: 6px;
+  }
+  .syllabus-scroll-body::-webkit-scrollbar-track {
+    background: #f8fafc;
+  }
+  .syllabus-scroll-body::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 4px;
   }
 
   .teach-progress-wrap {
@@ -353,6 +380,9 @@
             <button type="button" class="btn btn-sm btn-outline-info text-white border-light rounded-pill px-3 py-1 fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#studentProgressModal">
               👥 Check Student Progress
             </button>
+            <button type="button" class="btn btn-sm btn-success text-white rounded-pill px-3 py-1 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#markAttendanceModal">
+              📝 Mark Attendance
+            </button>
           </div>
           <div class="small teach-meta-text mt-1">
             <span>📍 {{ batch.branch_name or 'Main Branch' }}</span> &bull;
@@ -390,7 +420,7 @@
           <button id="projector-toggle-btn" type="button" class="btn btn-sm btn-primary teach-btn-projector d-flex align-items-center gap-1">
             <span>📺</span> <span>Projector Mode</span>
           </button>
-          <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-sm btn-outline-light">
+          <a href="{{ url_for('lms_admin.classroom_teaching_dashboard') }}" class="btn btn-sm btn-outline-light">
             ✕ Exit
           </a>
         </div>
@@ -406,9 +436,6 @@
           
           <div class="card shadow-sm border-0 mb-3">
             <div class="card-body p-4">
-              
-
-
               <!-- TABS NAV: Watch Video | Read Tutorial -->
               <ul class="nav nav-tabs teach-nav-tabs mb-3" id="contentTabs" role="tablist">
                 <li class="nav-item" role="presentation">
@@ -476,7 +503,7 @@
             </div>
 
             <!-- Collapsible Chapter List -->
-            <div class="syllabus-scroll-body" style="max-height: 70vh; overflow-y: auto;">
+            <div class="syllabus-scroll-body">
               {% if chapters %}
                 {% for ch in chapters %}
                   <div class="teach-chapter-item">
@@ -605,6 +632,301 @@
     </div>
   </div>
 </div>
+
+<!-- BATCH ATTENDANCE MARKING MODAL -->
+<div class="modal fade" id="markAttendanceModal" tabindex="-1" aria-labelledby="markAttendanceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form id="markAttendanceForm" method="post" action="{{ url_for('lms_admin.save_batch_attendance_from_teach', batch_id=batch.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="time_warn_reason" id="teachTimeWarnReasonHidden">
+        <div class="modal-header bg-dark text-white">
+          <div>
+            <h5 class="modal-title fw-bold" id="markAttendanceModalLabel">📝 Mark Attendance — {{ batch.batch_name }}</h5>
+            <small class="text-white-50">Branch: {{ batch.branch_name or 'Main Branch' }} | Trainer: {{ batch.trainer_name or 'Unassigned' }}</small>
+          </div>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body p-4 bg-light">
+          <!-- DATE SELECTION & QUICK PRESETS BAR -->
+          <div class="card border-0 shadow-2xs p-3 mb-3 bg-white rounded-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+              <div class="d-flex align-items-center gap-2">
+                <label class="form-label fw-bold text-dark mb-0">Attendance Date:</label>
+                <input type="date" name="attendance_date" id="attDateInput" class="form-control form-control-sm fw-bold" value="{{ today_date }}" required style="width: 170px;">
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <span class="small text-muted fw-semibold">Quick Set All:</span>
+                <button type="button" class="btn btn-sm btn-outline-success px-3 fw-bold" onclick="setAllAttendance('present')">🟢 All Present</button>
+                <button type="button" class="btn btn-sm btn-outline-danger px-3 fw-bold" onclick="setAllAttendance('absent')">🔴 All Absent</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- DYNAMIC ATTENDANCE STATUS BANNER FOR SELECTED DATE -->
+          <div id="dateAttStatusBanner" class="alert alert-primary py-2 px-3 mb-3 small shadow-2xs d-none"></div>
+
+          <!-- STUDENTS ATTENDANCE LIST -->
+          {% if students_progress %}
+            <div class="row g-3">
+              {% for s in students_progress %}
+                <div class="col-12 student-att-row" data-student-id="{{ s.student_id }}">
+                  <div class="card border-0 shadow-2xs p-3 bg-white rounded-3">
+                    <div class="row align-items-center g-3">
+                      <!-- STUDENT INFO -->
+                      <div class="col-md-5">
+                        <div class="d-flex align-items-center gap-3">
+                          {% if s.photo_filename %}
+                            <img src="{{ url_for('static', filename='images/student_photos/' + s.photo_filename) }}" 
+                                 class="rounded-circle object-fit-cover shadow-2xs" 
+                                 style="width: 44px; height: 44px; border: 2px solid #e2e8f0;" 
+                                 alt="{{ s.full_name }}">
+                          {% else %}
+                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-2xs" 
+                                 style="width: 44px; height: 44px; font-size: 15px;">
+                              {{ s.initials }}
+                            </div>
+                          {% endif %}
+                          <div>
+                            <div class="fw-bold text-dark mb-0 fs-6">{{ s.full_name }}</div>
+                            <small class="text-muted">Code: <strong>{{ s.student_code }}</strong> | Phone: {{ s.phone }}</small>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- STATUS RADIO BUTTON GROUP -->
+                      <div class="col-md-4">
+                        <div class="btn-group w-100" role="group" aria-label="Status for {{ s.full_name }}">
+                          <input type="radio" class="btn-check att-radio-present" name="status_{{ s.student_id }}" id="att_present_{{ s.student_id }}" value="present" {% if s.today_status == 'present' or not s.is_marked_today %}checked{% endif %}>
+                          <label class="btn btn-sm btn-outline-success fw-bold" for="att_present_{{ s.student_id }}">Present</label>
+
+                          <input type="radio" class="btn-check att-radio-absent" name="status_{{ s.student_id }}" id="att_absent_{{ s.student_id }}" value="absent" {% if s.today_status == 'absent' %}checked{% endif %}>
+                          <label class="btn btn-sm btn-outline-danger fw-bold" for="att_absent_{{ s.student_id }}">Absent</label>
+
+                          <input type="radio" class="btn-check" name="status_{{ s.student_id }}" id="att_late_{{ s.student_id }}" value="late" {% if s.today_status == 'late' %}checked{% endif %}>
+                          <label class="btn btn-sm btn-outline-warning fw-bold text-dark" for="att_late_{{ s.student_id }}">Late</label>
+
+                          <input type="radio" class="btn-check" name="status_{{ s.student_id }}" id="att_leave_{{ s.student_id }}" value="leave" {% if s.today_status == 'leave' %}checked{% endif %}>
+                          <label class="btn btn-sm btn-outline-info fw-bold" for="att_leave_{{ s.student_id }}">Leave</label>
+                        </div>
+                      </div>
+
+                      <!-- REMARKS INPUT -->
+                      <div class="col-md-3">
+                        <input type="text" name="remarks_{{ s.student_id }}" class="form-control form-control-sm" placeholder="Optional remarks..." value="{{ s.today_remarks }}">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="text-center py-5 text-muted">
+              <div class="fs-1">👥</div>
+              <p class="mt-2 fw-medium">No active students found in this batch.</p>
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="modal-footer bg-white border-top">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success fw-bold px-4">Save Attendance ✓</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- OUT OF SCHEDULE ATTENDANCE SCRUTINY WARNING MODAL -->
+<div class="modal fade" id="teachTimeWarnModal" tabindex="-1" aria-labelledby="teachTimeWarnModalLabel" aria-hidden="true" style="z-index: 1060;">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-warning shadow">
+      <div class="modal-header bg-warning bg-opacity-10 border-warning">
+        <h5 class="modal-title text-warning-emphasis fw-bold" id="teachTimeWarnModalLabel">
+          ⚠️ Out-of-Schedule Scrutiny Required
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="teachTimeWarnMsg" class="mb-3 p-3 bg-warning-subtle rounded border border-warning-subtle text-dark"></div>
+        <label for="teachTimeWarnReasonInput" class="form-label fw-bold text-dark">
+          Reason for marking out-of-schedule attendance <span class="text-danger">*</span>
+        </label>
+        <textarea id="teachTimeWarnReasonInput" class="form-control" rows="3"
+          placeholder="e.g. Backdated entry for absent student, makeup class, system maintenance during batch hours..."
+          maxlength="500" required></textarea>
+        <div id="teachTimeWarnReasonError" class="text-danger small mt-1" style="display:none;">
+          A scrutiny reason is required for out-of-schedule or backdated attendance.
+        </div>
+      </div>
+      <div class="modal-footer border-warning">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning fw-bold px-4" id="teachTimeWarnOkBtn">Submit with Scrutiny Reason ✓</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const allAttData = {{ all_attendance_json | safe }};
+
+function updateAttendanceForSelectedDate(selectedDate) {
+  const banner = document.getElementById('dateAttStatusBanner');
+  const recordsForDate = (allAttData && allAttData[selectedDate]) ? allAttData[selectedDate] : null;
+
+  if (recordsForDate && Object.keys(recordsForDate).length > 0) {
+    if (banner) {
+      banner.className = 'alert alert-primary py-2 px-3 mb-3 small shadow-2xs d-flex align-items-center gap-2';
+      banner.innerHTML = '<span>ℹ️</span> <span><strong>Existing Attendance Found:</strong> Showing saved records for <strong>' + selectedDate + '</strong>. You can modify and save updates below.</span>';
+      banner.classList.remove('d-none');
+    }
+    document.querySelectorAll('.student-att-row').forEach(row => {
+      const sid = row.getAttribute('data-student-id');
+      const rec = recordsForDate[sid];
+      if (rec) {
+        const rad = row.querySelector('input[value="' + rec.status + '"]');
+        if (rad) rad.checked = true;
+        const rem = row.querySelector('input[name="remarks_' + sid + '"]');
+        if (rem) rem.value = rec.remarks || '';
+      } else {
+        const rad = row.querySelector('input[value="present"]');
+        if (rad) rad.checked = true;
+        const rem = row.querySelector('input[name="remarks_' + sid + '"]');
+        if (rem) rem.value = '';
+      }
+    });
+  } else {
+    if (banner) {
+      banner.className = 'alert alert-warning py-2 px-3 mb-3 small shadow-2xs d-flex align-items-center gap-2';
+      banner.innerHTML = '<span>✨</span> <span><strong>No Saved Entry:</strong> No attendance recorded for <strong>' + selectedDate + '</strong> yet. Defaulting all students to Present.</span>';
+      banner.classList.remove('d-none');
+    }
+    document.querySelectorAll('.student-att-row').forEach(row => {
+      const sid = row.getAttribute('data-student-id');
+      const rad = row.querySelector('input[value="present"]');
+      if (rad) rad.checked = true;
+      const rem = row.querySelector('input[name="remarks_' + sid + '"]');
+      if (rem) rem.value = '';
+    });
+  }
+}
+
+function setAllAttendance(status) {
+  if (status === 'present') {
+    document.querySelectorAll('.att-radio-present').forEach(el => el.checked = true);
+  } else if (status === 'absent') {
+    document.querySelectorAll('.att-radio-absent').forEach(el => el.checked = true);
+  }
+}
+
+(function() {
+  const batchStart = "{{ batch.start_time or '' }}";
+  const batchEnd   = "{{ batch.end_time or '' }}";
+  const todayDate  = "{{ today_date }}";
+  let pendingAttForm = null;
+
+  function getCurrentHHMM() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    return h + ':' + m;
+  }
+
+  function checkScrutinyWarning(selectedDate) {
+    if (selectedDate !== todayDate) {
+      return selectedDate < todayDate ? 'backdated' : 'future_dated';
+    }
+    if (batchStart && batchEnd) {
+      const nowHHMM = getCurrentHHMM();
+      if (nowHHMM < batchStart) return 'before_start';
+      if (nowHHMM > batchEnd)   return 'after_end';
+    }
+    return null;
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const dateInput = document.getElementById('attDateInput');
+    if (dateInput) {
+      dateInput.addEventListener('change', function() {
+        updateAttendanceForSelectedDate(this.value);
+      });
+      // Trigger initial view update
+      updateAttendanceForSelectedDate(dateInput.value);
+    }
+
+    const attForm = document.getElementById('markAttendanceForm');
+    if (!attForm) return;
+
+    attForm.addEventListener('submit', function(e) {
+      const dateInp = attForm.querySelector('input[name="attendance_date"]');
+      const selectedDate = dateInp ? dateInp.value : todayDate;
+      const warningType = checkScrutinyWarning(selectedDate);
+
+      if (!warningType) return; // In-schedule — submit normally
+
+      // If scrutiny reason already filled, submit
+      const hiddenReason = document.getElementById('teachTimeWarnReasonHidden');
+      if (hiddenReason && hiddenReason.value.trim() !== '') return;
+
+      e.preventDefault();
+      pendingAttForm = attForm;
+
+      const msgEl = document.getElementById('teachTimeWarnMsg');
+      let typeLabel = '';
+      if (warningType === 'backdated') {
+        typeLabel = 'marking <strong>Backdated Attendance</strong> for <strong>' + selectedDate + '</strong>';
+      } else if (warningType === 'future_dated') {
+        typeLabel = 'marking <strong>Future-dated Attendance</strong> for <strong>' + selectedDate + '</strong>';
+      } else if (warningType === 'before_start') {
+        typeLabel = 'marking attendance <strong>before batch start time (' + batchStart + ')</strong>';
+      } else if (warningType === 'after_end') {
+        typeLabel = 'marking attendance <strong>after batch end time (' + batchEnd + ')</strong>';
+      }
+
+      if (msgEl) {
+        msgEl.innerHTML =
+          '<strong>Scrutiny Flag:</strong> You are ' + typeLabel + '.<br>' +
+          '<small class="text-muted">This out-of-schedule entry will be logged under admin scrutiny records.</small>';
+      }
+
+      const modalEl = document.getElementById('teachTimeWarnModal');
+      if (modalEl && typeof bootstrap !== 'undefined') {
+        new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false }).show();
+      }
+    });
+
+    const okBtn = document.getElementById('teachTimeWarnOkBtn');
+    if (okBtn) {
+      okBtn.addEventListener('click', function() {
+        const textarea = document.getElementById('teachTimeWarnReasonInput');
+        const reason = textarea ? textarea.value.trim() : '';
+        const errEl = document.getElementById('teachTimeWarnReasonError');
+        if (!reason) {
+          if (errEl) errEl.style.display = 'block';
+          if (textarea) textarea.focus();
+          return;
+        }
+        if (errEl) errEl.style.display = 'none';
+
+        const hiddenReason = document.getElementById('teachTimeWarnReasonHidden');
+        if (hiddenReason) hiddenReason.value = reason;
+
+        const modalEl = document.getElementById('teachTimeWarnModal');
+        if (modalEl && typeof bootstrap !== 'undefined') {
+          const bsModal = bootstrap.Modal.getInstance(modalEl);
+          if (bsModal) bsModal.hide();
+        }
+
+        if (pendingAttForm) {
+          pendingAttForm.submit();
+          pendingAttForm = null;
+        }
+      });
+    }
+  });
+})();
+</script>
 {% endblock %}
 
 {% block extra_js %}
