@@ -54,17 +54,22 @@
     </div>
   </div>
 
-  <!-- BATCH SELECTION HEADER -->
-  <div class="d-flex align-items-center justify-content-between mb-3">
+  <!-- BATCH SELECTION HEADER WITH SEARCH BOX -->
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
     <h4 class="fw-bold text-dark mb-0">Select Assigned Batch to Start Teaching</h4>
-    <span class="badge bg-primary px-3 py-2 fs-6">{{ batches|length }} Active Batches</span>
+    <div class="d-flex align-items-center gap-3">
+      <div class="position-relative" style="min-width: 280px;">
+        <input type="text" id="batchSearchInput" class="form-control form-control-sm ps-5 rounded-pill border-secondary-subtle shadow-2xs" placeholder="🔍 Search batch, course, trainer, branch...">
+      </div>
+      <span class="badge bg-primary px-3 py-2 fs-6" id="activeBatchCountBadge">{{ batches|length }} Active Batches</span>
+    </div>
   </div>
 
   <!-- BATCH CARDS GRID -->
   {% if batches %}
-    <div class="row g-4">
+    <div class="row g-4" id="batchCardsContainer">
       {% for b in batches %}
-        <div class="col-md-6 col-lg-4">
+        <div class="col-md-6 col-lg-4 batch-card-col" data-search-text="{{ b.batch_name | lower }} {{ (b.course_name or '') | lower }} {{ (b.branch_name or '') | lower }} {{ (b.trainer_name or '') | lower }}">
           <div class="card h-100 border-0 shadow-sm" style="border-radius: 14px; overflow: hidden; border-left: 5px solid #4f46e5 !important;">
             <div class="card-body p-4 d-flex flex-column justify-content-between">
               <div>
@@ -78,9 +83,24 @@
                   <div><strong>Time:</strong> 🕐 {{ b.start_time or '' }} - {{ b.end_time or '' }}</div>
                   <div><strong>Trainer:</strong> {{ b.trainer_name or 'Unassigned' }}</div>
                 </div>
+
+                <!-- TOPIC PROGRESS & NEXT TOPIC INFO -->
+                <div class="p-3 bg-light rounded-3 mb-3 border">
+                  <div class="d-flex align-items-center justify-content-between small fw-semibold mb-1">
+                    <span class="text-secondary">📚 Topics Completed:</span>
+                    <span class="text-primary fw-bold">{{ b.taught_cnt }}/{{ b.total_cnt }} ({{ b.taught_pct }}%)</span>
+                  </div>
+                  <div class="progress mb-2" style="height: 6px;">
+                    <div class="progress-bar bg-success" role="progressbar" style="width: {{ b.taught_pct }}%;"></div>
+                  </div>
+                  <div class="small text-truncate" title="{{ b.next_topic }}">
+                    <strong class="text-dark">Next Topic:</strong>
+                    <span class="text-primary fw-medium">{{ b.next_topic }}</span>
+                  </div>
+                </div>
               </div>
 
-              <div class="mt-3 pt-3 border-top d-flex gap-2">
+              <div class="pt-2 border-top d-flex gap-2">
                 <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=b.id) }}" class="btn btn-primary w-100 fw-bold py-2 d-flex align-items-center justify-content-center gap-2" style="background: #4f46e5; border-color: #4f46e5; border-radius: 8px;">
                   <span>🎓 Launch Teaching Mode</span>
                 </a>
@@ -97,4 +117,34 @@
     </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('batchSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', function() {
+      const query = this.value.toLowerCase().trim();
+      const cards = document.querySelectorAll('.batch-card-col');
+      let visibleCount = 0;
+
+      cards.forEach(function(card) {
+        const searchText = card.getAttribute('data-search-text') || '';
+        if (!query || searchText.includes(query)) {
+          card.style.display = '';
+          visibleCount++;
+        } else {
+          card.style.display = 'none';
+        }
+      });
+
+      const badge = document.getElementById('activeBatchCountBadge');
+      if (badge) {
+        badge.textContent = visibleCount + ' Batches Found';
+      }
+    });
+  }
+});
+</script>
 {% endblock %}

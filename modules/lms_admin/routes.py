@@ -9984,7 +9984,92 @@ def classroom_teaching_dashboard():
             WHERE {" AND ".join(where_clauses)}
             ORDER BY b.batch_name ASC
         """
-        batches = cur.execute(sql, params).fetchall()
+        raw_batches = cur.execute(sql, params).fetchall()
+
+        batches = []
+        for b in raw_batches:
+            b_dict = dict(b)
+            bid = b['id']
+
+            cur.execute("""
+                SELECT lp.id, lp.program_name
+                FROM batches b
+                JOIN lms_programs lp ON lp.course_id = b.course_id
+                WHERE b.id = ? AND lp.is_active = 1 AND lp.is_deleted = 0
+                LIMIT 1
+            """, (bid,))
+            prog_row = cur.fetchone()
+
+            taught_cnt = 0
+            total_cnt = 0
+            next_topic = "No syllabus configured"
+
+            if prog_row:
+                pid = prog_row['id']
+                cur.execute("""
+                    SELECT master_topic_id, topic_id
+                    FROM lms_batch_topic_progress
+                    WHERE batch_id = ?
+                """, (bid,))
+                taught_records = cur.fetchall()
+                taught_master_ids = {r['master_topic_id'] for r in taught_records if r['master_topic_id'] is not None}
+                taught_topic_ids = {r['topic_id'] for r in taught_records if r['topic_id'] is not None}
+
+                cur.execute("""
+                    SELECT 1 FROM lms_program_chapters pc
+                    JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                    WHERE pc.program_id = ? AND pc.is_visible = 1 AND mc.status = 'active'
+                    LIMIT 1
+                """, (pid,))
+                has_master = bool(cur.fetchone())
+
+                all_topics = []
+                if has_master:
+                    cur.execute("""
+                        SELECT mt.id, mt.title as topic_title, pc.chapter_order, mt.topic_order
+                        FROM lms_program_chapters pc
+                        JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                        JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+                        WHERE pc.program_id = ? AND pc.is_visible = 1 AND mc.status = 'active' AND mt.status = 'active'
+                        ORDER BY pc.chapter_order, mt.topic_order
+                    """, (pid,))
+                    for t in cur.fetchall():
+                        all_topics.append({
+                            'id': t['id'],
+                            'title': t['topic_title'],
+                            'is_taught': t['id'] in taught_master_ids
+                        })
+                else:
+                    cur.execute("""
+                        SELECT lt.id, lt.topic_title, lc.chapter_order, lt.topic_order
+                        FROM lms_chapters lc
+                        JOIN lms_topics lt ON lt.chapter_id = lc.id
+                        WHERE lc.program_id = ? AND lc.is_active = 1 AND lt.is_active = 1
+                        ORDER BY lc.chapter_order, lt.topic_order
+                    """, (pid,))
+                    for t in cur.fetchall():
+                        all_topics.append({
+                            'id': t['id'],
+                            'title': t['topic_title'],
+                            'is_taught': t['id'] in taught_topic_ids
+                        })
+
+                total_cnt = len(all_topics)
+                taught_cnt = sum(1 for t in all_topics if t['is_taught'])
+
+                untaught = [t['title'] for t in all_topics if not t['is_taught']]
+                if untaught:
+                    next_topic = untaught[0]
+                elif total_cnt > 0:
+                    next_topic = "All Topics Completed ✓"
+
+            pct = round((taught_cnt / total_cnt * 100), 1) if total_cnt > 0 else 0.0
+
+            b_dict['taught_cnt'] = taught_cnt
+            b_dict['total_cnt'] = total_cnt
+            b_dict['taught_pct'] = pct
+            b_dict['next_topic'] = next_topic
+            batches.append(b_dict)
         
         return render_template(
             "lms_admin/classroom_teaching_dashboard.html",
@@ -10200,9 +10285,24 @@ def classroom_teach_mode(batch_id):
                     cur.execute("""
                         SELECT COUNT(DISTINCT mtp.master_topic_id) as cnt
                         FROM lms_master_topic_progress mtp
-                        WHERE mtp.student_id = ? AND mtp.program_id = ? AND mtp.is_completed = 1
+                        JOIN lms_master_topics mt ON mt.id = mtp.master_topic_id
+                        JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                        JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                        WHERE mtp.student_id = ?
+                          AND pc.program_id = ?
+                          AND mtp.is_completed = 1
+                          AND pc.is_visible = 1
+                          AND mc.status = 'active'
+                          AND mt.status = 'active'
                     """, (sid, program_id))
                     completed_topics = cur.fetchone()['cnt'] or 0
+                    if completed_topics == 0:
+                        cur.execute("""
+                            SELECT COUNT(DISTINCT mtp.master_topic_id) as cnt
+                            FROM lms_master_topic_progress mtp
+                            WHERE mtp.student_id = ? AND mtp.is_completed = 1
+                        """, (sid,))
+                        completed_topics = cur.fetchone()['cnt'] or 0
                 else:
                     cur.execute("""
                         SELECT COUNT(DISTINCT tp.topic_id) as cnt
@@ -10212,6 +10312,13 @@ def classroom_teach_mode(batch_id):
                         WHERE tp.student_id = ? AND lc.program_id = ? AND tp.is_completed = 1
                     """, (sid, program_id))
                     completed_topics = cur.fetchone()['cnt'] or 0
+                    if completed_topics == 0:
+                        cur.execute("""
+                            SELECT COUNT(DISTINCT tp.topic_id) as cnt
+                            FROM lms_topic_progress tp
+                            WHERE tp.student_id = ? AND tp.is_completed = 1
+                        """, (sid,))
+                        completed_topics = cur.fetchone()['cnt'] or 0
 
             topic_pct = round((completed_topics / total_topics * 100), 1) if total_topics > 0 else 0.0
 
@@ -10236,6 +10343,13 @@ def classroom_teach_mode(batch_id):
                     WHERE sub.student_id = ? AND pc.program_id = ? AND sub.review_status IN ('submitted', 'accepted', 'approved')
                 """, (sid, program_id))
                 completed_assignments = cur.fetchone()['cnt'] or 0
+                if completed_assignments == 0:
+                    cur.execute("""
+                        SELECT COUNT(DISTINCT sub.assignment_id) as cnt
+                        FROM lms_assignment_submissions sub
+                        WHERE sub.student_id = ? AND sub.review_status IN ('submitted', 'accepted', 'approved')
+                    """, (sid,))
+                    completed_assignments = cur.fetchone()['cnt'] or 0
 
             assg_pct = round((completed_assignments / total_assignments * 100), 1) if total_assignments > 0 else 0.0
 
