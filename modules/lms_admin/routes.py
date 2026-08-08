@@ -1,6 +1,6 @@
 from flask import render_template, request, jsonify, send_from_directory
 from . import lms_admin_bp
-from db import get_conn, log_activity
+from db import get_conn, log_activity, _ensure_lms_batch_topic_progress_table
 from flask import session, redirect, url_for, flash, abort
 from extensions import csrf
 from datetime import datetime
@@ -9950,3 +9950,414 @@ def profile_update_requests():
         rejected_count=counts["rejected_count"] if counts and counts["rejected_count"] else 0,
         total_count=counts["total_count"] if counts and counts["total_count"] else 0
     )
+
+
+# ── Trainer Classroom Teaching Mode ───────────────────────────────────────
+
+@lms_admin_bp.route('/classroom-teaching', methods=['GET'])
+@login_required
+def classroom_teaching_dashboard():
+    """Trainer Classroom Teaching Mode Landing Page with Batch Selector & 3 Options"""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
+        user_id = session.get('user_id')
+        user_role = session.get('role', '').lower()
+        is_admin = (user_role == 'admin')
+        
+        where_clauses = ["(br.institute_id = ? OR br.institute_id IS NULL)", "b.status = 'active'"]
+        params = [current_inst]
+        
+        if not is_admin:
+            where_clauses.append("(b.trainer_id = ? OR b.trainer_id IS NULL)")
+            params.append(user_id)
+            
+        sql = f"""
+            SELECT b.id, b.batch_name, b.start_time, b.end_time,
+                   br.branch_name, c.course_name, u.full_name as trainer_name,
+                   (SELECT COUNT(DISTINCT sb.student_id) FROM student_batches sb WHERE sb.batch_id = b.id AND sb.status = 'active') as student_count
+            FROM batches b
+            LEFT JOIN branches br ON br.id = b.branch_id
+            LEFT JOIN courses c ON c.id = b.course_id
+            LEFT JOIN users u ON u.id = b.trainer_id
+            WHERE {" AND ".join(where_clauses)}
+            ORDER BY b.batch_name ASC
+        """
+        batches = cur.execute(sql, params).fetchall()
+        
+        return render_template(
+            "lms_admin/classroom_teaching_dashboard.html",
+            batches=batches
+        )
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/batch/<int:batch_id>/teach', methods=['GET'])
+@login_required
+def classroom_teach_mode(batch_id):
+    """Trainer Classroom Teaching Mode: Presenter View for Batch Lessons"""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        _ensure_lms_batch_topic_progress_table(conn)
+        current_inst = get_current_institute_id(default=1)
+        user_id = session.get('user_id')
+        user_role = session.get('role', '').lower()
+        
+        # Verify batch
+        cur.execute("""
+            SELECT b.id, b.batch_name, b.start_time, b.end_time, b.branch_id,
+                   br.branch_name, b.course_id, c.course_name, u.full_name as trainer_name,
+                   b.trainer_id
+            FROM batches b
+            LEFT JOIN branches br ON br.id = b.branch_id
+            LEFT JOIN courses c ON c.id = b.course_id
+            LEFT JOIN users u ON u.id = b.trainer_id
+            WHERE b.id = ? AND (br.institute_id = ? OR br.institute_id IS NULL)
+        """, (batch_id, current_inst))
+        batch = cur.fetchone()
+        
+        if not batch:
+            flash('Batch not found or access denied.', 'danger')
+            return redirect(url_for('attendance.list_batches'))
+            
+        # Get active program for this batch
+        requested_program_id = _strict_positive_int(request.args.get('program_id'))
+        
+        cur.execute("""
+            SELECT DISTINCT lp.id, lp.program_name, lp.description
+            FROM lms_programs lp
+            WHERE lp.institute_id = ? AND lp.is_active = 1 AND lp.is_deleted = 0
+              AND (
+                lp.course_id = ?
+                OR EXISTS (
+                    SELECT 1 FROM lms_batch_program_access bpa
+                    WHERE bpa.batch_id = ? AND bpa.program_id = lp.id AND bpa.is_active = 1
+                )
+                OR EXISTS (
+                    SELECT 1 FROM lms_course_program_map cpm
+                    WHERE cpm.course_id = ? AND cpm.program_id = lp.id
+                )
+              )
+            ORDER BY lp.program_name
+        """, (current_inst, batch['course_id'], batch_id, batch['course_id']))
+        programs = cur.fetchall()
+        
+        if not programs and batch.get('course_name'):
+            course_words = [w for w in batch['course_name'].split() if len(w) > 3 and w.upper() not in ('COURSE', 'LEVEL', 'CERTIFICATE', 'MANAGEMENT')]
+            if course_words:
+                like_clauses = " OR ".join(["lp.program_name LIKE ?"] * len(course_words))
+                like_params = [current_inst] + [f"%{w}%" for w in course_words]
+                cur.execute(f"""
+                    SELECT id, program_name, description FROM lms_programs lp
+                    WHERE lp.institute_id = ? AND lp.is_active = 1 AND lp.is_deleted = 0
+                      AND ({like_clauses})
+                    ORDER BY lp.program_name
+                """, like_params)
+                programs = cur.fetchall()
+
+        if not programs:
+            cur.execute("""
+                SELECT id, program_name, description FROM lms_programs
+                WHERE institute_id = ? AND is_active = 1 AND is_deleted = 0
+                ORDER BY program_name
+            """, (current_inst,))
+            programs = cur.fetchall()
+            
+        selected_program = None
+        if requested_program_id:
+            selected_program = next((p for p in programs if p['id'] == requested_program_id), None)
+        if not selected_program and programs:
+            selected_program = programs[0]
+            
+        program_id = selected_program['id'] if selected_program else None
+        
+        # Get taught topics for this batch
+        taught_topic_ids = set()
+        taught_master_topic_ids = set()
+        if program_id:
+            cur.execute("""
+                SELECT master_topic_id, topic_id
+                FROM lms_batch_topic_progress
+                WHERE batch_id = ? AND program_id = ?
+            """, (batch_id, program_id))
+            for row in cur.fetchall():
+                if row['master_topic_id']:
+                    taught_master_topic_ids.add(row['master_topic_id'])
+                if row['topic_id']:
+                    taught_topic_ids.add(row['topic_id'])
+                    
+        # Load chapters and topics with video/PDF/notes content
+        chapters = []
+        if program_id:
+            cur.execute("""
+                SELECT COUNT(*) as c
+                FROM lms_program_chapters pc
+                JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+                WHERE pc.program_id = ? AND pc.is_visible = 1
+                  AND mc.status = 'active' AND mt.status = 'active'
+            """, (program_id,))
+            has_master_content = (cur.fetchone()['c'] or 0) > 0
+            
+            if has_master_content:
+                cur.execute("""
+                    SELECT pc.id, pc.master_chapter_id,
+                           COALESCE(NULLIF(pc.custom_title, ''), mc.title) as chapter_title,
+                           pc.chapter_order, mc.description
+                    FROM lms_program_chapters pc
+                    JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                    WHERE pc.program_id = ? AND pc.is_visible = 1 AND mc.status = 'active'
+                    ORDER BY pc.chapter_order
+                """, (program_id,))
+                ch_rows = cur.fetchall()
+                for c_idx, ch in enumerate(ch_rows, start=1):
+                    cur.execute("""
+                        SELECT mt.id, mt.title as topic_title, mt.topic_order,
+                               mt.short_description as summary,
+                               (SELECT external_url FROM lms_topic_contents WHERE master_topic_id = mt.id AND content_mode = 'youtube' LIMIT 1) as video_url,
+                               (SELECT file_path FROM lms_topic_contents WHERE master_topic_id = mt.id AND content_mode = 'pdf' LIMIT 1) as pdf_notes_url,
+                               (SELECT content_body FROM lms_topic_contents WHERE master_topic_id = mt.id AND content_mode IN ('rich_text', 'html', 'interactive_image') LIMIT 1) as content_body,
+                               (SELECT content_body FROM lms_topic_contents WHERE master_topic_id = mt.id AND content_mode = 'code' LIMIT 1) as code_snippet
+                        FROM lms_master_topics mt
+                        WHERE mt.master_chapter_id = ? AND mt.status = 'active'
+                        ORDER BY mt.topic_order
+                    """, (ch['master_chapter_id'],))
+                    topics = []
+                    for t in cur.fetchall():
+                        t_dict = dict(t)
+                        t_dict['is_master'] = True
+                        t_dict['is_taught'] = t['id'] in taught_master_topic_ids
+                        topics.append(t_dict)
+                    chapters.append({
+                        'id': ch['id'],
+                        'chapter_title': ch['chapter_title'],
+                        'chapter_order': ch['chapter_order'] or c_idx,
+                        'topics': topics
+                    })
+            else:
+                cur.execute("""
+                    SELECT lc.id, lc.chapter_title, lc.chapter_order, lc.description
+                    FROM lms_chapters lc
+                    WHERE lc.program_id = ? AND lc.is_active = 1
+                    ORDER BY lc.chapter_order
+                """, (program_id,))
+                ch_rows = cur.fetchall()
+                for c_idx, ch in enumerate(ch_rows, start=1):
+                    cur.execute("""
+                        SELECT lt.id, lt.topic_title, lt.topic_order,
+                               lt.description as summary, lt.video_url, lt.pdf_url as pdf_notes_url,
+                               lt.content as content_body, NULL as code_snippet
+                        FROM lms_topics lt
+                        WHERE lt.chapter_id = ? AND lt.is_active = 1
+                        ORDER BY lt.topic_order
+                    """, (ch['id'],))
+                    topics = []
+                    for t in cur.fetchall():
+                        t_dict = dict(t)
+                        t_dict['is_master'] = False
+                        t_dict['is_taught'] = t['id'] in taught_topic_ids
+                        topics.append(t_dict)
+                    chapters.append({
+                        'id': ch['id'],
+                        'chapter_title': ch['chapter_title'],
+                        'chapter_order': ch['chapter_order'] or c_idx,
+                        'topics': topics
+                    })
+                    
+        total_topics = sum(len(ch['topics']) for ch in chapters)
+        taught_count = sum(sum(1 for t in ch['topics'] if t['is_taught']) for ch in chapters)
+        taught_pct = round((taught_count / total_topics * 100), 1) if total_topics > 0 else 0.0
+
+        # Compute student progress for batch modal monitoring
+        cur.execute("""
+            SELECT s.id AS student_id,
+                   s.full_name,
+                   s.phone,
+                   s.student_code,
+                   s.photo_filename,
+                   s.status AS student_status
+            FROM student_batches sb
+            JOIN students s ON s.id = sb.student_id
+            WHERE sb.batch_id = ? AND sb.status IN ('active', 'completed')
+            ORDER BY s.full_name
+        """, (batch_id,))
+        student_rows = cur.fetchall()
+
+        students_progress = []
+        for srow in student_rows:
+            sid = srow['student_id']
+            fname = srow['full_name'] or 'Student'
+            
+            parts = fname.strip().split()
+            initials = (parts[0][0] + (parts[-1][0] if len(parts) > 1 else '')).upper() if parts else 'ST'
+            
+            completed_topics = 0
+            if program_id:
+                if has_master_content:
+                    cur.execute("""
+                        SELECT COUNT(DISTINCT mtp.master_topic_id) as cnt
+                        FROM lms_master_topic_progress mtp
+                        WHERE mtp.student_id = ? AND mtp.program_id = ? AND mtp.is_completed = 1
+                    """, (sid, program_id))
+                    completed_topics = cur.fetchone()['cnt'] or 0
+                else:
+                    cur.execute("""
+                        SELECT COUNT(DISTINCT tp.topic_id) as cnt
+                        FROM lms_topic_progress tp
+                        JOIN lms_topics lt ON lt.id = tp.topic_id
+                        JOIN lms_chapters lc ON lc.id = lt.chapter_id
+                        WHERE tp.student_id = ? AND lc.program_id = ? AND tp.is_completed = 1
+                    """, (sid, program_id))
+                    completed_topics = cur.fetchone()['cnt'] or 0
+
+            topic_pct = round((completed_topics / total_topics * 100), 1) if total_topics > 0 else 0.0
+
+            total_assignments = 0
+            completed_assignments = 0
+            if program_id:
+                cur.execute("""
+                    SELECT COUNT(DISTINCT a.id) as cnt
+                    FROM lms_assignments a
+                    JOIN lms_master_topics mt ON mt.id = a.master_topic_id
+                    JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                    WHERE pc.program_id = ? AND pc.is_visible = 1 AND mt.status = 'active'
+                """, (program_id,))
+                total_assignments = cur.fetchone()['cnt'] or 0
+
+                cur.execute("""
+                    SELECT COUNT(DISTINCT sub.assignment_id) as cnt
+                    FROM lms_assignment_submissions sub
+                    JOIN lms_assignments a ON a.id = sub.assignment_id
+                    JOIN lms_master_topics mt ON mt.id = a.master_topic_id
+                    JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
+                    WHERE sub.student_id = ? AND pc.program_id = ? AND sub.review_status IN ('submitted', 'accepted', 'approved')
+                """, (sid, program_id))
+                completed_assignments = cur.fetchone()['cnt'] or 0
+
+            assg_pct = round((completed_assignments / total_assignments * 100), 1) if total_assignments > 0 else 0.0
+
+            if topic_pct >= 100:
+                p_class = 'completed'
+                p_label = 'Completed'
+            elif topic_pct >= 75:
+                p_class = 'above_75'
+                p_label = 'Above 75%'
+            elif topic_pct >= 50:
+                p_class = '50_75'
+                p_label = '50% to 75%'
+            elif topic_pct >= 25:
+                p_class = '25_50'
+                p_label = '25% to 50%'
+            elif topic_pct > 0:
+                p_class = 'below_25'
+                p_label = 'Below 25%'
+            else:
+                p_class = 'not_started'
+                p_label = 'Not Started'
+
+            students_progress.append({
+                'student_id': sid,
+                'full_name': fname,
+                'phone': srow['phone'] or '-',
+                'student_code': srow['student_code'] or '-',
+                'photo_filename': srow['photo_filename'],
+                'initials': initials,
+                'student_status': srow['student_status'] or 'active',
+                'completed_topics': completed_topics,
+                'total_topics': total_topics,
+                'topic_pct': topic_pct,
+                'completed_assignments': completed_assignments,
+                'total_assignments': total_assignments,
+                'assg_pct': assg_pct,
+                'progress_class': p_class,
+                'progress_label': p_label
+            })
+
+        return render_template(
+            "lms_admin/classroom_teach_mode.html",
+            batch=batch,
+            programs=programs,
+            selected_program=selected_program,
+            chapters=chapters,
+            total_topics=total_topics,
+            taught_count=taught_count,
+            taught_pct=taught_pct,
+            students_progress=students_progress,
+        )
+    finally:
+        conn.close()
+
+
+@lms_admin_bp.route('/batch/<int:batch_id>/mark-topic-taught', methods=['POST'])
+@login_required
+@csrf.exempt
+def mark_batch_topic_taught(batch_id):
+    """API to toggle topic taught status for a batch"""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+        
+    data = request.get_json() or {}
+    program_id = data.get('program_id')
+    master_topic_id = data.get('master_topic_id')
+    topic_id = data.get('topic_id')
+    status = data.get('status', 'taught')
+    
+    if not batch_id or not program_id:
+        return jsonify({'success': False, 'message': 'Missing batch_id or program_id'}), 400
+        
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        _ensure_lms_batch_topic_progress_table(conn)
+        
+        where_cond = "batch_id = ? AND program_id = ?"
+        where_params = [batch_id, program_id]
+        if master_topic_id:
+            where_cond += " AND master_topic_id = ?"
+            where_params.append(master_topic_id)
+        elif topic_id:
+            where_cond += " AND topic_id = ?"
+            where_params.append(topic_id)
+        else:
+            return jsonify({'success': False, 'message': 'Missing topic identifier'}), 400
+            
+        cur.execute(f"SELECT id FROM lms_batch_topic_progress WHERE {where_cond}", where_params)
+        existing = cur.fetchone()
+        
+        if status == 'taught' and not existing:
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            cur.execute("""
+                INSERT INTO lms_batch_topic_progress
+                (batch_id, program_id, master_topic_id, topic_id, taught_by_user_id, taught_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (batch_id, program_id, master_topic_id, topic_id, user_id, now_str, now_str))
+            conn.commit()
+            is_taught = True
+        elif status == 'pending' and existing:
+            cur.execute(f"DELETE FROM lms_batch_topic_progress WHERE {where_cond}", where_params)
+            conn.commit()
+            is_taught = False
+        else:
+            is_taught = bool(existing)
+            
+        cur.execute("""
+            SELECT COUNT(*) as taught_cnt
+            FROM lms_batch_topic_progress
+            WHERE batch_id = ? AND program_id = ?
+        """, (batch_id, program_id))
+        taught_cnt = (cur.fetchone() or {})['taught_cnt'] or 0
+        
+        return jsonify({
+            'success': True,
+            'is_taught': is_taught,
+            'taught_cnt': taught_cnt,
+            'message': 'Status updated successfully'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        conn.close()

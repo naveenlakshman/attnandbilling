@@ -1,0 +1,618 @@
+{% extends "base.html" %}
+
+{% block title %}🎓 Classroom Teaching Mode - {{ batch.batch_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ── CLASSROOM TEACHING MODE STYLING (PURE CSS, NO INLINE STYLES) ── */
+  html.projector-mode,
+  body.projector-mode {
+    background-color: #090d16 !important;
+  }
+
+  html.projector-mode .erp-sidebar,
+  body.projector-mode .erp-sidebar,
+  html.projector-mode .erp-topbar,
+  body.projector-mode .erp-topbar,
+  html.projector-mode .sidebar-backdrop,
+  body.projector-mode .sidebar-backdrop,
+  html.projector-mode footer,
+  body.projector-mode footer,
+  html.projector-mode header,
+  body.projector-mode header {
+    display: none !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  html.projector-mode .erp-shell,
+  body.projector-mode .erp-shell {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  html.projector-mode .erp-main,
+  body.projector-mode .erp-main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  html.projector-mode .teach-container,
+  body.projector-mode .teach-container {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  html.projector-mode .teach-card-wrapper,
+  body.projector-mode .teach-card-wrapper {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .teach-header-card {
+    background-color: #0f172a !important;
+    border-bottom: 1px solid #1e293b;
+    color: #ffffff !important;
+    padding: 1rem 1.5rem;
+  }
+
+  .teach-badge-tag {
+    background-color: #4f46e5;
+    color: #ffffff;
+    padding: 0.35rem 0.65rem;
+    border-radius: 0.375rem;
+    font-weight: 700;
+    font-size: 0.75rem;
+  }
+
+  .teach-meta-text {
+    color: #94a3b8 !important;
+  }
+
+  .teach-progress-label {
+    color: #34d399 !important;
+  }
+
+  .teach-progress-track {
+    height: 6px;
+    width: 130px;
+    background-color: #334155;
+  }
+
+  .teach-progress-bar {
+    background-color: #10b981;
+  }
+
+  .teach-btn-projector {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+  }
+
+  .teach-program-select {
+    width: auto;
+    background-color: #1e293b !important;
+    color: #ffffff !important;
+    border: 1px solid #475569;
+  }
+
+  /* Content Tabs Styling */
+  .teach-nav-tabs .nav-link {
+    color: #64748b;
+    font-weight: 600;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 0.75rem 1.25rem;
+    transition: all 0.2s ease;
+  }
+
+  .teach-nav-tabs .nav-link:hover:not(.disabled) {
+    color: #0d6efd;
+  }
+
+  .teach-nav-tabs .nav-link.active {
+    color: #0d6efd;
+    font-weight: 700;
+    background: transparent;
+    border-bottom-color: #0d6efd;
+  }
+
+  .teach-nav-tabs .nav-link.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Lesson Content Formatting Safeguards */
+  .rich-text-content {
+    color: #212529;
+    font-size: 1.05rem;
+    line-height: 1.8;
+  }
+
+  .rich-text-content img {
+    max-width: 100% !important;
+    max-height: 450px !important;
+    height: auto !important;
+    object-fit: contain;
+    border-radius: 0.375rem;
+    margin: 1rem 0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+
+  .rich-text-content table {
+    width: 100% !important;
+    margin: 1.25rem 0 !important;
+    border-collapse: collapse !important;
+    border: 1px solid #dee2e6;
+  }
+
+  .rich-text-content th,
+  .rich-text-content td {
+    padding: 0.75rem 1rem;
+    border: 1px solid #dee2e6;
+  }
+
+  .rich-text-content th {
+    background-color: #f8f9fa;
+    font-weight: 700;
+  }
+
+  /* PDF & Code Viewer Frames */
+  .pdf-viewer-frame {
+    width: 100%;
+    height: 650px;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    background-color: #ffffff;
+  }
+
+  .code-viewer-frame {
+    background-color: #0f172a;
+    color: #34d399;
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.95rem;
+    padding: 1.25rem;
+    border-radius: 0.375rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Sidebar Syllabus List */
+  .syllabus-sidebar-card {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+  }
+
+  .syllabus-chapter-title {
+    background-color: #f8f9fa;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #495057;
+    border-left: 3px solid #0d6efd;
+    padding: 0.5rem 0.75rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0.25rem;
+    border-radius: 0.25rem;
+  }
+
+  /* ── SYLLABUS SIDEBAR — scoped to .teach-syllabus-wrap ── */
+  .teach-syllabus-wrap {
+    border: 1px solid #e9ecef;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  }
+
+  .teach-syllabus-header {
+    background: #fff;
+    border-bottom: 1px solid #e9ecef;
+    padding: 10px 14px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .teach-progress-wrap {
+    background: #e9ecef;
+    border-radius: 4px;
+    height: 6px;
+    margin: 6px 0 4px;
+  }
+
+  .teach-progress-fill {
+    background: #198754;
+    height: 6px;
+    border-radius: 4px;
+    transition: width 0.3s;
+    display: block;
+  }
+
+  .teach-progress-label {
+    font-size: 11px;
+    color: #6c757d;
+    margin-top: 2px;
+  }
+
+  .teach-syllabus-wrap .teach-chapter-item {
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .teach-syllabus-wrap .teach-chapter-header {
+    padding: 11px 14px !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: #212529 !important;
+    background: #f8f9fa !important;
+    user-select: none;
+    transition: background 0.15s;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  .teach-syllabus-wrap .teach-chapter-header:hover {
+    background: #f0f4ff !important;
+  }
+
+  .teach-syllabus-wrap .teach-chapter-header .teach-chevron {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: #6c757d;
+    transition: transform 0.2s;
+    display: inline-block;
+  }
+
+  .teach-syllabus-wrap .teach-chapter-header.open .teach-chevron {
+    transform: rotate(180deg);
+  }
+
+  /* CRITICAL: hide collapsed chapters unless .open class is present */
+  .teach-syllabus-wrap .teach-chapter-topics {
+    display: none !important;
+  }
+
+  .teach-syllabus-wrap .teach-chapter-topics.open {
+    display: block !important;
+  }
+
+  /* Topic rows */
+  .teach-syllabus-wrap .syllabus-topic-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    padding: 9px 14px 9px 24px !important;
+    font-size: 13px !important;
+    color: #495057 !important;
+    cursor: pointer !important;
+    border-left: 3px solid transparent !important;
+    transition: background 0.1s;
+    background: transparent;
+  }
+
+  .teach-syllabus-wrap .syllabus-topic-item:hover {
+    background: #f0f4ff !important;
+    color: #0d6efd !important;
+  }
+
+  .teach-syllabus-wrap .syllabus-topic-item.active {
+    background: #e8f0fe !important;
+    color: #0d6efd !important;
+    font-weight: 600 !important;
+    border-left-color: #0d6efd !important;
+  }
+
+  /* Circle check icon */
+  .teach-syllabus-wrap .syllabus-check-icon {
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    border-radius: 50% !important;
+    flex-shrink: 0 !important;
+    border: 2px solid #dee2e6 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 10px !important;
+    color: transparent !important;
+    background: #fff !important;
+  }
+
+  .teach-syllabus-wrap .syllabus-topic-item.done .syllabus-check-icon {
+    background: #198754 !important;
+    border-color: #198754 !important;
+    color: #fff !important;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid teach-container py-3" 
+     id="classroomTeachApp" 
+     data-program-id="{{ selected_program.id if selected_program else 0 }}" 
+     data-batch-id="{{ batch.id }}" 
+     data-total-topics="{{ total_topics }}" 
+     data-taught-count="{{ taught_count }}">
+     
+  <div class="card teach-card-wrapper shadow-sm border-0">
+    
+    <!-- TOP HEADER NAVBAR CARD -->
+    <div class="card-header teach-header-card">
+      <div class="row align-items-center g-3">
+        <div class="col-md-6">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h4 class="mb-0 fw-bold text-white">{{ batch.batch_name }}</h4>
+            <button type="button" class="btn btn-sm btn-outline-info text-white border-light rounded-pill px-3 py-1 fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#studentProgressModal">
+              👥 Check Student Progress
+            </button>
+          </div>
+          <div class="small teach-meta-text mt-1">
+            <span>📍 {{ batch.branch_name or 'Main Branch' }}</span> &bull;
+            <span>⏰ {{ batch.start_time or '' }} - {{ batch.end_time or '' }}</span> &bull;
+            <span>👨‍🏫 Trainer: {{ batch.trainer_name or 'Unassigned' }}</span>
+          </div>
+        </div>
+
+        <div class="col-md-6 d-flex align-items-center justify-content-md-end gap-3 flex-wrap">
+          <!-- Program Switcher Dropdown -->
+          {% if programs|length > 1 %}
+          <select class="form-select form-select-sm teach-program-select" id="programSwitcherSelect">
+            {% for p in programs %}
+              <option value="{{ p.id }}" {% if selected_program and selected_program.id == p.id %}selected{% endif %}>
+                {{ p.program_name }}
+              </option>
+            {% endfor %}
+          </select>
+          {% endif %}
+
+          <!-- Batch Taught Progress Indicator -->
+          <div class="text-end">
+            <div class="small fw-bold teach-progress-label">
+              Progress: <span id="batch-taught-count">{{ taught_count }}</span>/{{ total_topics }} Topics (<span id="batch-taught-pct">{{ taught_pct }}</span>%)
+            </div>
+            <div class="progress teach-progress-track mt-1">
+              <div id="batch-progress-bar" class="progress-bar teach-progress-bar" role="progressbar" style="width: {{ taught_pct }}%;"></div>
+            </div>
+          </div>
+
+          <!-- Presenter Controls -->
+          <button id="toggle-sidebar-btn" type="button" class="btn btn-sm btn-outline-light d-flex align-items-center gap-1" title="Show/Hide Topics List">
+            <span>🗂️</span> <span id="toggle-sidebar-text">Topics</span>
+          </button>
+          <button id="projector-toggle-btn" type="button" class="btn btn-sm btn-primary teach-btn-projector d-flex align-items-center gap-1">
+            <span>📺</span> <span>Projector Mode</span>
+          </button>
+          <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-sm btn-outline-light">
+            ✕ Exit
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN BODY GRID: STAGE + SIDEBAR -->
+    <div class="card-body p-3 bg-light">
+      <div class="row g-3">
+        
+        <!-- LEFT PRESENTATION STAGE COLUMN -->
+        <div class="col-lg-8 col-xl-9" id="stage-content-col">
+          
+          <div class="card shadow-sm border-0 mb-3">
+            <div class="card-body p-4">
+              
+
+
+              <!-- TABS NAV: Watch Video | Read Tutorial -->
+              <ul class="nav nav-tabs teach-nav-tabs mb-3" id="contentTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active" id="tabWatch" type="button">🎬 Watch Video</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="tabRead" type="button">📖 Read Tutorial</button>
+                </li>
+              </ul>
+
+              <!-- TAB PANES (display:block/none — no Bootstrap fade) -->
+              <div id="contentTabsContent">
+
+                <!-- WATCH VIDEO PANE -->
+                <div id="paneWatch" role="tabpanel" style="display:block;">
+                  <div id="video-container-box" class="ratio ratio-16x9 rounded overflow-hidden shadow-sm mb-2 d-none">
+                    <iframe id="video-iframe" src="" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+                  </div>
+                  <div id="no-video-msg" class="text-center py-5 text-muted d-none">
+                    <div class="fs-1">🎦</div>
+                    <p class="mt-2 fw-medium">No video tutorial configured for this topic.</p>
+                  </div>
+                </div>
+
+                <!-- READ TUTORIAL PANE -->
+                <div id="paneRead" role="tabpanel" style="display:none;">
+                  <div id="rich-content-box" class="rich-text-content"></div>
+                  <div id="no-read-msg" class="text-center py-5 text-muted d-none">
+                    <div class="fs-1">📖</div>
+                    <p class="mt-2 fw-medium">No tutorial content configured for this topic.</p>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ACTION NAVIGATION FOOTER CARD -->
+          <div class="card shadow-sm border-0 p-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <button id="mark-taught-btn" type="button" class="btn btn-success fw-bold px-4 py-2">
+                <span id="mark-taught-text">Mark Taught for Batch ✓</span>
+              </button>
+
+              <div class="btn-group" role="group">
+                <button id="prev-topic-btn" type="button" class="btn btn-outline-secondary">‹ Previous Topic</button>
+                <button id="next-topic-btn" type="button" class="btn btn-primary">Next Topic ›</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- RIGHT SYLLABUS SIDEBAR COLUMN -->
+        <div class="col-lg-4 col-xl-3" id="syllabus-sidebar-col">
+          <div class="teach-syllabus-wrap">
+
+            <!-- Sidebar Header -->
+            <div class="teach-syllabus-header">
+              <div class="d-flex align-items-center justify-content-between">
+                <h6 class="fw-bold mb-0 text-dark">📚 Course Syllabus</h6>
+                <span class="badge bg-primary rounded-pill">{{ total_topics }} Topics</span>
+              </div>
+              <div class="teach-progress-wrap">
+                <div id="sidebar-progress-bar" class="teach-progress-fill" style="width: {{ taught_pct }}%;"></div>
+              </div>
+              <div class="teach-progress-label">
+                <span id="batch-taught-count">{{ taught_count }}</span> / {{ total_topics }} Taught
+              </div>
+            </div>
+
+            <!-- Collapsible Chapter List -->
+            <div class="syllabus-scroll-body" style="max-height: 70vh; overflow-y: auto;">
+              {% if chapters %}
+                {% for ch in chapters %}
+                  <div class="teach-chapter-item">
+                    <div class="teach-chapter-header {% if loop.first %}open{% endif %}">
+                      <span>{{ ch.chapter_order }}. {{ ch.chapter_title }}</span>
+                      <span class="teach-chevron">▼</span>
+                    </div>
+                    <div class="teach-chapter-topics {% if loop.first %}open{% endif %}">
+                      {% for t in ch.topics %}
+                        <div class="syllabus-topic-item {% if loop.first and ch.chapter_order == 1 %}active{% endif %} {% if t.is_taught %}done{% endif %}"
+                             id="topic-item-{{ t.id }}"
+                             data-topic-id="{{ t.id }}"
+                             data-is-master="{{ '1' if t.is_master else '0' }}"
+                             data-chapter-title="{{ ch.chapter_title }}"
+                             data-title="{{ t.topic_title }}"
+                             data-video-url="{{ t.video_url or '' }}"
+                             data-content="{{ t.content_body or '' }}"
+                             data-is-taught="{{ '1' if t.is_taught else '0' }}">
+                          <span class="syllabus-check-icon">{% if t.is_taught %}✓{% endif %}</span>
+                          <span>{{ t.topic_order }}. {{ t.topic_title }}</span>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="p-4 text-center text-muted">
+                  <div class="fs-2">📭</div>
+                  <p class="mt-2 mb-0">No syllabus topics found for this program.</p>
+                </div>
+              {% endif %}
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- STUDENT PROGRESS MONITOR MODAL -->
+<div class="modal fade" id="studentProgressModal" tabindex="-1" aria-labelledby="studentProgressModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title fw-bold" id="studentProgressModalLabel">
+          👥 Batch Student Progress Monitor — {{ batch.batch_name }}
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body bg-light p-4">
+        {% if students_progress %}
+          <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+            {% for s in students_progress %}
+              <div class="col">
+                <div class="card h-100 border-0 shadow-sm rounded-3 overflow-hidden">
+                  <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div>
+                      <!-- Card Header: Student Identity -->
+                      <div class="d-flex align-items-center justify-content-between mb-2">
+                        <div>
+                          <h6 class="fw-bold text-dark mb-0 fs-6">{{ s.full_name }}</h6>
+                          <div class="text-muted small">{{ s.phone }} &bull; {{ s.student_code }}</div>
+                        </div>
+                        <div class="avatar-circle bg-primary-subtle text-primary fw-bold rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 42px; height: 42px; font-size: 14px;">
+                          {% if s.photo_filename %}
+                            <img src="{{ storage_url(s.photo_filename) }}" alt="" class="rounded-circle" style="width: 42px; height: 42px; object-fit: cover;">
+                          {% else %}
+                            {{ s.initials }}
+                          {% endif %}
+                        </div>
+                      </div>
+
+                      <div class="mb-3">
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1">{{ s.student_status | capitalize }}</span>
+                      </div>
+
+                      <!-- LMS TOPICS PROGRESS BOX -->
+                      <div class="p-2 bg-white rounded border mb-2 shadow-2xs">
+                        <div class="d-flex align-items-center justify-content-between small fw-semibold mb-1">
+                          <span class="text-secondary">📚 Topics Completed</span>
+                          <span class="text-primary fw-bold">{{ s.topic_pct }}%</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                          <div class="progress-bar bg-primary" role="progressbar" style="width: {{ s.topic_pct }}%;"></div>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between text-muted mt-1" style="font-size: 11px;">
+                          <span>{{ s.completed_topics }}/{{ s.total_topics }} topics</span>
+                          <span>{{ s.progress_label }}</span>
+                        </div>
+                      </div>
+
+                      <!-- LMS ASSIGNMENTS PROGRESS BOX -->
+                      <div class="p-2 bg-white rounded border shadow-2xs">
+                        <div class="d-flex align-items-center justify-content-between small fw-semibold mb-1">
+                          <span class="text-secondary">📋 Assignments Completed</span>
+                          <span class="text-success fw-bold">{{ s.assg_pct }}%</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                          <div class="progress-bar bg-success" role="progressbar" style="width: {{ s.assg_pct }}%;"></div>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between text-muted mt-1" style="font-size: 11px;">
+                          <span>{{ s.completed_assignments }}/{{ s.total_assignments }} assignments</span>
+                          <span>{{ 'Completed' if s.assg_pct >= 100 else ('In Progress' if s.assg_pct > 0 else 'Not Started') }}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-center py-5 text-muted">
+            <div class="fs-1">👥</div>
+            <p class="mt-2 fw-medium">No active students enrolled in this batch.</p>
+          </div>
+        {% endif %}
+      </div>
+      <div class="modal-footer bg-white border-top-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/classroom_teach_mode.js') }}"></script>
+{% endblock %}

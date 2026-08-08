@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}🎓 Classroom Teaching Mode{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <!-- Page Title Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-bold mb-1" style="color: #1e293b;">🎓 Classroom Teaching Mode</h2>
+      <p class="text-muted mb-0">Select an active batch to launch the interactive presenter view for classroom lectures.</p>
+    </div>
+  </div>
+
+  <!-- 3 CORE OPTIONS OVERVIEW CARD -->
+  <div class="row g-4 mb-5">
+    <div class="col-md-4">
+      <div class="card h-100 border-0 shadow-sm p-3" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: white; border-radius: 14px;">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="fs-1">📚</div>
+          <div>
+            <h5 class="fw-bold mb-0 text-white">1. Browse Program Syllabus</h5>
+            <small style="color: #94a3b8;">Chapters & Master Topics</small>
+          </div>
+        </div>
+        <p class="small mb-0" style="color: #cbd5e1;">Access complete course syllabus, video tutorials, PDF slide notes, code samples, and exercise questions directly in class.</p>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card h-100 border-0 shadow-sm p-3" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; border-radius: 14px;">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="fs-1">📺</div>
+          <div>
+            <h5 class="fw-bold mb-0 text-white">2. Projector Mode</h5>
+            <small style="color: #bfdbfe;">Distraction-Free Presentation</small>
+          </div>
+        </div>
+        <p class="small mb-0" style="color: #eff6ff;">Toggle full-screen presentation mode that hides admin sidebars and top bars for clean display on classroom projectors.</p>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card h-100 border-0 shadow-sm p-3" style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; border-radius: 14px;">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div class="fs-1">✅</div>
+          <div>
+            <h5 class="fw-bold mb-0 text-white">3. Mark Topic Taught</h5>
+            <small style="color: #a7f3d0;">SQLAlchemy Batch Progress</small>
+          </div>
+        </div>
+        <p class="small mb-0" style="color: #ecfdf5;">Record and track which topics have been covered by the trainer for each specific batch in real time.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- BATCH SELECTION HEADER -->
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="fw-bold text-dark mb-0">Select Assigned Batch to Start Teaching</h4>
+    <span class="badge bg-primary px-3 py-2 fs-6">{{ batches|length }} Active Batches</span>
+  </div>
+
+  <!-- BATCH CARDS GRID -->
+  {% if batches %}
+    <div class="row g-4">
+      {% for b in batches %}
+        <div class="col-md-6 col-lg-4">
+          <div class="card h-100 border-0 shadow-sm" style="border-radius: 14px; overflow: hidden; border-left: 5px solid #4f46e5 !important;">
+            <div class="card-body p-4 d-flex flex-column justify-content-between">
+              <div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <h5 class="fw-bold text-dark mb-0">{{ b.batch_name }}</h5>
+                  <span class="badge bg-light text-dark border">{{ b.student_count }} Students</span>
+                </div>
+                <div class="text-muted small mb-3">
+                  <div><strong>Course:</strong> {{ b.course_name or 'Course Not Mapped' }}</div>
+                  <div><strong>Branch:</strong> {{ b.branch_name or 'Main Branch' }}</div>
+                  <div><strong>Time:</strong> 🕐 {{ b.start_time or '' }} - {{ b.end_time or '' }}</div>
+                  <div><strong>Trainer:</strong> {{ b.trainer_name or 'Unassigned' }}</div>
+                </div>
+              </div>
+
+              <div class="mt-3 pt-3 border-top d-flex gap-2">
+                <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=b.id) }}" class="btn btn-primary w-100 fw-bold py-2 d-flex align-items-center justify-content-center gap-2" style="background: #4f46e5; border-color: #4f46e5; border-radius: 8px;">
+                  <span>🎓 Launch Teaching Mode</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="alert alert-info p-4 text-center" style="border-radius: 12px;">
+      <h5>No active batches found for classroom teaching.</h5>
+      <p class="mb-0">Please create or assign a batch to start classroom lectures.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -540,7 +540,57 @@ def add_column_if_not_exists(cur, table_name, column_name, column_def):
         print(f"Warning: Could not add column {column_name} to {table_name}: {e}")
 
 
+def _ensure_lms_batch_topic_progress_table(conn=None):
+    close_conn = False
+    if not conn:
+        conn = get_conn()
+        close_conn = True
+    try:
+        cur = conn.cursor()
+        raw_cur = getattr(cur, '_cursor', cur)
+        if Config.DB_TYPE == "mysql":
+            raw_cur.execute("""
+                CREATE TABLE IF NOT EXISTS lms_batch_topic_progress (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    batch_id INT NOT NULL,
+                    program_id INT NOT NULL,
+                    master_topic_id INT,
+                    topic_id INT,
+                    taught_by_user_id INT NOT NULL,
+                    taught_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    notes TEXT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_lms_batch_topic_progress_batch_topic (batch_id, program_id, master_topic_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+        else:
+            raw_cur.execute("""
+                CREATE TABLE IF NOT EXISTS lms_batch_topic_progress (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    batch_id INTEGER NOT NULL,
+                    program_id INTEGER NOT NULL,
+                    master_topic_id INTEGER,
+                    topic_id INTEGER,
+                    taught_by_user_id INTEGER NOT NULL,
+                    taught_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    notes TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+            """)
+            raw_cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_lms_batch_topic_progress_batch_topic
+                ON lms_batch_topic_progress(batch_id, program_id, master_topic_id)
+            """)
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        if close_conn:
+            conn.close()
+
+
 def init_db():
+    _ensure_lms_batch_topic_progress_table()
     if Config.DB_TYPE == "mysql":
         return
 
@@ -2710,6 +2760,24 @@ def init_db():
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_student_profile_update_requests_student
         ON student_profile_update_requests(student_id, status)
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_batch_topic_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            program_id INTEGER NOT NULL,
+            master_topic_id INTEGER,
+            topic_id INTEGER,
+            taught_by_user_id INTEGER NOT NULL,
+            taught_at TEXT NOT NULL DEFAULT (datetime('now')),
+            notes TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_batch_topic_progress_batch_topic
+        ON lms_batch_topic_progress(batch_id, program_id, master_topic_id)
     """)
 
     conn.commit()

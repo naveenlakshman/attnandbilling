@@ -132,6 +132,7 @@
          data-bs-parent="#erpSidebarAccordion">
       <div class="erp-module-menu">
         <a class="nav-link {{ 'active' if ep == 'lms_admin.dashboard' else '' }}" href="{{ url_for('lms_admin.dashboard') }}">LMS Dashboard</a>
+        <a class="nav-link {{ 'active' if ep in ['lms_admin.classroom_teaching_dashboard', 'lms_admin.classroom_teach_mode'] else '' }}" href="{{ url_for('lms_admin.classroom_teaching_dashboard') }}">🎓 Classroom Teaching Mode</a>
         <a class="nav-link {{ 'active' if ep in ['billing.courses', 'billing.course_new', 'billing.course_edit'] else '' }}" href="{{ url_for('billing.courses') }}">Courses</a>
         <a class="nav-link {{ 'active' if ep in ['lms_admin.list_programs', 'lms_admin.program_new', 'lms_admin.program_edit', 'lms_admin.program_view', 'lms_admin.list_chapters', 'lms_admin.list_program_chapter_topics', 'lms_admin.list_program_resources', 'lms_admin.add_program_resource', 'lms_admin.edit_program_resource'] else '' }}" href="{{ url_for('lms_admin.list_programs') }}">Programs</a>
         <a class="nav-link {{ 'active' if ep in ['lms_admin.list_master_chapters', 'lms_admin.master_chapter_new', 'lms_admin.master_chapter_edit', 'lms_admin.list_master_topics', 'lms_admin.master_topic_new', 'lms_admin.master_topic_edit', 'lms_admin.list_master_topic_contents', 'lms_admin.master_content_new'] else '' }}" href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a>

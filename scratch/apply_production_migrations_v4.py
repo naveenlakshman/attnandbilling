@@ -20,6 +20,7 @@ MIGRATION_FILES = [
     "20260729_tenant_document_sequences.sql",
     "20260729_tenant_writeoff_sequences.sql",
     "add_mysql_performance_indexes.sql",
+    "20260807_lms_batch_topic_progress.sql",
 ]
 
 

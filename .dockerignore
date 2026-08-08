@@ -29,6 +29,8 @@ scratch/*
 !scratch/test_certificate_preview_url_fix.py
 !scratch/test_auth_rate_limit.py
 !scratch/apply_production_migrations_v4.py
+!scratch/apply_local_migrations.py
+!migrations/*.sql
 scripts/*
 !scripts/test_domain_verification.py
 !scripts/run_fee_reminders.py
