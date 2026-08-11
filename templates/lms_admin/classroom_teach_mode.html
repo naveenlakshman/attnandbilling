@@ -637,16 +637,19 @@
 <div class="modal fade" id="markAttendanceModal" tabindex="-1" aria-labelledby="markAttendanceModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
-      <form id="markAttendanceForm" method="post" action="{{ url_for('lms_admin.save_batch_attendance_from_teach', batch_id=batch.id) }}">
+
+      <!-- HEADER (outside form, as Bootstrap scrollable requires) -->
+      <div class="modal-header bg-dark text-white">
+        <div>
+          <h5 class="modal-title fw-bold" id="markAttendanceModalLabel">📝 Mark Attendance — {{ batch.batch_name }}</h5>
+          <small class="text-white-50">Branch: {{ batch.branch_name or 'Main Branch' }} | Trainer: {{ batch.trainer_name or 'Unassigned' }}</small>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <form id="markAttendanceForm" method="post" action="{{ url_for('lms_admin.save_batch_attendance_from_teach', batch_id=batch.id) }}" style="display: flex; flex-direction: column; overflow: hidden; flex: 1 1 auto;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="time_warn_reason" id="teachTimeWarnReasonHidden">
-        <div class="modal-header bg-dark text-white">
-          <div>
-            <h5 class="modal-title fw-bold" id="markAttendanceModalLabel">📝 Mark Attendance — {{ batch.batch_name }}</h5>
-            <small class="text-white-50">Branch: {{ batch.branch_name or 'Main Branch' }} | Trainer: {{ batch.trainer_name or 'Unassigned' }}</small>
-          </div>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
 
         <div class="modal-body p-4 bg-light">
           <!-- DATE SELECTION & QUICK PRESETS BAR -->
