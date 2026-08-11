@@ -1,0 +1,472 @@
+/* ══════════════════════════════════════════════════════════════════
+   CLASSROOM TEACHING MODE — STYLESHEET
+   Covers: projector mode, syllabus sidebar, content tabs, and
+           the Mark Attendance modal (history cells, fee badges,
+           status select).
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── PROJECTOR MODE ── */
+html.projector-mode,
+body.projector-mode {
+  background-color: #090d16 !important;
+}
+
+html.projector-mode .erp-sidebar,
+body.projector-mode .erp-sidebar,
+html.projector-mode .erp-topbar,
+body.projector-mode .erp-topbar,
+html.projector-mode .sidebar-backdrop,
+body.projector-mode .sidebar-backdrop,
+html.projector-mode footer,
+body.projector-mode footer,
+html.projector-mode header,
+body.projector-mode header {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+html.projector-mode .erp-shell,
+body.projector-mode .erp-shell {
+  display: block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+}
+
+html.projector-mode .erp-main,
+body.projector-mode .erp-main {
+  margin-left: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+html.projector-mode .teach-container,
+body.projector-mode .teach-container {
+  padding: 0 !important;
+  max-width: 100% !important;
+}
+
+html.projector-mode .teach-card-wrapper,
+body.projector-mode .teach-card-wrapper {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ── HEADER CARD ── */
+.teach-header-card {
+  background-color: #0f172a !important;
+  border-bottom: 1px solid #1e293b;
+  color: #ffffff !important;
+  padding: 1rem 1.5rem;
+}
+
+.teach-badge-tag {
+  background-color: #4f46e5;
+  color: #ffffff;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.375rem;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.teach-meta-text {
+  color: #94a3b8 !important;
+}
+
+.teach-progress-label {
+  color: #34d399 !important;
+}
+
+.teach-progress-track {
+  height: 6px;
+  width: 130px;
+  background-color: #334155;
+}
+
+.teach-progress-bar {
+  background-color: #10b981;
+}
+
+.teach-btn-projector {
+  background-color: #3b82f6;
+  border-color: #3b82f6;
+}
+
+.teach-program-select {
+  width: auto;
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+  border: 1px solid #475569;
+}
+
+/* ── CONTENT TABS ── */
+.teach-nav-tabs .nav-link {
+  color: #64748b;
+  font-weight: 600;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.75rem 1.25rem;
+  transition: all 0.2s ease;
+}
+
+.teach-nav-tabs .nav-link:hover:not(.disabled) {
+  color: #0d6efd;
+}
+
+.teach-nav-tabs .nav-link.active {
+  color: #0d6efd;
+  font-weight: 700;
+  background: transparent;
+  border-bottom-color: #0d6efd;
+}
+
+.teach-nav-tabs .nav-link.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── LESSON CONTENT ── */
+.rich-text-content {
+  color: #212529;
+  font-size: 1.05rem;
+  line-height: 1.8;
+}
+
+.rich-text-content img {
+  max-width: 100% !important;
+  max-height: 450px !important;
+  height: auto !important;
+  object-fit: contain;
+  border-radius: 0.375rem;
+  margin: 1rem 0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.rich-text-content table {
+  width: 100% !important;
+  margin: 1.25rem 0 !important;
+  border-collapse: collapse !important;
+  border: 1px solid #dee2e6;
+}
+
+.rich-text-content th,
+.rich-text-content td {
+  padding: 0.75rem 1rem;
+  border: 1px solid #dee2e6;
+}
+
+.rich-text-content th {
+  background-color: #f8f9fa;
+  font-weight: 700;
+}
+
+/* ── PDF & CODE VIEWER ── */
+.pdf-viewer-frame {
+  width: 100%;
+  height: 650px;
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+  background-color: #ffffff;
+}
+
+.code-viewer-frame {
+  background-color: #0f172a;
+  color: #34d399;
+  font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.95rem;
+  padding: 1.25rem;
+  border-radius: 0.375rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── SYLLABUS SIDEBAR ── */
+.syllabus-sidebar-card {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+.syllabus-chapter-title {
+  background-color: #f8f9fa;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #495057;
+  border-left: 3px solid #0d6efd;
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.25rem;
+  border-radius: 0.25rem;
+}
+
+#syllabus-sidebar-col {
+  position: sticky;
+  top: 15px;
+  align-self: flex-start;
+  z-index: 100;
+}
+
+.teach-syllabus-wrap {
+  border: 1px solid #e9ecef;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 30px);
+}
+
+.teach-syllabus-header {
+  background: #fff;
+  border-bottom: 1px solid #e9ecef;
+  padding: 10px 14px;
+  flex-shrink: 0;
+}
+
+.syllabus-scroll-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 100px);
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.syllabus-scroll-body::-webkit-scrollbar { width: 6px; }
+.syllabus-scroll-body::-webkit-scrollbar-track { background: #f8fafc; }
+.syllabus-scroll-body::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+.teach-progress-wrap {
+  background: #e9ecef;
+  border-radius: 4px;
+  height: 6px;
+  margin: 6px 0 4px;
+}
+
+.teach-progress-fill {
+  background: #198754;
+  height: 6px;
+  border-radius: 4px;
+  transition: width 0.3s;
+  display: block;
+}
+
+.teach-progress-label {
+  font-size: 11px;
+  color: #6c757d;
+  margin-top: 2px;
+}
+
+.teach-syllabus-wrap .teach-chapter-item {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.teach-syllabus-wrap .teach-chapter-header {
+  padding: 11px 14px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #212529 !important;
+  background: #f8f9fa !important;
+  user-select: none;
+  transition: background 0.15s;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.teach-syllabus-wrap .teach-chapter-header:hover {
+  background: #f0f4ff !important;
+}
+
+.teach-syllabus-wrap .teach-chapter-header .teach-chevron {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #6c757d;
+  transition: transform 0.2s;
+  display: inline-block;
+}
+
+.teach-syllabus-wrap .teach-chapter-header.open .teach-chevron {
+  transform: rotate(180deg);
+}
+
+/* CRITICAL: hide collapsed chapters unless .open class is present */
+.teach-syllabus-wrap .teach-chapter-topics {
+  display: none !important;
+}
+
+.teach-syllabus-wrap .teach-chapter-topics.open {
+  display: block !important;
+}
+
+/* Topic rows */
+.teach-syllabus-wrap .syllabus-topic-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 9px 14px 9px 24px !important;
+  font-size: 13px !important;
+  color: #495057 !important;
+  cursor: pointer !important;
+  border-left: 3px solid transparent !important;
+  transition: background 0.1s;
+  background: transparent;
+}
+
+.teach-syllabus-wrap .syllabus-topic-item:hover {
+  background: #f0f4ff !important;
+  color: #0d6efd !important;
+}
+
+.teach-syllabus-wrap .syllabus-topic-item.active {
+  background: #e8f0fe !important;
+  color: #0d6efd !important;
+  font-weight: 600 !important;
+  border-left-color: #0d6efd !important;
+}
+
+/* Circle check icon */
+.teach-syllabus-wrap .syllabus-check-icon {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  border-radius: 50% !important;
+  flex-shrink: 0 !important;
+  border: 2px solid #dee2e6 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 10px !important;
+  color: transparent !important;
+  background: #fff !important;
+}
+
+.teach-syllabus-wrap .syllabus-topic-item.done .syllabus-check-icon {
+  background: #198754 !important;
+  border-color: #198754 !important;
+  color: #fff !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   MARK ATTENDANCE MODAL — SHARED WITH /attendance/mark-attendance
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Fee Due Badges ── */
+.att-due-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.att-due-badge-overdue {
+  background: #f8d7da;
+  color: #842029;
+  border: 1px solid #f5c2c7;
+}
+
+.att-due-badge-upcoming {
+  background: #fff3cd;
+  color: #664d03;
+  border: 1px solid #ffecb5;
+}
+
+/* ── Student card fee-row highlight ── */
+.att-student-card.row-overdue  { background: #fff5f5 !important; border-left: 3px solid #f5c2c7 !important; }
+.att-student-card.row-upcoming { background: #fffdf0 !important; border-left: 3px solid #ffecb5 !important; }
+
+/* ── Last 7 Days history cells ── */
+.att-hist-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.att-hist-cells {
+  display: flex;
+  gap: 3px;
+}
+
+.att-hist-cell {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: inline-block;
+  flex-shrink: 0;
+  cursor: default;
+  transition: transform 0.1s;
+}
+
+.att-hist-cell:hover { transform: scale(1.2); }
+
+.att-hist-labels {
+  display: flex;
+  gap: 3px;
+}
+
+.att-hist-label {
+  width: 20px;
+  text-align: center;
+  font-size: 9px;
+  color: #6c757d;
+}
+
+/* Status colours */
+.att-hist-present { background: #28a745; }
+.att-hist-absent  { background: #dc3545; }
+.att-hist-late    { background: #ffc107; }
+.att-hist-leave   { background: #0dcaf0; }
+.att-hist-none    { background: #e9ecef; border: 1px solid #dee2e6; }
+
+/* ── History legend ── */
+.att-hist-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #495057;
+}
+
+.att-hist-legend-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* ── Status select dropdown ── */
+.att-status-select {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1.5px solid #dee2e6;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+  background-color: #fff;
+}
+
+.att-status-select:focus { outline: none; box-shadow: 0 0 0 2px rgba(13,110,253,.25); }
+
+.att-status-select.present  { background-color: #d1e7dd; border-color: #a3cfbb; color: #0a3622; }
+.att-status-select.absent   { background-color: #f8d7da; border-color: #f1aeb5; color: #58151c; }
+.att-status-select.late     { background-color: #fff3cd; border-color: #ffe69c; color: #664d03; }
+.att-status-select.leave    { background-color: #cff4fc; border-color: #9eeaf9; color: #055160; }
+.att-status-select.not_marked { background-color: #f8f9fa; border-color: #dee2e6; color: #6c757d; }

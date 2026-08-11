@@ -10383,10 +10383,98 @@ def classroom_teach_mode(batch_id):
                 'assg_pct': assg_pct,
                 'progress_class': p_class,
                 'progress_label': p_label,
-                'today_status': att_row['status'] if att_row else 'present',
+                'today_status': att_row['status'] if att_row else None,
                 'today_remarks': att_row['remarks'] if (att_row and att_row['remarks']) else '',
                 'is_marked_today': att_row is not None,
             })
+
+        # --- 7-day attendance history for modal ---
+        from datetime import date as date_type, timedelta as _td
+        today_obj = date_type.fromisoformat(today_date)
+        history_dates = [(today_obj - _td(days=i)).isoformat() for i in range(7, 0, -1)]
+        history_7days = {}
+        if student_rows:
+            student_ids_h = [srow['student_id'] for srow in student_rows]
+            ph_d = ','.join(['?' for _ in history_dates])
+            ph_s = ','.join(['?' for _ in student_ids_h])
+            cur.execute(f"""
+                SELECT student_id, attendance_date, status
+                FROM attendance_records
+                WHERE attendance_date IN ({ph_d})
+                AND student_id IN ({ph_s})
+            """, history_dates + student_ids_h)
+            for row in cur.fetchall():
+                sid2 = row['student_id']
+                if sid2 not in history_7days:
+                    history_7days[sid2] = {}
+                history_7days[sid2][row['attendance_date']] = row['status']
+
+        # --- Payment dues for modal ---
+        payment_dues = {}
+        if student_rows:
+            student_ids_p = [srow['student_id'] for srow in student_rows]
+            alert_end_date = (today_obj + _td(days=4)).isoformat()
+            placeholders_p = ','.join(['?' for _ in student_ids_p])
+
+            cur.execute(f"""
+                SELECT i.student_id,
+                       SUM(ip.amount_due - ip.amount_paid) AS total_past_due,
+                       MIN(parse_date(ip.due_date)) AS earliest_due_date
+                FROM installment_plans ip
+                JOIN invoices i ON ip.invoice_id = i.id
+                WHERE ip.status != 'paid'
+                  AND (ip.amount_due - ip.amount_paid) > 0
+                  AND date(parse_date(ip.due_date)) < date(?)
+                  AND i.student_id IN ({placeholders_p})
+                GROUP BY i.student_id
+            """, [today_date] + student_ids_p)
+            for row in cur.fetchall():
+                sid2 = row['student_id']
+                if sid2 not in payment_dues:
+                    payment_dues[sid2] = {}
+                payment_dues[sid2]['past_due'] = float(row['total_past_due'] or 0)
+                try:
+                    earliest = date_type.fromisoformat(row['earliest_due_date'])
+                    payment_dues[sid2]['past_days'] = (today_obj - earliest).days
+                except Exception:
+                    payment_dues[sid2]['past_days'] = None
+
+            cur.execute(f"""
+                SELECT i.student_id,
+                       MIN(parse_date(ip.due_date)) AS next_due_date,
+                       SUM(ip.amount_due - ip.amount_paid) AS total_upcoming
+                FROM installment_plans ip
+                JOIN invoices i ON ip.invoice_id = i.id
+                WHERE ip.status != 'paid'
+                  AND (ip.amount_due - ip.amount_paid) > 0
+                  AND date(parse_date(ip.due_date)) >= date(?)
+                  AND date(parse_date(ip.due_date)) <= date(?)
+                  AND i.student_id IN ({placeholders_p})
+                GROUP BY i.student_id
+            """, [today_date, alert_end_date] + student_ids_p)
+            for row in cur.fetchall():
+                sid2 = row['student_id']
+                if sid2 not in payment_dues:
+                    payment_dues[sid2] = {}
+                payment_dues[sid2]['upcoming_amount'] = float(row['total_upcoming'] or 0)
+                payment_dues[sid2]['upcoming_date'] = row['next_due_date']
+                try:
+                    due_d = date_type.fromisoformat(row['next_due_date'])
+                    payment_dues[sid2]['upcoming_days'] = (due_d - today_obj).days
+                except Exception:
+                    payment_dues[sid2]['upcoming_days'] = None
+
+        # --- Approved leave for today ---
+        approved_leave_student_ids = set()
+        cur.execute("""
+            SELECT student_id
+            FROM leave_requests
+            WHERE status = 'approved'
+              AND date(from_date) <= date(?)
+              AND date(to_date) >= date(?)
+        """, (today_date, today_date))
+        for row in cur.fetchall():
+            approved_leave_student_ids.add(row['student_id'])
 
         cur.execute("""
             SELECT student_id, attendance_date, status, remarks
@@ -10419,6 +10507,10 @@ def classroom_teach_mode(batch_id):
             students_progress=students_progress,
             today_date=today_date,
             all_attendance_json=all_attendance_json,
+            history_7days=history_7days,
+            history_dates=history_dates,
+            payment_dues=payment_dues,
+            approved_leave_student_ids=approved_leave_student_ids,
         )
     finally:
         conn.close()
@@ -10473,8 +10565,12 @@ def save_batch_attendance_from_teach(batch_id):
         now = datetime.now().isoformat(timespec="seconds")
         for s in students:
             sid = s['student_id']
-            status = request.form.get(f'status_{sid}', 'present')
+            status = request.form.get(f'status_{sid}', 'not_marked')
             remarks = request.form.get(f'remarks_{sid}', '').strip()
+
+            # Skip students where attendance was not marked
+            if status == 'not_marked':
+                continue
 
             if status not in ['present', 'absent', 'late', 'leave']:
                 status = 'present'

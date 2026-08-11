@@ -3,362 +3,7 @@
 {% block title %}🎓 Classroom Teaching Mode - {{ batch.batch_name }}{% endblock %}
 
 {% block extra_css %}
-<style>
-  /* ── CLASSROOM TEACHING MODE STYLING (PURE CSS, NO INLINE STYLES) ── */
-  html.projector-mode,
-  body.projector-mode {
-    background-color: #090d16 !important;
-  }
-
-  html.projector-mode .erp-sidebar,
-  body.projector-mode .erp-sidebar,
-  html.projector-mode .erp-topbar,
-  body.projector-mode .erp-topbar,
-  html.projector-mode .sidebar-backdrop,
-  body.projector-mode .sidebar-backdrop,
-  html.projector-mode footer,
-  body.projector-mode footer,
-  html.projector-mode header,
-  body.projector-mode header {
-    display: none !important;
-    visibility: hidden !important;
-    width: 0 !important;
-    height: 0 !important;
-    overflow: hidden !important;
-  }
-
-  html.projector-mode .erp-shell,
-  body.projector-mode .erp-shell {
-    display: block !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-  }
-
-  html.projector-mode .erp-main,
-  body.projector-mode .erp-main {
-    margin-left: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  html.projector-mode .teach-container,
-  body.projector-mode .teach-container {
-    padding: 0 !important;
-    max-width: 100% !important;
-  }
-
-  html.projector-mode .teach-card-wrapper,
-  body.projector-mode .teach-card-wrapper {
-    border-radius: 0 !important;
-    box-shadow: none !important;
-  }
-
-  .teach-header-card {
-    background-color: #0f172a !important;
-    border-bottom: 1px solid #1e293b;
-    color: #ffffff !important;
-    padding: 1rem 1.5rem;
-  }
-
-  .teach-badge-tag {
-    background-color: #4f46e5;
-    color: #ffffff;
-    padding: 0.35rem 0.65rem;
-    border-radius: 0.375rem;
-    font-weight: 700;
-    font-size: 0.75rem;
-  }
-
-  .teach-meta-text {
-    color: #94a3b8 !important;
-  }
-
-  .teach-progress-label {
-    color: #34d399 !important;
-  }
-
-  .teach-progress-track {
-    height: 6px;
-    width: 130px;
-    background-color: #334155;
-  }
-
-  .teach-progress-bar {
-    background-color: #10b981;
-  }
-
-  .teach-btn-projector {
-    background-color: #3b82f6;
-    border-color: #3b82f6;
-  }
-
-  .teach-program-select {
-    width: auto;
-    background-color: #1e293b !important;
-    color: #ffffff !important;
-    border: 1px solid #475569;
-  }
-
-  /* Content Tabs Styling */
-  .teach-nav-tabs .nav-link {
-    color: #64748b;
-    font-weight: 600;
-    border: none;
-    border-bottom: 3px solid transparent;
-    padding: 0.75rem 1.25rem;
-    transition: all 0.2s ease;
-  }
-
-  .teach-nav-tabs .nav-link:hover:not(.disabled) {
-    color: #0d6efd;
-  }
-
-  .teach-nav-tabs .nav-link.active {
-    color: #0d6efd;
-    font-weight: 700;
-    background: transparent;
-    border-bottom-color: #0d6efd;
-  }
-
-  .teach-nav-tabs .nav-link.disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  /* Lesson Content Formatting Safeguards */
-  .rich-text-content {
-    color: #212529;
-    font-size: 1.05rem;
-    line-height: 1.8;
-  }
-
-  .rich-text-content img {
-    max-width: 100% !important;
-    max-height: 450px !important;
-    height: auto !important;
-    object-fit: contain;
-    border-radius: 0.375rem;
-    margin: 1rem 0;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  }
-
-  .rich-text-content table {
-    width: 100% !important;
-    margin: 1.25rem 0 !important;
-    border-collapse: collapse !important;
-    border: 1px solid #dee2e6;
-  }
-
-  .rich-text-content th,
-  .rich-text-content td {
-    padding: 0.75rem 1rem;
-    border: 1px solid #dee2e6;
-  }
-
-  .rich-text-content th {
-    background-color: #f8f9fa;
-    font-weight: 700;
-  }
-
-  /* PDF & Code Viewer Frames */
-  .pdf-viewer-frame {
-    width: 100%;
-    height: 650px;
-    border: 1px solid #dee2e6;
-    border-radius: 0.375rem;
-    background-color: #ffffff;
-  }
-
-  .code-viewer-frame {
-    background-color: #0f172a;
-    color: #34d399;
-    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 0.95rem;
-    padding: 1.25rem;
-    border-radius: 0.375rem;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  /* Sidebar Syllabus List */
-  .syllabus-sidebar-card {
-    max-height: calc(100vh - 200px);
-    overflow-y: auto;
-  }
-
-  .syllabus-chapter-title {
-    background-color: #f8f9fa;
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: #495057;
-    border-left: 3px solid #0d6efd;
-    padding: 0.5rem 0.75rem;
-    margin-top: 0.75rem;
-    margin-bottom: 0.25rem;
-    border-radius: 0.25rem;
-  }
-
-  /* ── SYLLABUS SIDEBAR — scoped to .teach-syllabus-wrap ── */
-  #syllabus-sidebar-col {
-    position: sticky;
-    top: 15px;
-    align-self: flex-start;
-    z-index: 100;
-  }
-
-  .teach-syllabus-wrap {
-    border: 1px solid #e9ecef;
-    border-radius: 0.5rem;
-    overflow: hidden;
-    background: #fff;
-    box-shadow: 0 1px 4px rgba(0,0,0,.07);
-    display: flex;
-    flex-direction: column;
-    max-height: calc(100vh - 30px);
-  }
-
-  .teach-syllabus-header {
-    background: #fff;
-    border-bottom: 1px solid #e9ecef;
-    padding: 10px 14px;
-    flex-shrink: 0;
-  }
-
-  .syllabus-scroll-body {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    max-height: calc(100vh - 100px);
-    scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 #f8fafc;
-  }
-
-  .syllabus-scroll-body::-webkit-scrollbar {
-    width: 6px;
-  }
-  .syllabus-scroll-body::-webkit-scrollbar-track {
-    background: #f8fafc;
-  }
-  .syllabus-scroll-body::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1;
-    border-radius: 4px;
-  }
-
-  .teach-progress-wrap {
-    background: #e9ecef;
-    border-radius: 4px;
-    height: 6px;
-    margin: 6px 0 4px;
-  }
-
-  .teach-progress-fill {
-    background: #198754;
-    height: 6px;
-    border-radius: 4px;
-    transition: width 0.3s;
-    display: block;
-  }
-
-  .teach-progress-label {
-    font-size: 11px;
-    color: #6c757d;
-    margin-top: 2px;
-  }
-
-  .teach-syllabus-wrap .teach-chapter-item {
-    border-bottom: 1px solid #f0f0f0;
-  }
-
-  .teach-syllabus-wrap .teach-chapter-header {
-    padding: 11px 14px !important;
-    cursor: pointer !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    font-size: 13px !important;
-    font-weight: 600 !important;
-    color: #212529 !important;
-    background: #f8f9fa !important;
-    user-select: none;
-    transition: background 0.15s;
-    border: none !important;
-    border-radius: 0 !important;
-  }
-
-  .teach-syllabus-wrap .teach-chapter-header:hover {
-    background: #f0f4ff !important;
-  }
-
-  .teach-syllabus-wrap .teach-chapter-header .teach-chevron {
-    flex-shrink: 0;
-    font-size: 10px;
-    color: #6c757d;
-    transition: transform 0.2s;
-    display: inline-block;
-  }
-
-  .teach-syllabus-wrap .teach-chapter-header.open .teach-chevron {
-    transform: rotate(180deg);
-  }
-
-  /* CRITICAL: hide collapsed chapters unless .open class is present */
-  .teach-syllabus-wrap .teach-chapter-topics {
-    display: none !important;
-  }
-
-  .teach-syllabus-wrap .teach-chapter-topics.open {
-    display: block !important;
-  }
-
-  /* Topic rows */
-  .teach-syllabus-wrap .syllabus-topic-item {
-    display: flex !important;
-    align-items: center !important;
-    gap: 10px !important;
-    padding: 9px 14px 9px 24px !important;
-    font-size: 13px !important;
-    color: #495057 !important;
-    cursor: pointer !important;
-    border-left: 3px solid transparent !important;
-    transition: background 0.1s;
-    background: transparent;
-  }
-
-  .teach-syllabus-wrap .syllabus-topic-item:hover {
-    background: #f0f4ff !important;
-    color: #0d6efd !important;
-  }
-
-  .teach-syllabus-wrap .syllabus-topic-item.active {
-    background: #e8f0fe !important;
-    color: #0d6efd !important;
-    font-weight: 600 !important;
-    border-left-color: #0d6efd !important;
-  }
-
-  /* Circle check icon */
-  .teach-syllabus-wrap .syllabus-check-icon {
-    width: 18px !important;
-    height: 18px !important;
-    min-width: 18px !important;
-    border-radius: 50% !important;
-    flex-shrink: 0 !important;
-    border: 2px solid #dee2e6 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 10px !important;
-    color: transparent !important;
-    background: #fff !important;
-  }
-
-  .teach-syllabus-wrap .syllabus-topic-item.done .syllabus-check-icon {
-    background: #198754 !important;
-    border-color: #198754 !important;
-    color: #fff !important;
-  }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/classroom-teach.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -635,10 +280,10 @@
 
 <!-- BATCH ATTENDANCE MARKING MODAL -->
 <div class="modal fade" id="markAttendanceModal" tabindex="-1" aria-labelledby="markAttendanceModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
 
-      <!-- HEADER (outside form, as Bootstrap scrollable requires) -->
+      <!-- HEADER (outside form so Bootstrap scrollable works correctly) -->
       <div class="modal-header bg-dark text-white">
         <div>
           <h5 class="modal-title fw-bold" id="markAttendanceModalLabel">📝 Mark Attendance — {{ batch.batch_name }}</h5>
@@ -647,90 +292,170 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
 
-      <form id="markAttendanceForm" method="post" action="{{ url_for('lms_admin.save_batch_attendance_from_teach', batch_id=batch.id) }}" style="display: flex; flex-direction: column; overflow: hidden; flex: 1 1 auto;">
+      <form id="markAttendanceForm" method="post" action="{{ url_for('lms_admin.save_batch_attendance_from_teach', batch_id=batch.id) }}"
+            style="display:flex; flex-direction:column; overflow:hidden; flex:1 1 auto;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="time_warn_reason" id="teachTimeWarnReasonHidden">
 
-        <div class="modal-body p-4 bg-light">
-          <!-- DATE SELECTION & QUICK PRESETS BAR -->
-          <div class="card border-0 shadow-2xs p-3 mb-3 bg-white rounded-3">
+        <div class="modal-body p-3 bg-light">
+
+          <!-- DATE SELECTION & QUICK PRESETS -->
+          <div class="card border-0 shadow-sm p-3 mb-3 bg-white rounded-3">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
               <div class="d-flex align-items-center gap-2">
                 <label class="form-label fw-bold text-dark mb-0">Attendance Date:</label>
-                <input type="date" name="attendance_date" id="attDateInput" class="form-control form-control-sm fw-bold" value="{{ today_date }}" required style="width: 170px;">
+                <input type="date" name="attendance_date" id="attDateInput"
+                       class="form-control form-control-sm fw-bold bg-light"
+                       value="{{ today_date }}" readonly style="width:170px; pointer-events:none;" tabindex="-1">
+                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">🔒 Today Only</span>
               </div>
               <div class="d-flex align-items-center gap-2">
                 <span class="small text-muted fw-semibold">Quick Set All:</span>
                 <button type="button" class="btn btn-sm btn-outline-success px-3 fw-bold" onclick="setAllAttendance('present')">🟢 All Present</button>
-                <button type="button" class="btn btn-sm btn-outline-danger px-3 fw-bold" onclick="setAllAttendance('absent')">🔴 All Absent</button>
+                <button type="button" class="btn btn-sm btn-outline-danger px-3 fw-bold"  onclick="setAllAttendance('absent')">🔴 All Absent</button>
               </div>
             </div>
           </div>
 
-          <!-- DYNAMIC ATTENDANCE STATUS BANNER FOR SELECTED DATE -->
-          <div id="dateAttStatusBanner" class="alert alert-primary py-2 px-3 mb-3 small shadow-2xs d-none"></div>
+          <!-- DYNAMIC DATE BANNER -->
+          <div id="dateAttStatusBanner" class="alert alert-primary py-2 px-3 mb-3 small d-none"></div>
 
-          <!-- STUDENTS ATTENDANCE LIST -->
+          <!-- LEGEND -->
+          {% if history_dates %}
+          <div class="att-hist-legend mb-3">
+            <span><span class="att-hist-legend-dot att-hist-present"></span> Present</span>
+            <span><span class="att-hist-legend-dot att-hist-absent"></span> Absent</span>
+            <span><span class="att-hist-legend-dot att-hist-late"></span> Late</span>
+            <span><span class="att-hist-legend-dot att-hist-leave"></span> Leave</span>
+            <span><span class="att-hist-legend-dot att-hist-none"></span> No record</span>
+          </div>
+          {% endif %}
+
+          <!-- STUDENT ROWS -->
           {% if students_progress %}
-            <div class="row g-3">
-              {% for s in students_progress %}
-                <div class="col-12 student-att-row" data-student-id="{{ s.student_id }}">
-                  <div class="card border-0 shadow-2xs p-3 bg-white rounded-3">
-                    <div class="row align-items-center g-3">
-                      <!-- STUDENT INFO -->
-                      <div class="col-md-5">
-                        <div class="d-flex align-items-center gap-3">
-                          {% if s.photo_filename %}
-                            <img src="{{ url_for('static', filename='images/student_photos/' + s.photo_filename) }}" 
-                                 class="rounded-circle object-fit-cover shadow-2xs" 
-                                 style="width: 44px; height: 44px; border: 2px solid #e2e8f0;" 
-                                 alt="{{ s.full_name }}">
-                          {% else %}
-                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-2xs" 
-                                 style="width: 44px; height: 44px; font-size: 15px;">
-                              {{ s.initials }}
-                            </div>
-                          {% endif %}
-                          <div>
-                            <div class="fw-bold text-dark mb-0 fs-6">{{ s.full_name }}</div>
-                            <small class="text-muted">Code: <strong>{{ s.student_code }}</strong> | Phone: {{ s.phone }}</small>
-                          </div>
-                        </div>
+          <div class="d-flex flex-column gap-2">
+            {% for s in students_progress %}
+            {% set dues = payment_dues.get(s.student_id, {}) %}
+            {% set _saved = s.today_status %}
+            {% if _saved %}
+              {% set cur_status = _saved %}
+            {% elif approved_leave_student_ids is defined and s.student_id in approved_leave_student_ids %}
+              {% set cur_status = 'leave' %}
+            {% else %}
+              {% set cur_status = 'not_marked' %}
+            {% endif %}
+
+            <div class="card border-0 shadow-sm p-3 bg-white rounded-3 att-student-card
+                        {% if dues.get('past_due', 0) > 0 %}row-overdue{% elif dues.get('upcoming_amount', 0) > 0 %}row-upcoming{% endif %}"
+                 data-student-id="{{ s.student_id }}">
+              <div class="row align-items-center g-2">
+
+                <!-- PHOTO + NAME + BADGES -->
+                <div class="col-md-4">
+                  <div class="d-flex align-items-start gap-3">
+                    {% if s.photo_filename %}
+                      <img src="{{ url_for('static', filename='images/student_photos/' + s.photo_filename) }}"
+                           class="rounded-circle object-fit-cover flex-shrink-0"
+                           style="width:44px;height:44px;border:2px solid #e2e8f0;" alt="{{ s.full_name }}">
+                    {% else %}
+                      <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold flex-shrink-0"
+                           style="width:44px;height:44px;font-size:15px;">{{ s.initials }}</div>
+                    {% endif %}
+                    <div>
+                      <div class="fw-bold text-dark fs-6 mb-0">{{ s.full_name }}</div>
+                      <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                        <small class="text-muted">{{ s.student_code }}</small>
+                        <small class="text-muted">·</small>
+                        <small class="text-muted">{{ s.phone }}</small>
+                        {% if s.phone %}
+                        <a href="tel:{{ s.phone | replace(' ','') | replace('-','') }}"
+                           title="Call" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#e8f5e9;color:#2e7d32;text-decoration:none;font-size:12px;">📞</a>
+                        <a href="https://wa.me/91{{ s.phone | replace(' ','') | replace('-','') | replace('+','') }}"
+                           target="_blank" title="WhatsApp"
+                           style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#e8f5e9;color:#25D366;text-decoration:none;">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        </a>
+                        {% endif %}
                       </div>
-
-                      <!-- STATUS RADIO BUTTON GROUP -->
-                      <div class="col-md-4">
-                        <div class="btn-group w-100" role="group" aria-label="Status for {{ s.full_name }}">
-                          <input type="radio" class="btn-check att-radio-present" name="status_{{ s.student_id }}" id="att_present_{{ s.student_id }}" value="present" {% if s.today_status == 'present' or not s.is_marked_today %}checked{% endif %}>
-                          <label class="btn btn-sm btn-outline-success fw-bold" for="att_present_{{ s.student_id }}">Present</label>
-
-                          <input type="radio" class="btn-check att-radio-absent" name="status_{{ s.student_id }}" id="att_absent_{{ s.student_id }}" value="absent" {% if s.today_status == 'absent' %}checked{% endif %}>
-                          <label class="btn btn-sm btn-outline-danger fw-bold" for="att_absent_{{ s.student_id }}">Absent</label>
-
-                          <input type="radio" class="btn-check" name="status_{{ s.student_id }}" id="att_late_{{ s.student_id }}" value="late" {% if s.today_status == 'late' %}checked{% endif %}>
-                          <label class="btn btn-sm btn-outline-warning fw-bold text-dark" for="att_late_{{ s.student_id }}">Late</label>
-
-                          <input type="radio" class="btn-check" name="status_{{ s.student_id }}" id="att_leave_{{ s.student_id }}" value="leave" {% if s.today_status == 'leave' %}checked{% endif %}>
-                          <label class="btn btn-sm btn-outline-info fw-bold" for="att_leave_{{ s.student_id }}">Leave</label>
-                        </div>
-                      </div>
-
-                      <!-- REMARKS INPUT -->
-                      <div class="col-md-3">
-                        <input type="text" name="remarks_{{ s.student_id }}" class="form-control form-control-sm" placeholder="Optional remarks..." value="{{ s.today_remarks }}">
-                      </div>
+                      <!-- FEE BADGES -->
+                      {% if dues.get('past_due', 0) > 0 %}
+                        {% set pd = dues.past_days %}
+                        {% if pd == 1 %}{% set pd_label = "1 day overdue" %}
+                        {% elif pd and pd > 1 %}{% set pd_label = pd ~ " days overdue" %}
+                        {% else %}{% set pd_label = dues.get('upcoming_date', '') %}{% endif %}
+                        <div><span class="att-due-badge att-due-badge-overdue">⚠ Past Due: ₹{{ "{:,.0f}".format(dues.past_due) }} · {{ pd_label }}</span></div>
+                      {% endif %}
+                      {% if dues.get('upcoming_amount', 0) > 0 %}
+                        {% set ud = dues.upcoming_days %}
+                        {% if ud == 0 %}{% set ud_label = "Due today" %}
+                        {% elif ud == 1 %}{% set ud_label = "Due tomorrow" %}
+                        {% elif ud and ud > 1 %}{% set ud_label = ud ~ " days left · " ~ dues.upcoming_date %}
+                        {% else %}{% set ud_label = dues.get('upcoming_date', '') %}{% endif %}
+                        <div><span class="att-due-badge att-due-badge-upcoming">💰 ₹{{ "{:,.0f}".format(dues.upcoming_amount) }} · {{ ud_label }}</span></div>
+                      {% endif %}
+                      {% if not _saved and approved_leave_student_ids is defined and s.student_id in approved_leave_student_ids %}
+                        <div><span class="att-due-badge" style="background:#d1e7dd;color:#0f5132;border:1px solid #a3cfbb;">📋 Approved Leave</span></div>
+                      {% endif %}
                     </div>
                   </div>
                 </div>
-              {% endfor %}
+
+                <!-- LAST 7 DAYS HISTORY -->
+                <div class="col-md-3">
+                  {% set hist = history_7days.get(s.student_id, {}) %}
+                  {% if history_dates %}
+                  <div class="att-hist-wrap">
+                    <div class="att-hist-cells">
+                      {% for d in history_dates %}
+                      {% set hs = hist.get(d) %}
+                      <span class="att-hist-cell att-hist-{{ hs or 'none' }}"
+                            title="{{ d }}: {{ hs | capitalize if hs else 'No record' }}"></span>
+                      {% endfor %}
+                    </div>
+                    <div class="att-hist-labels">
+                      {% for d in history_dates %}
+                      <span class="att-hist-label">{{ d[5:] }}</span>
+                      {% endfor %}
+                    </div>
+                  </div>
+                  {% else %}
+                  <small class="text-muted">—</small>
+                  {% endif %}
+                </div>
+
+                <!-- STATUS SELECT -->
+                <div class="col-md-3">
+                  <select class="att-status-select {{ cur_status }}"
+                          name="status_{{ s.student_id }}"
+                          id="att_status_{{ s.student_id }}"
+                          onchange="onAttStatusChange(this)">
+                    <option value="not_marked" {% if cur_status == 'not_marked' %}selected{% endif %}>⬜ Not Marked</option>
+                    <option value="present"    {% if cur_status == 'present'    %}selected{% endif %}>✓ Present</option>
+                    <option value="absent"     {% if cur_status == 'absent'     %}selected{% endif %}>✗ Absent</option>
+                    <option value="late"       {% if cur_status == 'late'       %}selected{% endif %}>⏱️ Late</option>
+                    <option value="leave"      {% if cur_status == 'leave'      %}selected{% endif %}>📋 Leave</option>
+                  </select>
+                </div>
+
+                <!-- REMARKS -->
+                <div class="col-md-2">
+                  <input type="text" name="remarks_{{ s.student_id }}"
+                         class="form-control form-control-sm"
+                         placeholder="Remarks..." value="{{ s.today_remarks }}">
+                </div>
+
+              </div>
             </div>
+            {% endfor %}
+          </div>
           {% else %}
-            <div class="text-center py-5 text-muted">
-              <div class="fs-1">👥</div>
-              <p class="mt-2 fw-medium">No active students found in this batch.</p>
-            </div>
+          <div class="text-center py-5 text-muted">
+            <div class="fs-1">👥</div>
+            <p class="mt-2 fw-medium">No active students found in this batch.</p>
+          </div>
           {% endif %}
-        </div>
+
+        </div><!-- /modal-body -->
 
         <div class="modal-footer bg-white border-top">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -740,6 +465,7 @@
     </div>
   </div>
 </div>
+
 
 <!-- OUT OF SCHEDULE ATTENDANCE SCRUTINY WARNING MODAL -->
 <div class="modal fade" id="teachTimeWarnModal" tabindex="-1" aria-labelledby="teachTimeWarnModalLabel" aria-hidden="true" style="z-index: 1060;">
@@ -780,47 +506,28 @@ function updateAttendanceForSelectedDate(selectedDate) {
 
   if (recordsForDate && Object.keys(recordsForDate).length > 0) {
     if (banner) {
-      banner.className = 'alert alert-primary py-2 px-3 mb-3 small shadow-2xs d-flex align-items-center gap-2';
+      banner.className = 'alert alert-primary py-2 px-3 mb-3 small d-flex align-items-center gap-2';
       banner.innerHTML = '<span>ℹ️</span> <span><strong>Existing Attendance Found:</strong> Showing saved records for <strong>' + selectedDate + '</strong>. You can modify and save updates below.</span>';
       banner.classList.remove('d-none');
     }
-    document.querySelectorAll('.student-att-row').forEach(row => {
-      const sid = row.getAttribute('data-student-id');
-      const rec = recordsForDate[sid];
-      if (rec) {
-        const rad = row.querySelector('input[value="' + rec.status + '"]');
-        if (rad) rad.checked = true;
-        const rem = row.querySelector('input[name="remarks_' + sid + '"]');
-        if (rem) rem.value = rec.remarks || '';
-      } else {
-        const rad = row.querySelector('input[value="present"]');
-        if (rad) rad.checked = true;
-        const rem = row.querySelector('input[name="remarks_' + sid + '"]');
-        if (rem) rem.value = '';
-      }
-    });
   } else {
     if (banner) {
-      banner.className = 'alert alert-warning py-2 px-3 mb-3 small shadow-2xs d-flex align-items-center gap-2';
-      banner.innerHTML = '<span>✨</span> <span><strong>No Saved Entry:</strong> No attendance recorded for <strong>' + selectedDate + '</strong> yet. Defaulting all students to Present.</span>';
+      banner.className = 'alert alert-warning py-2 px-3 mb-3 small d-flex align-items-center gap-2';
+      banner.innerHTML = '<span>✨</span> <span><strong>No Saved Entry:</strong> No attendance recorded for today (<strong>' + selectedDate + '</strong>) yet.</span>';
       banner.classList.remove('d-none');
     }
-    document.querySelectorAll('.student-att-row').forEach(row => {
-      const sid = row.getAttribute('data-student-id');
-      const rad = row.querySelector('input[value="present"]');
-      if (rad) rad.checked = true;
-      const rem = row.querySelector('input[name="remarks_' + sid + '"]');
-      if (rem) rem.value = '';
-    });
   }
 }
 
 function setAllAttendance(status) {
-  if (status === 'present') {
-    document.querySelectorAll('.att-radio-present').forEach(el => el.checked = true);
-  } else if (status === 'absent') {
-    document.querySelectorAll('.att-radio-absent').forEach(el => el.checked = true);
-  }
+  document.querySelectorAll('.att-status-select').forEach(function(sel) {
+    sel.value = status;
+    sel.className = 'att-status-select ' + status;
+  });
+}
+
+function onAttStatusChange(sel) {
+  sel.className = 'att-status-select ' + sel.value;
 }
 
 (function() {
