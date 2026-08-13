@@ -2,8 +2,8 @@ substitutions:
   _REGION: asia-south1
   _SERVICE: global-it-erp-production
   _REPOSITORY: cloud-run-source-deploy
-  _IMAGE_TAG: multi-v11
-  _REVISION_SUFFIX: multi-v11
+  _IMAGE_TAG: multi-v12
+  _REVISION_SUFFIX: multi-v12
   _RUNTIME_SERVICE_ACCOUNT: attn-billing-runtime@global-it-edu-app.iam.gserviceaccount.com
   _CLOUD_SQL_INSTANCE: global-it-edu-app:asia-south1:global-it-erp-production-db
   _REDIS_HOST: 10.94.179.83

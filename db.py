@@ -940,6 +940,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS attendance_followups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             student_id INTEGER NOT NULL,
             branch_id INTEGER NOT NULL,
             batch_id INTEGER,
@@ -952,6 +953,9 @@ def init_db():
             remarks TEXT,
             notes TEXT,
             created_by INTEGER,
+            contact_channel TEXT,
+            contact_person TEXT,
+            next_followup_date TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT,
             FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
@@ -1807,6 +1811,10 @@ def init_db():
     add_column_if_not_exists(cur, "student_uploaded_documents", "institute_id", "INTEGER NOT NULL DEFAULT 1")
     add_column_if_not_exists(cur, "student_profile_update_requests", "institute_id", "INTEGER NOT NULL DEFAULT 1")
     add_column_if_not_exists(cur, "student_notes", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "attendance_followups", "institute_id", "INTEGER")
+    add_column_if_not_exists(cur, "attendance_followups", "contact_channel", "TEXT")
+    add_column_if_not_exists(cur, "attendance_followups", "contact_person", "TEXT")
+    add_column_if_not_exists(cur, "attendance_followups", "next_followup_date", "TEXT")
 
     add_column_if_not_exists(cur, "users", "phone", "TEXT")
     add_column_if_not_exists(cur, "users", "branch_id", "INTEGER")
@@ -2397,6 +2405,19 @@ def init_db():
         
         # Add remarks to attendance_followups if missing
         add_column_if_not_exists(cur, 'attendance_followups', 'remarks', 'TEXT')
+        add_column_if_not_exists(cur, 'attendance_followups', 'institute_id', 'INTEGER')
+        add_column_if_not_exists(cur, 'attendance_followups', 'created_by', 'INTEGER')
+        add_column_if_not_exists(cur, 'attendance_followups', 'contact_channel', 'TEXT')
+        add_column_if_not_exists(cur, 'attendance_followups', 'contact_person', 'TEXT')
+        add_column_if_not_exists(cur, 'attendance_followups', 'next_followup_date', 'TEXT')
+        cur.execute("""
+            UPDATE attendance_followups
+            SET institute_id = (
+                SELECT institute_id FROM students
+                WHERE students.id = attendance_followups.student_id
+            )
+            WHERE institute_id IS NULL
+        """)
 
         # Add reason to attendance_time_warnings if missing (added Apr 2026)
         add_column_if_not_exists(cur, 'attendance_time_warnings', 'reason', 'TEXT')

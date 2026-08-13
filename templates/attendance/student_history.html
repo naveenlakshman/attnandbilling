@@ -309,6 +309,13 @@
                                         {% else %}
                                         <p class="text-muted mb-0">No remarks</p>
                                         {% endif %}
+                                        <div class="small text-muted mt-2">
+                                            {% if followup.batch_name %}<span class="me-3">Batch: {{ followup.batch_name }}</span>{% endif %}
+                                            {% if followup.contact_channel %}<span class="me-3">Channel: {{ followup.contact_channel|replace('_', ' ')|title }}</span>{% endif %}
+                                            {% if followup.contact_person %}<span class="me-3">Contact: {{ followup.contact_person }}</span>{% endif %}
+                                            <span class="me-3">Recorded by: {{ followup.owner_name }}</span>
+                                            {% if followup.next_followup_date %}<span>Next action: {{ followup.next_followup_date }}</span>{% endif %}
+                                        </div>
                                     </div>
                                 </div>
                                 {% endfor %}
