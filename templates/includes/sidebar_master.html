@@ -4,10 +4,11 @@
 
 {# Reorganized Active States checking #}
 {% set admissions_active = ep.startswith('leads.') and ep != 'leads.reports' %}
-{% set students_active = ep.startswith('attendance.') or ep.startswith('billing.students') or ep.startswith('billing.student_') or ep == 'billing.institute_day_overview' %}
+{% set attendance_report_endpoints = ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
+{% set students_active = (ep.startswith('attendance.') and ep not in attendance_report_endpoints) or ep.startswith('billing.students') or ep.startswith('billing.student_') or ep == 'billing.institute_day_overview' %}
 {% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') or ep.startswith('certificates.') %}
 {% set finance_active = (ep.startswith('billing.') and ep != 'billing.reminder_dashboard' and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
-{% set reports_active = (ep.startswith('reports.') and ep != 'reports.import_page') or ep == 'leads.reports' or ep in ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
+{% set reports_active = (ep.startswith('reports.') and ep != 'reports.import_page') or ep == 'leads.reports' or ep in attendance_report_endpoints %}
 {% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.') or ep == 'billing.reminder_dashboard' or ep == 'reports.import_page') %}
 
 <div class="erp-master-nav accordion accordion-flush" id="erpSidebarAccordion">
@@ -215,9 +216,10 @@
          class="accordion-collapse collapse {{ 'show' if reports_active else '' }}"
          data-bs-parent="#erpSidebarAccordion">
       <div class="erp-module-menu">
-        <a class="nav-link {{ 'active' if ep == 'attendance.daily_report' else '' }}" href="{{ url_for('attendance.daily_report') }}">Daily Report</a>
-        <a class="nav-link {{ 'active' if ep == 'leads.reports' else '' }}" href="{{ url_for('leads.reports') }}">Lead Report</a>
-        <a class="nav-link {{ 'active' if ep == 'reports.dashboard' else '' }}" href="{{ url_for('reports.dashboard') }}">Analytics</a>
+        {% if is_admin %}
+          <a class="nav-link {{ 'active' if ep == 'leads.reports' else '' }}" href="{{ url_for('leads.reports') }}">Lead Report</a>
+          <a class="nav-link {{ 'active' if ep == 'reports.dashboard' else '' }}" href="{{ url_for('reports.dashboard') }}">Analytics</a>
+        {% endif %}
         <a class="nav-link {{ 'active' if ep == 'attendance.daily_report' else '' }}" href="{{ url_for('attendance.daily_report') }}">Attendance Daily Report</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.monthly_summary' else '' }}" href="{{ url_for('attendance.monthly_summary') }}">Attendance Monthly Summary</a>
         <a class="nav-link {{ 'active' if ep in ['reports.attendance_monthly_report', 'reports.attendance_unmarked_details'] else '' }}" href="{{ url_for('reports.attendance_monthly_report') }}">Attendance Monthly Report</a>
@@ -231,6 +233,7 @@
   </div>
 
   <!-- Administration Section -->
+  {% if is_admin %}
   <div class="erp-module" data-module="admin">
     <button class="erp-module-toggle {{ 'active' if admin_active else '' }}"
             type="button"
@@ -270,6 +273,7 @@
       </div>
     </div>
   </div>
+  {% endif %}
 
   {% endif %}
   <hr class="sidebar-divider">

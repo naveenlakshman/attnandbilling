@@ -120,13 +120,15 @@ def _clone_master_chapter(cur, master_chapter_id):
     # 2. Insert new master chapter
     cur.execute("""
         INSERT INTO lms_master_chapters (
-            title, description, status, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            title, description, status, created_by, institute_id, is_shared, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         src_chapter['title'],
         src_chapter['description'],
         src_chapter['status'],
         session.get('user_id'),
+        src_chapter['institute_id'],
+        src_chapter['is_shared'],
         now,
         now
     ))
@@ -165,4 +167,3 @@ def _clone_master_chapter(cur, master_chapter_id):
         ))
 
     return new_master_chapter_id
-

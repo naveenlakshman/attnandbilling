@@ -4351,6 +4351,7 @@ def export_students_csv():
     try:
         conn = get_conn()
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
 
         cur.execute("""
             SELECT
@@ -4370,8 +4371,10 @@ def export_students_csv():
             FROM students
             LEFT JOIN branches
                 ON students.branch_id = branches.id
+               AND branches.institute_id = ?
+            WHERE students.institute_id = ?
             ORDER BY students.id DESC
-        """)
+        """, (current_inst, current_inst))
         students_data = cur.fetchall()
         conn.close()
 

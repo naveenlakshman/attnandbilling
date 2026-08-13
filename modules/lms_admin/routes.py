@@ -1166,7 +1166,7 @@ def list_master_chapters():
             usage = 'all'
 
         current_inst = get_current_institute_id(default=1)
-        base_sql = f"""
+        base_sql = """
                 SELECT
                     mc.id,
                     mc.title,
@@ -1182,12 +1182,15 @@ def list_master_chapters():
                 FROM lms_master_chapters mc
                 LEFT JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
                 LEFT JOIN lms_program_chapters pc ON pc.master_chapter_id = mc.id
-                LEFT JOIN lms_programs lp ON lp.id = pc.program_id AND lp.institute_id = {current_inst} AND lp.is_deleted = 0
-                WHERE (mc.institute_id = {current_inst} OR COALESCE(mc.is_shared, 1) = 1 OR mc.institute_id = 1)
+                LEFT JOIN lms_programs lp
+                  ON lp.id = pc.program_id
+                 AND lp.institute_id = ?
+                 AND lp.is_deleted = 0
+                WHERE mc.institute_id = ?
                 GROUP BY mc.id
         """
         filters = []
-        params = []
+        params = [current_inst, current_inst]
         if q:
             filters.append("(library.title LIKE ? OR COALESCE(library.description, '') LIKE ?)")
             params.extend((f"%{q}%", f"%{q}%"))
@@ -1201,9 +1204,13 @@ def list_master_chapters():
         if program_id:
             filters.append(
                 "EXISTS (SELECT 1 FROM lms_program_chapters selected_pc "
-                "WHERE selected_pc.master_chapter_id = library.id AND selected_pc.program_id = ?)"
+                "JOIN lms_programs selected_lp ON selected_lp.id = selected_pc.program_id "
+                "WHERE selected_pc.master_chapter_id = library.id "
+                "AND selected_pc.program_id = ? "
+                "AND selected_lp.institute_id = ? "
+                "AND selected_lp.is_deleted = 0)"
             )
-            params.append(program_id)
+            params.extend((program_id, current_inst))
 
         where_sql = f" WHERE {' AND '.join(filters)}" if filters else ""
         total = cur.execute(
@@ -1396,7 +1403,7 @@ def master_chapter_edit(master_chapter_id):
             """
                 SELECT id, title, description, status, institute_id, COALESCE(is_shared, 1) AS is_shared, created_at, updated_at
                 FROM lms_master_chapters
-                WHERE id = ? AND (institute_id = ? OR COALESCE(is_shared, 1) = 1 OR institute_id = 1)
+                WHERE id = ? AND institute_id = ?
             """,
             (master_chapter_id, current_inst)
         ).fetchone()
@@ -1471,9 +1478,10 @@ def master_chapter_archive(master_chapter_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         chapter = cur.execute(
-            "SELECT id, title FROM lms_master_chapters WHERE id = ?",
-            (master_chapter_id,)
+            "SELECT id, title FROM lms_master_chapters WHERE id = ? AND institute_id = ?",
+            (master_chapter_id, current_inst)
         ).fetchone()
         if not chapter:
             flash('Master chapter not found.', 'danger')
@@ -1532,18 +1540,21 @@ def bulk_master_chapters():
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         placeholders = ','.join('?' for _ in selected_ids)
         chapters = cur.execute(
-            f"SELECT id, title, status FROM lms_master_chapters WHERE id IN ({placeholders})",
-            selected_ids,
+            f"SELECT id, title, status FROM lms_master_chapters "
+            f"WHERE id IN ({placeholders}) AND institute_id = ?",
+            (*selected_ids, current_inst),
         ).fetchall()
         valid_ids = {row['id'] for row in chapters}
 
         if action == 'attach':
             program_id = _strict_positive_int(request.form.get('program_id'))
             program = cur.execute(
-                "SELECT id, program_name FROM lms_programs WHERE id = ? AND is_active = 1 AND is_deleted = 0",
-                (program_id,),
+                "SELECT id, program_name FROM lms_programs "
+                "WHERE id = ? AND institute_id = ? AND is_active = 1 AND is_deleted = 0",
+                (program_id, current_inst),
             ).fetchone() if program_id else None
             if not program:
                 flash('Select an active destination program.', 'danger')
@@ -1620,13 +1631,14 @@ def list_master_topics(master_chapter_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         chapter = cur.execute(
             """
                 SELECT id, title, description, status, created_at, updated_at
                 FROM lms_master_chapters
-                WHERE id = ?
+                WHERE id = ? AND institute_id = ?
             """,
-            (master_chapter_id,)
+            (master_chapter_id, current_inst)
         ).fetchone()
         if not chapter:
             flash('Master chapter not found.', 'danger')
@@ -2654,6 +2666,7 @@ def program_new():
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         
         if request.method == 'POST':
             program_name = request.form.get('program_name', '').strip()
@@ -2685,6 +2698,14 @@ def program_new():
             
             # Convert course_id to None if empty
             course_id = int(course_id) if course_id and course_id != '' else None
+            if course_id is not None:
+                course = cur.execute(
+                    "SELECT id FROM courses WHERE id = ? AND institute_id = ? AND is_active = 1",
+                    (course_id, current_inst),
+                ).fetchone()
+                if not course:
+                    flash('Selected course was not found for this institute.', 'danger')
+                    return redirect(url_for('lms_admin.program_new'))
             # A new program cannot be ready until chapters and topics are attached.
             is_published = 0
             
@@ -2701,9 +2722,10 @@ def program_new():
                     is_published,
                     is_active,
                     created_by,
+                    institute_id,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 course_id,
                 program_name,
@@ -2714,6 +2736,7 @@ def program_new():
                 is_published,
                 1,
                 session['user_id'],
+                current_inst,
                 now,
                 now
             ))
@@ -2740,9 +2763,9 @@ def program_new():
         cur.execute("""
             SELECT id, course_name
             FROM courses
-            WHERE is_active = 1
+            WHERE is_active = 1 AND institute_id = ?
             ORDER BY course_name ASC
-        """)
+        """, (current_inst,))
         courses = cur.fetchall()
         
         return render_template('lms_program_form.html', program=None, courses=courses)
@@ -2757,11 +2780,12 @@ def program_edit(program_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         
         # Get program details
         cur.execute("""
-            SELECT * FROM lms_programs WHERE id = ?
-        """, (program_id,))
+            SELECT * FROM lms_programs WHERE id = ? AND institute_id = ?
+        """, (program_id, current_inst))
         program = cur.fetchone()
         
         if not program:
@@ -2798,6 +2822,14 @@ def program_edit(program_id):
             
             # Convert course_id to None if empty
             course_id = int(course_id) if course_id and course_id != '' else None
+            if course_id is not None:
+                course = cur.execute(
+                    "SELECT id FROM courses WHERE id = ? AND institute_id = ? AND is_active = 1",
+                    (course_id, current_inst),
+                ).fetchone()
+                if not course:
+                    flash('Selected course was not found for this institute.', 'danger')
+                    return redirect(url_for('lms_admin.program_edit', program_id=program_id))
             is_published = 1 if is_published == 'on' or is_published == '1' else 0
 
             readiness = get_program_publishing_readiness(
@@ -2855,9 +2887,9 @@ def program_edit(program_id):
         cur.execute("""
             SELECT id, course_name
             FROM courses
-            WHERE is_active = 1
+            WHERE is_active = 1 AND institute_id = ?
             ORDER BY course_name ASC
-        """)
+        """, (current_inst,))
         courses = cur.fetchall()
         
         readiness = get_program_publishing_readiness(conn, program_id)
@@ -2877,9 +2909,13 @@ def program_clone(program_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         
         # 1. Fetch source program
-        cur.execute("SELECT * FROM lms_programs WHERE id = ?", (program_id,))
+        cur.execute(
+            "SELECT * FROM lms_programs WHERE id = ? AND institute_id = ?",
+            (program_id, current_inst),
+        )
         src_program = cur.fetchone()
         if not src_program:
             flash('Source program not found.', 'danger')
@@ -2901,8 +2937,8 @@ def program_clone(program_id):
         cur.execute("""
             INSERT INTO lms_programs (
                 course_id, program_name, program_reference_name, slug, description, thumbnail_path, 
-                is_published, is_active, is_deleted, created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_published, is_active, is_deleted, created_by, institute_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             src_program['course_id'],
             cloned_name,
@@ -2914,6 +2950,7 @@ def program_clone(program_id):
             src_program['is_active'],
             0, # is_deleted = 0
             session['user_id'],
+            current_inst,
             now,
             now
         ))
