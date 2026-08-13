@@ -1011,9 +1011,6 @@ def assign_students(batch_id):
         if not user:
             return redirect(url_for('core.login'))
 
-        student_status = (request.args.get('student_status') or 'all').strip().lower()
-        if student_status not in {'all', 'active', 'completed', 'dropped'}:
-            student_status = 'all'
         # Get batch - verify branch belongs to current institute
         cur.execute("""
             SELECT b.id, b.batch_name, b.course_id, c.course_name, b.branch_id, br.branch_name
@@ -2958,10 +2955,19 @@ def attendance_pattern():
     conn = get_conn()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
-        user = cur.fetchone()
-
         current_inst = get_current_institute_id(default=1)
+        cur.execute(
+            "SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ? AND institute_id = ?",
+            (user_id, current_inst),
+        )
+        user = cur.fetchone()
+        if not user:
+            return redirect(url_for('core.login'))
+
+        student_status = (request.args.get('student_status') or 'all').strip().lower()
+        if student_status not in {'all', 'active', 'completed', 'dropped'}:
+            student_status = 'all'
+
         # Branch list
         if user['can_view_all_branches']:
             cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))

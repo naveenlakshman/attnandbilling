@@ -422,7 +422,7 @@
 
     <div class="collapse mt-3" id="profileUpdateRequestForm">
       <div class="alert alert-info" style="font-size: 13px; margin-bottom: 20px;">
-        You can request updates to your profile details. Your request will be reviewed and applied by staff. (Approved updates: <strong>{{ student.profile_approved_updates_count or 0 }}/3</strong>)
+        Review every field before submitting. Your request will be reviewed and applied by staff. (Approved updates: <strong>{{ student.profile_approved_updates_count or 0 }}/3</strong>)
       </div>
 
       <form action="{{ url_for('students.profile_request_update') }}" method="post">
@@ -555,12 +555,38 @@
       </div>
       
       <div class="mt-3">
-        <button type="submit" class="btn btn-primary btn-sm">Request Profile Update</button>
+        <div class="form-check mb-3">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            value="1"
+            name="profile_review_confirmed"
+            id="profileReviewConfirmed"
+            required>
+          <label class="form-check-label" for="profileReviewConfirmed" style="font-size: 13px;">
+            I have checked all profile fields and confirm the information is correct.
+          </label>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm" id="profileUpdateSubmit" disabled>Request Profile Update</button>
       </div>
       </form>
     </div>
   {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const confirmation = document.getElementById('profileReviewConfirmed');
+  const submitButton = document.getElementById('profileUpdateSubmit');
+  if (!confirmation || !submitButton) return;
+
+  const syncProfileSubmit = function () {
+    submitButton.disabled = !confirmation.checked;
+  };
+  confirmation.addEventListener('change', syncProfileSubmit);
+  syncProfileSubmit();
+});
+</script>
 
 <!-- Enrolled Batches -->
 <div class="info-card">

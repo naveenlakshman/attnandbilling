@@ -46,6 +46,7 @@ def _clear_student_session():
     session.pop('student_session_mode', None)
     session.pop('student_force_password_change', None)
     session.pop('demo_mode', None)
+    session.pop('student_institute_id', None)
     session.pop('institute_id', None)
 
 
@@ -297,20 +298,32 @@ def _is_demo():
 
 def _has_program_access(conn, program_id, student_id):
     """Return True if the student is enrolled/has access to program_id.
-    Always returns True in demo mode."""
+    Demo mode remains read-only and is limited to the current institute."""
+    institute_id = get_current_institute_id(default=1)
     if _is_demo():
-        return True
+        return bool(conn.execute(
+            """
+                SELECT 1
+                FROM lms_programs
+                WHERE id = ?
+                  AND institute_id = ?
+                  AND is_active = 1
+                  AND COALESCE(is_deleted, 0) = 0
+            """,
+            (program_id, institute_id),
+        ).fetchone())
 
     access = conn.execute("""
         SELECT 1 FROM lms_programs lp
-        WHERE lp.id = ? AND lp.is_active = 1 AND COALESCE(lp.is_deleted, 0) = 0
+        WHERE lp.id = ? AND lp.institute_id = ?
+          AND lp.is_active = 1 AND COALESCE(lp.is_deleted, 0) = 0
           AND EXISTS (
               SELECT 1 FROM lms_student_program_access spa
               WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 1
                 AND COALESCE(spa.access_status, 'active') = 'active'
                 AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
           )
-    """, (program_id, student_id)).fetchone()
+    """, (program_id, institute_id, student_id)).fetchone()
     return bool(access)
 
 
@@ -763,6 +776,7 @@ def logout():
 @student_login_required
 def dashboard():
     student_id = session['student_id']
+    institute_id = get_current_institute_id(default=1)
     conn = get_conn()
     try:
         company = get_company_profile()
@@ -792,6 +806,7 @@ def dashboard():
                     WHERE lp.is_active = 1
                       AND COALESCE(lp.is_deleted, 0) = 0
                       AND lp.is_published = 1
+                      AND lp.institute_id = ?
                 )
                 SELECT
                     lp.id, lp.program_name, lp.description,
@@ -868,7 +883,7 @@ def dashboard():
                 FROM ranked_demo_programs lp
                 WHERE lp.demo_rank = 1
                 ORDER BY COALESCE(lp.program_reference_name, lp.program_name), lp.program_name
-            """).fetchall()
+            """, (institute_id,)).fetchall()
         else:
             # Normal mode: only programs the student is enrolled in
             programs = conn.execute("""
@@ -2056,6 +2071,9 @@ def profile_request_update():
     institute_id = get_current_institute_id()
     if institute_id is None:
         abort(404)
+    if request.form.get('profile_review_confirmed') != '1':
+        flash('Please review all profile fields and confirm before submitting.', 'warning')
+        return redirect(url_for('students.profile'))
     conn = get_conn()
     try:
         # 1. Fetch current student details
