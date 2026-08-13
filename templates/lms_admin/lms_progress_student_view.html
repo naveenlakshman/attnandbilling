@@ -315,6 +315,7 @@
                                 <th>Topic</th>
                                 <th>Status</th>
                                 <th>Reviewed</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -343,6 +344,12 @@
                                     {% if sub.reviewed_by_name %}
                                     <br><small class="text-muted">{{ sub.reviewed_by_name }}</small>
                                     {% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn-sm {{ 'btn-primary' if sub.review_status == 'submitted' else 'btn-outline-primary' }}"
+                                       href="{{ url_for('lms_admin.review_submission_detail', submission_id=sub.id, program_id=data.selected_program_id, status_filter='all') }}">
+                                        {{ 'Review' if sub.review_status == 'submitted' else 'View Review' }}
+                                    </a>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -382,6 +389,12 @@
                         {% if sub.reviewed_by_name %}
                         <div class="assignment-mobile-reviewer">{{ sub.reviewed_by_name }}</div>
                         {% endif %}
+                        <div class="mt-3">
+                            <a class="btn btn-sm {{ 'btn-primary' if sub.review_status == 'submitted' else 'btn-outline-primary' }}"
+                               href="{{ url_for('lms_admin.review_submission_detail', submission_id=sub.id, program_id=data.selected_program_id, status_filter='all') }}">
+                                {{ 'Review Assignment' if sub.review_status == 'submitted' else 'View Review' }}
+                            </a>
+                        </div>
                     </article>
                     {% endfor %}
                 </div>

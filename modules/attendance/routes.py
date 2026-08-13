@@ -490,10 +490,14 @@ def create_batch():
     
     try:
         # Get user info
-        cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
-        user = cur.fetchone()
-        
         current_inst = get_current_institute_id(default=1)
+        cur.execute(
+            "SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ? AND institute_id = ?",
+            (user_id, current_inst),
+        )
+        user = cur.fetchone()
+        if not user:
+            return redirect(url_for('core.login'))
         
         if request.method == 'POST':
             # Get form data
@@ -520,6 +524,27 @@ def create_batch():
             if not branch_chk:
                 return render_template('attendance/batch_form.html', error="Invalid branch for this institute",
                                      courses=[], trainers=[], branches=[], user=user), 400
+            if not user['can_view_all_branches'] and int(branch_id) != user['branch_id']:
+                return render_template('attendance/batch_form.html', error="You cannot create a batch for this branch",
+                                     courses=[], trainers=[], branches=[], user=user), 403
+
+            if course_id:
+                course_chk = cur.execute(
+                    "SELECT id FROM courses WHERE id = ? AND institute_id = ? AND is_active = 1",
+                    (course_id, current_inst),
+                ).fetchone()
+                if not course_chk:
+                    return render_template('attendance/batch_form.html', error="Invalid course for this institute",
+                                         courses=[], trainers=[], branches=[], user=user), 400
+
+            if trainer_id:
+                trainer_chk = cur.execute(
+                    "SELECT id FROM users WHERE id = ? AND institute_id = ? AND role = 'staff' AND is_active = 1",
+                    (trainer_id, current_inst),
+                ).fetchone()
+                if not trainer_chk:
+                    return render_template('attendance/batch_form.html', error="Invalid trainer for this institute",
+                                         courses=[], trainers=[], branches=[], user=user), 400
 
             # Validate operating hours if configured for branch
             op_time = branch_chk['opening_time']
@@ -569,14 +594,16 @@ def create_batch():
         
         # GET request - show form
         # Get courses
-        cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name ASC")
+        cur.execute(
+            "SELECT id, course_name FROM courses WHERE is_active = 1 AND institute_id = ? ORDER BY course_name ASC",
+            (current_inst,),
+        )
         courses = cur.fetchall()
         
         # Get trainers
         cur.execute("""
             SELECT id, full_name FROM users 
-            WHERE role = 'staff' AND is_active = 1 
-              AND (branch_id IN (SELECT id FROM branches WHERE institute_id = ?) OR branch_id IS NULL)
+            WHERE role = 'staff' AND is_active = 1 AND institute_id = ?
             ORDER BY full_name ASC
         """, (current_inst,))
         trainers = cur.fetchall()
@@ -786,17 +813,23 @@ def edit_batch(batch_id):
     cur = conn.cursor()
     
     try:
+        current_inst = get_current_institute_id(default=1)
         # Get user info
-        cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
+        cur.execute(
+            "SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ? AND institute_id = ?",
+            (user_id, current_inst),
+        )
         user = cur.fetchone()
+        if not user:
+            return redirect(url_for('core.login'))
         
         # Get batch
         cur.execute("""
             SELECT id, batch_name, course_id, branch_id, start_date, end_date,
                    start_time, end_time, trainer_id, status
             FROM batches
-            WHERE id = ?
-        """, (batch_id,))
+            WHERE id = ? AND branch_id IN (SELECT id FROM branches WHERE institute_id = ?)
+        """, (batch_id, current_inst))
         
         batch = cur.fetchone()
         if not batch:
@@ -817,11 +850,10 @@ def edit_batch(batch_id):
             trainer_id = request.form.get('trainer_id') or None
             status = request.form.get('status', 'active')
 
-            current_inst = get_current_institute_id(default=1)
             def _edit_error(msg):
-                cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name ASC")
+                cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 AND institute_id = ? ORDER BY course_name ASC", (current_inst,))
                 _courses = cur.fetchall()
-                cur.execute("SELECT id, full_name FROM users WHERE role = 'staff' AND is_active = 1 ORDER BY full_name ASC")
+                cur.execute("SELECT id, full_name FROM users WHERE role = 'staff' AND is_active = 1 AND institute_id = ? ORDER BY full_name ASC", (current_inst,))
                 _trainers = cur.fetchall()
                 cur.execute("SELECT id, branch_name, opening_time, closing_time FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name ASC", (current_inst,))
                 _branches = cur.fetchall()
@@ -832,6 +864,17 @@ def edit_batch(batch_id):
             # Validate
             if not batch_name:
                 return _edit_error("Batch name is required")
+
+            if course_id and not cur.execute(
+                "SELECT id FROM courses WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (course_id, current_inst),
+            ).fetchone():
+                return _edit_error("Invalid course for this institute")
+            if trainer_id and not cur.execute(
+                "SELECT id FROM users WHERE id = ? AND institute_id = ? AND role = 'staff' AND is_active = 1",
+                (trainer_id, current_inst),
+            ).fetchone():
+                return _edit_error("Invalid trainer for this institute")
             
             # Validate branch operating hours
             branch_info = cur.execute("SELECT opening_time, closing_time FROM branches WHERE id = ?", (batch['branch_id'],)).fetchone()
@@ -874,11 +917,10 @@ def edit_batch(batch_id):
                 return _edit_error(str(e))
         
         # GET request - show form
-        current_inst = get_current_institute_id(default=1)
-        cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name ASC")
+        cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 AND institute_id = ? ORDER BY course_name ASC", (current_inst,))
         courses = cur.fetchall()
         
-        cur.execute("SELECT id, full_name FROM users WHERE role = 'staff' AND is_active = 1 ORDER BY full_name ASC")
+        cur.execute("SELECT id, full_name FROM users WHERE role = 'staff' AND is_active = 1 AND institute_id = ? ORDER BY full_name ASC", (current_inst,))
         trainers = cur.fetchall()
         
         if user['can_view_all_branches']:

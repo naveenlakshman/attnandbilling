@@ -134,6 +134,77 @@ def _submission_storage_candidates(file_path):
     return [normalized] if normalized else []
 
 
+def _read_submission_file_bytes(file_path):
+    """Read a submission from tenant-aware storage or the legacy local folder."""
+    storage_service = get_storage_service()
+    for storage_path in _submission_storage_candidates(file_path):
+        if storage_service.file_exists(storage_path):
+            return storage_service.download_file(storage_path)
+
+    base_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
+    )
+    candidates = [file_path]
+    if (file_path or '').startswith('documents/'):
+        candidates.append(file_path.replace('documents/', '', 1))
+    for relative_path in candidates:
+        full_path = os.path.abspath(os.path.join(base_dir, relative_path or ''))
+        if os.path.commonpath((base_dir, full_path)) == base_dir and os.path.isfile(full_path):
+            with open(full_path, 'rb') as submission_file:
+                return submission_file.read()
+    raise FileNotFoundError(file_path)
+
+
+def _xlsx_formula_preview(file_path):
+    """Build a bounded, read-only workbook grid with formulas and cached values."""
+    from openpyxl import load_workbook
+    from openpyxl.utils import get_column_letter
+
+    file_bytes = _read_submission_file_bytes(file_path)
+    if len(file_bytes) > 25 * 1024 * 1024:
+        raise ValueError('Workbook is too large for the interactive preview.')
+    formulas_book = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=False)
+    values_book = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+    sheets = []
+    total_sheet_count = len(formulas_book.sheetnames)
+    try:
+        for sheet_name in formulas_book.sheetnames[:10]:
+            formula_sheet = formulas_book[sheet_name]
+            value_sheet = values_book[sheet_name]
+            row_count = min(max(formula_sheet.max_row or 1, 1), 100)
+            column_count = min(max(formula_sheet.max_column or 1, 1), 30)
+            rows = []
+            for row_number in range(1, row_count + 1):
+                cells = []
+                for column_number in range(1, column_count + 1):
+                    formula_cell = formula_sheet.cell(row_number, column_number)
+                    cached_value = value_sheet.cell(row_number, column_number).value
+                    raw_value = formula_cell.value
+                    formula = str(raw_value) if formula_cell.data_type == 'f' else ''
+                    display_value = cached_value if formula else raw_value
+                    if display_value is None:
+                        display_value = ''
+                    elif not isinstance(display_value, (str, int, float, bool)):
+                        display_value = str(display_value)
+                    cells.append({
+                        'coordinate': formula_cell.coordinate,
+                        'display': display_value,
+                        'formula': formula,
+                    })
+                rows.append(cells)
+            sheets.append({
+                'name': sheet_name,
+                'rows': rows,
+                'column_count': column_count,
+                'column_headers': [get_column_letter(index) for index in range(1, column_count + 1)],
+                'truncated': (formula_sheet.max_row or 1) > 100 or (formula_sheet.max_column or 1) > 30,
+            })
+    finally:
+        formulas_book.close()
+        values_book.close()
+    return {'sheets': sheets, 'sheet_count': total_sheet_count}
+
+
 def _current_lms_actor(conn):
     """Return the active admin/staff database identity for this session."""
     user_id = session.get('user_id')
@@ -7112,6 +7183,7 @@ def view_student_progress(student_id):
             'test_results': test_results,
             'assignment_submissions': assignment_submissions,
             'assignment_stats': assignment_stats,
+            'selected_program_id': requested_program_id,
             'total_topics': total_topics,
             'total_completed': total_completed,
             'overall_completion': round(overall_completion, 1),
@@ -8812,12 +8884,24 @@ def review_submission_detail(submission_id):
         office_exts = {'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'}
         is_localhost = request.host.startswith(('localhost', '127.', '0.0.0.0'))
         preview_type = preview_url = None
+        workbook_preview = None
         if ext == 'pdf':
             preview_type = 'pdf'
             preview_url = url_for('lms_admin.admin_download_submission', submission_id=submission_id, inline=1)
         elif ext in image_exts:
             preview_type = 'image'
             preview_url = url_for('lms_admin.admin_download_submission', submission_id=submission_id, inline=1)
+        elif ext == 'xlsx':
+            try:
+                workbook_preview = _xlsx_formula_preview(sub['file_path'])
+                preview_type = 'xlsx'
+            except Exception:
+                logger.exception('Could not build formula preview for submission %s', submission_id)
+                preview_type = 'office'
+                if not is_localhost:
+                    token = _make_submission_preview_token(submission_id)
+                    public_url = url_for('lms_admin.preview_submission_public_file', token=token, _external=True)
+                    preview_url = 'https://view.officeapps.live.com/op/embed.aspx?src=' + quote(public_url, safe='')
         elif ext in office_exts:
             preview_type = 'office'
             if not is_localhost:
@@ -8834,6 +8918,7 @@ def review_submission_detail(submission_id):
             is_localhost=is_localhost, office_exts=office_exts, orig_filename=orig,
             attempts=attempts,
             rubric_criteria=rubric_criteria,
+            workbook_preview=workbook_preview,
         )
     finally:
         conn.close()

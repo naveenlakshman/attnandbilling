@@ -9,6 +9,7 @@
   .review-nav{display:flex;gap:7px;flex-wrap:wrap}.review-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(320px,.75fr);gap:16px;align-items:start}.review-card{background:#fff;border:1px solid var(--rd-border);border-radius:12px;box-shadow:0 3px 12px rgba(15,23,42,.05);overflow:hidden}.review-card-header{padding:13px 16px;background:#f8fafc;border-bottom:1px solid var(--rd-border);font-weight:800}.review-card-body{padding:16px}
   .review-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin-bottom:14px}.review-meta>div{padding:10px 12px;background:#f8fafc;border-radius:8px}.review-meta small{display:block;color:var(--rd-muted);font-weight:700;text-transform:uppercase;font-size:.65rem}.review-meta strong{display:block;margin-top:3px;color:var(--rd-text);overflow-wrap:anywhere}.review-student{display:flex;align-items:center;gap:12px}.review-student-avatar{display:flex;flex:0 0 52px;width:52px;height:52px}.review-student-avatar img,.review-student-fallback{width:52px;height:52px;border-radius:50%;border:2px solid #dbeafe}.review-student-avatar img{display:block;object-fit:cover;background:#fff}.review-student-fallback{display:flex;align-items:center;justify-content:center;background:#dbeafe;color:#1d4ed8;font-size:1.25rem;font-weight:700;text-transform:uppercase}.review-student-copy{min-width:0}.instructions{margin-bottom:14px;padding:14px;border-left:4px solid #3b82f6;background:#eff6ff;border-radius:8px}.instructions h2{font-size:.9rem;font-weight:800}.instructions-content{white-space:pre-wrap;overflow-wrap:anywhere;color:#334155}
   .preview-frame{width:100%;height:66vh;min-height:480px;border:0;background:#eef2f7}.image-preview{display:flex;justify-content:center;padding:16px;background:#eef2f7}.image-preview img{max-width:100%;max-height:66vh;object-fit:contain}.preview-fallback{padding:48px 20px;text-align:center;background:#f8fafc;color:var(--rd-muted)}.decision-panel{position:sticky;top:16px}.status-pill{display:inline-flex;padding:.35rem .65rem;border-radius:999px;font-weight:800;font-size:.75rem}.status-pill.submitted{background:#fff3cd;color:#92400e}.status-pill.accepted{background:#dcfce7;color:#15803d}.status-pill.rejected{background:#fee2e2;color:#b91c1c}.decision-form textarea{min-height:105px}.decision-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.reviewed-copy{padding:12px;border-radius:8px;background:#f8fafc;white-space:pre-wrap;overflow-wrap:anywhere}
+  .workbook-preview{background:#fff}.formula-toolbar{display:grid;grid-template-columns:74px 34px minmax(0,1fr);align-items:center;border-bottom:1px solid #cbd5e1;background:#f8fafc}.formula-name,.formula-fx,.formula-value{min-height:36px;border:0;border-right:1px solid #cbd5e1;background:transparent;padding:7px 9px}.formula-name{font-weight:700;text-align:center}.formula-fx{display:flex;align-items:center;justify-content:center;font-style:italic;color:#475569}.formula-value{width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.sheet-grid-wrap{height:56vh;min-height:400px;overflow:auto}.sheet-grid{border-collapse:separate;border-spacing:0;min-width:100%;font-size:.8rem}.sheet-grid th,.sheet-grid td{height:28px;min-width:92px;padding:4px 7px;border-right:1px solid #dbe3ee;border-bottom:1px solid #dbe3ee;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}.sheet-grid thead th{position:sticky;top:0;z-index:2;background:#f1f5f9;text-align:center}.sheet-grid .row-number{position:sticky;left:0;z-index:1;min-width:44px;width:44px;background:#f1f5f9;text-align:center;color:#64748b}.sheet-grid thead .row-number{z-index:3}.sheet-grid td{cursor:cell}.sheet-grid td.selected{outline:2px solid #2563eb;outline-offset:-2px;background:#eff6ff}.sheet-tabs{display:flex;gap:3px;overflow-x:auto;padding:7px 9px 0;background:#eef2f7;border-top:1px solid #cbd5e1}.sheet-tab{border:1px solid #cbd5e1;border-bottom:0;border-radius:5px 5px 0 0;background:#e2e8f0;padding:6px 13px;white-space:nowrap}.sheet-tab.active{background:#fff;color:#1d4ed8;font-weight:700}.workbook-note{padding:6px 10px;background:#fff7ed;color:#9a3412;font-size:.75rem}
   .attempt-history{margin-top:16px}.attempt-table{width:100%;margin:0}.attempt-table th{font-size:.68rem;text-transform:uppercase;color:#64748b;white-space:nowrap}.attempt-table td{vertical-align:top;font-size:.82rem}.attempt-note{max-width:270px;white-space:pre-wrap;overflow-wrap:anywhere}.attempt-current{font-size:.65rem}.reviewer-summary{padding:10px 12px;border-radius:8px;background:#f8fafc;margin-bottom:14px}.reviewer-summary small{display:block;color:var(--rd-muted);font-weight:700;text-transform:uppercase;font-size:.65rem}.reviewer-summary strong{display:block;margin-top:3px}
   @media(max-width:991.98px){.review-layout{grid-template-columns:1fr}.decision-panel{position:static}.preview-frame{height:58vh;min-height:400px}.attempt-table,.attempt-table tbody,.attempt-table tr{display:block;width:100%}.attempt-table thead{display:none}.attempt-table tr{padding:12px;border-bottom:1px solid var(--rd-border)}.attempt-table td{display:grid;grid-template-columns:105px minmax(0,1fr);gap:10px;padding:5px 0;border:0}.attempt-table td::before{content:attr(data-label);font-size:.65rem;text-transform:uppercase;color:var(--rd-muted);font-weight:800}}@media(max-width:575.98px){.review-detail-header{display:grid}.review-meta{grid-template-columns:1fr}.review-nav{display:grid;grid-template-columns:1fr 1fr}.review-nav .back{grid-column:1/-1}.decision-actions{grid-template-columns:1fr}.preview-frame{min-height:330px}}
 </style>
@@ -49,6 +50,19 @@
       <section class="review-card"><div class="review-card-header d-flex justify-content-between align-items-center"><span>Submission preview</span><a class="btn btn-sm btn-outline-secondary" href="{{ download_url }}">Download file</a></div>
         {% if preview_type == 'pdf' %}<iframe class="preview-frame" title="PDF submission preview" src="{{ preview_url }}"></iframe>
         {% elif preview_type == 'image' %}<div class="image-preview"><img src="{{ preview_url }}" alt="Submission preview"></div>
+        {% elif preview_type == 'xlsx' and workbook_preview %}
+        <div class="workbook-preview" data-workbook-preview>
+          <div class="formula-toolbar" aria-label="Formula bar"><input class="formula-name" value="A1" readonly aria-label="Selected cell"><span class="formula-fx">fx</span><input class="formula-value" value="" readonly aria-label="Cell formula or value"></div>
+          {% for sheet in workbook_preview.sheets %}
+          <div class="workbook-sheet" data-sheet-index="{{ loop.index0 }}"{% if not loop.first %} hidden{% endif %}>
+            {% if sheet.truncated %}<div class="workbook-note">Preview limited to the first 100 rows and 30 columns. Download the workbook to inspect the remaining cells.</div>{% endif %}
+            <div class="sheet-grid-wrap"><table class="sheet-grid"><thead><tr><th class="row-number"></th>{% for header in sheet.column_headers %}<th>{{ header }}</th>{% endfor %}</tr></thead><tbody>
+              {% for row in sheet.rows %}<tr><th class="row-number">{{ loop.index }}</th>{% for cell in row %}<td tabindex="0" data-coordinate="{{ cell.coordinate }}" data-formula="{{ cell.formula }}" data-value="{{ cell.display }}">{{ cell.display }}</td>{% endfor %}</tr>{% endfor %}
+            </tbody></table></div>
+          </div>
+          {% endfor %}
+          <div class="sheet-tabs" role="tablist">{% for sheet in workbook_preview.sheets %}<button type="button" class="sheet-tab{% if loop.first %} active{% endif %}" data-sheet-target="{{ loop.index0 }}">{{ sheet.name }}</button>{% endfor %}</div>
+        </div>
         {% elif preview_type == 'office' and preview_url %}<iframe class="preview-frame" title="Office submission preview" src="{{ preview_url }}"></iframe>
         {% elif preview_type == 'office' and is_localhost %}<div class="preview-fallback"><strong>Office preview is unavailable on localhost.</strong><div class="mt-2">Download the file to inspect it. Secure Office preview is enabled when the app runs on public HTTPS.</div></div>
         {% else %}<div class="preview-fallback"><strong>This file type cannot be previewed safely in the browser.</strong><div class="mt-2">Use the secure download button above.</div></div>{% endif %}
@@ -95,4 +109,31 @@
     </tbody></table></div>
   </section>
 </div>
+<script>
+(() => {
+  const workbook = document.querySelector('[data-workbook-preview]');
+  if (!workbook) return;
+  const nameBox = workbook.querySelector('.formula-name');
+  const formulaBox = workbook.querySelector('.formula-value');
+  const selectCell = (cell) => {
+    workbook.querySelectorAll('.sheet-grid td.selected').forEach((item) => item.classList.remove('selected'));
+    cell.classList.add('selected');
+    nameBox.value = cell.dataset.coordinate || '';
+    formulaBox.value = cell.dataset.formula || cell.dataset.value || '';
+  };
+  workbook.addEventListener('click', (event) => {
+    const cell = event.target.closest('.sheet-grid td');
+    if (cell) selectCell(cell);
+    const tab = event.target.closest('[data-sheet-target]');
+    if (!tab) return;
+    workbook.querySelectorAll('.workbook-sheet').forEach((sheet) => { sheet.hidden = sheet.dataset.sheetIndex !== tab.dataset.sheetTarget; });
+    workbook.querySelectorAll('.sheet-tab').forEach((item) => item.classList.toggle('active', item === tab));
+    const firstCell = workbook.querySelector(`.workbook-sheet[data-sheet-index="${tab.dataset.sheetTarget}"] td`);
+    if (firstCell) selectCell(firstCell);
+  });
+  workbook.addEventListener('focusin', (event) => { if (event.target.matches('.sheet-grid td')) selectCell(event.target); });
+  const firstCell = workbook.querySelector('.workbook-sheet:not([hidden]) td');
+  if (firstCell) selectCell(firstCell);
+})();
+</script>
 {% endblock %}
