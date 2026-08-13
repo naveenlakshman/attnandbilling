@@ -1002,10 +1002,18 @@ def assign_students(batch_id):
     
     try:
         # Get user info
-        cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
-        user = cur.fetchone()
-        
         current_inst = get_current_institute_id(default=1)
+        cur.execute(
+            "SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ? AND institute_id = ?",
+            (user_id, current_inst),
+        )
+        user = cur.fetchone()
+        if not user:
+            return redirect(url_for('core.login'))
+
+        student_status = (request.args.get('student_status') or 'all').strip().lower()
+        if student_status not in {'all', 'active', 'completed', 'dropped'}:
+            student_status = 'all'
         # Get batch - verify branch belongs to current institute
         cur.execute("""
             SELECT b.id, b.batch_name, b.course_id, c.course_name, b.branch_id, br.branch_name
@@ -3013,30 +3021,44 @@ def attendance_pattern():
                 ORDER BY b.start_time ASC
             """, (current_inst,))
         batches = cur.fetchall()
+        valid_batch_ids = {row['id'] for row in batches}
+        if batch_id and batch_id not in valid_batch_ids:
+            batch_id = None
 
         # Students in selected batch (or all students across branch if no batch)
         students = []
+        student_status_sql = "" if student_status == 'all' else " AND s.status = ?"
         if batch_id:
-            cur.execute("""
+            student_params = [batch_id, current_inst]
+            if student_status != 'all':
+                student_params.append(student_status)
+            cur.execute(f"""
                 SELECT s.id, s.student_code, s.full_name, s.phone, s.photo_filename,
                        sb.batch_id as batch_id
                 FROM student_batches sb
                 JOIN students s ON sb.student_id = s.id
                 WHERE sb.batch_id = ? AND sb.status = 'active'
+                  AND s.institute_id = ?
+                  {student_status_sql}
                 ORDER BY s.full_name ASC
-            """, (batch_id,))
+            """, student_params)
             students = cur.fetchall()
         elif selected_branch_id:
-            cur.execute("""
+            student_params = [selected_branch_id, current_inst]
+            if student_status != 'all':
+                student_params.append(student_status)
+            cur.execute(f"""
                 SELECT s.id, s.student_code, s.full_name, s.phone, s.photo_filename,
                        MIN(sb.batch_id) as batch_id
                 FROM student_batches sb
                 JOIN students s ON sb.student_id = s.id
                 JOIN batches b ON sb.batch_id = b.id
                 WHERE b.branch_id = ? AND sb.status = 'active' AND b.status = 'active'
+                  AND s.institute_id = ?
+                  {student_status_sql}
                 GROUP BY s.id, s.student_code, s.full_name, s.phone, s.photo_filename
                 ORDER BY s.full_name ASC
-            """, (selected_branch_id,))
+            """, student_params)
             students = cur.fetchall()
 
         # Attendance records for the date range
@@ -3069,6 +3091,7 @@ def attendance_pattern():
                                students=students,
                                selected_branch_id=selected_branch_id,
                                batch_id=batch_id,
+                               student_status=student_status,
                                date_from=date_from_str,
                                date_to=date_to_str,
                                date_range=date_range,

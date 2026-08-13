@@ -17,6 +17,17 @@
   <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
     <h4 class="fw-bold text-dark mb-0">Select Assigned Batch to Start Teaching</h4>
     <div class="d-flex align-items-center gap-3">
+      {% if is_admin %}
+      <form method="GET" action="{{ url_for('lms_admin.classroom_teaching_dashboard') }}">
+        <label class="visually-hidden" for="trainerFilter">Filter by staff</label>
+        <select id="trainerFilter" name="trainer_id" class="form-select form-select-sm" style="min-width:220px" onchange="this.form.submit()">
+          <option value="">All Staff</option>
+          {% for trainer in trainers %}
+          <option value="{{ trainer.id }}"{% if selected_trainer_id == trainer.id %} selected{% endif %}>{{ trainer.full_name }}</option>
+          {% endfor %}
+        </select>
+      </form>
+      {% endif %}
       <div class="position-relative" style="min-width: 280px;">
         <input type="text" id="batchSearchInput" class="form-control form-control-sm ps-5 rounded-pill border-secondary-subtle shadow-2xs" placeholder="🔍 Search batch, course, trainer, branch...">
       </div>

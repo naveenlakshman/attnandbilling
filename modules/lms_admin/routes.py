@@ -1012,33 +1012,48 @@ def dashboard():
         cur.execute("SELECT COUNT(*) as count FROM lms_programs WHERE is_deleted = 0 AND slug != ? AND institute_id = ?", (_MASTER_BRIDGE_PROGRAM_SLUG, current_inst))
         total_programs = cur.fetchone()['count']
         
-        cur.execute("SELECT COUNT(*) as count FROM lms_master_chapters WHERE status = 'active'")
+        cur.execute(
+            "SELECT COUNT(*) as count FROM lms_master_chapters WHERE status = 'active' AND institute_id = ?",
+            (current_inst,),
+        )
         total_chapters = cur.fetchone()['count']
         
-        cur.execute("SELECT COUNT(*) as count FROM lms_master_topics WHERE status = 'active'")
+        cur.execute("""
+            SELECT COUNT(*) AS count
+            FROM lms_master_topics mt
+            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            WHERE mt.status = 'active' AND mc.institute_id = ?
+        """, (current_inst,))
         total_topics = cur.fetchone()['count']
 
         cur.execute("""
             SELECT COUNT(*) AS count
             FROM lms_master_topics mt
+            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
             WHERE mt.status = 'active'
+              AND mc.institute_id = ?
               AND NOT EXISTS (
                   SELECT 1 FROM lms_topic_contents ltc
                   WHERE ltc.master_topic_id = mt.id
                     AND ltc.content_mode IN ('pdf', 'rich_text', 'interactive_image')
               )
-        """)
+        """, (current_inst,))
         topics_missing_lesson = cur.fetchone()['count']
 
         cur.execute("""
             SELECT COUNT(*) AS count
             FROM lms_master_chapters mc
             WHERE mc.status = 'active'
+              AND mc.institute_id = ?
               AND NOT EXISTS (
-                  SELECT 1 FROM lms_program_chapters pc
+                  SELECT 1
+                  FROM lms_program_chapters pc
+                  JOIN lms_programs lp ON lp.id = pc.program_id
                   WHERE pc.master_chapter_id = mc.id
+                    AND lp.institute_id = ?
+                    AND lp.is_deleted = 0
               )
-        """)
+        """, (current_inst, current_inst))
         unlinked_chapters = cur.fetchone()['count']
 
         cur.execute("""
@@ -1048,15 +1063,29 @@ def dashboard():
         """, (_MASTER_BRIDGE_PROGRAM_SLUG, current_inst))
         draft_programs = cur.fetchone()['count']
         
-        cur.execute("SELECT COUNT(*) as count FROM lms_mock_tests")
+        cur.execute("""
+            SELECT COUNT(DISTINCT test.id) AS count
+            FROM lms_mock_tests test
+            LEFT JOIN lms_programs direct_program ON direct_program.id = test.program_id
+            LEFT JOIN lms_chapters chapter ON chapter.id = test.chapter_id
+            LEFT JOIN lms_programs chapter_program ON chapter_program.id = chapter.program_id
+            LEFT JOIN lms_topics topic ON topic.id = test.topic_id
+            LEFT JOIN lms_chapters topic_chapter ON topic_chapter.id = topic.chapter_id
+            LEFT JOIN lms_programs topic_program ON topic_program.id = topic_chapter.program_id
+            WHERE direct_program.institute_id = ?
+               OR chapter_program.institute_id = ?
+               OR topic_program.institute_id = ?
+        """, (current_inst, current_inst, current_inst))
         total_tests = cur.fetchone()['count']
 
         cur.execute("""
             SELECT COUNT(*) as count
             FROM lms_final_exam_applications app
             JOIN students s ON s.id = app.student_id
-            WHERE app.status = 'PENDING' AND s.institute_id = ?
-        """, (current_inst,))
+            WHERE app.status = 'PENDING'
+              AND app.institute_id = ?
+              AND s.institute_id = ?
+        """, (current_inst, current_inst))
         pending_final_exam_applications = cur.fetchone()['count']
         
         # Get recent LMS activity (last 10 records)
@@ -1069,11 +1098,12 @@ def dashboard():
                 al.created_at,
                 u.full_name
             FROM activity_logs al
-            LEFT JOIN users u ON al.user_id = u.id
+            LEFT JOIN users u ON al.user_id = u.id AND u.institute_id = ?
             WHERE al.module_name LIKE '%lms%'
+              AND al.institute_id = ?
             ORDER BY al.created_at DESC
             LIMIT 10
-        """)
+        """, (current_inst, current_inst))
         recent_activity = cur.fetchall()
         
         metrics = {
@@ -2352,9 +2382,10 @@ def master_topic_new(master_chapter_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         chapter = cur.execute(
-            "SELECT id, title, status FROM lms_master_chapters WHERE id = ?",
-            (master_chapter_id,)
+            "SELECT id, title, status FROM lms_master_chapters WHERE id = ? AND institute_id = ?",
+            (master_chapter_id, current_inst)
         ).fetchone()
         if not chapter:
             flash('Master chapter not found.', 'danger')
@@ -2387,11 +2418,12 @@ def master_topic_new(master_chapter_id):
                         short_description,
                         topic_order,
                         status,
+                        institute_id,
                         created_at,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (master_chapter_id, title, short_description, topic_order, status, now, now)
+                (master_chapter_id, title, short_description, topic_order, status, current_inst, now, now)
             )
             topic_id = cur.lastrowid
 
@@ -10087,11 +10119,31 @@ def classroom_teaching_dashboard():
         user_id = session.get('user_id')
         user_role = session.get('role', '').lower()
         is_admin = (user_role == 'admin')
+        selected_trainer_id = request.args.get('trainer_id', type=int) if is_admin else user_id
+
+        trainers = []
+        if is_admin:
+            trainers = cur.execute(
+                """
+                    SELECT id, full_name
+                    FROM users
+                    WHERE role = 'staff'
+                      AND is_active = 1
+                      AND institute_id = ?
+                    ORDER BY full_name ASC
+                """,
+                (current_inst,),
+            ).fetchall()
+            if selected_trainer_id and selected_trainer_id not in {row['id'] for row in trainers}:
+                selected_trainer_id = None
         
-        where_clauses = ["(br.institute_id = ? OR br.institute_id IS NULL)", "b.status = 'active'"]
+        where_clauses = ["br.institute_id = ?", "b.status = 'active'"]
         params = [current_inst]
         
-        if not is_admin:
+        if is_admin and selected_trainer_id:
+            where_clauses.append("b.trainer_id = ?")
+            params.append(selected_trainer_id)
+        elif not is_admin:
             where_clauses.append("(b.trainer_id = ? OR b.trainer_id IS NULL)")
             params.append(user_id)
             
@@ -10101,12 +10153,12 @@ def classroom_teaching_dashboard():
                    (SELECT COUNT(DISTINCT sb.student_id) FROM student_batches sb WHERE sb.batch_id = b.id AND sb.status = 'active') as student_count
             FROM batches b
             LEFT JOIN branches br ON br.id = b.branch_id
-            LEFT JOIN courses c ON c.id = b.course_id
-            LEFT JOIN users u ON u.id = b.trainer_id
+            LEFT JOIN courses c ON c.id = b.course_id AND c.institute_id = ?
+            LEFT JOIN users u ON u.id = b.trainer_id AND u.institute_id = ?
             WHERE {" AND ".join(where_clauses)}
             ORDER BY b.batch_name ASC
         """
-        raw_batches = cur.execute(sql, params).fetchall()
+        raw_batches = cur.execute(sql, [current_inst, current_inst, *params]).fetchall()
 
         batches = []
         for b in raw_batches:
@@ -10118,8 +10170,9 @@ def classroom_teaching_dashboard():
                 FROM batches b
                 JOIN lms_programs lp ON lp.course_id = b.course_id
                 WHERE b.id = ? AND lp.is_active = 1 AND lp.is_deleted = 0
+                  AND lp.institute_id = ?
                 LIMIT 1
-            """, (bid,))
+            """, (bid, current_inst))
             prog_row = cur.fetchone()
 
             taught_cnt = 0
@@ -10195,7 +10248,10 @@ def classroom_teaching_dashboard():
         
         return render_template(
             "lms_admin/classroom_teaching_dashboard.html",
-            batches=batches
+            batches=batches,
+            trainers=trainers,
+            selected_trainer_id=selected_trainer_id,
+            is_admin=is_admin,
         )
     finally:
         conn.close()

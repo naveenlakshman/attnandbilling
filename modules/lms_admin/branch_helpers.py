@@ -19,14 +19,17 @@ def _clone_master_topic(cur, master_topic_id, new_master_chapter_id):
     # 2. Insert new master topic
     cur.execute("""
         INSERT INTO lms_master_topics (
-            master_chapter_id, title, short_description, topic_order, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            master_chapter_id, title, short_description, topic_order, status,
+            institute_id, is_shared, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         new_master_chapter_id,
         src_topic['title'],
         src_topic['short_description'],
         src_topic['topic_order'],
         src_topic['status'],
+        src_topic['institute_id'],
+        src_topic['is_shared'],
         now,
         now
     ))

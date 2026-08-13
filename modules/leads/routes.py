@@ -839,9 +839,20 @@ def lead_detail(lead_id):
     cur.execute("""
         SELECT id, full_name, username
         FROM users
-        WHERE is_active = 1 AND institute_id = ?
+        WHERE is_active = 1
+          AND institute_id = ?
+          AND (
+              id = ?
+              OR (
+                  role = 'staff'
+                  AND (? IS NULL OR branch_id = ?)
+              )
+          )
         ORDER BY full_name
-    """, (get_current_institute_id(default=1),))
+    """, (
+        lead["institute_id"], lead.get("assigned_to_id"),
+        lead.get("branch_id"), lead.get("branch_id"),
+    ))
     all_users = cur.fetchall()
 
     # Followups timeline
@@ -1601,6 +1612,11 @@ def lead_reassign(lead_id):
 
     assigned_to_id = request.form.get("assigned_to_id", "").strip() or None
     current_inst = get_current_institute_id(default=1)
+    lead_institute_id = int(lead["institute_id"])
+    if lead_institute_id != int(current_inst):
+        conn.close()
+        flash("Access denied for this lead.", "danger")
+        return redirect(url_for("leads.leads_list"))
     now = datetime.now().isoformat(timespec="seconds")
 
     if assigned_to_id:
@@ -1608,8 +1624,19 @@ def lead_reassign(lead_id):
         cur.execute("""
             SELECT id, full_name, username, is_active
             FROM users
-            WHERE id = ? AND institute_id = ?
-        """, (assigned_to_id, current_inst))
+            WHERE id = ?
+              AND institute_id = ?
+              AND (
+                  id = ?
+                  OR (
+                      role = 'staff'
+                      AND (? IS NULL OR branch_id = ?)
+                  )
+              )
+        """, (
+            assigned_to_id, lead_institute_id, lead["assigned_to_id"],
+            lead.get("branch_id"), lead.get("branch_id"),
+        ))
         user = cur.fetchone()
 
         if not user or user["is_active"] != 1:
@@ -1621,7 +1648,7 @@ def lead_reassign(lead_id):
             UPDATE leads
             SET assigned_to_id = ?, updated_at = ?
             WHERE id = ? AND institute_id = ?
-        """, (assigned_to_id, now, lead_id, current_inst))
+        """, (assigned_to_id, now, lead_id, lead_institute_id))
 
         conn.commit()
         conn.close()
@@ -1642,7 +1669,7 @@ def lead_reassign(lead_id):
             UPDATE leads
             SET assigned_to_id = NULL, updated_at = ?
             WHERE id = ? AND institute_id = ?
-        """, (now, lead_id, current_inst))
+        """, (now, lead_id, lead_institute_id))
 
         conn.commit()
         conn.close()

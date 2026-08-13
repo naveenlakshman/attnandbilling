@@ -417,6 +417,16 @@
       </div>
 
       <div>
+        <label>👤 Student Status</label>
+        <select name="student_status" onchange="document.getElementById('filterForm').submit()">
+          <option value="all" {% if student_status == 'all' %}selected{% endif %}>All Students</option>
+          <option value="active" {% if student_status == 'active' %}selected{% endif %}>Active</option>
+          <option value="completed" {% if student_status == 'completed' %}selected{% endif %}>Completed</option>
+          <option value="dropped" {% if student_status == 'dropped' %}selected{% endif %}>Dropped</option>
+        </select>
+      </div>
+
+      <div>
         <label>📅 From Date</label>
         <input type="date" name="date_from" value="{{ date_from }}">
       </div>
