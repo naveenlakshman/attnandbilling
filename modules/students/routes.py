@@ -1845,19 +1845,22 @@ def profile():
                            qualification_levels=QUALIFICATION_LEVELS)
 
 
-def calculate_profile_score(student, uploaded_docs):
-    """Calculate profile completion using only education fields applicable to the student."""
+def calculate_profile_completion(student, uploaded_docs):
+    """Return score and missing items using only fields applicable to the student."""
     if not student:
-        return 0
+        return {'score': 0, 'filled_count': 0, 'total_items': 0, 'missing_count': 0, 'missing_labels': []}
     
     student_dict = dict(student)
     uploaded_cats = {d['category'] for d in uploaded_docs}
     
     fields_to_check = [
-        'full_name', 'phone', 'email', 'address', 'gender', 'education_level', 
-        'qualification', 'employment_status', 'date_of_birth', 'parent_name', 
-        'parent_contact', 'father_name', 'mother_name',
-        'student_signature_filename', 'parent_signature_filename'
+        ('full_name', 'Full Name'), ('phone', 'Phone'), ('email', 'Email'),
+        ('address', 'Address'), ('gender', 'Gender'), ('education_level', 'Education Level'),
+        ('qualification', 'Qualification'), ('employment_status', 'Employment Status'),
+        ('date_of_birth', 'Date of Birth'), ('parent_name', 'Parent Name'),
+        ('parent_contact', 'Parent Contact'), ('father_name', 'Father Name'),
+        ('mother_name', 'Mother Name'), ('student_signature_filename', 'Student Signature'),
+        ('parent_signature_filename', 'Parent Signature'),
     ]
 
     education_level = str(student_dict.get('education_level') or '').strip()
@@ -1882,25 +1885,49 @@ def calculate_profile_score(student, uploaded_docs):
     )
 
     if needs_tenth_details:
-        fields_to_check.extend(['tenth_institution', 'tenth_percentage'])
+        fields_to_check.extend([
+            ('tenth_institution', '10th Institution'),
+            ('tenth_percentage', '10th Percentage'),
+        ])
     if needs_puc_details:
-        fields_to_check.extend(['puc_institution', 'puc_percentage'])
+        fields_to_check.extend([
+            ('puc_institution', 'PUC Institution'),
+            ('puc_percentage', 'PUC Percentage'),
+        ])
     
     filled_count = 0
-    for field in fields_to_check:
+    missing_labels = []
+    for field, label in fields_to_check:
         val = student_dict.get(field)
         if val is not None and str(val).strip() != "":
             filled_count += 1
+        else:
+            missing_labels.append(label)
             
-    if 'qualification' in uploaded_cats:
-        filled_count += 1
-    if 'identity' in uploaded_cats:
-        filled_count += 1
-    if 'address' in uploaded_cats:
-        filled_count += 1
+    document_items = [
+        ('qualification', 'Qualification Document'),
+        ('identity', 'Identity Document'),
+        ('address', 'Address Document'),
+    ]
+    for category, label in document_items:
+        if category in uploaded_cats:
+            filled_count += 1
+        else:
+            missing_labels.append(label)
         
-    total_items = len(fields_to_check) + 3
-    return int((filled_count / total_items) * 100)
+    total_items = len(fields_to_check) + len(document_items)
+    return {
+        'score': int((filled_count / total_items) * 100),
+        'filled_count': filled_count,
+        'total_items': total_items,
+        'missing_count': len(missing_labels),
+        'missing_labels': missing_labels,
+    }
+
+
+def calculate_profile_score(student, uploaded_docs):
+    """Backward-compatible profile score used by student and exam workflows."""
+    return calculate_profile_completion(student, uploaded_docs)['score']
 
 
 @students_bp.route('/profile/document/<int:document_id>')

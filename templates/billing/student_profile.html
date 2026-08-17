@@ -106,6 +106,14 @@
                     </div>
                     <span style="font-size: 12px; font-weight: 700; color: {% if profile_score == 100 %}#10b981{% else %}#2563eb{% endif %};">{{ profile_score }}%</span>
                   </div>
+                  <div style="margin-top: 7px; font-size: 12px; font-weight: 600; color: {% if profile_completion.missing_count == 0 %}#059669{% else %}#dc2626{% endif %};"
+                       {% if profile_completion.missing_labels %}title="Missing: {{ profile_completion.missing_labels|join(', ') }}"{% endif %}>
+                    {% if profile_completion.missing_count == 0 %}
+                      ✓ Profile complete
+                    {% else %}
+                      {{ profile_completion.missing_count }} {{ 'item' if profile_completion.missing_count == 1 else 'items' }} missing to reach 100%
+                    {% endif %}
+                  </div>
                 </div>
               </div>
 

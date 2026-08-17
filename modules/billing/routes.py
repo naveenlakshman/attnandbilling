@@ -4181,8 +4181,9 @@ def student_profile(student_id):
         (student_id,)
     ).fetchone()
 
-    from modules.students.routes import calculate_profile_score
-    profile_score = calculate_profile_score(student, uploaded_docs)
+    from modules.students.routes import calculate_profile_completion
+    profile_completion = calculate_profile_completion(student, uploaded_docs)
+    profile_score = profile_completion['score']
 
     conn.close()
 
@@ -4213,6 +4214,7 @@ def student_profile(student_id):
         uploaded_docs=uploaded_docs,
         pending_update=pending_update,
         profile_score=profile_score,
+        profile_completion=profile_completion,
         format_datetime=_format_display_datetime,
         format_date=_format_display_date,
         format_inr=_format_inr,
