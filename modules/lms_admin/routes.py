@@ -8257,9 +8257,9 @@ def all_assignments():
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
                 {program_join}
                 JOIN assignment_counts ac ON ac.assignment_id = a.id
-                WHERE a.institute_id = ? AND mc.institute_id = ?
+                WHERE 1 = 1
             """
-            base_params = scope_params + program_params + [current_inst, current_inst]
+            base_params = scope_params + program_params
         else:
             base_sql = f"""
                 SELECT
@@ -8299,9 +8299,20 @@ def all_assignments():
                 JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
                 {program_join}
-                WHERE a.institute_id = ? AND mc.institute_id = ?
+                WHERE (
+                    a.institute_id = ?
+                    OR EXISTS (
+                        SELECT 1
+                        FROM lms_assignment_submissions s_visible
+                        JOIN students st_visible ON st_visible.id = s_visible.student_id
+                        WHERE s_visible.assignment_id = a.id
+                          AND s_visible.is_latest = 1
+                          AND st_visible.institute_id = ?
+                          AND (s_visible.institute_id = ? OR s_visible.institute_id IS NULL)
+                    )
+                )
             """
-            base_params = program_params + [current_inst, current_inst]
+            base_params = program_params + [current_inst, current_inst, current_inst]
 
         review_filter = (request.args.get('review_filter') or 'all').strip().lower()
         if review_filter not in {'all', 'submissions', 'pending', 'reviewed'}:
@@ -9107,8 +9118,8 @@ def edit_assignment(assignment_id):
             FROM   lms_assignments a
             JOIN   lms_master_topics mt ON mt.id = a.master_topic_id
             JOIN   lms_master_chapters mc ON mc.id = mt.master_chapter_id
-            WHERE  a.id = ? AND a.institute_id = ? AND mc.institute_id = ?
-        """, (assignment_id, current_inst, current_inst)).fetchone()
+            WHERE  a.id = ? AND a.institute_id = ?
+        """, (assignment_id, current_inst)).fetchone()
         if not assignment:
             flash('Assignment not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
@@ -9195,8 +9206,8 @@ def delete_assignment(assignment_id):
             FROM lms_assignments a
             JOIN lms_master_topics mt ON mt.id = a.master_topic_id
             JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
-            WHERE a.id = ? AND a.institute_id = ? AND mc.institute_id = ?
-        """, (assignment_id, current_inst, current_inst)).fetchone()
+            WHERE a.id = ? AND a.institute_id = ?
+        """, (assignment_id, current_inst)).fetchone()
         if not a:
             flash('Assignment not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
@@ -9227,8 +9238,20 @@ def view_submissions(assignment_id):
             FROM   lms_assignments a
             JOIN   lms_master_topics mt ON mt.id = a.master_topic_id
             JOIN   lms_master_chapters mc ON mc.id = mt.master_chapter_id
-            WHERE  a.id = ? AND a.institute_id = ? AND mc.institute_id = ?
-        """, (assignment_id, current_inst, current_inst)).fetchone()
+            WHERE  a.id = ?
+              AND (
+                  a.institute_id = ?
+                  OR EXISTS (
+                      SELECT 1
+                      FROM lms_assignment_submissions s_visible
+                      JOIN students st_visible ON st_visible.id = s_visible.student_id
+                      WHERE s_visible.assignment_id = a.id
+                        AND s_visible.is_latest = 1
+                        AND st_visible.institute_id = ?
+                        AND (s_visible.institute_id = ? OR s_visible.institute_id IS NULL)
+                  )
+              )
+        """, (assignment_id, current_inst, current_inst, current_inst)).fetchone()
         if not a:
             flash('Assignment not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
@@ -9884,8 +9907,20 @@ def admin_download_assignment(assignment_id):
             FROM lms_assignments a
             JOIN lms_master_topics mt ON mt.id = a.master_topic_id
             JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
-            WHERE a.id = ? AND a.institute_id = ? AND mc.institute_id = ?
-        """, (assignment_id, current_inst, current_inst)).fetchone()
+            WHERE a.id = ?
+              AND (
+                  a.institute_id = ?
+                  OR EXISTS (
+                      SELECT 1
+                      FROM lms_assignment_submissions s_visible
+                      JOIN students st_visible ON st_visible.id = s_visible.student_id
+                      WHERE s_visible.assignment_id = a.id
+                        AND s_visible.is_latest = 1
+                        AND st_visible.institute_id = ?
+                        AND (s_visible.institute_id = ? OR s_visible.institute_id IS NULL)
+                  )
+              )
+        """, (assignment_id, current_inst, current_inst, current_inst)).fetchone()
         if not a or not a['file_path']:
             abort(404)
         file_path = a['file_path']

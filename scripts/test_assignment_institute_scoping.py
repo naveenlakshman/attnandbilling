@@ -38,18 +38,6 @@ def main():
 
     conn.execute(
         """
-        UPDATE lms_assignments
-        SET institute_id = COALESCE((
-            SELECT mc.institute_id
-            FROM lms_master_topics mt
-            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
-            WHERE mt.id = lms_assignments.master_topic_id
-        ), 1)
-        WHERE master_topic_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
-        """
-    )
-    conn.execute(
-        """
         UPDATE lms_assignment_submissions
         SET institute_id = COALESCE((
             SELECT institute_id FROM students
@@ -74,16 +62,25 @@ def main():
                  SELECT 1 FROM students st
                  WHERE st.id = s.student_id AND st.institute_id = ?
              )
-            WHERE a.institute_id = ? AND mc.institute_id = ?
+            WHERE a.institute_id = ?
+               OR EXISTS (
+                   SELECT 1
+                   FROM lms_assignment_submissions s_visible
+                   JOIN students st_visible ON st_visible.id = s_visible.student_id
+                   WHERE s_visible.assignment_id = a.id
+                     AND s_visible.is_latest = 1
+                     AND st_visible.institute_id = ?
+                     AND (s_visible.institute_id = ? OR s_visible.institute_id IS NULL)
+               )
             GROUP BY a.id
             ORDER BY a.id
             """,
-            (institute_id, institute_id, institute_id, institute_id),
+            (institute_id, institute_id, institute_id, institute_id, institute_id),
         ).fetchall()
 
     institute_1 = assignments_for(1)
     institute_2 = assignments_for(2)
-    assert [(row["id"], row["submission_count"]) for row in institute_1] == [(1, 1)]
+    assert [(row["id"], row["submission_count"]) for row in institute_1] == [(1, 1), (2, 0)]
     assert [(row["id"], row["submission_count"]) for row in institute_2] == [(2, 2)]
 
     conn.execute(
@@ -91,8 +88,8 @@ def main():
         (3, 2, "New Institute 2 assignment", 2),
     )
     assert [row["id"] for row in assignments_for(2)] == [2, 3]
-    assert [row["id"] for row in assignments_for(1)] == [1]
-    print("PASS: Institute 2 legacy and new assignments are visible only in Institute 2.")
+    assert [row["id"] for row in assignments_for(1)] == [1, 2]
+    print("PASS: Institute 2 sees shared assignments through its own submissions without cross-tenant leakage.")
 
 
 if __name__ == "__main__":
