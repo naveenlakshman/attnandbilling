@@ -1681,6 +1681,16 @@ def init_db():
         WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
     """)
     cur.execute("""
+        UPDATE lms_assignments
+        SET institute_id = COALESCE((
+            SELECT mc.institute_id
+            FROM lms_master_topics mt
+            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            WHERE mt.id = lms_assignments.master_topic_id
+        ), 1)
+        WHERE master_topic_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
         UPDATE lms_batch_program_access
         SET institute_id = COALESCE((SELECT institute_id FROM batches WHERE batches.id = lms_batch_program_access.batch_id), 1)
         WHERE batch_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)

@@ -12,7 +12,9 @@
      data-program-id="{{ selected_program.id if selected_program else 0 }}" 
      data-batch-id="{{ batch.id }}" 
      data-total-topics="{{ total_topics }}" 
-     data-taught-count="{{ taught_count }}">
+     data-taught-count="{{ taught_count }}"
+     data-initial-topic-id="{{ initial_topic_id or 0 }}"
+     data-initial-topic-is-master="{{ '1' if initial_topic_is_master is sameas true else ('0' if initial_topic_is_master is sameas false else '') }}">
      
   <div class="card teach-card-wrapper shadow-sm border-0">
     
@@ -158,7 +160,7 @@
                     </div>
                     <div class="teach-chapter-topics {% if loop.first %}open{% endif %}">
                       {% for t in ch.topics %}
-                        <div class="syllabus-topic-item {% if loop.first and ch.chapter_order == 1 %}active{% endif %} {% if t.is_taught %}done{% endif %}"
+                        <div class="syllabus-topic-item {% if t.is_taught %}done{% endif %}"
                              id="topic-item-{{ t.id }}"
                              data-topic-id="{{ t.id }}"
                              data-is-master="{{ '1' if t.is_master else '0' }}"

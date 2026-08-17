@@ -2690,6 +2690,7 @@ def submit_assignment(assignment_id):
         return jsonify({'ok': False, 'error': 'Read-only in demo mode'}), 403
 
     student_id = session['student_id']
+    institute_id = get_current_institute_id(default=1)
     conn = get_conn()
     try:
         a = conn.execute(
@@ -2765,10 +2766,10 @@ def submit_assignment(assignment_id):
         # Insert new submission row
         conn.execute("""
             INSERT INTO lms_assignment_submissions
-                (assignment_id, student_id, file_path, original_filename,
+                (institute_id, assignment_id, student_id, file_path, original_filename,
                  status, review_status, submitted_at, updated_at, is_latest, is_late)
-            VALUES (?, ?, ?, ?, 'submitted', 'submitted', ?, ?, 1, ?)
-        """, (assignment_id, student_id, path_or_err, orig_name, now, now, is_late))
+            VALUES (?, ?, ?, ?, ?, 'submitted', 'submitted', ?, ?, 1, ?)
+        """, (institute_id, assignment_id, student_id, path_or_err, orig_name, now, now, is_late))
         conn.commit()
         return jsonify({'ok': True, 'status': 'submitted', 'review_status': 'submitted',
                         'submitted_at': now[:16], 'original_filename': orig_name,

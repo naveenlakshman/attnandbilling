@@ -71,7 +71,7 @@
               </div>
 
               <div class="pt-2 border-top d-flex gap-2">
-                <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=b.id) }}" class="btn btn-primary w-100 fw-bold py-2 d-flex align-items-center justify-content-center gap-2" style="background: #4f46e5; border-color: #4f46e5; border-radius: 8px;">
+                <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=b.id, program_id=b.launch_program_id) if b.launch_program_id else url_for('lms_admin.classroom_teach_mode', batch_id=b.id) }}" class="btn btn-primary w-100 fw-bold py-2 d-flex align-items-center justify-content-center gap-2" style="background: #4f46e5; border-color: #4f46e5; border-radius: 8px;">
                   <span>🎓 Launch Teaching Mode</span>
                 </a>
               </div>

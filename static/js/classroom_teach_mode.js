@@ -81,7 +81,20 @@
     }
 
     if (topicElementsList.length > 0) {
-      loadTopic(topicElementsList[0]);
+      const initialTopicId = appContainer.getAttribute('data-initial-topic-id');
+      const initialTopicIsMaster = appContainer.getAttribute('data-initial-topic-is-master');
+      const initialTopicElem = topicElementsList.find(function (elem) {
+        return elem.getAttribute('data-topic-id') === initialTopicId &&
+          elem.getAttribute('data-is-master') === initialTopicIsMaster;
+      }) || topicElementsList[0];
+
+      const initialTopicsGroup = initialTopicElem.closest('.teach-chapter-topics');
+      const initialChapterHeader = initialTopicsGroup ? initialTopicsGroup.previousElementSibling : null;
+      if (initialTopicsGroup) initialTopicsGroup.classList.add('open');
+      if (initialChapterHeader) initialChapterHeader.classList.add('open');
+
+      loadTopic(initialTopicElem);
+      initialTopicElem.scrollIntoView({ block: 'nearest' });
     }
   }
 
@@ -405,4 +418,3 @@
 
   document.addEventListener('DOMContentLoaded', initApp);
 })();
-

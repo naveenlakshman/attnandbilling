@@ -8201,9 +8201,11 @@ def all_assignments():
             scope_where = [
                 "sb.status = 'active'",
                 "LOWER(COALESCE(b.status, '')) = 'active'",
-                "s.institute_id = ?",
+                "st.institute_id = ?",
+                "(s.institute_id = ? OR s.institute_id IS NULL)",
+                "b.institute_id = ?",
             ]
-            scope_params = [current_inst]
+            scope_params = [current_inst, current_inst, current_inst]
             if admin_branch_limited:
                 scope_where.append("b.branch_id = ?")
                 scope_params.append(actor['branch_id'])
@@ -8220,6 +8222,7 @@ def all_assignments():
                     SELECT DISTINCT s.id, s.assignment_id,
                            COALESCE(s.review_status, 'submitted') AS review_status
                     FROM lms_assignment_submissions s
+                    JOIN students st ON st.id = s.student_id
                     JOIN student_batches sb ON sb.student_id = s.student_id
                     JOIN batches b ON b.id = sb.batch_id
                     WHERE s.is_latest = 1
@@ -8254,7 +8257,7 @@ def all_assignments():
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
                 {program_join}
                 JOIN assignment_counts ac ON ac.assignment_id = a.id
-                WHERE (a.institute_id = ? OR (a.institute_id IS NULL AND 1 = ?))
+                WHERE a.institute_id = ? AND mc.institute_id = ?
             """
             base_params = scope_params + program_params + [current_inst, current_inst]
         else:
@@ -8271,26 +8274,32 @@ def all_assignments():
                     strftime('%d %b %Y', a.created_at) AS created_date,
                     (SELECT COUNT(*)
                      FROM lms_assignment_submissions s
+                     JOIN students st ON st.id = s.student_id
                      WHERE s.assignment_id = a.id
                        AND s.is_latest = 1
-                       AND (s.institute_id = {current_inst} OR (s.institute_id IS NULL AND 1 = {current_inst}))) AS submission_count,
+                       AND st.institute_id = {current_inst}
+                       AND (s.institute_id = {current_inst} OR s.institute_id IS NULL)) AS submission_count,
                     (SELECT COUNT(*)
                      FROM lms_assignment_submissions s
+                     JOIN students st ON st.id = s.student_id
                      WHERE s.assignment_id = a.id
                        AND s.is_latest = 1
-                       AND (s.institute_id = {current_inst} OR (s.institute_id IS NULL AND 1 = {current_inst}))
+                       AND st.institute_id = {current_inst}
+                       AND (s.institute_id = {current_inst} OR s.institute_id IS NULL)
                        AND COALESCE(s.review_status, 'submitted') IN ('accepted', 'rejected')) AS reviewed_count,
                     (SELECT COUNT(*)
                      FROM lms_assignment_submissions s
+                     JOIN students st ON st.id = s.student_id
                      WHERE s.assignment_id = a.id
                        AND s.is_latest = 1
-                       AND (s.institute_id = {current_inst} OR (s.institute_id IS NULL AND 1 = {current_inst}))
+                       AND st.institute_id = {current_inst}
+                       AND (s.institute_id = {current_inst} OR s.institute_id IS NULL)
                        AND COALESCE(s.review_status, 'submitted') = 'submitted') AS pending_count
                 FROM lms_assignments a
                 JOIN lms_master_topics   mt ON mt.id = a.master_topic_id
                 JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
                 {program_join}
-                WHERE (a.institute_id = ? OR (a.institute_id IS NULL AND 1 = ?))
+                WHERE a.institute_id = ? AND mc.institute_id = ?
             """
             base_params = program_params + [current_inst, current_inst]
 
@@ -8491,7 +8500,11 @@ def review_queue():
         if selected_program_id and selected_program_id not in {row['id'] for row in programs}:
             selected_program_id = None
 
-        scope_where = ['s.is_latest = 1', '(s.institute_id = ? OR (s.institute_id IS NULL AND st.institute_id = ?))']
+        scope_where = [
+            's.is_latest = 1',
+            'st.institute_id = ?',
+            '(s.institute_id = ? OR s.institute_id IS NULL)',
+        ]
         scope_params = [current_inst, current_inst]
         if selected_trainer_id:
             scope_where.append("""EXISTS (
@@ -8806,6 +8819,7 @@ def review_submission_detail(submission_id):
         actor = _current_lms_actor(conn)
         if not actor:
             abort(403)
+        current_inst = get_current_institute_id(default=1)
         _require_submission_access(conn, submission_id)
         sub = conn.execute(
             """
@@ -8867,8 +8881,13 @@ def review_submission_detail(submission_id):
         selected_trainer_id = queue_args.get('trainer_id') if is_admin else actor['id']
         admin_branch_limited = is_admin and int(actor['can_view_all_branches'] or 0) != 1
 
-        scope_where = ["s.is_latest = 1", "COALESCE(s.review_status, 'submitted') = 'submitted'"]
-        scope_params = []
+        scope_where = [
+            "s.is_latest = 1",
+            "COALESCE(s.review_status, 'submitted') = 'submitted'",
+            "st.institute_id = ?",
+            "(s.institute_id = ? OR s.institute_id IS NULL)",
+        ]
+        scope_params = [current_inst, current_inst]
         if selected_trainer_id:
             scope_where.append("""EXISTS (SELECT 1 FROM student_batches sb JOIN batches b ON b.id = sb.batch_id
                 WHERE sb.student_id = s.student_id AND sb.status = 'active'
@@ -8972,14 +8991,15 @@ def review_submission_detail(submission_id):
 @lms_admin_bp.route('/master/topic/<int:master_topic_id>/assignments', methods=['GET', 'POST'])
 @lms_content_manager_required
 def manage_assignments(master_topic_id):
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     try:
         topic = conn.execute("""
             SELECT mt.id, mt.title, mc.id AS chapter_id, mc.title AS chapter_title
             FROM   lms_master_topics mt
             JOIN   lms_master_chapters mc ON mc.id = mt.master_chapter_id
-            WHERE  mt.id = ?
-        """, (master_topic_id,)).fetchone()
+            WHERE  mt.id = ? AND mc.institute_id = ?
+        """, (master_topic_id, current_inst)).fetchone()
         if not topic:
             flash('Topic not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
@@ -9018,13 +9038,13 @@ def manage_assignments(master_topic_id):
                 INSERT INTO lms_assignments
                     (master_topic_id, title, description, file_path, original_filename, uploaded_by, created_at, updated_at,
                      due_at, max_score, passing_score, grading_mode, rubric_id, completion_rule,
-                     allow_late_submission, max_attempts, is_required)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     allow_late_submission, max_attempts, is_required, institute_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (master_topic_id, title, description or None,
                   file_path, orig_name, session.get('user_id'), now, now,
                   grading['due_at'], grading['max_score'], grading['passing_score'],
                   grading['grading_mode'], grading['rubric_id'], grading['completion_rule'],
-                  grading['allow_late_submission'], grading['max_attempts'], grading['is_required']))
+                  grading['allow_late_submission'], grading['max_attempts'], grading['is_required'], current_inst))
             conn.commit()
             log_activity(
                 user_id=session['user_id'], branch_id=session.get('branch_id'),
@@ -9038,17 +9058,27 @@ def manage_assignments(master_topic_id):
             SELECT a.id, a.title, a.description, a.original_filename, a.file_path,
                    strftime('%d %b %Y', a.created_at) AS created_date,
                    (SELECT COUNT(*) FROM lms_assignment_submissions s
-                    WHERE s.assignment_id = a.id AND s.is_latest = 1) AS submission_count,
-                   (SELECT COUNT(*) FROM lms_assignment_submissions s
+                    JOIN students st ON st.id = s.student_id
                     WHERE s.assignment_id = a.id AND s.is_latest = 1
+                      AND st.institute_id = ?
+                      AND (s.institute_id = ? OR s.institute_id IS NULL)) AS submission_count,
+                   (SELECT COUNT(*) FROM lms_assignment_submissions s
+                    JOIN students st ON st.id = s.student_id
+                    WHERE s.assignment_id = a.id AND s.is_latest = 1
+                      AND st.institute_id = ?
+                      AND (s.institute_id = ? OR s.institute_id IS NULL)
                       AND COALESCE(s.review_status, 'submitted') IN ('accepted', 'rejected')) AS reviewed_count,
                    (SELECT COUNT(*) FROM lms_assignment_submissions s
+                    JOIN students st ON st.id = s.student_id
                     WHERE s.assignment_id = a.id AND s.is_latest = 1
+                      AND st.institute_id = ?
+                      AND (s.institute_id = ? OR s.institute_id IS NULL)
                       AND COALESCE(s.review_status, 'submitted') = 'submitted') AS pending_count
             FROM   lms_assignments a
-            WHERE  a.master_topic_id = ?
+            WHERE  a.master_topic_id = ? AND a.institute_id = ?
             ORDER  BY a.created_at
-        """, (master_topic_id,)).fetchall()
+        """, (current_inst, current_inst, current_inst, current_inst,
+              current_inst, current_inst, master_topic_id, current_inst)).fetchall()
 
         rubrics = conn.execute(
             "SELECT id, name FROM lms_rubrics WHERE is_active = 1 ORDER BY name"
@@ -9063,6 +9093,7 @@ def manage_assignments(master_topic_id):
 @lms_admin_bp.route('/master/assignments/<int:assignment_id>/edit', methods=['GET', 'POST'])
 @lms_content_manager_required
 def edit_assignment(assignment_id):
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     try:
         assignment = conn.execute("""
@@ -9076,8 +9107,8 @@ def edit_assignment(assignment_id):
             FROM   lms_assignments a
             JOIN   lms_master_topics mt ON mt.id = a.master_topic_id
             JOIN   lms_master_chapters mc ON mc.id = mt.master_chapter_id
-            WHERE  a.id = ?
-        """, (assignment_id,)).fetchone()
+            WHERE  a.id = ? AND a.institute_id = ? AND mc.institute_id = ?
+        """, (assignment_id, current_inst, current_inst)).fetchone()
         if not assignment:
             flash('Assignment not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
@@ -9123,7 +9154,7 @@ def edit_assignment(assignment_id):
                        due_at = ?, max_score = ?, passing_score = ?, grading_mode = ?,
                        rubric_id = ?, completion_rule = ?, allow_late_submission = ?,
                        max_attempts = ?, is_required = ?
-                WHERE  id = ?
+                WHERE  id = ? AND institute_id = ?
             """, (
                 title,
                 description or None,
@@ -9134,7 +9165,7 @@ def edit_assignment(assignment_id):
                 grading['due_at'], grading['max_score'], grading['passing_score'],
                 grading['grading_mode'], grading['rubric_id'], grading['completion_rule'],
                 grading['allow_late_submission'], grading['max_attempts'], grading['is_required'],
-                assignment_id,
+                assignment_id, current_inst,
             ))
             conn.commit()
             log_activity(
@@ -9156,16 +9187,23 @@ def edit_assignment(assignment_id):
 @lms_admin_bp.route('/master/assignments/<int:assignment_id>/delete', methods=['POST'])
 @lms_content_manager_required
 def delete_assignment(assignment_id):
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     try:
-        a = conn.execute(
-            "SELECT master_topic_id, title FROM lms_assignments WHERE id = ?",
-            (assignment_id,)
-        ).fetchone()
+        a = conn.execute("""
+            SELECT a.master_topic_id, a.title
+            FROM lms_assignments a
+            JOIN lms_master_topics mt ON mt.id = a.master_topic_id
+            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            WHERE a.id = ? AND a.institute_id = ? AND mc.institute_id = ?
+        """, (assignment_id, current_inst, current_inst)).fetchone()
         if not a:
             flash('Assignment not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
-        conn.execute("DELETE FROM lms_assignments WHERE id = ?", (assignment_id,))
+        conn.execute(
+            "DELETE FROM lms_assignments WHERE id = ? AND institute_id = ?",
+            (assignment_id, current_inst),
+        )
         conn.commit()
         log_activity(
             user_id=session['user_id'], branch_id=session.get('branch_id'),
@@ -9181,14 +9219,16 @@ def delete_assignment(assignment_id):
 @lms_admin_bp.route('/master/assignments/<int:assignment_id>/submissions')
 @lms_content_manager_required
 def view_submissions(assignment_id):
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     try:
         a = conn.execute("""
             SELECT a.id, a.title, a.master_topic_id, mt.title AS topic_title
             FROM   lms_assignments a
             JOIN   lms_master_topics mt ON mt.id = a.master_topic_id
-            WHERE  a.id = ?
-        """, (assignment_id,)).fetchone()
+            JOIN   lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            WHERE  a.id = ? AND a.institute_id = ? AND mc.institute_id = ?
+        """, (assignment_id, current_inst, current_inst)).fetchone()
         if not a:
             flash('Assignment not found.', 'danger')
             return redirect(url_for('lms_admin.list_master_chapters'))
@@ -9211,11 +9251,12 @@ def view_submissions(assignment_id):
                 SELECT id, batch_name
                 FROM batches
                 WHERE trainer_id = ?
+                  AND institute_id = ?
                   AND LOWER(COALESCE(status, '')) = 'active'
                   AND (? = 0 OR branch_id = ?)
                 ORDER BY batch_name
                 """,
-                (selected_trainer_id, 1 if admin_branch_limited else 0, actor['branch_id'])
+                (selected_trainer_id, current_inst, 1 if admin_branch_limited else 0, actor['branch_id'])
             ).fetchall()
         else:
             active_batches = conn.execute(
@@ -9223,10 +9264,11 @@ def view_submissions(assignment_id):
                 SELECT id, batch_name
                 FROM batches
                 WHERE LOWER(COALESCE(status, '')) = 'active'
+                  AND institute_id = ?
                   AND (? = 0 OR branch_id = ?)
                 ORDER BY batch_name
                 """,
-                (1 if admin_branch_limited else 0, actor['branch_id'])
+                (current_inst, 1 if admin_branch_limited else 0, actor['branch_id'])
             ).fetchall()
 
         if selected_batch_id:
@@ -9235,18 +9277,20 @@ def view_submissions(assignment_id):
                     """
                     SELECT 1 FROM batches
                     WHERE id = ? AND trainer_id = ?
+                      AND institute_id = ?
                       AND LOWER(COALESCE(status, '')) = 'active'
                     """,
-                    (selected_batch_id, selected_trainer_id)
+                    (selected_batch_id, selected_trainer_id, current_inst)
                 ).fetchone()
             else:
                 valid_batch = conn.execute(
                     """
                     SELECT 1 FROM batches
                     WHERE id = ?
+                      AND institute_id = ?
                       AND LOWER(COALESCE(status, '')) = 'active'
                     """,
-                    (selected_batch_id,)
+                    (selected_batch_id, current_inst)
                 ).fetchone()
             if not valid_batch:
                 selected_batch_id = None
@@ -9255,10 +9299,13 @@ def view_submissions(assignment_id):
             where_clauses = [
                 "s.assignment_id = ?",
                 "s.is_latest = 1",
+                "st.institute_id = ?",
+                "(s.institute_id = ? OR s.institute_id IS NULL)",
+                "b.institute_id = ?",
                 "sb.status = 'active'",
                 "LOWER(COALESCE(b.status, '')) = 'active'",
             ]
-            params = [assignment_id]
+            params = [assignment_id, current_inst, current_inst, current_inst]
             if selected_trainer_id:
                 where_clauses.append("b.trainer_id = ?")
                 params.append(selected_trainer_id)
@@ -9295,8 +9342,10 @@ def view_submissions(assignment_id):
                 FROM   lms_assignment_submissions s
                 JOIN   students st ON st.id = s.student_id
                 WHERE  s.assignment_id = ? AND s.is_latest = 1
+                  AND st.institute_id = ?
+                  AND (s.institute_id = ? OR s.institute_id IS NULL)
             """
-            submissions_base_params = [assignment_id]
+            submissions_base_params = [assignment_id, current_inst, current_inst]
 
         status_filter = (request.args.get('status_filter') or 'all').strip().lower()
         if status_filter not in {'all', 'submitted', 'reviewed', 'accepted', 'rejected'}:
@@ -9827,12 +9876,16 @@ def preview_submission_public_file():
 @lms_content_manager_required
 def admin_download_assignment(assignment_id):
     from flask import send_file, abort, redirect
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     try:
-        a = conn.execute(
-            "SELECT file_path, original_filename FROM lms_assignments WHERE id = ?",
-            (assignment_id,)
-        ).fetchone()
+        a = conn.execute("""
+            SELECT a.file_path, a.original_filename
+            FROM lms_assignments a
+            JOIN lms_master_topics mt ON mt.id = a.master_topic_id
+            JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
+            WHERE a.id = ? AND a.institute_id = ? AND mc.institute_id = ?
+        """, (assignment_id, current_inst, current_inst)).fetchone()
         if not a or not a['file_path']:
             abort(404)
         file_path = a['file_path']
@@ -10161,7 +10214,7 @@ def classroom_teaching_dashboard():
             params.append(user_id)
             
         sql = f"""
-            SELECT b.id, b.batch_name, b.start_time, b.end_time,
+            SELECT b.id, b.batch_name, b.start_time, b.end_time, b.course_id,
                    br.branch_name, c.course_name, u.full_name as trainer_name,
                    (SELECT COUNT(DISTINCT sb.student_id) FROM student_batches sb WHERE sb.batch_id = b.id AND sb.status = 'active') as student_count
             FROM batches b
@@ -10179,75 +10232,97 @@ def classroom_teaching_dashboard():
             bid = b['id']
 
             cur.execute("""
-                SELECT lp.id, lp.program_name
-                FROM batches b
-                JOIN lms_programs lp ON lp.course_id = b.course_id
-                WHERE b.id = ? AND lp.is_active = 1 AND lp.is_deleted = 0
-                  AND lp.institute_id = ?
-                LIMIT 1
-            """, (bid, current_inst))
-            prog_row = cur.fetchone()
+                SELECT lp.id, lp.program_name,
+                       MIN(CASE
+                           WHEN bpa.id IS NOT NULL THEN 0
+                           WHEN cpm.id IS NOT NULL THEN COALESCE(cpm.display_order, 0) + 10
+                           ELSE 1000
+                       END) AS program_order
+                FROM lms_programs lp
+                LEFT JOIN lms_batch_program_access bpa
+                  ON bpa.program_id = lp.id AND bpa.batch_id = ? AND bpa.is_active = 1
+                LEFT JOIN lms_course_program_map cpm
+                  ON cpm.program_id = lp.id AND cpm.course_id = ?
+                WHERE lp.institute_id = ? AND lp.is_active = 1 AND lp.is_deleted = 0
+                  AND (lp.course_id = ? OR bpa.id IS NOT NULL OR cpm.id IS NOT NULL)
+                GROUP BY lp.id, lp.program_name
+                ORDER BY program_order, lp.program_name
+            """, (bid, b['course_id'], current_inst, b['course_id']))
+            program_rows = cur.fetchall()
 
             taught_cnt = 0
             total_cnt = 0
             next_topic = "No syllabus configured"
+            launch_program_id = program_rows[0]['id'] if program_rows else None
 
-            if prog_row:
-                pid = prog_row['id']
+            if program_rows:
                 cur.execute("""
-                    SELECT master_topic_id, topic_id
+                    SELECT program_id, master_topic_id, topic_id
                     FROM lms_batch_topic_progress
                     WHERE batch_id = ?
                 """, (bid,))
                 taught_records = cur.fetchall()
-                taught_master_ids = {r['master_topic_id'] for r in taught_records if r['master_topic_id'] is not None}
-                taught_topic_ids = {r['topic_id'] for r in taught_records if r['topic_id'] is not None}
-
-                cur.execute("""
-                    SELECT 1 FROM lms_program_chapters pc
-                    JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
-                    WHERE pc.program_id = ? AND pc.is_visible = 1 AND mc.status = 'active'
-                    LIMIT 1
-                """, (pid,))
-                has_master = bool(cur.fetchone())
+                taught_master_keys = {(r['program_id'], r['master_topic_id']) for r in taught_records if r['master_topic_id'] is not None}
+                taught_topic_keys = {(r['program_id'], r['topic_id']) for r in taught_records if r['topic_id'] is not None}
 
                 all_topics = []
-                if has_master:
+                for program in program_rows:
+                    pid = program['id']
                     cur.execute("""
-                        SELECT mt.id, mt.title as topic_title, pc.chapter_order, mt.topic_order
-                        FROM lms_program_chapters pc
+                        SELECT 1 FROM lms_program_chapters pc
                         JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
                         JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
-                        WHERE pc.program_id = ? AND pc.is_visible = 1 AND mc.status = 'active' AND mt.status = 'active'
-                        ORDER BY pc.chapter_order, mt.topic_order
+                        WHERE pc.program_id = ? AND pc.is_visible = 1
+                          AND mc.status = 'active' AND mt.status = 'active'
+                        LIMIT 1
                     """, (pid,))
-                    for t in cur.fetchall():
+                    has_master = bool(cur.fetchone())
+
+                    if has_master:
+                        cur.execute("""
+                            SELECT mt.id, mt.title as topic_title, pc.chapter_order, mt.topic_order
+                            FROM lms_program_chapters pc
+                            JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
+                            JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
+                            WHERE pc.program_id = ? AND pc.is_visible = 1
+                              AND mc.status = 'active' AND mt.status = 'active'
+                            ORDER BY pc.chapter_order, mt.topic_order
+                        """, (pid,))
+                        topic_rows = cur.fetchall()
+                        topic_type = 'master'
+                    else:
+                        cur.execute("""
+                            SELECT lt.id, lt.topic_title, lc.chapter_order, lt.topic_order
+                            FROM lms_chapters lc
+                            JOIN lms_topics lt ON lt.chapter_id = lc.id
+                            WHERE lc.program_id = ? AND lc.is_active = 1 AND lt.is_active = 1
+                            ORDER BY lc.chapter_order, lt.topic_order
+                        """, (pid,))
+                        topic_rows = cur.fetchall()
+                        topic_type = 'legacy'
+
+                    for topic in topic_rows:
+                        taught_key = (pid, topic['id'])
                         all_topics.append({
-                            'id': t['id'],
-                            'title': t['topic_title'],
-                            'is_taught': t['id'] in taught_master_ids
-                        })
-                else:
-                    cur.execute("""
-                        SELECT lt.id, lt.topic_title, lc.chapter_order, lt.topic_order
-                        FROM lms_chapters lc
-                        JOIN lms_topics lt ON lt.chapter_id = lc.id
-                        WHERE lc.program_id = ? AND lc.is_active = 1 AND lt.is_active = 1
-                        ORDER BY lc.chapter_order, lt.topic_order
-                    """, (pid,))
-                    for t in cur.fetchall():
-                        all_topics.append({
-                            'id': t['id'],
-                            'title': t['topic_title'],
-                            'is_taught': t['id'] in taught_topic_ids
+                            'program_id': pid,
+                            'program_name': program['program_name'],
+                            'id': topic['id'],
+                            'title': topic['topic_title'],
+                            'is_taught': taught_key in (
+                                taught_master_keys if topic_type == 'master' else taught_topic_keys
+                            ),
                         })
 
                 total_cnt = len(all_topics)
                 taught_cnt = sum(1 for t in all_topics if t['is_taught'])
 
-                untaught = [t['title'] for t in all_topics if not t['is_taught']]
+                untaught = [t for t in all_topics if not t['is_taught']]
                 if untaught:
-                    next_topic = untaught[0]
+                    next_item = untaught[0]
+                    launch_program_id = next_item['program_id']
+                    next_topic = next_item['title']
+                    if len(program_rows) > 1:
+                        next_topic = f"{next_item['program_name']}: {next_topic}"
                 elif total_cnt > 0:
                     next_topic = "All Topics Completed ✓"
 
@@ -10257,6 +10332,7 @@ def classroom_teaching_dashboard():
             b_dict['total_cnt'] = total_cnt
             b_dict['taught_pct'] = pct
             b_dict['next_topic'] = next_topic
+            b_dict['launch_program_id'] = launch_program_id
             batches.append(b_dict)
         
         return render_template(
@@ -10353,17 +10429,28 @@ def classroom_teach_mode(batch_id):
         # Get taught topics for this batch
         taught_topic_ids = set()
         taught_master_topic_ids = set()
+        initial_topic_id = None
+        initial_topic_is_master = None
         if program_id:
             cur.execute("""
                 SELECT master_topic_id, topic_id
                 FROM lms_batch_topic_progress
                 WHERE batch_id = ? AND program_id = ?
+                ORDER BY taught_at DESC, id DESC
             """, (batch_id, program_id))
-            for row in cur.fetchall():
+            taught_rows = cur.fetchall()
+            for row_index, row in enumerate(taught_rows):
                 if row['master_topic_id']:
                     taught_master_topic_ids.add(row['master_topic_id'])
                 if row['topic_id']:
                     taught_topic_ids.add(row['topic_id'])
+                if row_index == 0:
+                    if row['master_topic_id']:
+                        initial_topic_id = row['master_topic_id']
+                        initial_topic_is_master = True
+                    elif row['topic_id']:
+                        initial_topic_id = row['topic_id']
+                        initial_topic_is_master = False
                     
         # Load chapters and topics with video/PDF/notes content
         chapters = []
@@ -10695,6 +10782,8 @@ def classroom_teach_mode(batch_id):
             total_topics=total_topics,
             taught_count=taught_count,
             taught_pct=taught_pct,
+            initial_topic_id=initial_topic_id,
+            initial_topic_is_master=initial_topic_is_master,
             students_progress=students_progress,
             today_date=today_date,
             all_attendance_json=all_attendance_json,

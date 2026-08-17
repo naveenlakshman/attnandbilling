@@ -189,6 +189,28 @@ def test_course_aware_review_queue():
     assert rows_meghana[0]['trainer_names'] == 'Meghana M'
     print("PASS: Meghana only sees CCBA assignment with CCBA batch and Meghana M metadata.")
 
+    # Test 3: strict institute isolation while retaining legacy NULL submission rows.
+    cur.execute("INSERT INTO students VALUES (600, 'Institute Two Student', 'I2-001', 2, 2)")
+    cur.execute("INSERT INTO lms_assignment_submissions VALUES (3, 1, 600, 1, 'submitted', '2026-08-04 12:00:00', 2, 'i2.docx', NULL, NULL)")
+    cur.execute("INSERT INTO lms_assignment_submissions VALUES (4, 1, 500, 1, 'submitted', '2026-08-04 13:00:00', 2, 'bad-i2-current-i1-student.docx', NULL, NULL)")
+    cur.execute("INSERT INTO lms_assignment_submissions VALUES (5, 1, 600, 1, 'submitted', '2026-08-04 14:00:00', 1, 'bad-i1-current-i2-student.docx', NULL, NULL)")
+    cur.execute("INSERT INTO lms_assignment_submissions VALUES (6, 1, 600, 1, 'submitted', '2026-08-04 15:00:00', NULL, 'i2-legacy-null.docx', NULL, NULL)")
+
+    institute_scope_sql = """
+        SELECT s.id
+        FROM lms_assignment_submissions s
+        JOIN students st ON st.id = s.student_id
+        WHERE s.is_latest = 1
+          AND st.institute_id = ?
+          AND (s.institute_id = ? OR s.institute_id IS NULL)
+        ORDER BY s.id
+    """
+    institute_1_ids = {row['id'] for row in cur.execute(institute_scope_sql, (1, 1)).fetchall()}
+    institute_2_ids = {row['id'] for row in cur.execute(institute_scope_sql, (2, 2)).fetchall()}
+    assert institute_1_ids == {1, 2}, f"Institute 1 leaked or missed submissions: {institute_1_ids}"
+    assert institute_2_ids == {3, 6}, f"Institute 2 leaked or missed submissions: {institute_2_ids}"
+    print("PASS: Institute 2 sees its own current and legacy submissions without cross-institute leakage.")
+
     print("ALL TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == '__main__':
