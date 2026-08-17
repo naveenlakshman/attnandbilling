@@ -44,8 +44,12 @@ def _BLEACH_ATTRS(tag, name, value):
     if name in ('class', 'style'):
         return True
     if tag == 'a' and name in ('href', 'title', 'target'):
+        if name == 'href' and value.strip().lower().startswith('data:'):
+            return False
         return True
     if tag == 'img' and name in ('src', 'alt', 'width', 'height'):
+        if name == 'src' and value.strip().lower().startswith('data:'):
+            return bool(re.match(r'^data:image/(?:png|jpe?g|gif|webp);base64,', value.strip(), re.I))
         return True
     if tag in ('td', 'th') and name in ('colspan', 'rowspan', 'width', 'height', 'align', 'valign', 'bgcolor'):
         return True
@@ -379,6 +383,7 @@ def sanitize_rich_text(html):
         html,
         tags=_BLEACH_TAGS,
         attributes=_BLEACH_ATTRS,
+        protocols=set(bleach.sanitizer.ALLOWED_PROTOCOLS) | {'data'},
         css_sanitizer=_CSS_SANITIZER,
         strip=True,
     )
@@ -8859,6 +8864,8 @@ def review_submission_detail(submission_id):
         ).fetchone()
         if not sub:
             abort(404)
+        sub = dict(sub)
+        sub['assignment_description_html'] = sanitize_rich_text(sub.get('assignment_description') or '')
 
         attempts = conn.execute(
             """
@@ -9028,6 +9035,7 @@ def manage_assignments(master_topic_id):
             if not description_ok:
                 flash(description_error, 'danger')
                 return redirect(url_for('lms_admin.manage_assignments', master_topic_id=master_topic_id))
+            description = sanitize_rich_text(description)
 
             grading, grading_error = _parse_assignment_grading_settings(conn)
             if grading_error:
@@ -9137,6 +9145,7 @@ def edit_assignment(assignment_id):
             if not description_ok:
                 flash(description_error, 'danger')
                 return redirect(url_for('lms_admin.edit_assignment', assignment_id=assignment_id))
+            description = sanitize_rich_text(description)
 
             grading, grading_error = _parse_assignment_grading_settings(conn)
             if grading_error:

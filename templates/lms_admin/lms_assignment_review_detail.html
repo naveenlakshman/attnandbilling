@@ -45,7 +45,7 @@
           <div><small>Due date</small><strong>{{ sub.due_at or 'No due date' }}</strong></div>
           <div><small>Submission timing</small><strong>{{ 'Late' if sub.is_late else 'On time' }}</strong></div>
         </div>
-        <div class="instructions"><h2>Assignment instructions</h2><div class="instructions-content">{{ sub.assignment_description or 'No instructions were provided for this assignment.' }}</div></div>
+        <div class="instructions"><h2>Assignment instructions</h2><div class="instructions-content lms-rich-content">{{ sub.assignment_description_html|safe if sub.assignment_description_html else 'No instructions were provided for this assignment.' }}</div></div>
       </div></section>
       <section class="review-card"><div class="review-card-header d-flex justify-content-between align-items-center"><span>Submission preview</span><a class="btn btn-sm btn-outline-secondary" href="{{ download_url }}">Download file</a></div>
         {% if preview_type == 'pdf' %}<iframe class="preview-frame" title="PDF submission preview" src="{{ preview_url }}"></iframe>
