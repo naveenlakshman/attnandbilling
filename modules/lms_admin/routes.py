@@ -8203,7 +8203,7 @@ def all_assignments():
                 "LOWER(COALESCE(b.status, '')) = 'active'",
                 "st.institute_id = ?",
                 "(s.institute_id = ? OR s.institute_id IS NULL)",
-                "b.institute_id = ?",
+                "b.branch_id IN (SELECT id FROM branches WHERE institute_id = ?)",
             ]
             scope_params = [current_inst, current_inst, current_inst]
             if admin_branch_limited:
@@ -9274,7 +9274,7 @@ def view_submissions(assignment_id):
                 SELECT id, batch_name
                 FROM batches
                 WHERE trainer_id = ?
-                  AND institute_id = ?
+                  AND branch_id IN (SELECT id FROM branches WHERE institute_id = ?)
                   AND LOWER(COALESCE(status, '')) = 'active'
                   AND (? = 0 OR branch_id = ?)
                 ORDER BY batch_name
@@ -9287,7 +9287,7 @@ def view_submissions(assignment_id):
                 SELECT id, batch_name
                 FROM batches
                 WHERE LOWER(COALESCE(status, '')) = 'active'
-                  AND institute_id = ?
+                  AND branch_id IN (SELECT id FROM branches WHERE institute_id = ?)
                   AND (? = 0 OR branch_id = ?)
                 ORDER BY batch_name
                 """,
@@ -9300,7 +9300,7 @@ def view_submissions(assignment_id):
                     """
                     SELECT 1 FROM batches
                     WHERE id = ? AND trainer_id = ?
-                      AND institute_id = ?
+                      AND branch_id IN (SELECT id FROM branches WHERE institute_id = ?)
                       AND LOWER(COALESCE(status, '')) = 'active'
                     """,
                     (selected_batch_id, selected_trainer_id, current_inst)
@@ -9310,7 +9310,7 @@ def view_submissions(assignment_id):
                     """
                     SELECT 1 FROM batches
                     WHERE id = ?
-                      AND institute_id = ?
+                      AND branch_id IN (SELECT id FROM branches WHERE institute_id = ?)
                       AND LOWER(COALESCE(status, '')) = 'active'
                     """,
                     (selected_batch_id, current_inst)
@@ -9324,7 +9324,7 @@ def view_submissions(assignment_id):
                 "s.is_latest = 1",
                 "st.institute_id = ?",
                 "(s.institute_id = ? OR s.institute_id IS NULL)",
-                "b.institute_id = ?",
+                "b.branch_id IN (SELECT id FROM branches WHERE institute_id = ?)",
                 "sb.status = 'active'",
                 "LOWER(COALESCE(b.status, '')) = 'active'",
             ]
