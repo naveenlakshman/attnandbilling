@@ -2,9 +2,12 @@
 
 import os
 import sys
+from io import BytesIO
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from openpyxl import Workbook
+import modules.lms_admin.routes as lms_routes
 from modules.lms_admin.routes import sanitize_rich_text
 
 
@@ -32,7 +35,27 @@ def main():
     assert '<details class="instructions">' in template
     assert '<details class="instructions" open>' not in template
     assert '<summary>Assignment instructions</summary>' in template
-    print('PASS: Embedded assignment images render while active content is removed.')
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.merge_cells('A1:D1')
+    sheet['A1'] = 'Project Dashboard'
+    sheet['C5'] = '=SUM(1,2)'
+    workbook_bytes = BytesIO()
+    workbook.save(workbook_bytes)
+    original_reader = lms_routes._read_submission_file_bytes
+    try:
+        lms_routes._read_submission_file_bytes = lambda _path: workbook_bytes.getvalue()
+        preview = lms_routes._xlsx_formula_preview('test.xlsx')
+    finally:
+        lms_routes._read_submission_file_bytes = original_reader
+    preview_sheet = preview['sheets'][0]
+    assert len(preview_sheet['rows']) == 50
+    assert len(preview_sheet['column_headers']) == 15
+    assert preview_sheet['rows'][0][1]['coordinate'] == 'B1'
+    assert preview_sheet['rows'][4][2]['formula'] == '=SUM(1,2)'
+    assert preview_sheet['truncated'] is False
+    print('PASS: Instructions are sanitized and the formula preview has a scrollable worksheet canvas.')
 
 
 if __name__ == '__main__':

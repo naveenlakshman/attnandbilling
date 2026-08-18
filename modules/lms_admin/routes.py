@@ -175,8 +175,12 @@ def _xlsx_formula_preview(file_path):
         for sheet_name in formulas_book.sheetnames[:10]:
             formula_sheet = formulas_book[sheet_name]
             value_sheet = values_book[sheet_name]
-            row_count = min(max(formula_sheet.max_row or 1, 1), 100)
-            column_count = min(max(formula_sheet.max_column or 1, 1), 30)
+            source_row_count = max(formula_sheet.max_row or 1, 1)
+            source_column_count = max(formula_sheet.max_column or 1, 1)
+            # Keep a useful worksheet canvas even when the populated range is
+            # small, so reviewers can scroll in every direction like Excel.
+            row_count = min(max(source_row_count, 50), 100)
+            column_count = min(max(source_column_count, 15), 30)
             rows = []
             for row_number in range(1, row_count + 1):
                 cells = []
@@ -191,7 +195,7 @@ def _xlsx_formula_preview(file_path):
                     elif not isinstance(display_value, (str, int, float, bool)):
                         display_value = str(display_value)
                     cells.append({
-                        'coordinate': formula_cell.coordinate,
+                        'coordinate': f'{get_column_letter(column_number)}{row_number}',
                         'display': display_value,
                         'formula': formula,
                     })
@@ -201,7 +205,7 @@ def _xlsx_formula_preview(file_path):
                 'rows': rows,
                 'column_count': column_count,
                 'column_headers': [get_column_letter(index) for index in range(1, column_count + 1)],
-                'truncated': (formula_sheet.max_row or 1) > 100 or (formula_sheet.max_column or 1) > 30,
+                'truncated': source_row_count > 100 or source_column_count > 30,
             })
     finally:
         formulas_book.close()
