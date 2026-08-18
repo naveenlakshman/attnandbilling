@@ -22,6 +22,16 @@ def main():
     assert 'onerror' not in sanitized
     assert '<script' not in sanitized
     assert 'data:text/html' not in sanitized
+
+    template_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'templates', 'lms_admin', 'lms_assignment_review_detail.html',
+    )
+    with open(template_path, encoding='utf-8') as template_file:
+        template = template_file.read()
+    assert '<details class="instructions">' in template
+    assert '<details class="instructions" open>' not in template
+    assert '<summary>Assignment instructions</summary>' in template
     print('PASS: Embedded assignment images render while active content is removed.')
 
 
