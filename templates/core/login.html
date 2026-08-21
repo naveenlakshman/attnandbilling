@@ -32,8 +32,15 @@
         </div>
 
         <div class="mb-3">
-            <label class="form-label">Password</label>
-            <input type="password" name="password" class="form-control" placeholder="Enter password" required>
+            <label class="form-label" for="password">Password</label>
+            <div class="input-group">
+                <input type="password" id="password" name="password" class="form-control"
+                       placeholder="Enter password" required autocomplete="current-password">
+                <button type="button" class="btn btn-outline-secondary" id="toggle-password"
+                        aria-label="Show password" aria-pressed="false" title="Show password">
+                    <span aria-hidden="true">👁️</span>
+                </button>
+            </div>
         </div>
 
         <button type="submit" class="btn btn-primary w-100">Login</button>
@@ -51,4 +58,19 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+  (() => {
+    const passwordInput = document.getElementById('password');
+    const toggleButton = document.getElementById('toggle-password');
+
+    toggleButton.addEventListener('click', () => {
+      const showPassword = passwordInput.type === 'password';
+      passwordInput.type = showPassword ? 'text' : 'password';
+      toggleButton.setAttribute('aria-pressed', String(showPassword));
+      toggleButton.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
+      toggleButton.title = showPassword ? 'Hide password' : 'Show password';
+    });
+  })();
+</script>
 {% endblock %}

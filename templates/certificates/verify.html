@@ -1,11 +1,11 @@
 {% extends "login_base.html" %}
 
-{% block title %}Verify Certificate — Global IT Education{% endblock %}
+{% block title %}Verify Certificate — {{ company.company_name }}{% endblock %}
 
 {% block content %}
 <div class="card login-card shadow-sm p-4" style="max-width: 500px; width: 100%;">
   <div class="text-center mb-4">
-    <h3 class="fw-bold text-primary mb-1">Global IT Education</h3>
+    <h3 class="fw-bold text-primary mb-1">{{ company.company_name }}</h3>
     <p class="text-muted small">Public Certificate Verification Portal</p>
     <hr>
   </div>
