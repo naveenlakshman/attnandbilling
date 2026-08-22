@@ -103,7 +103,8 @@ INSERT INTO subscription_plans (
         JSON_OBJECT(
             'crm', TRUE, 'students', TRUE, 'finance', TRUE,
             'attendance', TRUE, 'reports', TRUE, 'lms', TRUE,
-            'certificates', TRUE, 'integrations', TRUE
+            'certificates', TRUE, 'integrations', TRUE,
+            'smart_counselling', TRUE
         ),
         1, 20, CURRENT_TIMESTAMP
     ),
@@ -113,7 +114,8 @@ INSERT INTO subscription_plans (
         JSON_OBJECT(
             'crm', TRUE, 'students', TRUE, 'finance', TRUE,
             'attendance', TRUE, 'reports', TRUE, 'lms', TRUE,
-            'certificates', TRUE, 'integrations', TRUE
+            'certificates', TRUE, 'integrations', TRUE,
+            'smart_counselling', TRUE
         ),
         1, 30, CURRENT_TIMESTAMP
     )
