@@ -80,9 +80,8 @@ def inject_smart_counselling_navigation():
     return {"smart_counselling_enabled": _feature_enabled()}
 
 
-@smart_counselling_bp.get("/smart-counselling")
-@smart_counselling_bp.get("/smart-counselling/")
-@smart_counselling_bp.get("/smart-counselling/<path:client_path>")
+@smart_counselling_bp.get("/smart-counselling", strict_slashes=False)
+@smart_counselling_bp.get("/smart-counselling/<path:client_path>", strict_slashes=False)
 @smart_counselling_staff_required
 def host(client_path=""):
     return render_template("smart_counselling/index.html")
