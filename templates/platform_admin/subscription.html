@@ -37,7 +37,7 @@
       </div>
       <h5 class="mt-4">Feature flags</h5>
       <div class="row g-2">
-        {% for feature in ['crm','students','finance','attendance','reports','lms','certificates','integrations'] %}
+        {% for feature in ['crm','students','finance','attendance','reports','lms','certificates','integrations','smart_counselling'] %}
         <div class="col-md-3"><div class="form-check"><input type="hidden" name="feature_{{ feature }}" value="0"><input class="form-check-input" type="checkbox" name="feature_{{ feature }}" value="1" id="feature{{ feature }}" {% if entitlement and entitlement.features and entitlement.features.get(feature) %}checked{% endif %}><label class="form-check-label" for="feature{{ feature }}">{{ feature|replace('_',' ')|title }}</label></div></div>
         {% endfor %}
       </div>

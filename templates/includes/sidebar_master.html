@@ -10,6 +10,7 @@
 {% set finance_active = (ep.startswith('billing.') and ep != 'billing.reminder_dashboard' and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
 {% set reports_active = (ep.startswith('reports.') and ep != 'reports.import_page') or ep == 'leads.reports' or ep in attendance_report_endpoints %}
 {% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.') or ep == 'billing.reminder_dashboard' or ep == 'reports.import_page') %}
+{% set smart_counselling_active = ep.startswith('smart_counselling.') %}
 
 <div class="erp-master-nav accordion accordion-flush" id="erpSidebarAccordion">
 
@@ -39,6 +40,14 @@
     <span class="erp-nav-mark"><i class="bi bi-speedometer2"></i></span>
     <span class="nav-text">Dashboard</span>
   </a>
+
+  {% if smart_counselling_enabled %}
+  <a class="nav-link erp-primary-link {{ 'active' if smart_counselling_active else '' }}"
+     href="{{ url_for('smart_counselling.host') }}">
+    <span class="erp-nav-mark"><i class="bi bi-chat-square-heart-fill"></i></span>
+    <span class="nav-text">Smart Counselling</span>
+  </a>
+  {% endif %}
 
   <!-- Leads Section -->
   <div class="erp-module" data-module="Leads">

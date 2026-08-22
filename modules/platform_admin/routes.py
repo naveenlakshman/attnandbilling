@@ -1654,7 +1654,7 @@ def institute_subscription(institute_id):
                 feature: "1" in request.form.getlist(f"feature_{feature}")
                 for feature in (
                     "crm", "students", "finance", "attendance", "reports",
-                    "lms", "certificates", "integrations",
+                    "lms", "certificates", "integrations", "smart_counselling",
                 )
             }
             plan = conn.execute(

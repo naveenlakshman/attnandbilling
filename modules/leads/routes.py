@@ -832,6 +832,10 @@ def lead_detail(lead_id):
         return redirect(url_for("leads.dashboard"))
 
     lead = lead_services.enrich_lead_for_crm(lead)
+    from modules.smart_counselling.insights_service import get_latest_counselling_insight
+    smart_counselling_insight = get_latest_counselling_insight(
+        conn, get_current_institute_id(default=1), lead_id
+    )
     if lead.get("branch_id") and not lead.get("branch_name"):
         lead["branch_name"] = f"Branch #{lead.get('branch_id')}"
 
@@ -958,6 +962,7 @@ def lead_detail(lead_id):
         methods=FOLLOWUP_METHODS,
         outcomes=FOLLOWUP_OUTCOMES,
         linked_student=linked_student,
+        smart_counselling_insight=smart_counselling_insight,
         lost_reasons=LOST_REASONS,
     )
 

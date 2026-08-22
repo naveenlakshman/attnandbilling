@@ -22,6 +22,7 @@ from modules.students import students_bp
 from modules.website import website_bp
 from modules.platform_admin import platform_admin_bp
 from modules.notifications import notifications_bp
+from modules.smart_counselling import smart_counselling_bp
 from modules.core.utils import login_required
 from services.tenant_context import init_tenant_context
 
@@ -143,6 +144,7 @@ def create_app():
     app.register_blueprint(students_bp)
     app.register_blueprint(platform_admin_bp)
     app.register_blueprint(notifications_bp)
+    app.register_blueprint(smart_counselling_bp)
     from modules.notifications.database import init_notification_database
     init_notification_database()
     from modules.certificates.routes import certificates_bp
@@ -249,6 +251,7 @@ def create_app():
             or request.endpoint.startswith("baddebt.")
             or request.endpoint.startswith("assets.")
             or request.endpoint.startswith("import_export.")
+            or request.endpoint.startswith("smart_counselling.")
         ):
             return None
         abort(403)
@@ -265,6 +268,7 @@ def create_app():
         "lms_admin": "lms",
         "exams": "lms",
         "certificates": "certificates",
+        "smart_counselling": "smart_counselling",
     }
 
     @app.before_request
@@ -295,6 +299,16 @@ def create_app():
             else:
                 assert_subscription_access(conn, institute_id)
         except SubscriptionAccessDenied as exc:
+            if request.path.startswith("/api/smart-counselling/"):
+                return {
+                    "success": False,
+                    "data": None,
+                    "error": {
+                        "code": "feature_disabled",
+                        "message": str(exc),
+                        "fields": {},
+                    },
+                }, 403
             return render_template(
                 "core/subscription_blocked.html",
                 subscription_message=str(exc),

@@ -2801,6 +2801,10 @@ def init_db():
         ON lms_batch_topic_progress(batch_id, program_id, master_topic_id)
     """)
 
+    # ---------- SMART COUNSELLING PHASE 2 ----------
+    from modules.smart_counselling.schema import ensure_smart_counselling_schema
+    ensure_smart_counselling_schema(conn)
+
     conn.commit()
     if Config.DB_TYPE == "mysql":
         conn.execute("SELECT RELEASE_LOCK('attn_billing_init_db')")

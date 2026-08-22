@@ -435,6 +435,9 @@
       {% if session.get('role') == 'admin' %}
       <div class="course-card-actions">
         <a class="btn btn-secondary btn-sm" href="{{ url_for('billing.course_edit', id=c.id) }}">✏️ Edit</a>
+        {% if smart_counselling_enabled %}
+        <a class="btn btn-primary btn-sm" href="{{ url_for('smart_counselling.course_profile_admin', course_id=c.id) }}">🧠 Course Intelligence</a>
+        {% endif %}
 
         <form method="POST" action="{{ url_for('billing.course_toggle_active', id=c.id) }}" style="display:contents;">
           <button type="submit"

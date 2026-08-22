@@ -166,7 +166,7 @@
   {% include 'includes/fab_menu_billing.html' %}
 {% elif request.endpoint and (request.endpoint.startswith('lms_admin.') or request.endpoint.startswith('exams.')) %}
   {% include 'includes/fab_menu_lms.html' %}
-{% elif not request.endpoint or (not request.endpoint.startswith('leads.') and not request.endpoint.startswith('baddebt.')) %}
+{% elif not request.endpoint or (not request.endpoint.startswith('leads.') and not request.endpoint.startswith('baddebt.') and not request.endpoint.startswith('smart_counselling.')) %}
   {% include 'includes/fab_menu_main.html' %}
 {% endif %}
 

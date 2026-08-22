@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Smart Counselling · {{ company.company_short_name }}{% endblock %}
+{% block page_title %}{{ company.company_short_name }} - Smart Counselling{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='smart-counselling/browser/styles.css') }}">
+{% endblock %}
+
+{% block content %}
+  <smart-counselling-root>
+    <div class="sc-host-loading" role="status">
+      <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      Loading Smart Counselling…
+    </div>
+  </smart-counselling-root>
+  <script type="module" src="{{ url_for('static', filename='smart-counselling/browser/main.js') }}"></script>
+{% endblock %}

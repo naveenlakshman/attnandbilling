@@ -6,7 +6,9 @@ __pycache__/
 .git/
 .gitignore
 .pytest_cache/
-.env
+.env*
+frontend/smart-counselling/node_modules/
+static/smart-counselling/
 instance/
 backup_test_attn_billing.sql
 *.db

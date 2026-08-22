@@ -34,6 +34,10 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+/frontend/smart-counselling/node_modules/
+/frontend/smart-counselling/.angular/
+/static/smart-counselling/
+/.pnpm-store/
 downloads/
 eggs/
 .eggs/

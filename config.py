@@ -162,6 +162,27 @@ class Config:
     SMS_GATEWAY_USER = os.environ.get("SMS_GATEWAY_USER", "")
     SMS_GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "")
 
+    # Smart Counselling OTP. Real delivery is opt-in outside production so
+    # development and automated tests cannot accidentally send SMS messages.
+    SMART_COUNSELLING_OTP_TTL_SECONDS = max(60, int(os.environ.get("SMART_COUNSELLING_OTP_TTL_SECONDS", "300")))
+    SMART_COUNSELLING_OTP_MAX_ATTEMPTS = max(1, int(os.environ.get("SMART_COUNSELLING_OTP_MAX_ATTEMPTS", "5")))
+    SMART_COUNSELLING_OTP_RESEND_COOLDOWN_SECONDS = max(10, int(os.environ.get("SMART_COUNSELLING_OTP_RESEND_COOLDOWN_SECONDS", "45")))
+    SMART_COUNSELLING_OTP_MOBILE_HOURLY_LIMIT = max(1, int(os.environ.get("SMART_COUNSELLING_OTP_MOBILE_HOURLY_LIMIT", "5")))
+    SMART_COUNSELLING_OTP_USER_HOURLY_LIMIT = max(1, int(os.environ.get("SMART_COUNSELLING_OTP_USER_HOURLY_LIMIT", "30")))
+    SMART_COUNSELLING_OTP_SESSION_HOURLY_LIMIT = max(1, int(os.environ.get("SMART_COUNSELLING_OTP_SESSION_HOURLY_LIMIT", "8")))
+    SMART_COUNSELLING_OTP_SEND_IP_LIMIT = os.environ.get("SMART_COUNSELLING_OTP_SEND_IP_LIMIT", "10 per minute")
+    SMART_COUNSELLING_OTP_VERIFY_IP_LIMIT = os.environ.get("SMART_COUNSELLING_OTP_VERIFY_IP_LIMIT", "30 per minute")
+    SMART_COUNSELLING_OTP_DELIVERY_MODE = os.environ.get(
+        "SMART_COUNSELLING_OTP_DELIVERY_MODE",
+        "gateway" if APP_ENV == "production" else "disabled",
+    ).strip().lower()
+    # Use a dedicated HMAC key instead of coupling OTP hashes to Flask session
+    # signing. Development/tests retain a compatibility fallback; production
+    # validation below requires an explicit, separate secret.
+    SMART_COUNSELLING_OTP_SECRET = os.environ.get(
+        "SMART_COUNSELLING_OTP_SECRET", SECRET_KEY
+    )
+
     # LMS File Uploads
     UPLOAD_FOLDER = UPLOAD_DIR
 
@@ -194,6 +215,17 @@ class Config:
             errors.append("SESSION_COOKIE_SECURE must be true")
         if cls.RATELIMIT_STORAGE_URI == "memory://":
             errors.append("RATELIMIT_STORAGE_URI must use shared storage in production")
+        if (
+            len(cls.SMART_COUNSELLING_OTP_SECRET) < 32
+            or cls.SMART_COUNSELLING_OTP_SECRET == cls.SECRET_KEY
+        ):
+            errors.append(
+                "SMART_COUNSELLING_OTP_SECRET must be a separate random value of at least 32 characters"
+            )
+        if cls.SMART_COUNSELLING_OTP_DELIVERY_MODE != "gateway":
+            errors.append("SMART_COUNSELLING_OTP_DELIVERY_MODE must be gateway in production")
+        elif not cls.SMS_GATEWAY_USER or not cls.SMS_GATEWAY_PASSWORD:
+            errors.append("SMS gateway credentials are required for production OTP delivery")
         if cls.DB_TYPE != "mysql":
             errors.append("DB_TYPE must be mysql")
         if cls.STORAGE_PROVIDER != "gcs":
