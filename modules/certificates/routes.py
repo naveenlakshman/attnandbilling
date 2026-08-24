@@ -3,6 +3,7 @@ import datetime
 from flask import render_template, request, redirect, url_for, session, flash, jsonify, abort, current_app
 from db import get_conn, get_company_profile
 from services.storage import get_storage_service
+from services.tenant_context import get_current_institute_id
 import logging
 from modules.core.utils import lms_content_manager_required, admin_required
 from . import certificates_bp
@@ -433,10 +434,20 @@ def admin_issue():
 
         selected_student_id = request.args.get("student_id", type=int)
         selected_course_id = request.args.get("course_id", type=int)
+        current_inst = get_current_institute_id(default=1)
 
-        # Handle GET request: list students eligible or search
-        # We fetch active students enrolled in batches
-        students = cur.execute("SELECT id, student_code, full_name FROM students WHERE status = 'active' ORDER BY full_name").fetchall()
+        # Handle GET request: list students eligible or search.
+        # Include completed students because they may need manual certificate issuance.
+        students = cur.execute(
+            """
+            SELECT id, student_code, full_name, status
+            FROM students
+            WHERE institute_id = ?
+              AND status IN ('active', 'completed')
+            ORDER BY full_name
+            """,
+            (current_inst,),
+        ).fetchall()
         
         # Fetch invoiced courses for the selected student
         courses_list = []
