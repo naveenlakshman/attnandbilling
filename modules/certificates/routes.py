@@ -9,7 +9,7 @@ from . import certificates_bp
 
 logger = logging.getLogger("app.certificates")
 from .services import EligibilityService, CertificateService
-from .verifier import verify_certificate_number
+from .verifier import verify_certificate_number, verify_certificate_signed
 from .generator import get_certificate_render_data
 from .audit import log_certificate_action
 
@@ -52,6 +52,30 @@ def verify_certificate(cert_no=None):
             )
             conn.commit()
         return render_template("certificates/verify.html", cert=data, cert_no=cert_no)
+    finally:
+        conn.close()
+
+
+@certificates_bp.route("/verify-certificate/<int:cert_id>/<token>", methods=["GET"])
+def verify_certificate_qr(cert_id, token):
+    conn = get_conn()
+    try:
+        data = verify_certificate_signed(conn, cert_id, token)
+        if data:
+            ip, ua = _get_client_info()
+            log_certificate_action(
+                conn, data["certificate_id"], "Verified",
+                performed_by=None,
+                ip_address=ip,
+                user_agent=ua,
+                reason="Public signed certificate QR verification page queried"
+            )
+            conn.commit()
+        return render_template(
+            "certificates/verify.html",
+            cert=data,
+            cert_no=data["certificate_number"] if data else None
+        )
     finally:
         conn.close()
 
@@ -261,7 +285,7 @@ from . import certificates_bp
 
 logger = logging.getLogger("app.certificates")
 from .services import EligibilityService, CertificateService
-from .verifier import verify_certificate_number
+from .verifier import verify_certificate_number, verify_certificate_signed
 from .generator import get_certificate_render_data
 from .audit import log_certificate_action
 

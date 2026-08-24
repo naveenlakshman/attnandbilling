@@ -2,6 +2,7 @@ import qrcode
 import io
 import base64
 import datetime
+from .verification_tokens import build_certificate_verification_url
 
 def generate_qr_code_base64(url):
     """
@@ -147,7 +148,11 @@ def get_certificate_render_data(cur, cert_id, base_url):
     month, year = get_month_year_from_date(cert["snapshot_completion_date"])
     
     # Generate verification QR Code locally targeting the public verify endpoint
-    verification_url = f"{base_url.rstrip('/')}/verify-certificate/{cert['certificate_number']}"
+    verification_url = build_certificate_verification_url(
+        base_url,
+        cert["id"],
+        cert["certificate_number"],
+    )
     qr_base64 = generate_qr_code_base64(verification_url)
     
     # Build overlay CSS style block dictionary based on database parameters
