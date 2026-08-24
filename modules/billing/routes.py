@@ -5262,6 +5262,30 @@ def _provision_program_access_for_course(cur, student_id, course_id):
             """, (student_id, program_id, now_date, now_iso, now_iso))
 
 
+def _resolve_invoice_item_course_id(cur, raw_course_id, description, institute_id):
+    course_id_raw = (raw_course_id or "").strip()
+    if course_id_raw:
+        return int(course_id_raw)
+
+    description = (description or "").strip()
+    if not description:
+        return None
+
+    row = cur.execute(
+        """
+        SELECT id
+        FROM courses
+        WHERE institute_id = ?
+          AND is_active = 1
+          AND LOWER(TRIM(course_name)) = LOWER(TRIM(?))
+        ORDER BY id
+        LIMIT 1
+        """,
+        (institute_id, description),
+    ).fetchone()
+    return row["id"] if row else None
+
+
 @billing_bp.route("/invoice/new", methods=["GET", "POST"])
 @login_required
 def invoice_new():
@@ -5348,15 +5372,21 @@ def invoice_new():
 
             for i in range(len(item_course_ids)):
                 course_id_raw = (item_course_ids[i] or "").strip()
+                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
+                course_id = _resolve_invoice_item_course_id(
+                    cur,
+                    course_id_raw,
+                    description,
+                    current_inst,
+                )
                 qty_raw = (item_qtys[i] or "0").strip()
                 rate_raw = (item_rates[i] or "0").strip()
                 discount_raw = (item_discounts[i] or "0").strip()
 
                 # Skip empty rows (no course selected)
-                if not course_id_raw:
+                if not course_id:
                     continue
 
-                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
                 qty = float(qty_raw or 0)
                 rate = float(rate_raw or 0)
                 row_discount = float(discount_raw or 0)
@@ -5382,8 +5412,6 @@ def invoice_new():
                 subtotal += gross
                 discount_amount += row_discount
                 total_amount += line_total
-
-                course_id = int(course_id_raw) if course_id_raw else None
 
                 invoice_items_to_save.append({
                     "course_id": course_id,
@@ -5792,15 +5820,21 @@ def invoice_edit(invoice_id):
 
             for i in range(len(item_course_ids)):
                 course_id_raw = (item_course_ids[i] or "").strip()
+                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
+                course_id = _resolve_invoice_item_course_id(
+                    cur,
+                    course_id_raw,
+                    description,
+                    invoice["institute_id"],
+                )
                 qty_raw = (item_qtys[i] or "0").strip()
                 rate_raw = (item_rates[i] or "0").strip()
                 discount_raw = (item_discounts[i] or "0").strip()
 
                 # Skip empty rows (no course selected)
-                if not course_id_raw:
+                if not course_id:
                     continue
 
-                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
                 qty = float(qty_raw or 0)
                 rate = float(rate_raw or 0)
                 row_discount = float(discount_raw or 0)
@@ -5828,8 +5862,6 @@ def invoice_edit(invoice_id):
                 subtotal += gross
                 discount_amount += row_discount
                 total_amount += line_total
-
-                course_id = int(course_id_raw) if course_id_raw else None
 
                 invoice_items_to_save.append({
                     "course_id": course_id,
