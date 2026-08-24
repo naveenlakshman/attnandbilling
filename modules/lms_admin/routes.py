@@ -12,6 +12,9 @@ import json
 import sqlite3
 import io
 import mimetypes
+import posixpath
+import zipfile
+import xml.etree.ElementTree as ET
 from urllib.parse import quote
 import bleach
 from bleach.css_sanitizer import CSSSanitizer
@@ -142,8 +145,10 @@ def _read_submission_file_bytes(file_path):
     """Read a submission from tenant-aware storage or the legacy local folder."""
     storage_service = get_storage_service()
     for storage_path in _submission_storage_candidates(file_path):
-        if storage_service.file_exists(storage_path):
+        try:
             return storage_service.download_file(storage_path)
+        except Exception:
+            logger.debug("Submission storage candidate not readable: %s", storage_path, exc_info=True)
 
     base_dir = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'uploads', 'submissions')
@@ -159,47 +164,126 @@ def _read_submission_file_bytes(file_path):
     raise FileNotFoundError(file_path)
 
 
+def _xlsx_column_index(cell_ref):
+    letters = ''.join(ch for ch in (cell_ref or '') if ch.isalpha()).upper()
+    index = 0
+    for char in letters:
+        index = index * 26 + (ord(char) - ord('A') + 1)
+    return index or 1
+
+
+def _xlsx_cell_display(cell, shared_strings):
+    ns = {'x': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+    formula = cell.findtext('x:f', default='', namespaces=ns) or ''
+    if formula:
+        formula = '=' + formula
+    cell_type = cell.attrib.get('t')
+    value = cell.findtext('x:v', default='', namespaces=ns) or ''
+    if cell_type == 's':
+        try:
+            value = shared_strings[int(value)]
+        except (ValueError, IndexError):
+            value = ''
+    elif cell_type == 'inlineStr':
+        value = ''.join(cell.itertext())
+    elif cell_type == 'b':
+        value = 'TRUE' if value == '1' else 'FALSE' if value == '0' else value
+    return value, formula
+
+
+def _xlsx_shared_strings(zf):
+    try:
+        root = ET.fromstring(zf.read('xl/sharedStrings.xml'))
+    except KeyError:
+        return []
+    ns = {'x': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+    strings = []
+    for item in root.findall('x:si', ns):
+        strings.append(''.join(item.itertext()))
+    return strings
+
+
+def _xlsx_sheet_paths(zf):
+    ns = {
+        'x': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+        'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+        'rel': 'http://schemas.openxmlformats.org/package/2006/relationships',
+    }
+    workbook = ET.fromstring(zf.read('xl/workbook.xml'))
+    rels_root = ET.fromstring(zf.read('xl/_rels/workbook.xml.rels'))
+    rels = {
+        rel.attrib.get('Id'): rel.attrib.get('Target')
+        for rel in rels_root.findall('rel:Relationship', ns)
+    }
+    sheets = []
+    for sheet in workbook.findall('x:sheets/x:sheet', ns):
+        rel_id = sheet.attrib.get(f"{{{ns['r']}}}id")
+        target = rels.get(rel_id)
+        if not target:
+            continue
+        normalized = posixpath.normpath(posixpath.join('xl', target))
+        sheets.append((sheet.attrib.get('name') or 'Sheet', normalized))
+    return sheets
+
+
 def _xlsx_formula_preview(file_path):
-    """Build a bounded, read-only workbook grid with formulas and cached values."""
-    from openpyxl import load_workbook
+    """Build a bounded, read-only workbook grid with formulas and cached values.
+
+    Review detail pages must render quickly. Loading some student workbooks
+    through openpyxl can block until Cloud Run's 120s timeout, so this parser
+    reads the XLSX package XML directly and only materializes the bounded cells
+    needed for the browser preview.
+    """
     from openpyxl.utils import get_column_letter
 
     file_bytes = _read_submission_file_bytes(file_path)
     if len(file_bytes) > 25 * 1024 * 1024:
         raise ValueError('Workbook is too large for the interactive preview.')
-    formulas_book = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=False)
-    values_book = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
     sheets = []
-    total_sheet_count = len(formulas_book.sheetnames)
-    try:
-        for sheet_name in formulas_book.sheetnames[:10]:
-            formula_sheet = formulas_book[sheet_name]
-            value_sheet = values_book[sheet_name]
-            source_row_count = max(formula_sheet.max_row or 1, 1)
-            source_column_count = max(formula_sheet.max_column or 1, 1)
+    ns = {'x': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+    with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+        shared_strings = _xlsx_shared_strings(zf)
+        sheet_paths = _xlsx_sheet_paths(zf)
+        total_sheet_count = len(sheet_paths)
+        for sheet_name, sheet_path in sheet_paths[:10]:
+            root = ET.fromstring(zf.read(sheet_path))
+            dimension = root.find('x:dimension', ns)
+            dimension_ref = dimension.attrib.get('ref', '') if dimension is not None else ''
+            upper_ref = dimension_ref.split(':')[-1] if ':' in dimension_ref else dimension_ref
+            match = re.match(r'([A-Za-z]+)([0-9]+)$', upper_ref or '')
+            source_row_count = int(match.group(2)) if match else 1
+            source_column_count = _xlsx_column_index(match.group(1)) if match else 1
             # Keep a useful worksheet canvas even when the populated range is
             # small, so reviewers can scroll in every direction like Excel.
             row_count = min(max(source_row_count, 50), 100)
             column_count = min(max(source_column_count, 15), 30)
-            rows = []
-            for row_number in range(1, row_count + 1):
-                cells = []
-                for column_number in range(1, column_count + 1):
-                    formula_cell = formula_sheet.cell(row_number, column_number)
-                    cached_value = value_sheet.cell(row_number, column_number).value
-                    raw_value = formula_cell.value
-                    formula = str(raw_value) if formula_cell.data_type == 'f' else ''
-                    display_value = cached_value if formula else raw_value
-                    if display_value is None:
-                        display_value = ''
-                    elif not isinstance(display_value, (str, int, float, bool)):
-                        display_value = str(display_value)
-                    cells.append({
+            cell_values = {}
+            for row in root.findall('x:sheetData/x:row', ns):
+                try:
+                    row_number = int(row.attrib.get('r', '0'))
+                except ValueError:
+                    continue
+                if row_number < 1 or row_number > row_count:
+                    continue
+                for cell in row.findall('x:c', ns):
+                    coordinate = cell.attrib.get('r') or ''
+                    column_number = _xlsx_column_index(coordinate)
+                    if column_number < 1 or column_number > column_count:
+                        continue
+                    display_value, formula = _xlsx_cell_display(cell, shared_strings)
+                    cell_values[(row_number, column_number)] = {
                         'coordinate': f'{get_column_letter(column_number)}{row_number}',
                         'display': display_value,
                         'formula': formula,
-                    })
-                rows.append(cells)
+                    }
+            rows = [[
+                cell_values.get((row_number, column_number), {
+                    'coordinate': f'{get_column_letter(column_number)}{row_number}',
+                    'display': '',
+                    'formula': '',
+                })
+                for column_number in range(1, column_count + 1)
+            ] for row_number in range(1, row_count + 1)]
             sheets.append({
                 'name': sheet_name,
                 'rows': rows,
@@ -207,9 +291,6 @@ def _xlsx_formula_preview(file_path):
                 'column_headers': [get_column_letter(index) for index in range(1, column_count + 1)],
                 'truncated': source_row_count > 100 or source_column_count > 30,
             })
-    finally:
-        formulas_book.close()
-        values_book.close()
     return {'sheets': sheets, 'sheet_count': total_sheet_count}
 
 
