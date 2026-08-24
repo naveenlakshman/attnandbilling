@@ -15,6 +15,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+  }
   @media print {
     @page {
       size: {% if template.orientation == 'Portrait' %}A4 portrait{% else %}A4 landscape{% endif %};
@@ -258,20 +259,31 @@
     }
     
     function triggerDownload() {
+      const pageWidth = element.offsetWidth;
+      const pageHeight = element.offsetHeight;
       const opt = {
         margin:       0,
         filename:     "Certificate_{{ cert.certificate_number }}.pdf",
         image:        { type: 'jpeg', quality: 1.0 },
+        pagebreak:    { mode: [] },
         html2canvas:  { 
           scale: 2, 
           useCORS: true, 
           logging: false,
+          backgroundColor: '#ffffff',
+          x: 0,
+          y: 0,
+          width: pageWidth,
+          height: pageHeight,
+          windowWidth: pageWidth,
+          windowHeight: pageHeight,
           scrollX: 0,
           scrollY: 0
         },
         jsPDF:        { 
           unit: 'px', 
-          format: {% if template.orientation == "Portrait" %}[707, 1000]{% else %}[1000, 707]{% endif %}, 
+          format: [pageWidth, pageHeight], 
+          hotfixes: ['px_scaling'],
           orientation: '{% if template.orientation == "Portrait" %}portrait{% else %}landscape{% endif %}' 
         }
       };
@@ -287,6 +299,17 @@
         }
         
         // Restore download button
+        if (downloadBtn) {
+          downloadBtn.disabled = false;
+          downloadBtn.innerHTML = originalText;
+        }
+      }).catch((error) => {
+        console.error('Certificate PDF generation failed:', error);
+        element.classList.remove('cert-pdf-export');
+        bgImg.src = previewUrl;
+        if (photoImg && originalPhotoStyles.width !== undefined) {
+          Object.assign(photoImg.style, originalPhotoStyles);
+        }
         if (downloadBtn) {
           downloadBtn.disabled = false;
           downloadBtn.innerHTML = originalText;
