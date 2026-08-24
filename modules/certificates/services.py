@@ -139,15 +139,33 @@ class EligibilityService:
         no_dues = dues.get("passed", False)
 
         # 5. Course Invoiced Check
+        invoiced_where = [
+            "ii.course_id = ?"
+        ]
+        invoice_params = [student_id, course_id]
+        if mapped_program_ids:
+            program_placeholders = ", ".join(["?"] * len(mapped_program_ids))
+            invoiced_where.append(f"""
+                EXISTS (
+                    SELECT 1
+                    FROM lms_course_program_map invoice_map
+                    WHERE invoice_map.course_id = ii.course_id
+                      AND invoice_map.program_id IN ({program_placeholders})
+                )
+            """)
+            invoice_params.extend(mapped_program_ids)
+
         invoice_check = cur.execute(
-            """
+            f"""
             SELECT ii.id
             FROM invoice_items ii
             JOIN invoices i ON i.id = ii.invoice_id
-            WHERE i.student_id = ? AND ii.course_id = ? AND i.status != 'cancelled'
+            WHERE i.student_id = ?
+              AND ({' OR '.join(invoiced_where)})
+              AND i.status != 'cancelled'
             LIMIT 1
             """,
-            (student_id, course_id)
+            invoice_params
         ).fetchone()
         is_invoiced = invoice_check is not None
 
