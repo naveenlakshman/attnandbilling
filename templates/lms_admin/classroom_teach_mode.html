@@ -83,13 +83,16 @@
           
           <div class="card shadow-sm border-0 mb-3">
             <div class="card-body p-4">
-              <!-- TABS NAV: Watch Video | Read Tutorial -->
+              <!-- TABS NAV: Video | Lesson | Assignment -->
               <ul class="nav nav-tabs teach-nav-tabs mb-3" id="contentTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                  <button class="nav-link active" id="tabWatch" type="button">🎬 Watch Video</button>
+                  <button class="nav-link active" id="tabWatch" type="button">🎬 Video</button>
                 </li>
                 <li class="nav-item" role="presentation">
-                  <button class="nav-link" id="tabRead" type="button">📖 Read Tutorial</button>
+                  <button class="nav-link" id="tabRead" type="button">📖 Lesson</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="tabAssignment" type="button">📝 Assignment</button>
                 </li>
               </ul>
 
@@ -107,12 +110,21 @@
                   </div>
                 </div>
 
-                <!-- READ TUTORIAL PANE -->
+                <!-- LESSON PANE -->
                 <div id="paneRead" role="tabpanel" style="display:none;">
                   <div id="rich-content-box" class="rich-text-content"></div>
                   <div id="no-read-msg" class="text-center py-5 text-muted d-none">
                     <div class="fs-1">📖</div>
-                    <p class="mt-2 fw-medium">No tutorial content configured for this topic.</p>
+                    <p class="mt-2 fw-medium">No lesson content configured for this topic.</p>
+                  </div>
+                </div>
+
+                <!-- ASSIGNMENT PANE -->
+                <div id="paneAssignment" role="tabpanel" style="display:none;">
+                  <div id="assignment-list" class="d-flex flex-column gap-3"></div>
+                  <div id="no-assignment-msg" class="text-center py-5 text-muted d-none">
+                    <div class="fs-1">📝</div>
+                    <p class="mt-2 fw-medium">No assignment configured for this topic.</p>
                   </div>
                 </div>
 
@@ -154,11 +166,11 @@
               {% if chapters %}
                 {% for ch in chapters %}
                   <div class="teach-chapter-item">
-                    <div class="teach-chapter-header {% if loop.first %}open{% endif %}">
+                    <div class="teach-chapter-header">
                       <span>{{ ch.chapter_order }}. {{ ch.chapter_title }}</span>
                       <span class="teach-chevron">▼</span>
                     </div>
-                    <div class="teach-chapter-topics {% if loop.first %}open{% endif %}">
+                    <div class="teach-chapter-topics">
                       {% for t in ch.topics %}
                         <div class="syllabus-topic-item {% if t.is_taught %}done{% endif %}"
                              id="topic-item-{{ t.id }}"
@@ -501,6 +513,7 @@
 
 <script>
 const allAttData = {{ all_attendance_json | safe }};
+window.classroomAssignmentsByTopic = {{ assignments_by_topic | tojson }};
 
 function updateAttendanceForSelectedDate(selectedDate) {
   const banner = document.getElementById('dateAttStatusBanner');

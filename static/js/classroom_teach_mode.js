@@ -1,6 +1,6 @@
 /**
  * Trainer Classroom Teaching Mode - Presenter JavaScript Module
- * Tabs: Watch Video | Read Tutorial only
+ * Tabs: Video | Lesson | Assignment
  */
 
 (function () {
@@ -49,12 +49,15 @@
       });
     }
 
-    // Tab buttons — direct click listeners on the two tabs
+    // Tab buttons
     const tabWatch = document.getElementById('tabWatch');
     if (tabWatch) tabWatch.addEventListener('click', function () { switchTab('watch'); });
 
     const tabRead = document.getElementById('tabRead');
     if (tabRead) tabRead.addEventListener('click', function () { switchTab('read'); });
+
+    const tabAssignment = document.getElementById('tabAssignment');
+    if (tabAssignment) tabAssignment.addEventListener('click', function () { switchTab('assignment'); });
 
     // Syllabus topic list items
     topicElementsList = Array.from(document.querySelectorAll('.syllabus-topic-item'));
@@ -74,6 +77,7 @@
           header.classList.remove('open');
           if (topicsEl) topicsEl.classList.remove('open');
         } else {
+          closeAllChapters();
           header.classList.add('open');
           if (topicsEl) topicsEl.classList.add('open');
         }
@@ -88,14 +92,26 @@
           elem.getAttribute('data-is-master') === initialTopicIsMaster;
       }) || topicElementsList[0];
 
-      const initialTopicsGroup = initialTopicElem.closest('.teach-chapter-topics');
-      const initialChapterHeader = initialTopicsGroup ? initialTopicsGroup.previousElementSibling : null;
-      if (initialTopicsGroup) initialTopicsGroup.classList.add('open');
-      if (initialChapterHeader) initialChapterHeader.classList.add('open');
-
       loadTopic(initialTopicElem);
       initialTopicElem.scrollIntoView({ block: 'nearest' });
     }
+  }
+
+  function closeAllChapters() {
+    document.querySelectorAll('.teach-chapter-header.open').forEach(function (header) {
+      header.classList.remove('open');
+    });
+    document.querySelectorAll('.teach-chapter-topics.open').forEach(function (topics) {
+      topics.classList.remove('open');
+    });
+  }
+
+  function openTopicChapter(elem) {
+    const topicsGroup = elem.closest('.teach-chapter-topics');
+    const chapterHeader = topicsGroup ? topicsGroup.previousElementSibling : null;
+    closeAllChapters();
+    if (topicsGroup) topicsGroup.classList.add('open');
+    if (chapterHeader) chapterHeader.classList.add('open');
   }
 
   /* ── PROJECTOR MODE ─────────────────────────────────────────────── */
@@ -189,11 +205,11 @@
     }
   }
 
-  /* ── TAB SWITCHER (Watch / Read only) ──────────────────────────── */
+  /* ── TAB SWITCHER ─────────────────────────────────────────────── */
 
   function switchTab(tabName) {
     // Deactivate all tabs and panes
-    ['watch', 'read'].forEach(function (t) {
+    ['watch', 'read', 'assignment'].forEach(function (t) {
       var btn = document.getElementById('tab' + capitalize(t));
       var pane = document.getElementById('pane' + capitalize(t));
       if (btn) btn.classList.remove('active');
@@ -223,6 +239,7 @@
     if (currentTopicElem) currentTopicElem.classList.remove('active');
     currentTopicElem = elem;
     elem.classList.add('active');
+    openTopicChapter(elem);
 
     const chTitle = elem.getAttribute('data-chapter-title') || 'Chapter';
     const title = elem.getAttribute('data-title') || 'Topic';
@@ -230,6 +247,8 @@
     const videoUrl = elem.getAttribute('data-video-url');
     const content = elem.getAttribute('data-content');
     const isTaught = elem.getAttribute('data-is-taught') === '1';
+    const topicId = elem.getAttribute('data-topic-id');
+    const isMaster = elem.getAttribute('data-is-master') === '1';
 
     // Update breadcrumb & heading
     const chBreadcrumb = document.getElementById('current-chapter-breadcrumb');
@@ -309,6 +328,63 @@
       if (richBox) { richBox.innerHTML = ''; richBox.classList.add('d-none'); }
       if (noReadMsg) noReadMsg.classList.remove('d-none');
       if (tabRead) tabRead.classList.add('disabled');
+    }
+
+    // Assignment tab — instructions and trainer-downloadable attachment(s)
+    const assignmentList = document.getElementById('assignment-list');
+    const noAssignmentMsg = document.getElementById('no-assignment-msg');
+    const tabAssignment = document.getElementById('tabAssignment');
+    const assignmentsByTopic = window.classroomAssignmentsByTopic || {};
+    const assignments = isMaster ? (assignmentsByTopic[topicId] || []) : [];
+
+    if (assignmentList) assignmentList.innerHTML = '';
+    if (assignments.length > 0) {
+      assignments.forEach(function (assignment, index) {
+        const card = document.createElement('article');
+        card.className = 'card border shadow-sm';
+
+        const body = document.createElement('div');
+        body.className = 'card-body p-4';
+
+        const heading = document.createElement('h4');
+        heading.className = 'fw-bold text-dark mb-3';
+        heading.textContent = assignments.length > 1
+          ? (index + 1) + '. ' + assignment.title
+          : assignment.title;
+        body.appendChild(heading);
+
+        if (assignment.description_html) {
+          const instructions = document.createElement('div');
+          instructions.className = 'rich-text-content mb-3';
+          instructions.innerHTML = assignment.description_html;
+          instructions.querySelectorAll('img').forEach(function (img) {
+            img.style.maxWidth = '100%';
+            img.style.height = 'auto';
+          });
+          body.appendChild(instructions);
+        }
+
+        if (assignment.has_file && assignment.download_url) {
+          const link = document.createElement('a');
+          link.className = 'btn btn-primary';
+          link.href = assignment.download_url;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.textContent = '⬇ Open Assignment File' +
+            (assignment.original_filename ? ' — ' + assignment.original_filename : '');
+          body.appendChild(link);
+        }
+
+        card.appendChild(body);
+        if (assignmentList) assignmentList.appendChild(card);
+      });
+      if (assignmentList) assignmentList.classList.remove('d-none');
+      if (noAssignmentMsg) noAssignmentMsg.classList.add('d-none');
+      if (tabAssignment) tabAssignment.classList.remove('disabled');
+    } else {
+      if (assignmentList) assignmentList.classList.add('d-none');
+      if (noAssignmentMsg) noAssignmentMsg.classList.remove('d-none');
+      if (tabAssignment) tabAssignment.classList.add('disabled');
     }
 
     // Default to read if content exists, else watch

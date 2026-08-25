@@ -35,6 +35,10 @@ def main():
     assert '<details class="instructions">' in template
     assert '<details class="instructions" open>' not in template
     assert '<summary>Assignment instructions</summary>' in template
+    assert 'Formatted Sheet' in template
+    assert 'Formula Inspector' in template
+    assert 'data-excel-view-target="formatted"' in template
+    assert 'data-excel-view-target="formulas"' in template
 
     workbook = Workbook()
     sheet = workbook.active
@@ -55,7 +59,7 @@ def main():
     assert preview_sheet['rows'][0][1]['coordinate'] == 'B1'
     assert preview_sheet['rows'][4][2]['formula'] == '=SUM(1,2)'
     assert preview_sheet['truncated'] is False
-    print('PASS: Instructions are sanitized and the formula preview has a scrollable worksheet canvas.')
+    print('PASS: Assignment instructions and dual formatted/formula XLSX previews are configured safely.')
 
 
 if __name__ == '__main__':

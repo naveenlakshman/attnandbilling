@@ -2,6 +2,27 @@
 
 {% block title %}🎓 Classroom Teaching Mode{% endblock %}
 
+{% block extra_css %}
+<style>
+  .classroom-batch-card { transition: box-shadow .2s ease, transform .2s ease; }
+  .classroom-batch-card.running-now {
+    border-left-color: #16a34a !important;
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, .18), 0 8px 22px rgba(22, 163, 74, .13) !important;
+  }
+  .live-badge-classroom {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: #dcfce7;
+    color: #15803d;
+    font-size: .7rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4">
   <!-- Page Title Header -->
@@ -39,13 +60,19 @@
   {% if batches %}
     <div class="row g-4" id="batchCardsContainer">
       {% for b in batches %}
-        <div class="col-md-6 col-lg-4 batch-card-col" data-search-text="{{ b.batch_name | lower }} {{ (b.course_name or '') | lower }} {{ (b.branch_name or '') | lower }} {{ (b.trainer_name or '') | lower }}">
-          <div class="card h-100 border-0 shadow-sm" style="border-radius: 14px; overflow: hidden; border-left: 5px solid #4f46e5 !important;">
+        <div class="col-md-6 col-lg-4 batch-card-col"
+             data-start="{{ b.start_time or '' }}"
+             data-end="{{ b.end_time or '' }}"
+             data-search-text="{{ b.batch_name | lower }} {{ (b.course_name or '') | lower }} {{ (b.branch_name or '') | lower }} {{ (b.trainer_name or '') | lower }}">
+          <div class="card h-100 border-0 shadow-sm classroom-batch-card" style="border-radius: 14px; overflow: hidden; border-left: 5px solid #4f46e5 !important;">
             <div class="card-body p-4 d-flex flex-column justify-content-between">
               <div>
                 <div class="d-flex align-items-center justify-content-between mb-2">
                   <h5 class="fw-bold text-dark mb-0">{{ b.batch_name }}</h5>
-                  <span class="badge bg-light text-dark border">{{ b.student_count }} Students</span>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="live-badge-classroom d-none">● LIVE</span>
+                    <span class="badge bg-light text-dark border">{{ b.student_count }} Students</span>
+                  </div>
                 </div>
                 <div class="text-muted small mb-3">
                   <div><strong>Course:</strong> {{ b.course_name or 'Course Not Mapped' }}</div>
@@ -92,6 +119,36 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+  function nowHHMM() {
+    const current = new Date();
+    return String(current.getHours()).padStart(2, '0') + ':' + String(current.getMinutes()).padStart(2, '0');
+  }
+
+  function updateLiveBatches() {
+    const container = document.getElementById('batchCardsContainer');
+    if (!container) return;
+
+    const now = nowHHMM();
+    const cards = Array.from(container.querySelectorAll('.batch-card-col'));
+    cards.forEach(function(card) {
+      const start = card.dataset.start;
+      const end = card.dataset.end;
+      const isLive = Boolean(start && end && now >= start && now < end);
+      card.dataset.isLive = isLive ? '1' : '0';
+      card.querySelector('.classroom-batch-card')?.classList.toggle('running-now', isLive);
+      card.querySelector('.live-badge-classroom')?.classList.toggle('d-none', !isLive);
+    });
+
+    cards.sort(function(left, right) {
+      return Number(right.dataset.isLive || 0) - Number(left.dataset.isLive || 0);
+    }).forEach(function(card) {
+      container.appendChild(card);
+    });
+  }
+
+  updateLiveBatches();
+  window.setInterval(updateLiveBatches, 60000);
+
   const searchInput = document.getElementById('batchSearchInput');
   if (searchInput) {
     searchInput.addEventListener('input', function() {

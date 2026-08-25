@@ -221,7 +221,12 @@ def _xlsx_sheet_paths(zf):
         target = rels.get(rel_id)
         if not target:
             continue
-        normalized = posixpath.normpath(posixpath.join('xl', target))
+        # Relationship targets may be package-absolute ("/xl/...") or
+        # relative ("worksheets/..."). Zip members never begin with "/".
+        if target.startswith('/'):
+            normalized = posixpath.normpath(target.lstrip('/'))
+        else:
+            normalized = posixpath.normpath(posixpath.join('xl', target))
         sheets.append((sheet.attrib.get('name') or 'Sheet', normalized))
     return sheets
 
@@ -9062,6 +9067,17 @@ def review_submission_detail(submission_id):
             try:
                 workbook_preview = _xlsx_formula_preview(sub['file_path'])
                 preview_type = 'xlsx'
+                if not is_localhost:
+                    token = _make_submission_preview_token(submission_id)
+                    public_url = url_for(
+                        'lms_admin.preview_submission_public_file',
+                        token=token,
+                        _external=True,
+                    )
+                    preview_url = (
+                        'https://view.officeapps.live.com/op/embed.aspx?src='
+                        + quote(public_url, safe='')
+                    )
             except Exception:
                 logger.exception('Could not build formula preview for submission %s', submission_id)
                 preview_type = 'office'
@@ -10663,6 +10679,68 @@ def classroom_teach_mode(batch_id):
         taught_count = sum(sum(1 for t in ch['topics'] if t['is_taught']) for ch in chapters)
         taught_pct = round((taught_count / total_topics * 100), 1) if total_topics > 0 else 0.0
 
+        # Resume on the topic after the most recently taught topic. If topics
+        # were completed out of order, prefer the next pending topic; when the
+        # program is fully taught, keep the final topic selected.
+        ordered_topics = [topic for chapter in chapters for topic in chapter['topics']]
+        if ordered_topics:
+            recent_index = next((
+                index for index, topic in enumerate(ordered_topics)
+                if topic['id'] == initial_topic_id
+                and bool(topic.get('is_master')) == bool(initial_topic_is_master)
+            ), None)
+
+            next_topic = None
+            if recent_index is not None:
+                next_topic = next((
+                    topic for topic in ordered_topics[recent_index + 1:]
+                    if not topic.get('is_taught')
+                ), None)
+            if next_topic is None:
+                next_topic = next((
+                    topic for topic in ordered_topics
+                    if not topic.get('is_taught')
+                ), None)
+            if next_topic is None:
+                next_topic = ordered_topics[-1]
+
+            initial_topic_id = next_topic['id']
+            initial_topic_is_master = bool(next_topic.get('is_master'))
+
+        # Assignment presentation data for each master topic. Assignments are
+        # authored against master topics, so legacy topics intentionally have
+        # an empty list in the teaching view.
+        assignments_by_topic = {}
+        master_topic_ids = [
+            topic['id']
+            for chapter in chapters
+            for topic in chapter['topics']
+            if topic.get('is_master')
+        ]
+        if master_topic_ids:
+            placeholders = ','.join('?' for _ in master_topic_ids)
+            cur.execute(f"""
+                SELECT id, master_topic_id, title, description,
+                       file_path, original_filename
+                FROM lms_assignments
+                WHERE institute_id = ?
+                  AND master_topic_id IN ({placeholders})
+                ORDER BY master_topic_id, created_at, id
+            """, [current_inst] + master_topic_ids)
+            for assignment in cur.fetchall():
+                topic_key = str(assignment['master_topic_id'])
+                assignments_by_topic.setdefault(topic_key, []).append({
+                    'id': assignment['id'],
+                    'title': assignment['title'],
+                    'description_html': sanitize_rich_text(assignment['description'] or ''),
+                    'original_filename': assignment['original_filename'] or '',
+                    'has_file': bool(assignment['file_path']),
+                    'download_url': url_for(
+                        'lms_admin.admin_download_assignment',
+                        assignment_id=assignment['id'],
+                    ) if assignment['file_path'] else '',
+                })
+
         # Compute student progress for batch modal monitoring
         cur.execute("""
             SELECT s.id AS student_id,
@@ -10911,6 +10989,7 @@ def classroom_teach_mode(batch_id):
             total_topics=total_topics,
             taught_count=taught_count,
             taught_pct=taught_pct,
+            assignments_by_topic=assignments_by_topic,
             initial_topic_id=initial_topic_id,
             initial_topic_is_master=initial_topic_is_master,
             students_progress=students_progress,
