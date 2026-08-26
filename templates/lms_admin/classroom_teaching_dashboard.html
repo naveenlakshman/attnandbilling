@@ -20,6 +20,17 @@
     font-weight: 800;
     white-space: nowrap;
   }
+  .classroom-status-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: .7rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .class-completed-badge { background: #dbeafe; color: #1d4ed8; }
+  .attendance-marked-badge { background: #fef3c7; color: #92400e; }
 </style>
 {% endblock %}
 
@@ -37,7 +48,7 @@
   <!-- BATCH SELECTION HEADER WITH SEARCH BOX -->
   <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
     <h4 class="fw-bold text-dark mb-0">Select Assigned Batch to Start Teaching</h4>
-    <div class="d-flex align-items-center gap-3">
+    <div class="d-flex align-items-center justify-content-end flex-wrap gap-3">
       {% if is_admin %}
       <form method="GET" action="{{ url_for('lms_admin.classroom_teaching_dashboard') }}">
         <label class="visually-hidden" for="trainerFilter">Filter by staff</label>
@@ -49,6 +60,22 @@
         </select>
       </form>
       {% endif %}
+      <div>
+        <label class="visually-hidden" for="attendanceStatusFilter">Attendance status</label>
+        <select id="attendanceStatusFilter" class="form-select form-select-sm" style="min-width:170px">
+          <option value="all">All Attendance</option>
+          <option value="completed">Attendance Completed</option>
+          <option value="pending">Attendance Pending</option>
+        </select>
+      </div>
+      <div>
+        <label class="visually-hidden" for="classStatusFilter">Class status</label>
+        <select id="classStatusFilter" class="form-select form-select-sm" style="min-width:155px">
+          <option value="all">All Classes</option>
+          <option value="completed">Class Completed</option>
+          <option value="pending">Class Pending</option>
+        </select>
+      </div>
       <div class="position-relative" style="min-width: 280px;">
         <input type="text" id="batchSearchInput" class="form-control form-control-sm ps-5 rounded-pill border-secondary-subtle shadow-2xs" placeholder="🔍 Search batch, course, trainer, branch...">
       </div>
@@ -63,14 +90,22 @@
         <div class="col-md-6 col-lg-4 batch-card-col"
              data-start="{{ b.start_time or '' }}"
              data-end="{{ b.end_time or '' }}"
+             data-attendance-status="{{ 'completed' if b.attendance_marked_today else 'pending' }}"
+             data-class-status="{{ 'completed' if b.class_completed_today else 'pending' }}"
              data-search-text="{{ b.batch_name | lower }} {{ (b.course_name or '') | lower }} {{ (b.branch_name or '') | lower }} {{ (b.trainer_name or '') | lower }}">
           <div class="card h-100 border-0 shadow-sm classroom-batch-card" style="border-radius: 14px; overflow: hidden; border-left: 5px solid #4f46e5 !important;">
             <div class="card-body p-4 d-flex flex-column justify-content-between">
               <div>
                 <div class="d-flex align-items-center justify-content-between mb-2">
                   <h5 class="fw-bold text-dark mb-0">{{ b.batch_name }}</h5>
-                  <div class="d-flex align-items-center gap-2">
+                  <div class="d-flex align-items-center justify-content-end gap-2 flex-wrap">
                     <span class="live-badge-classroom d-none">● LIVE</span>
+                    {% if b.class_completed_today %}
+                    <span class="classroom-status-badge class-completed-badge">Class Completed</span>
+                    {% endif %}
+                    {% if b.attendance_marked_today %}
+                    <span class="classroom-status-badge attendance-marked-badge">Attendance Marked</span>
+                    {% endif %}
                     <span class="badge bg-light text-dark border">{{ b.student_count }} Students</span>
                   </div>
                 </div>
@@ -94,6 +129,12 @@
                     <strong class="text-dark">Next Topic:</strong>
                     <span class="text-primary fw-medium">{{ b.next_topic }}</span>
                   </div>
+                  {% if b.today_completed_topics %}
+                  <div class="small mt-2 pt-2 border-top" title="{{ b.today_completed_topics | join(', ') }}">
+                    <strong class="text-success">Completed Today:</strong>
+                    <span class="text-dark">{{ b.today_completed_topics | join(', ') }}</span>
+                  </div>
+                  {% endif %}
                 </div>
               </div>
 
@@ -150,28 +191,34 @@ document.addEventListener('DOMContentLoaded', function() {
   window.setInterval(updateLiveBatches, 60000);
 
   const searchInput = document.getElementById('batchSearchInput');
-  if (searchInput) {
-    searchInput.addEventListener('input', function() {
-      const query = this.value.toLowerCase().trim();
-      const cards = document.querySelectorAll('.batch-card-col');
-      let visibleCount = 0;
+  const attendanceFilter = document.getElementById('attendanceStatusFilter');
+  const classFilter = document.getElementById('classStatusFilter');
 
-      cards.forEach(function(card) {
-        const searchText = card.getAttribute('data-search-text') || '';
-        if (!query || searchText.includes(query)) {
-          card.style.display = '';
-          visibleCount++;
-        } else {
-          card.style.display = 'none';
-        }
-      });
+  function applyBatchFilters() {
+    const query = (searchInput?.value || '').toLowerCase().trim();
+    const attendanceStatus = attendanceFilter?.value || 'all';
+    const classStatus = classFilter?.value || 'all';
+    const cards = document.querySelectorAll('.batch-card-col');
+    let visibleCount = 0;
 
-      const badge = document.getElementById('activeBatchCountBadge');
-      if (badge) {
-        badge.textContent = visibleCount + ' Batches Found';
-      }
+    cards.forEach(function(card) {
+      const searchText = card.dataset.searchText || '';
+      const matchesSearch = !query || searchText.includes(query);
+      const matchesAttendance = attendanceStatus === 'all' || card.dataset.attendanceStatus === attendanceStatus;
+      const matchesClass = classStatus === 'all' || card.dataset.classStatus === classStatus;
+      const isVisible = matchesSearch && matchesAttendance && matchesClass;
+
+      card.style.display = isVisible ? '' : 'none';
+      if (isVisible) visibleCount++;
     });
+
+    const badge = document.getElementById('activeBatchCountBadge');
+    if (badge) badge.textContent = visibleCount + ' Batches Found';
   }
+
+  searchInput?.addEventListener('input', applyBatchFilters);
+  attendanceFilter?.addEventListener('change', applyBatchFilters);
+  classFilter?.addEventListener('change', applyBatchFilters);
 });
 </script>
 {% endblock %}

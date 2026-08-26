@@ -10327,6 +10327,13 @@ def classroom_teaching_dashboard():
     try:
         cur = conn.cursor()
         current_inst = get_current_institute_id(default=1)
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
+        ist_now = datetime.now(timezone.utc).astimezone(ist_tz)
+        today_date = ist_now.strftime("%Y-%m-%d")
+        today_start_ist = ist_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow_start_ist = today_start_ist + timedelta(days=1)
+        today_start_utc = today_start_ist.astimezone(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+        tomorrow_start_utc = tomorrow_start_ist.astimezone(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
         user_id = session.get('user_id')
         user_role = session.get('role', '').lower()
         is_admin = (user_role == 'admin')
@@ -10361,7 +10368,10 @@ def classroom_teaching_dashboard():
         sql = f"""
             SELECT b.id, b.batch_name, b.start_time, b.end_time, b.course_id,
                    br.branch_name, c.course_name, u.full_name as trainer_name,
-                   (SELECT COUNT(DISTINCT sb.student_id) FROM student_batches sb WHERE sb.batch_id = b.id AND sb.status = 'active') as student_count
+                   (SELECT COUNT(DISTINCT sb.student_id) FROM student_batches sb WHERE sb.batch_id = b.id AND sb.status = 'active') as student_count,
+                   (SELECT COUNT(DISTINCT ar.student_id)
+                    FROM attendance_records ar
+                    WHERE ar.batch_id = b.id AND ar.attendance_date = ?) AS attendance_today_count
             FROM batches b
             LEFT JOIN branches br ON br.id = b.branch_id
             LEFT JOIN courses c ON c.id = b.course_id AND c.institute_id = ?
@@ -10369,7 +10379,7 @@ def classroom_teaching_dashboard():
             WHERE {" AND ".join(where_clauses)}
             ORDER BY b.batch_name ASC
         """
-        raw_batches = cur.execute(sql, [current_inst, current_inst, *params]).fetchall()
+        raw_batches = cur.execute(sql, [today_date, current_inst, current_inst, *params]).fetchall()
 
         batches = []
         for b in raw_batches:
@@ -10399,16 +10409,26 @@ def classroom_teaching_dashboard():
             total_cnt = 0
             next_topic = "No syllabus configured"
             launch_program_id = program_rows[0]['id'] if program_rows else None
+            today_completed_topics = []
 
             if program_rows:
                 cur.execute("""
-                    SELECT program_id, master_topic_id, topic_id
+                    SELECT program_id, master_topic_id, topic_id,
+                           CASE WHEN taught_at >= ? AND taught_at < ? THEN 1 ELSE 0 END AS is_today
                     FROM lms_batch_topic_progress
                     WHERE batch_id = ?
-                """, (bid,))
+                """, (today_start_utc, tomorrow_start_utc, bid))
                 taught_records = cur.fetchall()
                 taught_master_keys = {(r['program_id'], r['master_topic_id']) for r in taught_records if r['master_topic_id'] is not None}
                 taught_topic_keys = {(r['program_id'], r['topic_id']) for r in taught_records if r['topic_id'] is not None}
+                taught_today_master_keys = {
+                    (r['program_id'], r['master_topic_id']) for r in taught_records
+                    if r['master_topic_id'] is not None and r['is_today']
+                }
+                taught_today_topic_keys = {
+                    (r['program_id'], r['topic_id']) for r in taught_records
+                    if r['topic_id'] is not None and r['is_today']
+                }
 
                 all_topics = []
                 for program in program_rows:
@@ -10448,6 +10468,9 @@ def classroom_teaching_dashboard():
 
                     for topic in topic_rows:
                         taught_key = (pid, topic['id'])
+                        is_taught_today = taught_key in (
+                            taught_today_master_keys if topic_type == 'master' else taught_today_topic_keys
+                        )
                         all_topics.append({
                             'program_id': pid,
                             'program_name': program['program_name'],
@@ -10456,10 +10479,15 @@ def classroom_teaching_dashboard():
                             'is_taught': taught_key in (
                                 taught_master_keys if topic_type == 'master' else taught_topic_keys
                             ),
+                            'is_taught_today': is_taught_today,
                         })
 
                 total_cnt = len(all_topics)
                 taught_cnt = sum(1 for t in all_topics if t['is_taught'])
+                today_completed_topics = [
+                    f"{t['program_name']}: {t['title']}" if len(program_rows) > 1 else t['title']
+                    for t in all_topics if t['is_taught_today']
+                ]
 
                 untaught = [t for t in all_topics if not t['is_taught']]
                 if untaught:
@@ -10478,6 +10506,9 @@ def classroom_teaching_dashboard():
             b_dict['taught_pct'] = pct
             b_dict['next_topic'] = next_topic
             b_dict['launch_program_id'] = launch_program_id
+            b_dict['attendance_marked_today'] = int(b.get('attendance_today_count') or 0) > 0
+            b_dict['class_completed_today'] = bool(today_completed_topics)
+            b_dict['today_completed_topics'] = today_completed_topics
             batches.append(b_dict)
         
         return render_template(
