@@ -184,7 +184,7 @@
       
       <div class="batch-card-actions d-flex align-items-center gap-2 flex-wrap">
         <span class="badge bg-white text-secondary border font-monospace py-1 px-2" style="font-size: 0.72rem;">
-          🕐 {{ batch.start_time or '—' }}{% if batch.end_time %} – {{ batch.end_time }}{% endif %}
+          🕐 {{ batch.start_time | format_time if batch.start_time else '—' }}{% if batch.end_time %} – {{ batch.end_time | format_time }}{% endif %}
         </span>
 
         <!-- Label 1: Attendance Marked Status -->
@@ -206,7 +206,7 @@
         {% endif %}
 
         <span class="badge bg-primary" style="font-size:.72rem; padding: 4px 8px;">{{ batch.student_count }} student{{ 's' if batch.student_count != 1 else '' }}</span>
-        <a href="{{ url_for('attendance.batch_planner', batch_id=batch.id) }}" class="btn btn-sm btn-outline-secondary" style="font-size:.72rem; padding:2px 8px;">View</a>
+        <a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}" class="btn btn-sm btn-outline-secondary" style="font-size:.72rem; padding:2px 8px;">View</a>
         <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=batch.id) }}" class="btn btn-sm btn-primary" style="font-size:.72rem; padding:2px 8px; font-weight: 600;">🎓 Teach Batch</a>
       </div>
     </div>
