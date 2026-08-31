@@ -146,41 +146,54 @@
 <!-- My Batches list -->
 {% if my_batches %}
 <div class="card kpi-card mb-4">
-  <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom">
-    <span class="fw-semibold">My Batches</span>
+  <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom py-3">
+    <div class="d-flex align-items-center gap-2">
+      <span class="fw-semibold fs-6">My Batches</span>
+      <span class="badge bg-primary text-white rounded-pill px-2">{{ my_batches|length }}</span>
+    </div>
     <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-sm btn-outline-info">Mark Attendance</a>
   </div>
   <div class="card-body p-3">
     {% for batch in my_batches %}
     <div class="batch-card">
-      <div>
-        <strong>{{ batch.batch_name }}</strong>
-        <small class="text-muted ms-2">{{ batch.course_name or '' }}</small>
+      <div class="batch-info me-3" style="min-width: 220px; max-width: 440px;">
+        <div>
+          <strong class="text-dark" style="font-size: 0.95rem;">{{ batch.batch_name }}</strong>
+        </div>
+        <div class="text-muted small d-flex align-items-center gap-2 flex-wrap mt-1">
+          <span class="badge bg-white text-secondary border font-monospace py-1 px-2" style="font-size: 0.75rem;">
+            🕐 {{ batch.start_time or '—' }}{% if batch.end_time %} – {{ batch.end_time }}{% endif %}
+          </span>
+          {% if batch.course_name %}
+          <span class="text-muted text-truncate" style="max-width: 320px; font-size: 0.82rem;" title="{{ batch.course_name }}">
+            {{ batch.course_name }}
+          </span>
+          {% endif %}
+        </div>
       </div>
-      <div class="d-flex align-items-center gap-2 flex-wrap">
-        <small class="text-muted me-1">🕐 {{ batch.start_time or '—' }} – {{ batch.end_time or '—' }}</small>
-        
+      
+      <div class="d-flex align-items-center gap-2 flex-wrap ms-auto">
         <!-- Label 1: Attendance Marked Status -->
         {% if batch.student_count == 0 %}
-          <span class="badge bg-secondary" style="font-size:.72rem;">Attendance N/A</span>
+          <span class="badge bg-secondary" style="font-size:.75rem; padding: 5px 9px;">Attendance N/A</span>
         {% elif batch.is_attendance_full %}
-          <span class="badge bg-success" style="font-size:.72rem;" title="{{ batch.att_today_count }}/{{ batch.student_count }} students marked">✓ Attendance Marked (100%)</span>
+          <span class="badge bg-success" style="font-size:.75rem; padding: 5px 9px;" title="{{ batch.att_today_count }}/{{ batch.student_count }} students marked">✓ Attendance Marked (100%)</span>
         {% elif batch.att_today_count > 0 %}
-          <span class="badge bg-warning text-dark" style="font-size:.72rem;" title="{{ batch.att_today_count }}/{{ batch.student_count }} students marked">⚠️ Attendance {{ batch.attendance_pct }}% Marked</span>
+          <span class="badge bg-warning text-dark" style="font-size:.75rem; padding: 5px 9px;" title="{{ batch.att_today_count }}/{{ batch.student_count }} students marked">⚠️ Attendance {{ batch.attendance_pct }}% Marked</span>
         {% else %}
-          <span class="badge bg-danger" style="font-size:.72rem;">❌ Attendance Not Marked</span>
+          <span class="badge bg-danger" style="font-size:.75rem; padding: 5px 9px;">❌ Attendance Pending</span>
         {% endif %}
 
         <!-- Label 2: Class Marked Taught Status -->
         {% if batch.class_taught_today %}
-          <span class="badge bg-info text-dark" style="font-size:.72rem;">🎓 Class Taught</span>
+          <span class="badge bg-info text-dark" style="font-size:.75rem; padding: 5px 9px;">🎓 Class Taught</span>
         {% else %}
-          <span class="badge bg-light text-secondary border" style="font-size:.72rem;">📖 Class Not Marked Taught</span>
+          <span class="badge bg-light text-secondary border" style="font-size:.75rem; padding: 5px 9px;">📖 Class Pending</span>
         {% endif %}
 
-        <span class="badge bg-primary" style="font-size:.72rem;">{{ batch.student_count }} students</span>
-        <a href="{{ url_for('attendance.batch_planner', batch_id=batch.id) }}" class="btn btn-xs btn-outline-secondary" style="font-size:.75rem; padding:2px 8px;">View</a>
-        <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=batch.id) }}" class="btn btn-xs btn-primary" style="font-size:.75rem; padding:2px 8px; font-weight: 600;">🎓 Teach Batch</a>
+        <span class="badge bg-primary" style="font-size:.75rem; padding: 5px 9px;">{{ batch.student_count }} student{{ 's' if batch.student_count != 1 else '' }}</span>
+        <a href="{{ url_for('attendance.batch_planner', batch_id=batch.id) }}" class="btn btn-sm btn-outline-secondary" style="font-size:.75rem; padding:3px 10px;">View</a>
+        <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=batch.id) }}" class="btn btn-sm btn-primary" style="font-size:.75rem; padding:3px 10px; font-weight: 600;">🎓 Teach Batch</a>
       </div>
     </div>
     {% endfor %}
