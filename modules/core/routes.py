@@ -445,20 +445,59 @@ def _staff_dashboard(institute_id):
     today = datetime.now().date().isoformat()
     current_month = datetime.now().strftime("%Y-%m")
 
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    ist_now = datetime.now(timezone.utc).astimezone(ist_tz)
+    today_start_ist = ist_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow_start_ist = today_start_ist + timedelta(days=1)
+    today_start_utc = today_start_ist.astimezone(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+    tomorrow_start_utc = tomorrow_start_ist.astimezone(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+
+    _ensure_lms_batch_topic_progress_table(conn)
+
     # ── My batches (trainer = me) ───────────────────────────────
     cur.execute("""
         SELECT b.id, b.batch_name, b.start_time, b.end_time, b.status,
                c.course_name, br.branch_name,
-               COUNT(sb.id) AS student_count
+               (SELECT COUNT(DISTINCT sb.student_id)
+                FROM student_batches sb
+                WHERE sb.batch_id = b.id AND sb.status = 'active') AS student_count,
+               (SELECT COUNT(DISTINCT ar.student_id)
+                FROM attendance_records ar
+                WHERE ar.batch_id = b.id AND ar.attendance_date = ?) AS att_today_count
         FROM batches b
         LEFT JOIN courses c ON b.course_id = c.id
         LEFT JOIN branches br ON b.branch_id = br.id
-        LEFT JOIN student_batches sb ON sb.batch_id = b.id AND sb.status = 'active'
         WHERE br.institute_id = ? AND b.trainer_id = ? AND b.status = 'active'
         GROUP BY b.id
         ORDER BY CASE WHEN b.start_time IS NULL OR b.start_time = '' THEN 1 ELSE 0 END, b.start_time ASC, b.batch_name ASC
-    """, [institute_id, user_id])
-    my_batches = cur.fetchall()
+    """, [today, institute_id, user_id])
+    raw_batches = cur.fetchall()
+
+    # Query taught progress for today
+    cur.execute("""
+        SELECT DISTINCT batch_id
+        FROM lms_batch_topic_progress
+        WHERE (taught_at >= ? AND taught_at < ?) OR date(taught_at) = ?
+    """, [today_start_utc, tomorrow_start_utc, today])
+    taught_batch_ids = {r["batch_id"] for r in cur.fetchall()}
+
+    my_batches = []
+    for b in raw_batches:
+        b_dict = dict(b)
+        student_count = int(b_dict.get("student_count") or 0)
+        att_today_count = int(b_dict.get("att_today_count") or 0)
+        b_dict["student_count"] = student_count
+        b_dict["att_today_count"] = att_today_count
+
+        if student_count > 0:
+            att_pct = int(round((att_today_count / student_count) * 100))
+        else:
+            att_pct = 0
+        b_dict["attendance_pct"] = att_pct
+        b_dict["is_attendance_full"] = (att_today_count >= student_count and student_count > 0)
+        b_dict["class_taught_today"] = b_dict["id"] in taught_batch_ids
+        my_batches.append(b_dict)
+
     batch_ids = [row["id"] for row in my_batches]
 
     # ── Today's attendance (my batches active today) ───────────
