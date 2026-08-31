@@ -456,7 +456,7 @@ def _staff_dashboard(institute_id):
         LEFT JOIN student_batches sb ON sb.batch_id = b.id AND sb.status = 'active'
         WHERE br.institute_id = ? AND b.trainer_id = ? AND b.status = 'active'
         GROUP BY b.id
-        ORDER BY b.batch_name ASC
+        ORDER BY CASE WHEN b.start_time IS NULL OR b.start_time = '' THEN 1 ELSE 0 END, b.start_time ASC, b.batch_name ASC
     """, [institute_id, user_id])
     my_batches = cur.fetchall()
     batch_ids = [row["id"] for row in my_batches]
