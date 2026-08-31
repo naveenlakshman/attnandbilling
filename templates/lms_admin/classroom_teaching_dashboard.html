@@ -80,6 +80,7 @@
         <input type="text" id="batchSearchInput" class="form-control form-control-sm ps-5 rounded-pill border-secondary-subtle shadow-2xs" placeholder="🔍 Search batch, course, trainer, branch...">
       </div>
       <span class="badge bg-primary px-3 py-2 fs-6" id="activeBatchCountBadge">{{ batches|length }} Active Batches</span>
+      <span class="badge bg-info text-dark px-3 py-2 fs-6" id="activeStudentCountBadge">{{ total_students }} Total Students</span>
     </div>
   </div>
 
@@ -90,6 +91,7 @@
         <div class="col-md-6 col-lg-4 batch-card-col"
              data-start="{{ b.start_time or '' }}"
              data-end="{{ b.end_time or '' }}"
+             data-student-count="{{ b.student_count or 0 }}"
              data-attendance-status="{{ 'completed' if b.attendance_marked_today else 'pending' }}"
              data-class-status="{{ 'completed' if b.class_completed_today else 'pending' }}"
              data-search-text="{{ b.batch_name | lower }} {{ (b.course_name or '') | lower }} {{ (b.branch_name or '') | lower }} {{ (b.trainer_name or '') | lower }}">
@@ -200,6 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const classStatus = classFilter?.value || 'all';
     const cards = document.querySelectorAll('.batch-card-col');
     let visibleCount = 0;
+    let visibleStudentCount = 0;
 
     cards.forEach(function(card) {
       const searchText = card.dataset.searchText || '';
@@ -209,11 +212,17 @@ document.addEventListener('DOMContentLoaded', function() {
       const isVisible = matchesSearch && matchesAttendance && matchesClass;
 
       card.style.display = isVisible ? '' : 'none';
-      if (isVisible) visibleCount++;
+      if (isVisible) {
+        visibleCount++;
+        visibleStudentCount += Number(card.dataset.studentCount || 0);
+      }
     });
 
-    const badge = document.getElementById('activeBatchCountBadge');
-    if (badge) badge.textContent = visibleCount + ' Batches Found';
+    const batchBadge = document.getElementById('activeBatchCountBadge');
+    if (batchBadge) batchBadge.textContent = visibleCount + ' Active Batches';
+
+    const studentBadge = document.getElementById('activeStudentCountBadge');
+    if (studentBadge) studentBadge.textContent = visibleStudentCount + ' Total Students';
   }
 
   searchInput?.addEventListener('input', applyBatchFilters);

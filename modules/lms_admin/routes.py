@@ -10511,9 +10511,12 @@ def classroom_teaching_dashboard():
             b_dict['today_completed_topics'] = today_completed_topics
             batches.append(b_dict)
         
+        total_students = sum(int(b.get('student_count') or 0) for b in batches)
+
         return render_template(
             "lms_admin/classroom_teaching_dashboard.html",
             batches=batches,
+            total_students=total_students,
             trainers=trainers,
             selected_trainer_id=selected_trainer_id,
             is_admin=is_admin,
