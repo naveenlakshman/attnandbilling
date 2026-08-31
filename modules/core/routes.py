@@ -1,9 +1,9 @@
 from flask import Blueprint, abort, current_app, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import logging
-from db import get_conn, get_company_profile, clear_company_cache
+from db import get_conn, get_company_profile, clear_company_cache, _ensure_lms_batch_topic_progress_table
 from services.storage import get_storage_service
 from .utils import login_required, admin_required
 

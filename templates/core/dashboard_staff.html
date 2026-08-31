@@ -157,9 +157,28 @@
         <strong>{{ batch.batch_name }}</strong>
         <small class="text-muted ms-2">{{ batch.course_name or '' }}</small>
       </div>
-      <div class="d-flex align-items-center gap-3">
-        <small class="text-muted">🕐 {{ batch.start_time or '—' }} – {{ batch.end_time or '—' }}</small>
-        <span class="badge bg-primary">{{ batch.student_count }} students</span>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <small class="text-muted me-1">🕐 {{ batch.start_time or '—' }} – {{ batch.end_time or '—' }}</small>
+        
+        <!-- Label 1: Attendance Marked Status -->
+        {% if batch.student_count == 0 %}
+          <span class="badge bg-secondary" style="font-size:.72rem;">Attendance N/A</span>
+        {% elif batch.is_attendance_full %}
+          <span class="badge bg-success" style="font-size:.72rem;" title="{{ batch.att_today_count }}/{{ batch.student_count }} students marked">✓ Attendance Marked (100%)</span>
+        {% elif batch.att_today_count > 0 %}
+          <span class="badge bg-warning text-dark" style="font-size:.72rem;" title="{{ batch.att_today_count }}/{{ batch.student_count }} students marked">⚠️ Attendance {{ batch.attendance_pct }}% Marked</span>
+        {% else %}
+          <span class="badge bg-danger" style="font-size:.72rem;">❌ Attendance Not Marked</span>
+        {% endif %}
+
+        <!-- Label 2: Class Marked Taught Status -->
+        {% if batch.class_taught_today %}
+          <span class="badge bg-info text-dark" style="font-size:.72rem;">🎓 Class Taught</span>
+        {% else %}
+          <span class="badge bg-light text-secondary border" style="font-size:.72rem;">📖 Class Not Marked Taught</span>
+        {% endif %}
+
+        <span class="badge bg-primary" style="font-size:.72rem;">{{ batch.student_count }} students</span>
         <a href="{{ url_for('attendance.batch_planner', batch_id=batch.id) }}" class="btn btn-xs btn-outline-secondary" style="font-size:.75rem; padding:2px 8px;">View</a>
         <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=batch.id) }}" class="btn btn-xs btn-primary" style="font-size:.75rem; padding:2px 8px; font-weight: 600;">🎓 Teach Batch</a>
       </div>
