@@ -1,5 +1,4 @@
 import sqlite3
-import pytest
 
 def test_staff_dashboard_my_batches_sorting_and_labels():
     """Verify that batches in staff dashboard are ordered chronologically and calculate attendance % & taught status."""
