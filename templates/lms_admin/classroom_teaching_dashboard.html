@@ -131,18 +131,33 @@
                     <strong class="text-dark">Next Topic:</strong>
                     <span class="text-primary fw-medium">{{ b.next_topic }}</span>
                   </div>
+                  {% if b.earlier_pending_summary %}
+                  <div class="small mt-2 text-warning-emphasis" title="{{ b.earlier_pending_summary }}">
+                    <strong>⚠ Earlier Topics Pending:</strong>
+                    <span>{{ b.earlier_pending_summary }}</span>
+                  </div>
+                  {% endif %}
                   {% if b.today_completed_topics %}
                   <div class="small mt-2 pt-2 border-top" title="{{ b.today_completed_topics | join(', ') }}">
                     <strong class="text-success">Completed Today:</strong>
                     <span class="text-dark">{{ b.today_completed_topics | join(', ') }}</span>
                   </div>
+                  {% elif b.last_taught_topic and b.last_taught_at %}
+                  <div class="small mt-2 pt-2 border-top" title="{{ b.last_taught_topic }}">
+                    <strong class="text-secondary">Last Topic Taught:</strong>
+                    <span class="text-dark">{{ b.last_taught_topic }}</span>
+                    <div class="text-muted mt-1">{{ b.last_taught_at | format_ist_datetime('%d-%b-%Y %I:%M %p') }} IST</div>
+                  </div>
                   {% endif %}
                 </div>
               </div>
 
-              <div class="pt-2 border-top d-flex gap-2">
+              <div class="pt-2 border-top d-flex gap-2 flex-wrap">
                 <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=b.id, program_id=b.launch_program_id) if b.launch_program_id else url_for('lms_admin.classroom_teach_mode', batch_id=b.id) }}" class="btn btn-primary w-100 fw-bold py-2 d-flex align-items-center justify-content-center gap-2" style="background: #4f46e5; border-color: #4f46e5; border-radius: 8px;">
                   <span>🎓 Launch Teaching Mode</span>
+                </a>
+                <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=b.id, program_id=b.launch_program_id, show_students=1) if b.launch_program_id else url_for('lms_admin.classroom_teach_mode', batch_id=b.id, show_students=1) }}" target="_blank" rel="noopener" class="btn btn-outline-primary w-100 fw-semibold py-2 d-flex align-items-center justify-content-center gap-2" style="border-radius: 8px;">
+                  <span>👥 Check Students</span>
                 </a>
               </div>
             </div>

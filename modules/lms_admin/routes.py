@@ -10410,13 +10410,17 @@ def classroom_teaching_dashboard():
             next_topic = "No syllabus configured"
             launch_program_id = program_rows[0]['id'] if program_rows else None
             today_completed_topics = []
+            last_taught_topic = None
+            last_taught_at = None
+            earlier_pending_summary = None
 
             if program_rows:
                 cur.execute("""
-                    SELECT program_id, master_topic_id, topic_id,
+                    SELECT id, program_id, master_topic_id, topic_id, taught_at,
                            CASE WHEN taught_at >= ? AND taught_at < ? THEN 1 ELSE 0 END AS is_today
                     FROM lms_batch_topic_progress
                     WHERE batch_id = ?
+                    ORDER BY taught_at DESC, id DESC
                 """, (today_start_utc, tomorrow_start_utc, bid))
                 taught_records = cur.fetchall()
                 taught_master_keys = {(r['program_id'], r['master_topic_id']) for r in taught_records if r['master_topic_id'] is not None}
@@ -10445,7 +10449,9 @@ def classroom_teaching_dashboard():
 
                     if has_master:
                         cur.execute("""
-                            SELECT mt.id, mt.title as topic_title, pc.chapter_order, mt.topic_order
+                            SELECT mt.id, mt.title as topic_title,
+                                   COALESCE(NULLIF(pc.custom_title, ''), mc.title) as chapter_title,
+                                   pc.chapter_order, mt.topic_order
                             FROM lms_program_chapters pc
                             JOIN lms_master_chapters mc ON mc.id = pc.master_chapter_id
                             JOIN lms_master_topics mt ON mt.master_chapter_id = mc.id
@@ -10457,7 +10463,8 @@ def classroom_teaching_dashboard():
                         topic_type = 'master'
                     else:
                         cur.execute("""
-                            SELECT lt.id, lt.topic_title, lc.chapter_order, lt.topic_order
+                            SELECT lt.id, lt.topic_title, lc.chapter_title,
+                                   lc.chapter_order, lt.topic_order
                             FROM lms_chapters lc
                             JOIN lms_topics lt ON lt.chapter_id = lc.id
                             WHERE lc.program_id = ? AND lc.is_active = 1 AND lt.is_active = 1
@@ -10474,6 +10481,7 @@ def classroom_teaching_dashboard():
                         all_topics.append({
                             'program_id': pid,
                             'program_name': program['program_name'],
+                            'chapter_title': topic['chapter_title'],
                             'id': topic['id'],
                             'title': topic['topic_title'],
                             'is_taught': taught_key in (
@@ -10489,9 +10497,54 @@ def classroom_teaching_dashboard():
                     for t in all_topics if t['is_taught_today']
                 ]
 
+                topic_lookup = {
+                    (t['program_id'], t['id']): t
+                    for t in all_topics
+                }
+                last_taught_item = None
+                for record in taught_records:
+                    topic_id = record['master_topic_id'] if record['master_topic_id'] is not None else record['topic_id']
+                    topic = topic_lookup.get((record['program_id'], topic_id))
+                    if topic:
+                        last_taught_item = topic
+                        last_taught_topic = topic['title']
+                        if len(program_rows) > 1:
+                            last_taught_topic = f"{topic['program_name']}: {last_taught_topic}"
+                        last_taught_at = record['taught_at']
+                        break
+
                 untaught = [t for t in all_topics if not t['is_taught']]
                 if untaught:
-                    next_item = untaught[0]
+                    next_item = None
+                    if last_taught_item:
+                        last_taught_index = all_topics.index(last_taught_item)
+                        next_item = next((
+                            topic for topic in all_topics[last_taught_index + 1:]
+                            if not topic['is_taught']
+                        ), None)
+
+                        if next_item:
+                            earlier_pending = [
+                                topic for topic in all_topics[:last_taught_index]
+                                if not topic['is_taught']
+                            ]
+                            if earlier_pending:
+                                pending_by_chapter = {}
+                                for topic in earlier_pending:
+                                    chapter_label = topic['chapter_title'] or 'Uncategorised chapter'
+                                    if len(program_rows) > 1:
+                                        chapter_label = f"{topic['program_name']} / {chapter_label}"
+                                    pending_by_chapter[chapter_label] = pending_by_chapter.get(chapter_label, 0) + 1
+                                earlier_pending_summary = '; '.join(
+                                    f"{count} earlier topic{'s' if count != 1 else ''} pending in {chapter}"
+                                    for chapter, count in pending_by_chapter.items()
+                                )
+
+                    # No teaching history, or the latest topic was at the end of
+                    # the syllabus: wrap to the earliest remaining pending topic.
+                    if next_item is None:
+                        next_item = untaught[0]
+
                     launch_program_id = next_item['program_id']
                     next_topic = next_item['title']
                     if len(program_rows) > 1:
@@ -10505,10 +10558,13 @@ def classroom_teaching_dashboard():
             b_dict['total_cnt'] = total_cnt
             b_dict['taught_pct'] = pct
             b_dict['next_topic'] = next_topic
+            b_dict['earlier_pending_summary'] = earlier_pending_summary
             b_dict['launch_program_id'] = launch_program_id
             b_dict['attendance_marked_today'] = int(b.get('attendance_today_count') or 0) > 0
             b_dict['class_completed_today'] = bool(today_completed_topics)
             b_dict['today_completed_topics'] = today_completed_topics
+            b_dict['last_taught_topic'] = last_taught_topic
+            b_dict['last_taught_at'] = last_taught_at
             batches.append(b_dict)
         
         total_students = sum(int(b.get('student_count') or 0) for b in batches)
@@ -10809,10 +10865,12 @@ def classroom_teach_mode(batch_id):
             initials = (parts[0][0] + (parts[-1][0] if len(parts) > 1 else '')).upper() if parts else 'ST'
             
             completed_topics = 0
+            last_topic_completed_at = None
             if program_id:
                 master_cnt = 0
                 cur.execute("""
-                    SELECT COUNT(DISTINCT mtp.master_topic_id) as cnt
+                    SELECT COUNT(DISTINCT mtp.master_topic_id) as cnt,
+                           MAX(mtp.completed_at) as last_completed_at
                     FROM lms_master_topic_progress mtp
                     JOIN lms_master_topics mt ON mt.id = mtp.master_topic_id
                     JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
@@ -10824,17 +10882,29 @@ def classroom_teach_mode(batch_id):
                       AND mc.status = 'active'
                       AND mt.status = 'active'
                 """, (sid, program_id, program_id))
-                master_cnt = cur.fetchone()['cnt'] or 0
+                master_progress = cur.fetchone()
+                master_cnt = master_progress['cnt'] or 0
 
                 legacy_cnt = 0
                 cur.execute("""
-                    SELECT COUNT(DISTINCT tp.topic_id) as cnt
+                    SELECT COUNT(DISTINCT tp.topic_id) as cnt,
+                           MAX(tp.completed_at) as last_completed_at
                     FROM lms_topic_progress tp
                     JOIN lms_topics lt ON lt.id = tp.topic_id
                     JOIN lms_chapters lc ON lc.id = lt.chapter_id
                     WHERE tp.student_id = ? AND lc.program_id = ? AND tp.is_completed = 1
                 """, (sid, program_id))
-                legacy_cnt = cur.fetchone()['cnt'] or 0
+                legacy_progress = cur.fetchone()
+                legacy_cnt = legacy_progress['cnt'] or 0
+
+                topic_completion_dates = [
+                    value for value in (
+                        master_progress['last_completed_at'],
+                        legacy_progress['last_completed_at'],
+                    ) if value
+                ]
+                if topic_completion_dates:
+                    last_topic_completed_at = max(topic_completion_dates, key=str)
 
                 completed_topics = max(master_cnt, legacy_cnt)
 
@@ -10843,6 +10913,7 @@ def classroom_teach_mode(batch_id):
 
             total_assignments = 0
             completed_assignments = 0
+            last_assignment_completed_at = None
             if program_id:
                 cur.execute("""
                     SELECT COUNT(DISTINCT a.id) as cnt
@@ -10854,14 +10925,17 @@ def classroom_teach_mode(batch_id):
                 total_assignments = cur.fetchone()['cnt'] or 0
 
                 cur.execute("""
-                    SELECT COUNT(DISTINCT sub.assignment_id) as cnt
+                    SELECT COUNT(DISTINCT sub.assignment_id) as cnt,
+                           MAX(COALESCE(sub.reviewed_at, sub.submitted_at)) as last_completed_at
                     FROM lms_assignment_submissions sub
                     JOIN lms_assignments a ON a.id = sub.assignment_id
                     JOIN lms_master_topics mt ON mt.id = a.master_topic_id
                     JOIN lms_program_chapters pc ON pc.master_chapter_id = mt.master_chapter_id
                     WHERE sub.student_id = ? AND pc.program_id = ? AND sub.review_status IN ('submitted', 'accepted', 'approved')
                 """, (sid, program_id))
-                completed_assignments = cur.fetchone()['cnt'] or 0
+                assignment_progress = cur.fetchone()
+                completed_assignments = assignment_progress['cnt'] or 0
+                last_assignment_completed_at = assignment_progress['last_completed_at']
 
             completed_assignments = min(completed_assignments, total_assignments) if total_assignments > 0 else completed_assignments
             assg_pct = min(100.0, round((completed_assignments / total_assignments * 100), 1)) if total_assignments > 0 else 0.0
@@ -10897,9 +10971,11 @@ def classroom_teach_mode(batch_id):
                 'completed_topics': completed_topics,
                 'total_topics': total_topics,
                 'topic_pct': topic_pct,
+                'last_topic_completed_at': last_topic_completed_at,
                 'completed_assignments': completed_assignments,
                 'total_assignments': total_assignments,
                 'assg_pct': assg_pct,
+                'last_assignment_completed_at': last_assignment_completed_at,
                 'progress_class': p_class,
                 'progress_label': p_label,
                 'today_status': att_row['status'] if att_row else None,
@@ -11033,6 +11109,7 @@ def classroom_teach_mode(batch_id):
             history_dates=history_dates,
             payment_dues=payment_dues,
             approved_leave_student_ids=approved_leave_student_ids,
+            show_student_progress=request.args.get('show_students') == '1',
         )
     finally:
         conn.close()

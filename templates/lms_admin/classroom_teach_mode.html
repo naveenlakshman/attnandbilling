@@ -255,6 +255,14 @@
                           <span>{{ s.completed_topics }}/{{ s.total_topics }} topics</span>
                           <span>{{ s.progress_label }}</span>
                         </div>
+                        <div class="text-muted mt-2 pt-2 border-top" style="font-size: 11px;">
+                          <strong>Last topic completion:</strong>
+                          {% if s.last_topic_completed_at %}
+                            {{ s.last_topic_completed_at | format_ist_datetime('%d-%b-%Y %I:%M %p') }} IST
+                          {% else %}
+                            Not completed yet
+                          {% endif %}
+                        </div>
                       </div>
 
                       <!-- LMS ASSIGNMENTS PROGRESS BOX -->
@@ -269,6 +277,14 @@
                         <div class="d-flex align-items-center justify-content-between text-muted mt-1" style="font-size: 11px;">
                           <span>{{ s.completed_assignments }}/{{ s.total_assignments }} assignments</span>
                           <span>{{ 'Completed' if s.assg_pct >= 100 else ('In Progress' if s.assg_pct > 0 else 'Not Started') }}</span>
+                        </div>
+                        <div class="text-muted mt-2 pt-2 border-top" style="font-size: 11px;">
+                          <strong>Last assignment completion:</strong>
+                          {% if s.last_assignment_completed_at %}
+                            {{ s.last_assignment_completed_at | format_ist_datetime('%d-%b-%Y %I:%M %p') }} IST
+                          {% else %}
+                            Not completed yet
+                          {% endif %}
                         </div>
                       </div>
                     </div>
@@ -571,6 +587,13 @@ function onAttStatusChange(sel) {
   }
 
   document.addEventListener('DOMContentLoaded', function() {
+    {% if show_student_progress %}
+    const studentProgressModal = document.getElementById('studentProgressModal');
+    if (studentProgressModal && typeof bootstrap !== 'undefined') {
+      bootstrap.Modal.getOrCreateInstance(studentProgressModal).show();
+    }
+    {% endif %}
+
     const dateInput = document.getElementById('attDateInput');
     if (dateInput) {
       dateInput.addEventListener('change', function() {
