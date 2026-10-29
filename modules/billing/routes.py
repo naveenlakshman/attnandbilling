@@ -640,6 +640,9 @@ def _student_required_error_message(missing):
 
 
 billing_bp = Blueprint("billing", __name__)
+
+from modules.billing.cashfree_routes import register_cashfree_routes
+register_cashfree_routes(billing_bp)
 logger = logging.getLogger(__name__)
 
 
@@ -5011,7 +5014,11 @@ def invoice_view(invoice_id):
         total_paid=total_paid,
         balance_amount=balance_amount,
         total_written_off=total_written_off,
-        effective_status=effective_status
+        effective_status=effective_status,
+        cashfree_available=(
+            get_current_institute_id() == current_app.config.get("CASHFREE_INSTITUTE_ID", 1)
+            and session.get("role") in {"admin", "staff"}
+        ),
     )
 
 @billing_bp.route("/invoice/<int:invoice_id>/print")
@@ -6618,6 +6625,11 @@ def receipt_edit(receipt_id):
         conn.close()
         flash("Receipt not found.", "danger")
         return redirect(url_for("billing.receipts"))
+
+    if receipt["notes"] and receipt["notes"].startswith("SANDBOX Cashfree order "):
+        conn.close()
+        flash("Verified Cashfree receipts cannot be edited. Reconcile gateway payments separately.", "warning")
+        return redirect(url_for("billing.invoice_view", invoice_id=receipt["invoice_id"]))
 
     if request.method == "POST":
         try:

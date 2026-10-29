@@ -133,7 +133,8 @@ class Config:
         "CONTENT_SECURITY_POLICY",
         "default-src 'self'; base-uri 'self'; object-src 'none'; "
         "frame-ancestors 'self'; form-action 'self'; "
-        "frame-src 'self' https://view.officeapps.live.com https://*.officeapps.live.com "
+        "frame-src 'self' https://sdk.cashfree.com https://sandbox.cashfree.com "
+        "https://*.cashfree.com https://view.officeapps.live.com https://*.officeapps.live.com "
         "https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com; "
         "img-src 'self' data: blob: https:; media-src 'self' blob: https:; "
         "font-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; "
@@ -151,6 +152,14 @@ class Config:
 
     # Google AI (Gemini)
     GOOGLE_AI_API_KEY = os.environ.get("GOOGLE_AI_API_KEY")
+
+    # Cashfree sandbox credentials stay on the server. One merchant account is
+    # explicitly bound to one institute; never share it across tenant ledgers.
+    CASHFREE_APP_ID = os.environ.get("CASHFREE_APP_ID", "")
+    CASHFREE_SECRET_KEY = os.environ.get("CASHFREE_SECRET_KEY", "")
+    CASHFREE_API_URL = os.environ.get("CASHFREE_API_URL", "https://sandbox.cashfree.com/pg")
+    CASHFREE_INSTITUTE_ID = int(os.environ.get("CASHFREE_INSTITUTE_ID", "1"))
+    CASHFREE_NOTIFY_URL = os.environ.get("CASHFREE_NOTIFY_URL", "")
 
     # Google Maps (Geocoding / Pincode lookup)
     GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")
