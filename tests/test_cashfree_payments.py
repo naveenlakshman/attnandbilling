@@ -78,6 +78,10 @@ def sandbox(tmp_path, monkeypatch):
     def invoice_view(invoice_id):
         return 'invoice'
 
+    @bp.route('/invoice/download/<token>')
+    def invoice_public_download(token):
+        return 'invoice download'
+
     app.register_blueprint(bp, url_prefix='/billing')
 
     @app.get('/token')

@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 
 from db import get_company_profile, get_conn, log_activity
 from modules.core.sms import normalize_sms_phone, send_sms
+from services import payment_links
 
 
 AUTO_SMS_SENT_VIA = "auto_sms"
@@ -186,6 +187,8 @@ def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
                 company = get_company_profile(institute_id)
                 company_profiles[institute_id] = company
             message = _build_message(row, reminder_type, company)
+            message = payment_links.append_to_message(
+                message, payment_links.build_link(conn, institute_id, row['invoice_id']))
             summary["eligible"] += 1
 
             if dry_run:
@@ -196,6 +199,7 @@ def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
                     "phone": phone,
                     "reminder_type": reminder_type,
                     "status": "dry_run",
+                    "message_text": message,
                 })
             else:
                 cur.execute("""
@@ -241,6 +245,7 @@ def send_automatic_fee_reminders(run_date=None, dry_run=False, limit=None):
                         record_id=row["installment_id"],
                         description=f"Automatic fee reminder SMS sent to {phone} for {row['invoice_no']}",
                         conn=conn,
+                        institute_id=institute_id,
                     )
                 else:
                     summary["failed"] += 1

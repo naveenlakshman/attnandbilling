@@ -18,7 +18,7 @@ from flask import Flask
 
 from config import Config
 from db import MySQLConnectionWrapper
-from services import cashfree, cashfree_payments as payments
+from services import cashfree, cashfree_payments as payments, payment_links
 
 
 @pytest.fixture(scope='module')
@@ -86,13 +86,13 @@ def test_mysql_migration_and_concurrent_gateway_posting(mysql_server, monkeypatc
 
     conn = connect()
     try:
-        migration = Path(__file__).parents[1] / 'migrations/20261029_cashfree_sandbox.sql'
-        sql = '\n'.join(line for line in migration.read_text().splitlines() if not line.startswith('--'))
-        # Apply the actual migration with the raw cursor: the compatibility cursor
-        # intentionally suppresses CREATE TABLE statements.
-        for statement in sql.split(';'):
-            if statement.strip():
-                conn._conn.cursor().execute(statement)
+        for filename in ('20261029_cashfree_sandbox.sql','20261029_cashfree_student_payment_links.sql'):
+            migration = Path(__file__).parents[1] / 'migrations' / filename
+            sql = '\n'.join(line for line in migration.read_text().splitlines() if not line.startswith('--'))
+            # Use the raw cursor: the compatibility cursor suppresses CREATE.
+            for statement in sql.split(';'):
+                if statement.strip():
+                    conn._conn.cursor().execute(statement)
         schema = '''
             CREATE TABLE students (id BIGINT PRIMARY KEY, institute_id BIGINT NOT NULL);
             INSERT INTO students VALUES (100, 1);
@@ -100,6 +100,8 @@ def test_mysql_migration_and_concurrent_gateway_posting(mysql_server, monkeypatc
                 student_id BIGINT NOT NULL, branch_id BIGINT, total_amount DECIMAL(12,2),
                 status VARCHAR(32), updated_at VARCHAR(32));
             INSERT INTO invoices VALUES (101,1,100,3,1000,'unpaid',NULL);
+            ALTER TABLE invoices ADD COLUMN created_by BIGINT NOT NULL DEFAULT 10;
+            ALTER TABLE invoices ADD COLUMN invoice_no VARCHAR(64) DEFAULT 'TEST-101';
             CREATE TABLE receipts (id BIGINT AUTO_INCREMENT PRIMARY KEY, receipt_no VARCHAR(128) UNIQUE,
                 invoice_id BIGINT, institute_id BIGINT, receipt_date DATE, amount_received DECIMAL(12,2),
                 payment_mode VARCHAR(32), notes TEXT, created_by BIGINT, created_at VARCHAR(32));
@@ -109,6 +111,9 @@ def test_mysql_migration_and_concurrent_gateway_posting(mysql_server, monkeypatc
                 installment_no INT, amount_due DECIMAL(12,2), amount_paid DECIMAL(12,2),
                 status VARCHAR(32), updated_at VARCHAR(32));
             INSERT INTO installment_plans VALUES (1,101,1,500,0,'pending',NULL), (2,101,2,500,0,'pending',NULL);
+            ALTER TABLE installment_plans ADD COLUMN due_date VARCHAR(32) DEFAULT '2026-10-29';
+            CREATE TABLE institute_domains (id BIGINT PRIMARY KEY,institute_id BIGINT,hostname VARCHAR(255),status VARCHAR(32),is_primary INT);
+            INSERT INTO institute_domains VALUES (1,1,'tenant.example','active',1);
             CREATE TABLE institute_settings (institute_id BIGINT PRIMARY KEY, receipt_prefix VARCHAR(64));
             INSERT INTO institute_settings VALUES (1,'TEST/REC');
             CREATE TABLE institute_document_sequences (institute_id BIGINT, document_type VARCHAR(32),
@@ -125,10 +130,12 @@ def test_mysql_migration_and_concurrent_gateway_posting(mysql_server, monkeypatc
     finally:
         conn.close()
     monkeypatch.setattr(payments, 'get_conn', connect)
+    monkeypatch.setattr(payment_links, 'get_conn', connect)
     monkeypatch.setattr(Config, 'DB_TYPE', 'mysql')
     app = Flask(__name__)
     app.config.update(DB_TYPE='mysql', CASHFREE_APP_ID='test', CASHFREE_SECRET_KEY='fixture-secret',
-                      CASHFREE_API_URL='https://sandbox.cashfree.com/pg')
+                      CASHFREE_API_URL='https://sandbox.cashfree.com/pg', SECRET_KEY='test-secret',
+                      CASHFREE_PAYMENT_LINKS_ENABLED=True, CASHFREE_PAYMENT_LINK_BASE_URL='https://tenant.example')
     remote = {}
 
     def api(method, path, payload=None, idempotency_key=None):
@@ -137,7 +144,7 @@ def test_mysql_migration_and_concurrent_gateway_posting(mysql_server, monkeypatc
             return remote[payload['order_id']]
         order_id = path.split('/')[2]
         if path.endswith('/payments'):
-            return [{'cf_payment_id': order_id, 'payment_amount': 750, 'payment_currency':'INR',
+            return [{'cf_payment_id': order_id, 'payment_amount': remote[order_id]['order_amount'], 'payment_currency':'INR',
                      'payment_status':'SUCCESS', 'payment_method':{'upi':{}}}]
         return remote[order_id]
 
@@ -170,5 +177,20 @@ def test_mysql_migration_and_concurrent_gateway_posting(mysql_server, monkeypatc
         installments = conn.execute('SELECT amount_paid FROM installment_plans ORDER BY id').fetchall()
         assert [str(row['amount_paid']) for row in installments] == ['500.00','250.00']
         assert len(conn.execute('SELECT * FROM activity_logs').fetchall()) == 2
+    finally:
+        conn.close()
+
+    with app.app_context():
+        conn = connect()
+        link = payment_links.build_link(conn,1,101)
+        conn.close()
+        token = link.rsplit('/',1)[1]
+        public_order = payment_links.create_order(token,1,dict(details,amount='250.00',payment_option='full'),str(uuid.uuid4()))
+        assert payment_links.verify_order(token,1,public_order['order_id'])['paid']
+    conn = connect()
+    try:
+        assert conn.execute('SELECT status FROM invoices WHERE id=101').fetchone()['status'] == 'paid'
+        assert len(conn.execute('SELECT * FROM receipts').fetchall()) == 2
+        assert conn.execute('SELECT COUNT(*) n FROM cashfree_payment_link_orders').fetchone()['n'] == 1
     finally:
         conn.close()

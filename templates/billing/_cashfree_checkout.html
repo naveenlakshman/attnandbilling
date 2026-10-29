@@ -8,6 +8,11 @@
 <section class="card" style="margin:16px 0;" aria-label="Cashfree sandbox payment">
   <h3>Pay online (Cashfree sandbox)</h3>
   <p>Test payments update this ERP's fee ledger and are labelled SANDBOX on the receipt.</p>
+  {% if student_payment_url %}
+  <label for="student-payment-url">Student payment link</label>
+  <input id="student-payment-url" class="form-control mb-2" type="text" readonly value="{{ student_payment_url }}" onfocus="this.select()">
+  <p><a href="{{ student_payment_url }}" target="_blank" rel="noopener noreferrer">Open student payment page</a> — the student can choose the current installment or full invoice balance.</p>
+  {% endif %}
   <form id="cashfree-payment-form"
         data-create-url="{{ url_for('billing.cashfree_create_order') }}"
         data-verify-url="{{ url_for('billing.cashfree_verify_order', order_id='ORDER_ID') }}"
@@ -29,5 +34,5 @@
   </form>
 </section>
 <script src="https://sdk.cashfree.com/js/v3/cashfree.js" defer></script>
-<script src="{{ url_for('static', filename='js/cashfree_checkout.js', v='20261029-uuid-fallback') }}" defer></script>
+<script src="{{ url_for('static', filename='js/cashfree_checkout.js', v='20261029-payment-links') }}" defer></script>
 {% endif %}

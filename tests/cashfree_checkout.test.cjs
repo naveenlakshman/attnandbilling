@@ -8,11 +8,17 @@ const source = fs.readFileSync(path.join(__dirname, '../static/js/cashfree_check
 const orderId = 'cf_1_0123456789abcdef0123456789abcdef';
 
 function setup(responses, {pending = false, valid = true, checkoutResult = {}, cryptoApi,
-                          origin = 'https://tenant.example'} = {}) {
+                          origin = 'https://tenant.example', studentChoice} = {}) {
   const calls = [], checkouts = [], navigations = [], handlers = {};
   const fields = Object.fromEntries(Object.entries({
     amount:'750.00', phone:'9876543210', email:'student@example.com', name:'Student', csrf_token:'csrf-test'
   }).map(([name,value]) => [name,{value}]));
+  if (studentChoice) {
+    fields.payment_option = {value:studentChoice,
+      selectedOptions:[{dataset:{amount:studentChoice === 'full' ? '1000.00' : '500.00'}}],
+      addEventListener:(name,handler) => { handlers.choice = handler; }};
+    fields.amount.value = fields.payment_option.selectedOptions[0].dataset.amount;
+  }
   const form = {
     dataset:{createUrl:'/billing/cashfree/orders', verifyUrl:'/billing/cashfree/orders/ORDER_ID/verify',
              studentId:'100', invoiceId:'101'},
@@ -54,7 +60,12 @@ function setup(responses, {pending = false, valid = true, checkoutResult = {}, c
     }
   });
   return {calls,checkouts,navigations,form,pay,check,status,window,startup,
-          submit:() => handlers.submit({preventDefault(){}}), recheck:() => handlers.check()};
+          submit:() => handlers.submit({preventDefault(){}}), recheck:() => handlers.check(),
+          choose:(option,amount) => {
+            fields.payment_option.value = option;
+            fields.payment_option.selectedOptions = [{dataset:{amount}}];
+            handlers.choice();
+          }};
 }
 
 const created = () => ({body:{order_id:orderId,payment_session_id:'session-test'}});
@@ -192,3 +203,22 @@ for (const cryptoApi of [null, {}]) {
     assert.equal(ui.pay.disabled, false);
   });
 }
+
+test('student can choose installment or full balance before checkout', async () => {
+  const ui = setup([created(), active()], {studentChoice:'installment'});
+  assert.equal(ui.form.elements.amount.value, '500.00');
+  ui.choose('full','1000.00');
+  await ui.submit();
+  const body = JSON.parse(ui.calls[0].options.body);
+  assert.equal(body.payment_option, 'full');
+  assert.equal(body.amount, '1000.00');
+  assert.equal(ui.form.elements.payment_option.disabled, true);
+});
+
+test('student success reload retains order reference for server-verified confirmation', async () => {
+  const ui = setup([created(), paid()], {studentChoice:'installment'});
+  await ui.submit();
+  const destination = new URL(ui.navigations[0]);
+  assert.equal(destination.searchParams.get('cashfree_paid_order'), orderId);
+  assert.equal(destination.searchParams.has('cashfree_order_id'), false);
+});

@@ -35,6 +35,13 @@ def init_sqlite_schema(conn):
     """)
     conn.execute("""CREATE INDEX IF NOT EXISTS idx_cashfree_invoice
                     ON cashfree_orders(institute_id, invoice_id, status)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS cashfree_payment_link_orders (
+        order_id VARCHAR(64) PRIMARY KEY,
+        link_digest VARCHAR(64) NOT NULL,
+        payment_option VARCHAR(16) NOT NULL CHECK(payment_option IN ('full','installment')),
+        created_at VARCHAR(32) NOT NULL,
+        FOREIGN KEY(order_id) REFERENCES cashfree_orders(order_id) ON DELETE RESTRICT
+    )""")
 
 
 def _now():
@@ -97,7 +104,7 @@ def authorize_order(conn, order, actor):
     _authorize_branch(actor, invoice)
 
 
-def create_order(actor, data, request_key, return_url):
+def create_order(actor, data, request_key, return_url, public_link=None):
     cashfree.require_config()
     if not isinstance(data, dict):
         raise cashfree.CashfreeError("A JSON object is required.", 400)
@@ -134,8 +141,13 @@ def create_order(actor, data, request_key, return_url):
                 conn.rollback()  # Do not carry a snapshot from invoice selection into the lock.
         invoice = _invoice(conn, invoice_id, student_id, institute_id)
         _authorize_branch(actor, invoice)
+        if public_link:
+            public_link['validate_amount'](conn, invoice)
+        fingerprint_values = [actor["id"], student_id, invoice_id, amount, phone, email, name]
+        if public_link:
+            fingerprint_values += [public_link['digest'], public_link['option']]
         fingerprint = hashlib.sha256(json.dumps(
-            [actor["id"], student_id, invoice_id, amount, phone, email, name],
+            fingerprint_values,
             separators=(",", ":"), ensure_ascii=True,
         ).encode()).hexdigest()
         existing = conn.execute("SELECT * FROM cashfree_orders WHERE order_id = ?", (order_id,)).fetchone()
@@ -161,6 +173,10 @@ def create_order(actor, data, request_key, return_url):
                 amount_paise, request_fingerprint, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                          (order_id, institute_id, student_id, invoice_id, actor["id"], amount, fingerprint, now, now))
+            if public_link:
+                conn.execute('''INSERT INTO cashfree_payment_link_orders
+                    (order_id,link_digest,payment_option,created_at) VALUES (?,?,?,?)''',
+                    (order_id,public_link['digest'],public_link['option'],now))
         conn.commit()  # Persist the mapping before a webhook can arrive.
         payload = {
             "order_id": order_id, "order_amount": amount / 100, "order_currency": "INR",

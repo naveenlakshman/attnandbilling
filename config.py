@@ -160,6 +160,9 @@ class Config:
     CASHFREE_API_URL = os.environ.get("CASHFREE_API_URL", "https://sandbox.cashfree.com/pg")
     CASHFREE_INSTITUTE_ID = int(os.environ.get("CASHFREE_INSTITUTE_ID", "1"))
     CASHFREE_NOTIFY_URL = os.environ.get("CASHFREE_NOTIFY_URL", "")
+    CASHFREE_PAYMENT_LINKS_ENABLED = _env_bool("CASHFREE_PAYMENT_LINKS_ENABLED", default=False)
+    CASHFREE_PAYMENT_LINK_BASE_URL = os.environ.get("CASHFREE_PAYMENT_LINK_BASE_URL", "").strip()
+    CASHFREE_PAYMENT_LINK_DAYS = max(1, min(int(os.environ.get("CASHFREE_PAYMENT_LINK_DAYS", "30")), 90))
 
     # Google Maps (Geocoding / Pincode lookup)
     GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")

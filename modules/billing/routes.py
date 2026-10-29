@@ -17,6 +17,7 @@ import hashlib
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
 from services.document_numbers import allocate_document_number
+from services import payment_links
 from services.subscriptions import (
     PlanLimitExceeded,
     SubscriptionAccessDenied,
@@ -5003,6 +5004,7 @@ def invoice_view(invoice_id):
     else:
         balance_amount = invoice_total - total_paid - total_written_off
 
+    student_payment_url = payment_links.build_link(conn, get_current_institute_id(default=1), invoice_id)
     conn.close()
 
     return render_template(
@@ -5015,6 +5017,7 @@ def invoice_view(invoice_id):
         balance_amount=balance_amount,
         total_written_off=total_written_off,
         effective_status=effective_status,
+        student_payment_url=student_payment_url,
         cashfree_available=(
             get_current_institute_id() == current_app.config.get("CASHFREE_INSTITUTE_ID", 1)
             and session.get("role") in {"admin", "staff"}
@@ -7072,6 +7075,7 @@ def invoice_public_download(token):
 def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
     try:
         cur.execute("""
             SELECT
@@ -7082,9 +7086,9 @@ def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
                 students.full_name,
                 students.phone
             FROM invoices
-            JOIN students ON invoices.student_id = students.id
-            WHERE invoices.id = ?
-        """, (invoice_id,))
+            JOIN students ON invoices.student_id = students.id AND students.institute_id = invoices.institute_id
+            WHERE invoices.id = ? AND invoices.institute_id = ?
+        """, (invoice_id, current_inst))
         invoice = cur.fetchone()
 
         if not invoice:
@@ -7113,6 +7117,7 @@ def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
             f"Dear {student_name}, invoice {invoice_no} for Rs.{amount:.0f} is ready. "
             f"Download your invoice: {download_url} - Global IT Education"
         )
+        message = payment_links.append_to_message(message, payment_links.build_link(conn, current_inst, invoice_id))
 
         result = send_sms(phone, message)
         if result.get("success"):
@@ -7728,6 +7733,8 @@ def reminder_send_sms():
         conn.close()
         return jsonify({"success": False, "error": "Student has no phone number on record"}), 400
 
+    message_text = payment_links.append_to_message(
+        message_text, payment_links.build_link(conn, current_inst, reminder['invoice_id']))
     result = send_sms(phone, message_text)
     now = datetime.now().isoformat(timespec="seconds")
     status = "sent" if result.get("success") else "failed"

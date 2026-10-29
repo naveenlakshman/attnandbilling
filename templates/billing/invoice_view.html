@@ -428,7 +428,7 @@
   <a class="btn btn-secondary" href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}" target="_blank"> Print Bill </a>
   <a href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}?mode=pdf" target="_blank" class="btn btn-success">⬇️ Download PDF</a>
   {% if invoice.phone %}
-  <form method="post" action="{{ url_for('billing.invoice_send_sms', invoice_id=invoice.id) }}" style="display:inline;" onsubmit="return confirm('Send invoice download link to {{ invoice.phone }}?');">
+  <form method="post" action="{{ url_for('billing.invoice_send_sms', invoice_id=invoice.id) }}" style="display:inline;" onsubmit="return confirm('Send invoice links to {{ invoice.phone }}?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn btn-info" style="color:#fff;" title="Send invoice download link via SMS">
       📱 Send SMS

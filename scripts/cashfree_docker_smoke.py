@@ -6,6 +6,7 @@ import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import requests
 
@@ -47,12 +48,13 @@ def inspect():
 def migrate():
     conn = local_connection()
     try:
-        migration = Path(__file__).resolve().parents[1] / 'migrations/20261029_cashfree_sandbox.sql'
-        sql = '\n'.join(line for line in migration.read_text().splitlines() if not line.startswith('--'))
         cursor = conn._conn.cursor()
-        for statement in sql.split(';'):
-            if statement.strip():
-                cursor.execute(statement)
+        for filename in ('20261029_cashfree_sandbox.sql','20261029_cashfree_student_payment_links.sql'):
+            migration = Path(__file__).resolve().parents[1] / 'migrations' / filename
+            sql = '\n'.join(line for line in migration.read_text().splitlines() if not line.startswith('--'))
+            for statement in sql.split(';'):
+                if statement.strip():
+                    cursor.execute(statement)
         conn.commit()
         print('Cashfree order-table migration applied to local Docker test database.')
     finally:
@@ -95,7 +97,7 @@ def diagnose():
                   'payment_attempts',[payment.get('payment_status') for payment in payments])
 
 
-def prepare():
+def prepare(link_demo=False):
     conn = local_connection()
     try:
         now = datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(timespec='seconds')
@@ -113,19 +115,25 @@ def prepare():
             student_id = cur.lastrowid
         else:
             student_id = student['id']
+        fixture_note = 'Cashfree student payment link test' if link_demo else 'Cashfree local sandbox smoke test'
+        amount = 1000 if link_demo else 10
         invoice = conn.execute('''SELECT id,invoice_no FROM invoices WHERE institute_id=1 AND student_id=?
-            AND notes='Cashfree local sandbox smoke test' AND status='unpaid' ORDER BY id DESC LIMIT 1''', (student_id,)).fetchone()
+            AND notes=? AND status='unpaid' ORDER BY id DESC LIMIT 1''', (student_id,fixture_note)).fetchone()
         if not invoice:
-            invoice_no = 'CF-SANDBOX-LOCAL-' + uuid.uuid4().hex[:8].upper()
+            invoice_no = ('CF-LINK-LOCAL-' if link_demo else 'CF-SANDBOX-LOCAL-') + uuid.uuid4().hex[:8].upper()
             cur.execute('''INSERT INTO invoices (institute_id,invoice_no,student_id,invoice_date,
                 subtotal,total_amount,installment_type,notes,status,created_by,branch_id,created_at)
-                VALUES (1,?,?,?,10,10,'full','Cashfree local sandbox smoke test','unpaid',?,?,?)''',
-                        (invoice_no,student_id,now[:10],user['id'],user['branch_id'],now))
+                VALUES (1,?,?,?,?,?,?,?,'unpaid',?,?,?)''',
+                        (invoice_no,student_id,now[:10],amount,amount,'custom' if link_demo else 'full',
+                         fixture_note,user['id'],user['branch_id'],now))
             invoice_id = cur.lastrowid
             cur.execute('''INSERT INTO invoice_items (invoice_id,description,quantity,unit_price,
-                line_total,created_at) VALUES (?,'Cashfree sandbox payment test',1,10,10,?)''', (invoice_id,now))
-            cur.execute('''INSERT INTO installment_plans (invoice_id,installment_no,due_date,
-                amount_due,amount_paid,status,created_at) VALUES (?,1,?,10,0,'pending',?)''', (invoice_id,now[:10],now))
+                line_total,created_at) VALUES (?,'Cashfree sandbox payment test',1,?,?,?)''', (invoice_id,amount,amount,now))
+            for index in range(2 if link_demo else 1):
+                due_date = (datetime.fromisoformat(now)+timedelta(days=30*index)).date().isoformat()
+                cur.execute('''INSERT INTO installment_plans (invoice_id,installment_no,due_date,
+                    amount_due,amount_paid,status,created_at) VALUES (?,?,?,?,0,'pending',?)''',
+                    (invoice_id,index+1,due_date,amount/(2 if link_demo else 1),now))
         else:
             invoice_id,invoice_no = invoice['id'],invoice['invoice_no']
         conn.commit()
@@ -215,9 +223,70 @@ def smoke():
     print('checkout_url',f"http://globalit.localhost:8080/billing/invoice/{fixture['invoice_id']}?cashfree_order_id={order_id}")
 
 
+def links_smoke():
+    local_connection().close()
+    fixture = prepare(link_demo=True)
+    from app import app
+    from modules.billing import routes, auto_reminders
+    from services import payment_links
+    with app.app_context():
+        conn = local_connection()
+        try:
+            payment_url = payment_links.build_link(conn,1,fixture['invoice_id'])
+        finally:
+            conn.close()
+    if not payment_url:
+        raise RuntimeError('Enable CASHFREE_PAYMENT_LINKS_ENABLED in .env.docker for this local test.')
+    parsed = requests.utils.urlparse(payment_url)
+    client = requests.Session()
+    client.trust_env = False
+    client.headers['Host'] = parsed.netloc
+    local_url = 'http://127.0.0.1:8080'+parsed.path
+    page = client.get(local_url,timeout=15,allow_redirects=False)
+    print('student_page_http',page.status_code)
+    assert page.status_code == 200 and 'data-amount="500.00"' in page.text and 'data-amount="1000.00"' in page.text
+    assert 'https://sandbox.cashfree.com/pg/view/sessions/checkout' in page.headers.get('Content-Security-Policy','')
+    token = re.search(r'name="csrf_token" value="([^"]+)"',page.text).group(1)
+    headers = {'X-CSRFToken':token,'Idempotency-Key':str(uuid.uuid4())}
+    result = client.post(local_url+'/orders',headers=headers,json=dict(
+        amount='500.00',payment_option='installment',name='Cashfree Sandbox Test',
+        phone='9999999999',email='cashfree-sandbox@example.com'),timeout=35)
+    print('anonymous_order_http',result.status_code)
+    if result.status_code != 200:
+        print('order_error',result.json().get('error'))
+        raise RuntimeError('Student-link sandbox order creation failed.')
+    order_id = result.json()['order_id']
+    print('payment_session_returned',bool(result.json().get('payment_session_id')))
+    verified = client.post(local_url+'/orders/'+order_id+'/verify',headers=headers,timeout=35)
+    print('anonymous_verify_http',verified.status_code,'status',verified.json().get('status'))
+    assert verified.status_code == 200
+    with app.test_request_context(base_url=Config.CASHFREE_PAYMENT_LINK_BASE_URL):
+        with patch.object(routes,'send_sms',return_value={'success':False,'error':'Local preview only'}) as sms:
+            routes._send_invoice_sms_link(fixture['invoice_id'],user_id=fixture['admin_user_id'])
+            message = sms.call_args.args[1]
+            print('invoice_sms_preview_has_both_links','/billing/invoice/download/' in message and '/billing/pay/' in message)
+    conn = local_connection()
+    try:
+        reminder = dict(conn.execute('''SELECT ip.id installment_id,ip.due_date due_date_iso,
+            ip.amount_due-ip.amount_paid balance_due,i.id invoice_id,i.institute_id,i.invoice_no,i.branch_id,
+            s.id student_id,s.full_name student_name,s.phone student_phone
+            FROM installment_plans ip JOIN invoices i ON i.id=ip.invoice_id
+            JOIN students s ON s.id=i.student_id WHERE i.id=? ORDER BY ip.installment_no LIMIT 1''',
+            (fixture['invoice_id'],)).fetchone())
+    finally:
+        conn.close()
+    with patch.object(auto_reminders,'_load_due_installments',return_value=[reminder]), \
+         patch.object(auto_reminders,'send_sms',side_effect=RuntimeError('Dry run must never send SMS')):
+        preview = auto_reminders.send_automatic_fee_reminders(dry_run=True,limit=1)
+    print('automatic_sms_preview_has_payment_link',bool(preview['items'] and '/billing/pay/' in preview['items'][0].get('message_text','')))
+    print('student_payment_url',payment_url)
+    print('staff_invoice_url',Config.CASHFREE_PAYMENT_LINK_BASE_URL+'/billing/invoice/'+str(fixture['invoice_id']))
+    print('sms_messages_sent',0)
+
+
 if __name__ == '__main__':
     commands = {'inspect': inspect, 'migrate': migrate, 'routing': routing, 'diagnose': diagnose,
-                'prepare': prepare, 'smoke': smoke}
+                'prepare': prepare, 'smoke': smoke, 'links-smoke': links_smoke}
     if len(sys.argv) != 2 or sys.argv[1] not in commands:
-        raise SystemExit('Usage: python -m scripts.cashfree_docker_smoke inspect|migrate|routing|diagnose|prepare|smoke')
+        raise SystemExit('Usage: python -m scripts.cashfree_docker_smoke inspect|migrate|routing|diagnose|prepare|smoke|links-smoke')
     commands[sys.argv[1]]()

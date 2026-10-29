@@ -2,11 +2,11 @@
 
 from functools import wraps
 
-from flask import current_app, jsonify, request, session, url_for
+from flask import current_app, jsonify, render_template, request, session, url_for
 
 from db import get_conn
 from extensions import csrf, limiter
-from services import cashfree, cashfree_payments
+from services import cashfree, cashfree_payments, payment_links
 from services.tenant_context import get_current_institute_id
 
 
@@ -47,19 +47,64 @@ def _errors(func):
 
 
 def register_cashfree_routes(billing_bp):
+    public_endpoints = {'billing.cashfree_public_pay', 'billing.cashfree_public_create', 'billing.cashfree_public_verify'}
+
     @billing_bp.after_request
     def cashfree_checkout_headers(response):
+        public = request.endpoint in public_endpoints
+        if public:
+            response.headers['Cache-Control'] = 'no-store'
+            response.headers['Referrer-Policy'] = 'no-referrer'
+            response.headers['X-Robots-Tag'] = 'noindex, nofollow'
         if (
-            request.endpoint == 'billing.invoice_view'
+            (request.endpoint == 'billing.invoice_view' or public)
             and response.status_code == 200
             and current_app.config.get('SECURITY_HEADERS_ENABLED')
-            and session.get('role') in {'admin', 'staff'}
+            and (public or session.get('role') in {'admin', 'staff'})
             and get_current_institute_id() == current_app.config.get('CASHFREE_INSTITUTE_ID', 1)
             and cashfree.configured()
         ):
             policy = response.headers.get('Content-Security-Policy', current_app.config['CONTENT_SECURITY_POLICY'])
             response.headers['Content-Security-Policy'] = cashfree.checkout_content_security_policy(policy)
         return response
+
+    @billing_bp.route('/pay/<token>', methods=['GET'])
+    @limiter.limit('60 per minute')
+    def cashfree_public_pay(token):
+        conn = get_conn()
+        try:
+            invoice = payment_links.resolve(conn, token, get_current_institute_id())
+            current = payment_links.amounts(conn, invoice)
+            pending_choice = None
+            verified_payment = None
+            if request.args.get('cashfree_order_id'):
+                order = payment_links.linked_order(conn, token, request.args['cashfree_order_id'], invoice)
+                pending_choice = order['payment_option']
+            if request.args.get('cashfree_paid_order'):
+                order = payment_links.linked_order(conn, token, request.args['cashfree_paid_order'], invoice)
+                if order['status'] == 'PAID' and order['receipt_id']:
+                    verified_payment = conn.execute('''SELECT receipt_no,amount_received FROM receipts
+                        WHERE id=? AND invoice_id=? AND institute_id=?''',
+                        (order['receipt_id'],invoice['id'],invoice['institute_id'])).fetchone()
+            return render_template('billing/student_payment.html', invoice=invoice, amounts=current,
+                                   token=token, pending_choice=pending_choice, verified_payment=verified_payment)
+        except cashfree.CashfreeError as exc:
+            return str(exc), exc.status
+        finally:
+            conn.close()
+
+    @billing_bp.route('/pay/<token>/orders', methods=['POST'])
+    @limiter.limit('10 per minute')
+    @_errors
+    def cashfree_public_create(token):
+        return payment_links.create_order(token, get_current_institute_id(), request.get_json(silent=True),
+                                          request.headers.get('Idempotency-Key'))
+
+    @billing_bp.route('/pay/<token>/orders/<order_id>/verify', methods=['POST'])
+    @limiter.limit('30 per minute')
+    @_errors
+    def cashfree_public_verify(token, order_id):
+        return payment_links.verify_order(token, get_current_institute_id(), order_id)
 
     @billing_bp.route("/cashfree/orders", methods=["POST"])
     @limiter.limit("10 per minute")

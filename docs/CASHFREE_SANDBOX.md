@@ -1,6 +1,8 @@
 # Cashfree sandbox fee collection
 
 The Flask billing blueprint exposes Cashfree checkout on **Bill of Supply / invoice detail**.
+Signed student payment links and reminder integration are described in
+[Student payment links](CASHFREE_STUDENT_PAYMENT_LINKS.md).
 It uses the existing invoice, receipt, installment, tenant receipt-number sequence, and activity-log tables.
 Sandbox receipts are labelled `SANDBOX Cashfree` in their notes. Use an ERP test database:
 simulated payments update that database's fee ledger.

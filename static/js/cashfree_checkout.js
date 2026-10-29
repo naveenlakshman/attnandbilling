@@ -10,6 +10,13 @@
   let pendingOrder = new URLSearchParams(window.location.search).get('cashfree_order_id');
   let requestKey = null;
   let requestDetails = null;
+  const paymentChoice = form.elements.payment_option;
+  if (paymentChoice) {
+    paymentChoice.addEventListener('change', () => {
+      form.elements.amount.value = paymentChoice.selectedOptions[0].dataset.amount;
+      refresh();
+    });
+  }
   function newRequestKey() {
     const crypto = window.crypto;
     if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -29,6 +36,7 @@
     pay.disabled = busy || !form.checkValidity();
     check.disabled = busy;
     check.hidden = !pendingOrder;
+    if (paymentChoice) paymentChoice.disabled = busy || !!pendingOrder;
   };
   async function post(url, body, key) {
     const headers = {'Content-Type': 'application/json', 'X-CSRFToken': form.elements.csrf_token.value};
@@ -48,6 +56,7 @@
       status.textContent = 'Payment verified and receipt recorded.';
       const url = new URL(window.location.href);
       url.searchParams.delete('cashfree_order_id');
+      if (paymentChoice) url.searchParams.set('cashfree_paid_order', pendingOrder);
       window.location.replace(url.href);
       return result;
     }
@@ -87,10 +96,11 @@
         amount: form.elements.amount.value, phone: form.elements.phone.value.trim(),
         email: form.elements.email.value.trim(), name: form.elements.name.value.trim()
       };
-      const details = JSON.stringify(body);
-      if (details !== requestDetails) {
+      if (paymentChoice) body.payment_option = paymentChoice.value;
+      const requestBody = JSON.stringify(body);
+      if (requestBody !== requestDetails) {
         requestKey = newRequestKey();
-        requestDetails = details;
+        requestDetails = requestBody;
       }
       status.textContent = 'Opening sandbox checkout...';
       const order = await post(form.dataset.createUrl, body, requestKey);
