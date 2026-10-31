@@ -1,17 +1,14 @@
-# Only the reviewed planner runtime files and build instructions are uploaded.
+# Only the classroom template, JavaScript and build instructions are uploaded.
 *
-!Dockerfile.batch-planner
-!cloudbuild.batch-planner.yaml
-!modules/
-modules/*
-!modules/attendance/
-modules/attendance/*
-!modules/attendance/routes.py
-!services/
-services/*
-!services/batch_syllabus_progress.py
+!Dockerfile.classroom-view
+!cloudbuild.classroom-view.yaml
 !templates/
 templates/*
-!templates/attendance/
-templates/attendance/*
-!templates/attendance/batch_planner.html
+!templates/lms_admin/
+templates/lms_admin/*
+!templates/lms_admin/classroom_teaching_dashboard.html
+!static/
+static/*
+!static/js/
+static/js/*
+!static/js/classroom_teaching_dashboard.js
