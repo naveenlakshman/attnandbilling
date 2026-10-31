@@ -6,6 +6,7 @@ import math
 from db import get_conn, log_activity
 from functools import wraps
 from services.tenant_context import get_current_institute_id
+from services.batch_syllabus_progress import batch_syllabus_progress
 
 attendance_bp = Blueprint('attendance', __name__)
 
@@ -2899,8 +2900,9 @@ def batch_planner():
             batch_duration_mins = 30
 
         if selected_branch_id:
-            cur.execute("SELECT * FROM branches WHERE id = ?", (selected_branch_id,))
-            selected_branch = cur.fetchone()
+            selected_branch = next((branch for branch in branches if branch['id'] == selected_branch_id), None)
+            if selected_branch is None:
+                return 'Branch not found or access denied.', 403
 
             cur.execute("""
                 SELECT b.id, b.batch_name, b.start_time, b.end_time, b.status,
@@ -2909,17 +2911,20 @@ def batch_planner():
                        COUNT(sb.id) as student_count,
                        COUNT(CASE WHEN sb.uses_own_laptop = 0 THEN 1 END) as computer_count
                 FROM batches b
-                LEFT JOIN courses c ON b.course_id = c.id
+                LEFT JOIN courses c ON b.course_id = c.id AND c.institute_id = ?
                 LEFT JOIN student_batches sb ON sb.batch_id = b.id AND sb.status = 'active'
                 WHERE b.branch_id = ? AND b.status = 'active'
                 GROUP BY b.id
                 ORDER BY b.start_time
-            """, (selected_branch_id,))
+            """, (current_inst, selected_branch_id,))
             raw_batches = cur.fetchall()
 
             no_of_computers = selected_branch['no_of_computers'] if selected_branch['no_of_computers'] else 0
 
             batch_list = [dict(row) for row in raw_batches]
+            progress = batch_syllabus_progress(conn, current_inst, [batch['id'] for batch in batch_list])
+            for batch in batch_list:
+                batch['syllabus_progress'] = progress[batch['id']]
 
             # Split into currently-running vs future-planned based on start_date
             IST = timezone(timedelta(hours=5, minutes=30))

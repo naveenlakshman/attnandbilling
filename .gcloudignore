@@ -1,15 +1,17 @@
-# Hotfix source upload: only expense category runtime files and build instructions.
+# Only the reviewed planner runtime files and build instructions are uploaded.
 *
-!Dockerfile.expense-hotfix
-!cloudbuild.expense-hotfix.yaml
+!Dockerfile.batch-planner
+!cloudbuild.batch-planner.yaml
 !modules/
 modules/*
-!modules/billing/
-modules/billing/*
-!modules/billing/routes.py
+!modules/attendance/
+modules/attendance/*
+!modules/attendance/routes.py
+!services/
+services/*
+!services/batch_syllabus_progress.py
 !templates/
 templates/*
-!templates/billing/
-templates/billing/*
-!templates/billing/expense_category_form.html
-!templates/billing/expense_categories.html
+!templates/attendance/
+templates/attendance/*
+!templates/attendance/batch_planner.html
