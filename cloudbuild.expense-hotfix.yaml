@@ -1,5 +1,5 @@
 substitutions:
-  _BASE_IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:7549d6c611a3a2a46f38cc39dc8a54557a4b5a18f16f2ccc523073408b2a3d5d
+  _BASE_IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:9e458db762e4617811581907f1a0df32ef64abd25e55e714f62c278332808463
   _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:expense-hotfix
 steps:
   - id: build-hotfix

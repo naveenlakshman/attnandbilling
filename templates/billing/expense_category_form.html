@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Add Expense Category - ERP{% endblock %}
+{% block title %}{{ 'Edit' if category else 'Add' }} Expense Category - ERP{% endblock %}
 
 {% block content %}
 
@@ -29,7 +29,7 @@
 </style>
 
 <div class="page-header">
-  <h2>Add Expense Category</h2>
+  <h2>{{ 'Edit' if category else 'Add' }} Expense Category</h2>
 </div>
 
 <div class="card">
@@ -43,13 +43,25 @@
         name="category_name" 
         id="category_name"
         maxlength="255"
+        value="{{ category.category_name if category else '' }}"
         class="form-control"
         placeholder="Example: Electricity, Rent, Salary"
         required>
     </div>
 
+    {% if category %}
+    <div class="form-group">
+      <label for="is_active">Status</label>
+      <select name="is_active" id="is_active" class="form-control" required aria-describedby="category_status_help">
+        <option value="1" {% if category.is_active %}selected{% endif %}>Active</option>
+        <option value="0" {% if not category.is_active %}selected{% endif %}>Inactive</option>
+      </select>
+      <small id="category_status_help">Inactive categories remain on existing expenses and cannot be selected for new expenses.</small>
+    </div>
+    {% endif %}
+
     <div class="form-actions">
-      <button type="submit" class="btn btn-primary">Save Category</button>
+      <button type="submit" class="btn btn-primary">{{ 'Update' if category else 'Save' }} Category</button>
       <a href="{{ url_for('billing.expense_categories') }}" class="btn btn-secondary">Cancel</a>
     </div>
 

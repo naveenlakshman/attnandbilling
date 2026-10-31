@@ -1,9 +1,11 @@
 import sqlite3
 import uuid
+from pathlib import Path
 
 import pymysql
 import pytest
 from flask import Blueprint, Flask
+from jinja2 import ChoiceLoader, DictLoader, FileSystemLoader
 from flask_wtf.csrf import generate_csrf
 
 from db import MySQLConnectionWrapper
@@ -18,6 +20,7 @@ def application(connect,monkeypatch):
     csrf.init_app(app)
     bp = Blueprint('billing',__name__)
     bp.add_url_rule('/expense-category/new',view_func=routes.expense_category_new,methods=['GET','POST'])
+    bp.add_url_rule('/expense-category/<int:category_id>/edit',view_func=routes.expense_category_edit,methods=['GET','POST'])
     bp.add_url_rule('/expense-categories',view_func=routes.expense_categories)
     bp.add_url_rule('/expense/new',view_func=routes.expense_new,methods=['GET','POST'])
     bp.add_url_rule('/expenses',endpoint='expenses',view_func=lambda:'expenses')
@@ -138,6 +141,113 @@ def test_category_post_requires_csrf_and_login(expense_app):
     assert response.location.endswith('/login') and not audit
 
 
+@pytest.mark.parametrize('role',['admin','staff'])
+def test_edit_own_category_preserves_id_ownership_and_existing_expenses(expense_app,role):
+    app,client,token,audit,connect = expense_app
+    with client.session_transaction() as state:
+        state['role'] = role
+    conn = connect()
+    conn.execute("INSERT INTO expenses (institute_id,category_id,title,amount) VALUES (7,7,'Existing expense',25)")
+    conn.commit()
+    loaded = client.get('/billing/expense-category/7/edit').json['category']
+    assert loaded['category_name'] == 'Own active category'
+    response = post(client,token,'/billing/expense-category/7/edit',
+                    {'category_name':'  Renamed category  ','is_active':'0','institute_id':'16'})
+    assert response.location.endswith('/billing/expense-categories')
+    category = conn.execute('SELECT * FROM expense_categories WHERE id=7').fetchone()
+    assert (category['category_name'],category['institute_id'],category['is_active']) == ('Renamed category',7,0)
+    expense = conn.execute('SELECT * FROM expenses').fetchone()
+    assert expense['category_id'] == 7 and expense['amount'] == 25
+    assert not client.get('/billing/expense/new').json['categories']
+    assert audit[0]['record_id'] == 7 and audit[0]['action_type'] == 'update'
+    assert audit[0]['institute_id'] == 7 and audit[0]['conn'] is not None
+    conn.close()
+
+
+@pytest.mark.parametrize('category_id',[1,16,999])
+@pytest.mark.parametrize('method',['get','post'])
+def test_edit_cannot_access_foreign_or_missing_category(expense_app,category_id,method):
+    app,client,token,audit,connect = expense_app
+    path = f'/billing/expense-category/{category_id}/edit'
+    response = client.get(path) if method == 'get' else post(client,token,path,{'category_name':'Tampered','is_active':'0'})
+    assert response.status_code == 404 and not audit
+    conn = connect()
+    assert conn.execute("SELECT COUNT(*) FROM expense_categories WHERE category_name='Tampered'").fetchone()[0] == 0
+    conn.close()
+
+
+@pytest.mark.parametrize('values',[
+    {'category_name':' '}, {'category_name':'x'*256},
+    {'category_name':'Own inactive category'}, {'category_name':'New name','is_active':'invalid'},
+])
+def test_invalid_edit_preserves_category(expense_app,values):
+    app,client,token,audit,connect = expense_app
+    response = post(client,token,'/billing/expense-category/7/edit',values)
+    assert response.status_code == 200 and not audit
+    assert response.json['category']['category_name'] == values['category_name'].strip()
+    conn = connect()
+    row = conn.execute('SELECT * FROM expense_categories WHERE id=7').fetchone()
+    assert row['category_name'] == 'Own active category' and row['is_active'] == 1
+    conn.close()
+
+
+def test_edit_allows_unchanged_name_and_reactivation(expense_app):
+    app,client,token,audit,connect = expense_app
+    unchanged = post(client,token,'/billing/expense-category/8/edit',{'category_name':'Own inactive category'})
+    assert unchanged.location.endswith('/billing/expense-categories')
+    assert client.get('/billing/expense-category/8/edit').json['category']['is_active'] == 0
+    activated = post(client,token,'/billing/expense-category/8/edit',{'category_name':'Own inactive category','is_active':'1'})
+    assert activated.location.endswith('/billing/expense-categories')
+    assert {row['id'] for row in client.get('/billing/expense/new').json['categories']} == {7,8}
+
+
+def test_edit_requires_csrf_and_login(expense_app):
+    app,client,token,audit,connect = expense_app
+    path = '/billing/expense-category/7/edit'
+    assert client.post(path,data={'category_name':'Example'}).status_code == 400
+    with client.session_transaction() as state:
+        state.pop('user_id')
+    assert client.get(path).location.endswith('/login')
+    assert post(client,token,path,{'category_name':'Example'}).location.endswith('/login')
+    assert not audit
+
+
+def test_edit_rolls_back_when_audit_fails(expense_app,monkeypatch):
+    app,client,token,audit,connect = expense_app
+    def fail(**values):
+        raise RuntimeError('Audit failed')
+    monkeypatch.setattr(routes,'log_activity',fail)
+    response = post(client,token,'/billing/expense-category/7/edit',{'category_name':'Should roll back','is_active':'0'})
+    assert response.location.endswith('/billing/expense-category/7/edit')
+    conn = connect()
+    row = conn.execute('SELECT * FROM expense_categories WHERE id=7').fetchone()
+    assert row['category_name'] == 'Own active category' and row['is_active'] == 1
+    conn.close()
+
+
+def test_category_edit_templates_render_real_links_prefill_and_escape(expense_app,monkeypatch):
+    from flask import render_template
+    app,client,token,audit,connect = expense_app
+    app.jinja_loader = ChoiceLoader([
+        DictLoader({'base.html':'{% block title %}{% endblock %}{% block content %}{% endblock %}'}),
+        FileSystemLoader(str(Path(__file__).resolve().parents[1]/'templates')),
+    ])
+    monkeypatch.setattr(routes,'render_template',render_template)
+    listing = client.get('/billing/expense-categories').text
+    assert 'href="/billing/expense-category/7/edit"' in listing
+    assert 'href="/billing/expense-category/16/edit"' not in listing
+    editing = client.get('/billing/expense-category/8/edit').text
+    assert 'Edit Expense Category' in editing and 'value="Own inactive category"' in editing
+    assert '<option value="0" selected>Inactive</option>' in editing
+    assert 'name="csrf_token"' in editing and 'maxlength="255"' in editing
+    creating = client.get('/billing/expense-category/new').text
+    assert 'Add Expense Category' in creating and 'value=""' in creating
+    assert 'name="is_active"' not in creating
+    escaped = post(client,token,'/billing/expense-category/7/edit',{'category_name':'<script>alert(1)</script>','is_active':'bad'}).text
+    assert '&lt;script&gt;alert(1)&lt;/script&gt;' in escaped
+    assert '<script>alert(1)</script>' not in escaped
+
+
 def test_mysql_strict_category_insert_and_global_name_conflict(mysql_server,monkeypatch):
     database = 'expense_test_'+uuid.uuid4().hex
     admin = pymysql.connect(**mysql_server)
@@ -165,4 +275,17 @@ def test_mysql_strict_category_insert_and_global_name_conflict(mysql_server,monk
     assert conflict.location.endswith('/billing/expense-category/new')
     with client.session_transaction() as state:
         assert any('Category name is already in use.' in message for category,message in state['_flashes'])
+    category_id = conn.execute("SELECT id FROM expense_categories WHERE institute_id=7").fetchone()['id']
+    conn.rollback()
+    edited = post(client,token,f'/billing/expense-category/{category_id}/edit',{'category_name':'Renamed in MySQL','is_active':'0'})
+    assert edited.location.endswith('/billing/expense-categories')
+    row = conn.execute('SELECT * FROM expense_categories WHERE id=?',(category_id,)).fetchone()
+    assert row['category_name'] == 'Renamed in MySQL' and row['is_active'] == 0 and row['institute_id'] == 7
+    conn.rollback()
+    conflict = post(client,token,f'/billing/expense-category/{category_id}/edit',{'category_name':'Existing global name','is_active':'1'})
+    assert conflict.location.endswith(f'/billing/expense-category/{category_id}/edit')
+    with client.session_transaction() as state:
+        assert any('Category name is already in use.' in message for category,message in state['_flashes'])
+    row = conn.execute('SELECT * FROM expense_categories WHERE id=?',(category_id,)).fetchone()
+    assert row['category_name'] == 'Renamed in MySQL' and row['is_active'] == 0
     conn.close()

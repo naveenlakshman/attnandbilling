@@ -88,7 +88,7 @@
 
         <td>
           <div class="actions">
-            <a href="#" class="btn btn-sm">Edit</a>
+            <a href="{{ url_for('billing.expense_category_edit', category_id=c.id) }}" class="btn btn-sm" aria-label="Edit {{ c.category_name }}">Edit</a>
           </div>
         </td>
 

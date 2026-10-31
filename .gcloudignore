@@ -1,4 +1,4 @@
-# Hotfix source upload: only two runtime files and build instructions.
+# Hotfix source upload: only expense category runtime files and build instructions.
 *
 !Dockerfile.expense-hotfix
 !cloudbuild.expense-hotfix.yaml
@@ -12,3 +12,4 @@ templates/*
 !templates/billing/
 templates/billing/*
 !templates/billing/expense_category_form.html
+!templates/billing/expense_categories.html

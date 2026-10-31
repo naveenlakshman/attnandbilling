@@ -8173,6 +8173,77 @@ def expense_category_new():
 
     return render_template("billing/expense_category_form.html")
 
+@billing_bp.route("/expense-category/<int:category_id>/edit", methods=["GET", "POST"])
+@login_required
+def expense_category_edit(category_id):
+    current_inst = get_current_institute_id(default=1)
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        category = cur.execute(
+            "SELECT * FROM expense_categories WHERE id = ? AND institute_id = ?",
+            (category_id, current_inst),
+        ).fetchone()
+        if not category:
+            return "Expense category not found.", 404
+
+        if request.method == "POST":
+            category_name = request.form.get("category_name", "").strip()
+            is_active = request.form.get("is_active", str(category["is_active"]))
+            error = None
+            if not category_name:
+                error = "Category name is required."
+            elif len(category_name) > 255:
+                error = "Category name must be 255 characters or fewer."
+            elif is_active not in ("0", "1"):
+                error = "Select a valid category status."
+            elif cur.execute(
+                "SELECT id FROM expense_categories WHERE category_name = ? AND institute_id = ? AND id <> ?",
+                (category_name, current_inst, category_id),
+            ).fetchone():
+                error = "Category already exists."
+
+            if error:
+                flash(error, "danger")
+                category = dict(category)
+                category.update(category_name=category_name)
+                if is_active in ("0", "1"):
+                    category["is_active"] = int(is_active)
+                return render_template("billing/expense_category_form.html", category=category)
+
+            try:
+                cur.execute(
+                    "UPDATE expense_categories SET category_name = ?, is_active = ? WHERE id = ? AND institute_id = ?",
+                    (category_name, int(is_active), category_id, current_inst),
+                )
+                log_activity(
+                    user_id=session.get("user_id"),
+                    branch_id=session.get("branch_id"),
+                    action_type="update",
+                    module_name="expense_category",
+                    record_id=category_id,
+                    description=f"Updated expense category '{category['category_name']}' to '{category_name}' ({'active' if is_active == '1' else 'inactive'})",
+                    conn=conn,
+                    institute_id=current_inst,
+                )
+                conn.commit()
+            except Exception as exc:
+                conn.rollback()
+                if exc.args and exc.args[0] == 1062:
+                    flash("Category name is already in use. Choose another name.", "danger")
+                else:
+                    logger.exception("Failed to update expense category %s", category_id)
+                    flash("Unable to update the expense category. Please try again.", "danger")
+                return redirect(url_for("billing.expense_category_edit", category_id=category_id))
+
+            flash("Expense category updated successfully.", "success")
+            return redirect(url_for("billing.expense_categories"))
+
+        return render_template("billing/expense_category_form.html", category=dict(category))
+    finally:
+        conn.close()
+
+
 @billing_bp.route("/activity-logs", methods=["GET"])
 @login_required
 def activity_logs():
