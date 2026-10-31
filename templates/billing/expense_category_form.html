@@ -34,12 +34,15 @@
 
 <div class="card">
   <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <div class="form-group">
-      <label>Category Name *</label>
+      <label for="category_name">Category Name *</label>
       <input 
         type="text" 
         name="category_name" 
+        id="category_name"
+        maxlength="255"
         class="form-control"
         placeholder="Example: Electricity, Rent, Salary"
         required>

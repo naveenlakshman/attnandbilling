@@ -1,42 +1,14 @@
-# .gcloudignore - Explicit Cloud Build Source Exclusions
-.gcloudignore
-.git
-.gitignore
-
-# Environment & Credentials
-.env
-.env.*
-!.env.example
-!.env.docker.example
-!.env.mysql.example
-!.env.cloudsql.example
-!.env.production.example
-gcp-key.json
-*.key
-*.pem
-
-# Database Dumps & Large Binaries
-*.sql
-!migrations/*.sql
-backup_test_attn_billing.sql
-scratch/*.sql
-database.db
-instance/
-cloud-sql-proxy.exe
-*.tar.gz
-*.zip
-
-# Virtual Environments & Caches
-__pycache__/
-.venv/
-venv/
-.pytest_cache/
-scratch/*
-!scratch/test_*.py
-frontend/smart-counselling/node_modules/
-frontend/smart-counselling/.angular/
-static/smart-counselling/
-.pnpm-store/
-
-# Production LMS assets are served from GCS, not from the container image.
-static/lms/
+# Hotfix source upload: only two runtime files and build instructions.
+*
+!Dockerfile.expense-hotfix
+!cloudbuild.expense-hotfix.yaml
+!modules/
+modules/*
+!modules/billing/
+modules/billing/*
+!modules/billing/routes.py
+!templates/
+templates/*
+!templates/billing/
+templates/billing/*
+!templates/billing/expense_category_form.html

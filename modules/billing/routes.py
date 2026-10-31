@@ -7977,6 +7977,18 @@ def expense_new():
                 flash("Expense amount must be greater than 0.", "danger")
                 return redirect(url_for("billing.expense_new"))
 
+            branch = cur.execute(
+                "SELECT id FROM branches WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (branch_id, current_inst),
+            ).fetchone()
+            category = cur.execute(
+                "SELECT id FROM expense_categories WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (category_id, current_inst),
+            ).fetchone()
+            if not branch or not category:
+                flash("Select an active branch and expense category from your institute.", "danger")
+                return redirect(url_for("billing.expense_new"))
+
             now = datetime.now().isoformat(timespec="seconds")
 
             cur.execute("""
@@ -8046,7 +8058,7 @@ def expense_new():
     cur.execute("""
         SELECT *
         FROM expense_categories
-        WHERE is_active = 1 AND (institute_id = ? OR institute_id = 1)
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY category_name
     """, (current_inst,))
     categories = cur.fetchall()
@@ -8071,8 +8083,9 @@ def expense_categories():
     cur.execute("""
         SELECT *
         FROM expense_categories
+        WHERE institute_id = ?
         ORDER BY category_name ASC
-    """)
+    """, (get_current_institute_id(default=1),))
     categories = cur.fetchall()
 
     conn.close()
@@ -8085,12 +8098,15 @@ def expense_categories():
 @billing_bp.route("/expense-category/new", methods=["GET", "POST"])
 @login_required
 def expense_category_new():
-
+    current_inst = get_current_institute_id(default=1)
     if request.method == "POST":
         category_name = request.form.get("category_name", "").strip()
 
         if not category_name:
             flash("Category name is required.", "danger")
+            return redirect(url_for("billing.expense_category_new"))
+        if len(category_name) > 255:
+            flash("Category name must be 255 characters or fewer.", "danger")
             return redirect(url_for("billing.expense_category_new"))
 
         conn = get_conn()
@@ -8099,8 +8115,8 @@ def expense_category_new():
         # Check duplicate
         cur.execute("""
             SELECT id FROM expense_categories 
-            WHERE category_name = ?
-        """, (category_name,))
+            WHERE category_name = ? AND institute_id = ?
+        """, (category_name, current_inst))
         existing = cur.fetchone()
 
         if existing:
@@ -8113,19 +8129,20 @@ def expense_category_new():
 
             cur.execute("""
                 INSERT INTO expense_categories (
+                    institute_id,
                     category_name,
                     is_active,
                     created_at
                 )
-                VALUES (?, ?, ?)
+                VALUES (?, ?, ?, ?)
             """, (
+                current_inst,
                 category_name,
                 1,
                 now
             ))
 
             category_id = cur.lastrowid
-            conn.commit()
 
             # ✅ ERP logging (as you requested)
             log_activity(
@@ -8134,15 +8151,21 @@ def expense_category_new():
                 action_type="create",
                 module_name="expense_category",
                 record_id=category_id,
-                description=f"Created expense category '{category_name}'"
+                description=f"Created expense category '{category_name}'",
+                conn=conn,
+                institute_id=current_inst,
             )
+            conn.commit()
 
             flash("Expense category created successfully.", "success")
             return redirect(url_for("billing.expense_categories"))
 
         except Exception as e:
             conn.rollback()
-            flash(f"Error: {str(e)}", "danger")
+            if e.args and e.args[0] == 1062:
+                flash("Category name is already in use. Choose another name.", "danger")
+            else:
+                flash(f"Error: {str(e)}", "danger")
             return redirect(url_for("billing.expense_category_new"))
 
         finally:
