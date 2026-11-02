@@ -1,10 +1,26 @@
-# Only the certificate search template change and build instructions are uploaded.
+# Reviewed batch dates/progress runtime files and build instructions only.
 *
-!Dockerfile.certificate-search
-!cloudbuild.certificate-search.yaml
+!Dockerfile.batch-overview
+!cloudbuild.batch-overview.yaml
+!services/
+services/*
+!services/batch_schedule.py
+!modules/
+modules/*
+!modules/core/
+modules/core/*
+!modules/core/routes.py
+!modules/lms_admin/
+modules/lms_admin/*
+!modules/lms_admin/routes.py
 !templates/
 templates/*
-!templates/base.html
-!templates/certificates/
-templates/certificates/*
-!templates/certificates/admin_issue.html
+!templates/core/
+templates/core/*
+!templates/core/dashboard_staff.html
+!templates/lms_admin/
+templates/lms_admin/*
+!templates/lms_admin/classroom_teaching_dashboard.html
+!templates/includes/
+templates/includes/*
+!templates/includes/batch_end_summary.html

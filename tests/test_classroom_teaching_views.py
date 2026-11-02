@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from flask import Flask, render_template
 from jinja2 import ChoiceLoader, DictLoader, FileSystemLoader
 import pytest
+from services.batch_schedule import batch_end_summary
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,7 @@ def make_app():
             attendance_marked_today=index%2==0,class_completed_today=index%3==0,taught_cnt=index,total_cnt=20 if index!=9 else 0,taught_pct=index*5.0,
             next_topic='Working with functions',earlier_pending_summary='2 earlier topics pending' if index==2 else None,
             today_completed_topics=['Introduction'] if index%3==0 else [],last_taught_topic='Basics',last_taught_at='2026-10-31 10:00',launch_program_id=31 if index!=9 else None))
+        batches[-1]['end_summary']=batch_end_summary('2026-11-20' if index!=9 else None,today=date(2026,11,2))
     app.config['BATCHES'] = batches
     def dashboard():
         from flask import request
@@ -56,6 +58,9 @@ def test_both_views_use_one_filterable_batch_record_and_existing_actions(view):
     assert 'Class Completed' in html and 'Class Pending' in html
     assert 'Attendance N/A' in html and 'No syllabus configured' in html
     assert 'classroom_teaching_dashboard.js?v=1' in html
+    assert html.count('data-days-remaining="18"')==16
+    assert 'End date: 20-11-2026' in html and '18 days left' in html
+    assert 'End date not set' in html
 
 
 def test_list_escapes_names_and_staff_has_no_trainer_selector():

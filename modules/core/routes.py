@@ -5,6 +5,8 @@ import os
 import logging
 from db import get_conn, get_company_profile, clear_company_cache, _ensure_lms_batch_topic_progress_table
 from services.storage import get_storage_service
+from services.batch_syllabus_progress import batch_syllabus_progress
+from services.batch_schedule import batch_end_summary
 from .utils import login_required, admin_required
 
 logger = logging.getLogger("app.core")
@@ -456,7 +458,7 @@ def _staff_dashboard(institute_id):
 
     # ── My batches (trainer = me) ───────────────────────────────
     cur.execute("""
-        SELECT b.id, b.batch_name, b.start_time, b.end_time, b.status,
+        SELECT b.id, b.batch_name, b.start_time, b.end_time, b.end_date, b.status,
                c.course_name, br.branch_name,
                (SELECT COUNT(DISTINCT sb.student_id)
                 FROM student_batches sb
@@ -481,6 +483,7 @@ def _staff_dashboard(institute_id):
     """, [today_start_utc, tomorrow_start_utc, today])
     taught_batch_ids = {r["batch_id"] for r in cur.fetchall()}
 
+    syllabus_progress = batch_syllabus_progress(conn, institute_id, [b['id'] for b in raw_batches])
     my_batches = []
     for b in raw_batches:
         b_dict = dict(b)
@@ -496,6 +499,8 @@ def _staff_dashboard(institute_id):
         b_dict["attendance_pct"] = att_pct
         b_dict["is_attendance_full"] = (att_today_count >= student_count and student_count > 0)
         b_dict["class_taught_today"] = b_dict["id"] in taught_batch_ids
+        b_dict["syllabus_progress"] = syllabus_progress[b_dict['id']]
+        b_dict["end_summary"] = batch_end_summary(b_dict.get('end_date'), today=ist_now.date())
         my_batches.append(b_dict)
 
     batch_ids = [row["id"] for row in my_batches]

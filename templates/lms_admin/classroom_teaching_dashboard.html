@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'includes/batch_end_summary.html' import batch_end %}
 
 {% block title %}🎓 Classroom Teaching Mode{% endblock %}
 
@@ -136,6 +137,7 @@
                 <span class="live-badge-classroom d-none">● LIVE</span>
               </div>
               <div class="text-muted classroom-list-meta">{{ b.course_name or 'Course Not Mapped' }} · {{ b.branch_name or 'Main Branch' }} · {{ b.trainer_name or 'Unassigned' }}</div>
+              <div class="mt-1">{{ batch_end(b.end_summary) }}</div>
               <div class="d-flex align-items-center gap-2 classroom-list-meta mt-1">
                 {% if b.total_cnt %}
                 <progress class="classroom-list-progress" value="{{ b.taught_pct }}" max="100" aria-label="Syllabus completed for {{ b.batch_name }}">{{ b.taught_pct }}%</progress>
@@ -181,6 +183,7 @@
                   <div><strong>Branch:</strong> {{ b.branch_name or 'Main Branch' }}</div>
                   <div><strong>Time:</strong> 🕐 {{ b.start_time or '' }} - {{ b.end_time or '' }}</div>
                   <div><strong>Trainer:</strong> {{ b.trainer_name or 'Unassigned' }}</div>
+                  <div class="mt-2">{{ batch_end(b.end_summary) }}</div>
                 </div>
 
                 <!-- TOPIC PROGRESS & NEXT TOPIC INFO -->
