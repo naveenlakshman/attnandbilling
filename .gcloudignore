@@ -1,14 +1,10 @@
-# Only the classroom template, JavaScript and build instructions are uploaded.
+# Only the certificate search template change and build instructions are uploaded.
 *
-!Dockerfile.classroom-view
-!cloudbuild.classroom-view.yaml
+!Dockerfile.certificate-search
+!cloudbuild.certificate-search.yaml
 !templates/
 templates/*
-!templates/lms_admin/
-templates/lms_admin/*
-!templates/lms_admin/classroom_teaching_dashboard.html
-!static/
-static/*
-!static/js/
-static/js/*
-!static/js/classroom_teaching_dashboard.js
+!templates/base.html
+!templates/certificates/
+templates/certificates/*
+!templates/certificates/admin_issue.html
