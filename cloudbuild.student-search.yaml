@@ -1,0 +1,13 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:student-search
+steps:
+  - id: build-student-search
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, Dockerfile.student-search, --tag, '${_IMAGE}', .]
+  - id: compile-student-template
+    name: gcr.io/cloud-builders/docker
+    args: [run, --rm, '${_IMAGE}', python, -c, "from jinja2 import Environment,FileSystemLoader; Environment(loader=FileSystemLoader('templates')).get_template('billing/students.html'); print('student_template=OK')"]
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s

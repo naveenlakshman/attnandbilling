@@ -1,26 +1,9 @@
-# Reviewed batch dates/progress runtime files and build instructions only.
+# Reviewed student-search template and build instructions only.
 *
-!Dockerfile.batch-overview
-!cloudbuild.batch-overview.yaml
-!services/
-services/*
-!services/batch_schedule.py
-!modules/
-modules/*
-!modules/core/
-modules/core/*
-!modules/core/routes.py
-!modules/lms_admin/
-modules/lms_admin/*
-!modules/lms_admin/routes.py
+!Dockerfile.student-search
+!cloudbuild.student-search.yaml
 !templates/
 templates/*
-!templates/core/
-templates/core/*
-!templates/core/dashboard_staff.html
-!templates/lms_admin/
-templates/lms_admin/*
-!templates/lms_admin/classroom_teaching_dashboard.html
-!templates/includes/
-templates/includes/*
-!templates/includes/batch_end_summary.html
+!templates/billing/
+templates/billing/*
+!templates/billing/students.html
