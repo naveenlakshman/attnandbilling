@@ -125,6 +125,10 @@
           <div class="kpi-value text-muted mb-1">—</div>
           <p class="text-muted small mb-0">Not Marked Yet</p>
           {% endif %}
+          <div class="small text-muted mt-1">Current batch roster</div>
+          {% if att_outside_roster %}
+          <div class="small text-muted mt-2">{{ att_outside_roster }} additional attendance record{{ 's' if att_outside_roster != 1 else '' }} outside the current roster.</div>
+          {% endif %}
         </div>
         <div class="col-sm-8">
           <div class="d-flex justify-content-around text-center mt-2 mt-sm-0">

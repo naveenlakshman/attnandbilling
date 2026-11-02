@@ -33,6 +33,16 @@ def test_staff_dashboard_queries_and_renders_own_progress_and_end_dates(tmp_path
         CREATE TABLE activity_logs (institute_id INTEGER,user_id INTEGER,action_type TEXT,module_name TEXT,description TEXT,created_at TEXT);
         CREATE TABLE leave_requests (student_id INTEGER,status TEXT);
     ''')
+    from datetime import datetime
+    from services.batch_schedule import IST
+    today=datetime.now(IST).date().isoformat()
+    conn.executescript('''
+        INSERT INTO students (id,institute_id) VALUES (101,7),(102,7),(103,7),(104,7),(105,7);
+        INSERT INTO student_batches (id,batch_id,status,uses_own_laptop,student_id) VALUES (5,7,'completed',0,105);
+    ''')
+    conn.executemany('INSERT INTO attendance_records VALUES (?,?,?,?,?)',[
+        (1,101,7,today,'present'),(2,102,7,today,'present'),(3,104,10,today,'present'),(4,105,7,today,'present'),
+    ])
     conn.commit();conn.close()
     app=Flask(__name__)
     app.config.update(TESTING=True,SECRET_KEY='staff-batch-status')
@@ -65,3 +75,7 @@ def test_staff_dashboard_queries_and_renders_own_progress_and_end_dates(tmp_path
     assert 'value="37.5" max="100"' in response.text
     assert 'End date: 31-12-2099' in response.text and 'End date not set' in response.text
     assert 'No syllabus configured' in response.text
+    assert captured['att_marked']==captured['total_students_today']==3
+    assert captured['attendance_rate']==100.0 and captured['att_outside_roster']==1
+    assert batches[7]['att_today_count']==2 and batches[7]['attendance_pct']==100
+    assert '1 additional attendance record outside the current roster.' in response.text

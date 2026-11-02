@@ -1,9 +1,18 @@
-# Reviewed student-search template and build instructions only.
+# Reviewed attendance KPI runtime files and build instructions only.
 *
-!Dockerfile.student-search
-!cloudbuild.student-search.yaml
+!Dockerfile.attendance-counts
+!cloudbuild.attendance-counts.yaml
+!modules/
+modules/*
+!modules/core/
+modules/core/*
+!modules/core/routes.py
+!services/
+services/*
+!services/attendance_summary.py
 !templates/
 templates/*
-!templates/billing/
-templates/billing/*
-!templates/billing/students.html
+!templates/core/
+templates/core/*
+!templates/core/dashboard_new.html
+!templates/core/dashboard_staff.html

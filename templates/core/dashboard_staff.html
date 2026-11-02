@@ -136,6 +136,10 @@
         <div class="kpi-value text-muted">—</div>
         <div class="kpi-label">Not Marked Yet</div>
       {% endif %}
+      <div class="small text-muted mt-1">Current batch roster</div>
+      {% if att_outside_roster %}
+      <div class="small text-muted mt-2">{{ att_outside_roster }} additional attendance record{{ 's' if att_outside_roster != 1 else '' }} outside the current roster.</div>
+      {% endif %}
     </div>
   </div>
   <div class="col-6 col-md">

@@ -1,0 +1,13 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:attendance-counts
+steps:
+  - id: build-attendance-counts
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, Dockerfile.attendance-counts, --tag, '${_IMAGE}', .]
+  - id: compile-attendance-counts
+    name: gcr.io/cloud-builders/docker
+    args: [run, --rm, '${_IMAGE}', python, -m, py_compile, modules/core/routes.py, services/attendance_summary.py]
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s

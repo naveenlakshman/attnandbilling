@@ -6,7 +6,8 @@ import logging
 from db import get_conn, get_company_profile, clear_company_cache, _ensure_lms_batch_topic_progress_table
 from services.storage import get_storage_service
 from services.batch_syllabus_progress import batch_syllabus_progress
-from services.batch_schedule import batch_end_summary
+from services.batch_schedule import IST, batch_end_summary
+from services.attendance_summary import get_attendance_summary
 from .utils import login_required, admin_required
 
 logger = logging.getLogger("app.core")
@@ -306,40 +307,17 @@ def dashboard():
     )
     total_bad_debt = float(cur.fetchone()["total"] or 0)
 
-    # ── Today's attendance ──────────────────────────────────────
-    cur.execute("""
-        SELECT ar.status, COUNT(*) AS cnt
-        FROM attendance_records ar
-        JOIN batches b ON ar.batch_id = b.id
-        JOIN branches br ON b.branch_id = br.id
-        WHERE ar.attendance_date = ?
-          AND br.institute_id = ?
-          AND b.status = 'active'
-          AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
-          AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
-        GROUP BY ar.status
-    """, [today, institute_id, today, today])
-    att_rows = cur.fetchall()
-    att_summary = {r["status"]: r["cnt"] for r in att_rows}
-    att_present = att_summary.get("present", 0)
-    att_late = att_summary.get("late", 0)
-    att_absent = att_summary.get("absent", 0)
-    att_leave = att_summary.get("leave", 0)
-    att_marked = att_present + att_late + att_absent + att_leave
+    # Marked and expected counts come from the same current roster.
+    attendance = get_attendance_summary(conn, institute_id, datetime.now(IST).date().isoformat())
+    att_present = attendance['counts']['present']
+    att_late = attendance['counts']['late']
+    att_absent = attendance['counts']['absent']
+    att_leave = attendance['counts']['leave']
+    att_marked = attendance['marked']
     att_total = att_marked
-
-    cur.execute("""
-        SELECT COUNT(*) AS cnt
-        FROM student_batches sb
-        JOIN batches b ON sb.batch_id = b.id
-        JOIN branches br ON b.branch_id = br.id
-        WHERE br.institute_id = ? AND b.status = 'active'
-          AND sb.status = 'active'
-          AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
-          AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
-    """, [institute_id, today, today])
-    total_students_today = cur.fetchone()["cnt"]
-    attendance_rate = _marked_percentage(att_marked, total_students_today)
+    total_students_today = attendance['expected']
+    attendance_rate = attendance['percentage']
+    att_outside_roster = attendance['outside_roster']
 
     # ── Active batches ──────────────────────────────────────────
     cur.execute(
@@ -426,6 +404,7 @@ def dashboard():
         att_marked=att_marked,
         total_students_today=total_students_today,
         att_total=att_total,
+        att_outside_roster=att_outside_roster,
         active_batches=active_batches,
         # Leads followup
         past_due_leads=past_due_leads,
@@ -465,14 +444,17 @@ def _staff_dashboard(institute_id):
                 WHERE sb.batch_id = b.id AND sb.status = 'active') AS student_count,
                (SELECT COUNT(DISTINCT ar.student_id)
                 FROM attendance_records ar
-                WHERE ar.batch_id = b.id AND ar.attendance_date = ?) AS att_today_count
+                WHERE ar.batch_id = b.id AND ar.attendance_date = ?
+                  AND EXISTS (SELECT 1 FROM student_batches current_sb
+                              WHERE current_sb.batch_id = ar.batch_id AND current_sb.student_id = ar.student_id
+                                AND current_sb.status = 'active')) AS att_today_count
         FROM batches b
         LEFT JOIN courses c ON b.course_id = c.id
         LEFT JOIN branches br ON b.branch_id = br.id
         WHERE br.institute_id = ? AND b.trainer_id = ? AND b.status = 'active'
         GROUP BY b.id
         ORDER BY CASE WHEN b.start_time IS NULL OR b.start_time = '' THEN 1 ELSE 0 END, b.start_time ASC, b.batch_name ASC
-    """, [today, institute_id, user_id])
+    """, [ist_now.date().isoformat(), institute_id, user_id])
     raw_batches = cur.fetchall()
 
     # Query taught progress for today
@@ -505,48 +487,17 @@ def _staff_dashboard(institute_id):
 
     batch_ids = [row["id"] for row in my_batches]
 
-    # ── Today's attendance (my batches active today) ───────────
-    cur.execute("""
-        SELECT b.id
-        FROM batches b
-        JOIN branches br ON b.branch_id = br.id
-        WHERE br.institute_id = ? AND b.trainer_id = ? AND b.status = 'active'
-          AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
-          AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
-    """, [institute_id, user_id, today, today])
-    today_batch_ids = [r["id"] for r in cur.fetchall()]
-
-    if today_batch_ids:
-        placeholders = ",".join("?" * len(today_batch_ids))
-        cur.execute(f"""
-            SELECT status, COUNT(*) AS cnt
-            FROM attendance_records
-            WHERE attendance_date = ? AND batch_id IN ({placeholders})
-            GROUP BY status
-        """, [today] + today_batch_ids)
-        att_rows = cur.fetchall()
-    else:
-        att_rows = []
-
-    att_summary = {r["status"]: r["cnt"] for r in att_rows}
-    att_present = att_summary.get("present", 0)
-    att_late = att_summary.get("late", 0)
-    att_absent = att_summary.get("absent", 0)
-    att_leave = att_summary.get("leave", 0)
-    att_marked = att_present + att_late + att_absent + att_leave
+    # Apply the same roster rule to the staff attendance summary.
+    attendance = get_attendance_summary(conn, institute_id, ist_now.date().isoformat(), trainer_id=user_id)
+    att_present = attendance['counts']['present']
+    att_late = attendance['counts']['late']
+    att_absent = attendance['counts']['absent']
+    att_leave = attendance['counts']['leave']
+    att_marked = attendance['marked']
     att_total = att_marked
-
-    if today_batch_ids:
-        placeholders = ",".join("?" * len(today_batch_ids))
-        cur.execute(f"""
-            SELECT COUNT(*) AS cnt
-            FROM student_batches sb
-            WHERE sb.batch_id IN ({placeholders}) AND sb.status = 'active'
-        """, today_batch_ids)
-        total_students_today = cur.fetchone()["cnt"]
-    else:
-        total_students_today = 0
-    attendance_rate = _marked_percentage(att_marked, total_students_today)
+    total_students_today = attendance['expected']
+    attendance_rate = attendance['percentage']
+    att_outside_roster = attendance['outside_roster']
 
     # ── My assigned leads — followup overdue ───────────────────
     cur.execute("""
@@ -674,6 +625,7 @@ def _staff_dashboard(institute_id):
         att_marked=att_marked,
         total_students_today=total_students_today,
         att_total=att_total,
+        att_outside_roster=att_outside_roster,
         attendance_rate=attendance_rate,
         my_past_due_leads=my_past_due_leads,
         my_today_leads=my_today_leads,
