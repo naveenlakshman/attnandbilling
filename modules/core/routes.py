@@ -308,7 +308,7 @@ def dashboard():
     total_bad_debt = float(cur.fetchone()["total"] or 0)
 
     # Marked and expected counts come from the same current roster.
-    attendance = get_attendance_summary(conn, institute_id, datetime.now(IST).date().isoformat())
+    attendance = get_attendance_summary(conn, institute_id, datetime.now(IST).date().isoformat(), include_branches=True)
     att_present = attendance['counts']['present']
     att_late = attendance['counts']['late']
     att_absent = attendance['counts']['absent']
@@ -405,6 +405,7 @@ def dashboard():
         total_students_today=total_students_today,
         att_total=att_total,
         att_outside_roster=att_outside_roster,
+        attendance_branches=attendance['branches'],
         active_batches=active_batches,
         # Leads followup
         past_due_leads=past_due_leads,

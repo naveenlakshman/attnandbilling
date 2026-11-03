@@ -1,15 +1,27 @@
 """Attendance KPIs use one current student/batch roster for numerator and denominator."""
 
 
-def get_attendance_summary(conn, institute_id, day, trainer_id=None):
+def _summarize(rows, outside_roster=0):
+    expected = sum(int(row['cnt']) for row in rows)
+    counts = {status: 0 for status in ('present', 'late', 'absent', 'leave')}
+    for row in rows:
+        if row['status'] in counts:
+            counts[row['status']] += int(row['cnt'])
+    marked = sum(counts.values())
+    return dict(counts=counts, expected=expected, marked=marked, pending=expected-marked,
+                percentage=round(marked / expected * 100, 1) if expected else None,
+                outside_roster=int(outside_roster))
+
+
+def get_attendance_summary(conn, institute_id, day, trainer_id=None, include_branches=False):
     trainer_clause = ' AND b.trainer_id = ?' if trainer_id is not None else ''
     roster_params = [institute_id, institute_id, day, day]
     if trainer_id is not None:
         roster_params.append(trainer_id)
     rows = conn.execute(f"""
-        SELECT ar.status, COUNT(*) AS cnt
+        SELECT roster.branch_id, ar.status, COUNT(*) AS cnt
         FROM (
-            SELECT DISTINCT sb.student_id, sb.batch_id
+            SELECT DISTINCT sb.student_id, sb.batch_id, b.branch_id
             FROM student_batches sb
             JOIN batches b ON b.id = sb.batch_id
             JOIN branches br ON br.id = b.branch_id
@@ -24,19 +36,13 @@ def get_attendance_summary(conn, institute_id, day, trainer_id=None):
             WHERE latest.student_id = roster.student_id AND latest.batch_id = roster.batch_id
               AND latest.attendance_date = ?
         )
-        GROUP BY ar.status
+        GROUP BY roster.branch_id, ar.status
     """, [*roster_params, day]).fetchall()
-    expected = sum(int(row['cnt']) for row in rows)
-    counts = {status: 0 for status in ('present', 'late', 'absent', 'leave')}
-    for row in rows:
-        if row['status'] in counts:
-            counts[row['status']] = int(row['cnt'])
-    marked = sum(counts.values())
     outside_params = [institute_id, institute_id, day, day, day]
     if trainer_id is not None:
         outside_params.append(trainer_id)
     outside = conn.execute(f"""
-        SELECT COUNT(*) AS cnt FROM attendance_records ar
+        SELECT b.branch_id, COUNT(*) AS cnt FROM attendance_records ar
         JOIN batches b ON b.id = ar.batch_id
         JOIN branches br ON br.id = b.branch_id
         JOIN students s ON s.id = ar.student_id AND s.institute_id = ?
@@ -50,7 +56,17 @@ def get_attendance_summary(conn, institute_id, day, trainer_id=None):
                          AND latest.attendance_date = ar.attendance_date)
           AND NOT EXISTS (SELECT 1 FROM student_batches sb WHERE sb.student_id = ar.student_id
                           AND sb.batch_id = ar.batch_id AND sb.status = 'active')
-    """, outside_params).fetchone()['cnt']
-    return dict(counts=counts, expected=expected, marked=marked, pending=expected-marked,
-                percentage=round(marked / expected * 100, 1) if expected else None,
-                outside_roster=int(outside))
+        GROUP BY b.branch_id
+    """, outside_params).fetchall()
+    summary = _summarize(rows, sum(int(row['cnt']) for row in outside))
+    if include_branches:
+        branches = conn.execute('''SELECT id, branch_name FROM branches
+                                   WHERE institute_id = ? ORDER BY branch_name, id''', [institute_id]).fetchall()
+        outside_by_branch = {row['branch_id']: int(row['cnt']) for row in outside}
+        summary['branches'] = [
+            dict(branch_id=branch['id'], branch_name=branch['branch_name'],
+                 **_summarize([row for row in rows if row['branch_id'] == branch['id']],
+                              outside_by_branch.get(branch['id'], 0)))
+            for branch in branches
+        ]
+    return summary

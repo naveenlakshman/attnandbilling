@@ -47,3 +47,11 @@ def test_admin_dashboard_wires_roster_counts_to_the_rendered_widget(db,monkeypat
     assert captured['att_present']==1 and captured['att_absent']==1 and captured['att_leave']==1
     assert '3 of 4 marked' in response.text and '75.0%' in response.text
     assert '1 additional attendance record outside the current roster.' in response.text
+    assert 'Attendance by branch' in response.text
+    branches={row['branch_id']:row for row in captured['attendance_branches']}
+    assert set(branches)=={7,9,10}
+    assert branches[7]['pending']==1 and branches[9]['percentage']==100.0
+    assert 'data-attendance-branch-id="7"' in response.text
+    assert 'data-attendance-branch-id="8"' not in response.text
+    assert 'Hoskote &lt;West&gt;' in response.text and 'Hoskote <West>' not in response.text
+    assert '66.7%' in response.text and 'No current roster' in response.text
