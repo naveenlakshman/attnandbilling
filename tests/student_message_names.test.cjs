@@ -22,3 +22,14 @@ test('blank and whitespace names are handled without losing initials',()=>{
   assert.ok(context.generateMessage('due_today','  Sujan  H C ',250,'INV-7','2026-11-06').startsWith('Dear Sujan H C,'));
   assert.ok(context.generateMessage('due_today',null,250,'INV-7','2026-11-06').startsWith('Dear Student,'));
 });
+test('edited reminders keep the full name across copy, WhatsApp and SMS',()=>{
+  const field={value:'Please pay Rs.500. https://example.test/pay/token'};
+  context.document={getElementById(){return field;}};
+  context.currentReminder={studentName:'Sujan H C'};
+  const once=context.getReminderMessage();
+  assert.equal(once,'Dear Sujan H C,\nPlease pay Rs.500. https://example.test/pay/token');
+  assert.equal(context.getReminderMessage(),once);
+  field.value='Annual fee is due.';context.currentReminder.studentName='Ann';
+  assert.ok(context.getReminderMessage().startsWith('Dear Ann,'));
+  field.value='';assert.equal(context.getReminderMessage(),'');
+});
