@@ -1,0 +1,23 @@
+steps:
+  - id: build-web
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, Dockerfile.student-messages, --target, web, --tag, '${_WEB_IMAGE}', .]
+  - id: check-web
+    name: gcr.io/cloud-builders/docker
+    args: [run, --rm, '${_WEB_IMAGE}', python, -m, py_compile, services/student_messages.py, modules/billing/routes.py, modules/billing/auto_reminders.py, modules/notifications/routes.py, modules/notifications/service.py]
+  - id: build-reminder-job
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, Dockerfile.student-messages, --target, fee-reminders, --tag, '${_JOB_IMAGE}', .]
+  - id: check-reminder-names-without-sending
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - '${_JOB_IMAGE}'
+      - python
+      - -c
+      - "from modules.billing.auto_reminders import _build_message; row=dict(student_name='Sujan H C',balance_due=500,due_date_iso='2026-11-06',invoice_no='INV-TEST'); assert all(_build_message(row,t,{}).startswith('Dear Sujan H C,') for t in ('before_3_days','before_2_days','due_today','overdue_day_7')); print('All scheduled reminder types preserve full names; no messages sent.')"
+images: ['${_WEB_IMAGE}', '${_JOB_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1200s

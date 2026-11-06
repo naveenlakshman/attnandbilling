@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from db import get_conn
 from modules.core.utils import admin_required
 from services.tenant_context import get_current_institute_id
+from services.student_messages import personalize_student_message
 from . import notifications_bp
 from .database import notification_session
 from .models import FeeExtensionRequest, Notification, NotificationTarget
@@ -103,7 +104,7 @@ def fee_reminder_admin():
                 message = request.form.get("message_template", "").strip()
                 if not title or not message:
                     raise ValueError("Reminder title and message are required.")
-                allowed = {"amount": "Rs.1,000", "invoice_no": "INV-001", "due_date": "05-Aug-2026", "lock_date": "08-Aug-2026"}
+                allowed = {"student_name": "Sujan H C", "full_name": "Sujan H C", "amount": "Rs.1,000", "invoice_no": "INV-001", "due_date": "05-Aug-2026", "lock_date": "08-Aug-2026"}
                 title.format(**allowed)
                 message.format(**allowed)
                 overdue_title = request.form.get("overdue_title_template", "").strip()
@@ -161,7 +162,7 @@ def fee_reminder_admin():
             "locked_title": settings.locked_title_template,
             "locked_message": settings.locked_message_template,
         }
-        sample = {"amount": "Rs.4,150", "invoice_no": "GIT/B/459", "due_date": "05-Aug-2026", "lock_date": "08-Aug-2026"}
+        sample = {"student_name": "Sujan H C", "full_name": "Sujan H C", "amount": "Rs.4,150", "invoice_no": "GIT/B/459", "due_date": "05-Aug-2026", "lock_date": "08-Aug-2026"}
         try:
             preview = {key: value.format(**sample) for key, value in preview.items()}
         except (KeyError, ValueError):
@@ -173,6 +174,8 @@ def fee_reminder_admin():
                 "locked_title": DEFAULT_FEE_REMINDER_SETTINGS["locked_title_template"],
                 "locked_message": DEFAULT_FEE_REMINDER_SETTINGS["locked_message_template"].format(**sample),
             }
+        preview = {key: personalize_student_message(value, sample['student_name']) if key.endswith('message') else value
+                   for key, value in preview.items()}
         return render_template(
             "notifications/fee_reminder_admin.html",
             settings=settings, extension_requests=request_rows, preview=preview,

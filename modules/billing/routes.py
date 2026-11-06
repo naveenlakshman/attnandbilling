@@ -17,6 +17,7 @@ import hashlib
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
 from services.document_numbers import allocate_document_number
+from services.student_messages import registration_message, invoice_message, receipt_message, personalize_student_message
 from services.subscriptions import (
     PlanLimitExceeded,
     SubscriptionAccessDenied,
@@ -3054,11 +3055,7 @@ def student_new():
         # Send welcome SMS with registration number
         try:
             sms_phone = "+91" + phone  # phone is already validated 10-digit
-            sms_message = (
-                f"Welcome to Global IT Education, {full_name}! "
-                f"Your Registration Number is {student_code}. "
-                "Keep this number safe for future reference."
-            )
+            sms_message = registration_message(full_name, student_code)
             send_sms(sms_phone, sms_message)
         except Exception:
             pass  # Never block registration if SMS fails
@@ -6498,12 +6495,7 @@ def receipt_new():
                         token=token,
                         _external=True
                     )
-                    first_name = student["full_name"].split()[0]
-                    message = (
-                        f"Dear {first_name}, payment of Rs.{amount_received:.0f} received "
-                        f"against {receipt_no}. Download your receipt: {download_url} "
-                        f"- Global IT Education"
-                    )
+                    message = receipt_message(student["full_name"], receipt_no, amount_received, download_url)
                     sms_result = send_sms(phone, message)
                     if sms_result.get("success"):
                         sms_now = datetime.now().isoformat(timespec="seconds")
@@ -7070,9 +7062,9 @@ def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
                 students.full_name,
                 students.phone
             FROM invoices
-            JOIN students ON invoices.student_id = students.id
-            WHERE invoices.id = ?
-        """, (invoice_id,))
+            JOIN students ON invoices.student_id = students.id AND students.institute_id = invoices.institute_id
+            WHERE invoices.id = ? AND invoices.institute_id = ?
+        """, (invoice_id, get_current_institute_id(default=1)))
         invoice = cur.fetchone()
 
         if not invoice:
@@ -7094,13 +7086,9 @@ def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
             _external=True,
         )
 
-        student_name = (invoice["full_name"] or "Student").split()[0]
         amount = float(invoice["total_amount"] or 0)
         invoice_no = invoice["invoice_no"]
-        message = (
-            f"Dear {student_name}, invoice {invoice_no} for Rs.{amount:.0f} is ready. "
-            f"Download your invoice: {download_url} - Global IT Education"
-        )
+        message = invoice_message(invoice["full_name"], invoice_no, amount, download_url)
 
         result = send_sms(phone, message)
         if result.get("success"):
@@ -7155,9 +7143,9 @@ def receipt_send_sms(receipt_id):
             students.phone
         FROM receipts
         JOIN invoices ON receipts.invoice_id = invoices.id
-        JOIN students ON invoices.student_id = students.id
-        WHERE receipts.id = ?
-    """, (receipt_id,))
+        JOIN students ON invoices.student_id = students.id AND students.institute_id = invoices.institute_id
+        WHERE receipts.id = ? AND invoices.institute_id = ?
+    """, (receipt_id, get_current_institute_id(default=1)))
     receipt = cur.fetchone()
 
     if not receipt:
@@ -7189,14 +7177,10 @@ def receipt_send_sms(receipt_id):
     if not phone.startswith("+"):
         phone = "+91" + phone.lstrip("0")
 
-    student_name = receipt["full_name"].split()[0]  # first name only
     amount = receipt["amount_received"]
     receipt_no = receipt["receipt_no"]
 
-    message = (
-        f"Dear {student_name}, payment of Rs.{amount:.0f} received against {receipt_no}. "
-        f"Download your receipt: {download_url} - Global IT Education"
-    )
+    message = receipt_message(receipt["full_name"], receipt_no, amount, download_url)
 
     result = send_sms(phone, message)
 
@@ -7716,6 +7700,7 @@ def reminder_send_sms():
         conn.close()
         return jsonify({"success": False, "error": "Student has no phone number on record"}), 400
 
+    message_text = personalize_student_message(message_text, reminder["student_name"])
     result = send_sms(phone, message_text)
     now = datetime.now().isoformat(timespec="seconds")
     status = "sent" if result.get("success") else "failed"

@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import and_, or_, select, text
+from services.student_messages import personalize_student_message, student_full_name
 
 from .database import notification_session
 from .models import (
@@ -70,7 +71,7 @@ def fee_reminder_settings(db, institute_id, create=False):
 def _outstanding_installments(db, student_id, institute_id):
     return db.execute(text("""
         SELECT ip.id AS installment_id, ip.due_date, ip.amount_due, ip.amount_paid,
-               i.id AS invoice_id, i.invoice_no
+               i.id AS invoice_id, i.invoice_no, s.full_name AS student_name
         FROM installment_plans ip
         JOIN invoices i ON i.id=ip.invoice_id
         JOIN students s ON s.id=i.student_id AND s.institute_id=i.institute_id
@@ -154,6 +155,8 @@ def _automatic_fee_notifications(db, student_id, institute_id, now):
         is_overdue = due_date < today
         is_locked = is_overdue and bool(values.restrict_content_on_overdue) and today >= lock_date
         template_values = {
+            "student_name": student_full_name(row["student_name"]),
+            "full_name": student_full_name(row["student_name"]),
             "amount": f"Rs.{balance:,.0f}",
             "invoice_no": row["invoice_no"],
             "due_date": due_date.strftime("%d-%b-%Y"),
@@ -179,7 +182,7 @@ def _automatic_fee_notifications(db, student_id, institute_id, now):
             "source": "automatic_fee",
             "type": "payment_overdue" if is_overdue else "fee_due_reminder",
             "title": title,
-            "message": message,
+            "message": personalize_student_message(message, row["student_name"]),
             "icon": values.icon,
             "color": "danger" if is_overdue else values.color,
             "priority": 100 if is_locked else (98 if is_overdue else 95),
@@ -210,13 +213,13 @@ def applicable_notifications(student_id, institute_id, now=None, include_standar
     with notification_session() as db:
         student_scope = db.execute(
             text("""
-                SELECT s.id, GROUP_CONCAT(DISTINCT sb.batch_id) AS batch_ids,
+                SELECT s.id, s.full_name, GROUP_CONCAT(DISTINCT sb.batch_id) AS batch_ids,
                        GROUP_CONCAT(DISTINCT b.course_id) AS course_ids
                 FROM students s
                 LEFT JOIN student_batches sb ON sb.student_id=s.id AND sb.status='active'
                 LEFT JOIN batches b ON b.id=sb.batch_id
                 WHERE s.id=:student_id AND s.institute_id=:institute_id
-                GROUP BY s.id
+                GROUP BY s.id, s.full_name
             """),
             {"student_id": student_id, "institute_id": institute_id},
         ).mappings().first()
@@ -265,7 +268,7 @@ def applicable_notifications(student_id, institute_id, now=None, include_standar
                     continue
             result.append({
                 "id": notice.id, "source": "standard", "type": notice.notification_type,
-                "title": notice.title, "message": notice.message,
+                "title": notice.title, "message": personalize_student_message(notice.message, student_scope["full_name"]),
                 "icon": notice.icon, "color": notice.color,
                 "action_label": notice.action_label, "action_url": notice.action_url,
                 "priority": notice.priority,

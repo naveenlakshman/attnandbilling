@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}{{ company.company_short_name }} - Receivables{% endblock %}
 
@@ -736,16 +736,16 @@ function openReminderModal(btn) {
 }
 
 function generateMessage(type, name, balance, invoiceNo, dueDate) {
-  const firstName = name.split(' ')[0];
+  const fullName = String(name || '').trim().replace(/\s+/g, ' ') || 'Student';
   const amt = '₹' + parseInt(parseFloat(balance)).toLocaleString('en-IN');
   const dateStr = formatDateDisplay(dueDate);
 
   if (type === 'overdue') {
-    return `Dear ${firstName}, this is a reminder from ${COMPANY_NAME} that your pending fee amount of ${amt} for Invoice ${invoiceNo} was due on ${dateStr}. Kindly make the payment at the earliest. For any clarification, contact ${CONTACT_NUMBER}.`;
+    return `Dear ${fullName}, this is a reminder from ${COMPANY_NAME} that your pending fee amount of ${amt} for Invoice ${invoiceNo} was due on ${dateStr}. Kindly make the payment at the earliest. For any clarification, contact ${CONTACT_NUMBER}.`;
   } else if (type === 'due_today') {
-    return `Dear ${firstName}, this is a reminder from ${COMPANY_NAME} that your fee amount of ${amt} for Invoice ${invoiceNo} is due today. Kindly make the payment on time. For any clarification, contact ${CONTACT_NUMBER}.`;
+    return `Dear ${fullName}, this is a reminder from ${COMPANY_NAME} that your fee amount of ${amt} for Invoice ${invoiceNo} is due today. Kindly make the payment on time. For any clarification, contact ${CONTACT_NUMBER}.`;
   } else {
-    return `Dear ${firstName}, this is a friendly reminder from ${COMPANY_NAME} that your upcoming installment of ${amt} is due on ${dateStr}. Kindly be prepared to make the payment on or before the due date. For any clarification, contact ${CONTACT_NUMBER}.`;
+    return `Dear ${fullName}, this is a friendly reminder from ${COMPANY_NAME} that your upcoming installment of ${amt} is due on ${dateStr}. Kindly be prepared to make the payment on or before the due date. For any clarification, contact ${CONTACT_NUMBER}.`;
   }
 }
 
