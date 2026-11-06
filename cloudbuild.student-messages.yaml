@@ -13,6 +13,10 @@ steps:
     args:
       - run
       - --rm
+      - --env
+      - SECRET_KEY=student-message-build-test-only-00000000
+      - --env
+      - APP_ENV=testing
       - '${_JOB_IMAGE}'
       - python
       - -c
