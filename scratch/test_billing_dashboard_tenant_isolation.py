@@ -10,6 +10,9 @@ from flask import Flask, session
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tests'))
+from dashboard_schema import create_financial_schema, insert_financial
+
 from modules.billing import routes
 
 
@@ -22,22 +25,6 @@ CREATE TABLE students (
     id INTEGER PRIMARY KEY, institute_id INTEGER, branch_id INTEGER,
     created_at TEXT
 );
-CREATE TABLE invoices (
-    id INTEGER PRIMARY KEY, student_id INTEGER, branch_id INTEGER,
-    invoice_date TEXT, total_amount REAL
-);
-CREATE TABLE receipts (
-    id INTEGER PRIMARY KEY, invoice_id INTEGER, receipt_date TEXT,
-    amount_received REAL
-);
-CREATE TABLE expenses (
-    id INTEGER PRIMARY KEY, branch_id INTEGER, expense_date TEXT,
-    amount REAL
-);
-CREATE TABLE installment_plans (
-    id INTEGER PRIMARY KEY, invoice_id INTEGER, due_date TEXT,
-    amount_due REAL, amount_paid REAL, status TEXT
-);
 """
 
 
@@ -48,9 +35,13 @@ def connect(path):
     return conn
 
 
-def seed(path):
+def seed(path, *, legacy=False, accuracy=False):
     conn = connect(path)
     conn.executescript(SCHEMA)
+    create_financial_schema(conn, legacy=legacy)
+    if accuracy:
+        from services.erp_schema import init_sqlite_schema
+        init_sqlite_schema(conn)
     today = date.today().isoformat()
     conn.executemany(
         "INSERT INTO branches VALUES (?, ?, ?, ?)",
@@ -60,23 +51,17 @@ def seed(path):
         "INSERT INTO students VALUES (?, ?, ?, ?)",
         [(1, 1, 1, today), (7, 7, 7, today)],
     )
-    conn.executemany(
-        "INSERT INTO invoices VALUES (?, ?, ?, ?, ?)",
-        [(1, 1, 1, today, 1000), (7, 7, 7, today, 7000)],
-    )
-    conn.executemany(
-        "INSERT INTO receipts VALUES (?, ?, ?, ?)",
-        [(1, 1, today, 400), (7, 7, today, 2800)],
-    )
-    conn.executemany(
-        "INSERT INTO expenses VALUES (?, ?, ?, ?)",
-        [(1, 1, today, 100), (7, 7, today, 700)],
-    )
-    conn.executemany(
-        "INSERT INTO installment_plans VALUES (?, ?, ?, ?, ?, ?)",
-        [(1, 1, today, 1000, 400, "partially_paid"),
-         (7, 7, today, 7000, 2800, "partially_paid")],
-    )
+    for inst, value in [(1, 1000), (7, 7000)]:
+        insert_financial(conn, 'invoices', id=inst, institute_id=inst, student_id=inst,
+                         branch_id=inst, total_amount=value)
+    for inst, value in [(1, 400), (7, 2800)]:
+        insert_financial(conn, 'receipts', id=inst, institute_id=inst, invoice_id=inst,
+                         amount_received=value)
+    for inst, value in [(1, 100), (7, 700)]:
+        insert_financial(conn, 'expenses', id=inst, institute_id=inst, branch_id=inst, amount=value)
+    for inst, due, paid in [(1, 1000, 400), (7, 7000, 2800)]:
+        insert_financial(conn, 'installment_plans', id=inst, invoice_id=inst,
+                         amount_due=due, amount_paid=paid, status='partially_paid')
     conn.commit()
     conn.close()
 
@@ -153,11 +138,9 @@ def main():
             students=1, invoices=1, sales=7000,
             receipts=2800, expenses=700, receivables=4200,
         )
-        assert_totals(
-            foreign_branch,
-            students=0, invoices=0, sales=0,
-            receipts=0, expenses=0, receivables=0,
-        )
+        response, status = foreign_branch
+        assert status == 400
+        assert response.get_json() == {'error': 'Branch not found in this institute'}
         assert [row["id"] for row in institute_seven["branches"]] == [7]
     finally:
         os.remove(database_path)

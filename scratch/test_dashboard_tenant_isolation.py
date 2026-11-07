@@ -9,17 +9,13 @@ from flask import Flask, session
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tests'))
+from dashboard_schema import create_financial_schema, insert_financial
+
 from modules.core import routes
 
 
 SCHEMA = """
-CREATE TABLE receipts (
-    id INTEGER PRIMARY KEY, invoice_id INTEGER, receipt_date TEXT,
-    amount_received REAL
-);
-CREATE TABLE expenses (
-    id INTEGER PRIMARY KEY, branch_id INTEGER, expense_date TEXT, amount REAL
-);
 CREATE TABLE students (
     id INTEGER PRIMARY KEY, institute_id INTEGER, full_name TEXT,
     student_code TEXT, phone TEXT, status TEXT, joined_date TEXT
@@ -29,17 +25,6 @@ CREATE TABLE leads (
     next_followup_date TEXT, lead_score INTEGER, stage TEXT, status TEXT,
     is_deleted INTEGER, created_at TEXT, assigned_to_id INTEGER
 );
-CREATE TABLE invoices (
-    id INTEGER PRIMARY KEY, institute_id INTEGER, student_id INTEGER,
-    invoice_no TEXT, branch_id INTEGER, status TEXT
-);
-CREATE TABLE installment_plans (
-    id INTEGER PRIMARY KEY, invoice_id INTEGER, due_date TEXT,
-    amount_due REAL, amount_paid REAL, remarks TEXT, status TEXT
-);
-CREATE TABLE bad_debt_writeoffs (
-    id INTEGER PRIMARY KEY, invoice_id INTEGER, amount_written_off REAL
-);
 CREATE TABLE branches (
     id INTEGER PRIMARY KEY, institute_id INTEGER, branch_name TEXT
 );
@@ -47,9 +32,6 @@ CREATE TABLE batches (
     id INTEGER PRIMARY KEY, branch_id INTEGER, batch_name TEXT,
     course_id INTEGER, trainer_id INTEGER, start_time TEXT, end_time TEXT,
     start_date TEXT, end_date TEXT, status TEXT
-);
-CREATE TABLE attendance_records (
-    id INTEGER PRIMARY KEY, batch_id INTEGER, attendance_date TEXT, status TEXT
 );
 CREATE TABLE student_batches (
     id INTEGER PRIMARY KEY, batch_id INTEGER, student_id INTEGER, status TEXT
@@ -74,19 +56,21 @@ def connect(path):
     return conn
 
 
-def seed(path):
+def seed(path, *, legacy=False, accuracy=False):
     conn = connect(path)
     conn.executescript(SCHEMA)
+    create_financial_schema(conn, legacy=legacy)
+    if accuracy:
+        from services.erp_schema import init_sqlite_schema
+        init_sqlite_schema(conn)
     month = routes.datetime.now().strftime("%Y-%m")
     today = routes.datetime.now().date().isoformat()
-    conn.executemany(
-        "INSERT INTO receipts VALUES (?, ?, ?, ?)",
-        [(1, 1, f"{month}-01", 900), (2, 7, f"{month}-01", 100)],
-    )
-    conn.executemany(
-        "INSERT INTO expenses VALUES (?, ?, ?, ?)",
-        [(1, 1, f"{month}-01", 300), (2, 7, f"{month}-01", 25)],
-    )
+    for ident, inst, value in [(1, 1, 900), (2, 7, 100)]:
+        insert_financial(conn, 'receipts', id=ident, institute_id=inst, invoice_id=inst,
+                         receipt_date=f"{month}-01", amount_received=value)
+    for inst, value in [(1, 300), (7, 25)]:
+        insert_financial(conn, 'expenses', id=inst, institute_id=inst, branch_id=inst,
+                         expense_date=f"{month}-01", amount=value)
     conn.executemany(
         "INSERT INTO students VALUES (?, ?, ?, ?, ?, ?, ?)",
         [
@@ -101,21 +85,16 @@ def seed(path):
             (7, 7, "Harsha Lead", "7", today, 20, "Interested", "active", 0, today, 7),
         ],
     )
-    conn.executemany(
-        "INSERT INTO bad_debt_writeoffs VALUES (?, ?, ?)",
-        [(1, 1, 80), (7, 7, 5)],
-    )
+    for inst, value in [(1, 80), (7, 5)]:
+        insert_financial(conn, 'bad_debt_writeoffs', id=inst, institute_id=inst, invoice_id=inst,
+                         amount_written_off=value)
     conn.executemany(
         "INSERT INTO branches VALUES (?, ?, ?)",
         [(1, 1, "Other Branch"), (7, 7, "Harsha Branch")],
     )
-    conn.executemany(
-        "INSERT INTO invoices VALUES (?, ?, ?, ?, ?, ?)",
-        [
-            (1, 1, 1, "OTHER-1", 1, "unpaid"),
-            (7, 7, 7, "HARSHA-7", 7, "unpaid"),
-        ],
-    )
+    for inst, code in [(1, 'OTHER-1'), (7, 'HARSHA-7')]:
+        insert_financial(conn, 'invoices', id=inst, institute_id=inst, student_id=inst,
+                         invoice_no=code, branch_id=inst, status='unpaid', total_amount=1000)
     conn.executemany(
         "INSERT INTO batches VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
@@ -128,8 +107,8 @@ def seed(path):
         [(1, 1, 1, "active"), (7, 7, 7, "active")],
     )
     conn.executemany(
-        "INSERT INTO attendance_records VALUES (?, ?, ?, ?)",
-        [(1, 1, today, "absent"), (7, 7, today, "present")],
+        "INSERT INTO attendance_records (id,student_id,batch_id,branch_id,attendance_date,status,created_at) VALUES (?,?,?,?,?,?,?)",
+        [(1, 1, 1, 1, today, 'absent', today), (7, 7, 7, 7, today, 'present', today)],
     )
     conn.executemany(
         "INSERT INTO users VALUES (?, ?, ?)",
@@ -146,6 +125,8 @@ def seed(path):
         "INSERT INTO leave_requests VALUES (?, ?, ?)",
         [(1, 1, "pending"), (7, 7, "pending")],
     )
+    for inst in [1, 7]:
+        insert_financial(conn, 'installment_plans', id=inst, invoice_id=inst, amount_due=1000)
     conn.commit()
     conn.close()
 

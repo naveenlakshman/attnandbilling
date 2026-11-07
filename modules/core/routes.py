@@ -179,7 +179,7 @@ def dashboard():
         SELECT COALESCE(SUM(r.amount_received), 0) AS total
         FROM receipts r
         JOIN invoices i ON r.invoice_id = i.id AND r.institute_id = i.institute_id
-        JOIN students s ON i.student_id = s.id
+        JOIN students s ON i.student_id = s.id AND i.institute_id = s.institute_id
         WHERE s.institute_id = ? AND strftime('%Y-%m', r.receipt_date) = ?
     """, [institute_id, current_month])
     revenue_this_month = float(cur.fetchone()["total"] or 0)
@@ -193,7 +193,7 @@ def dashboard():
     cur.execute(f"""
         SELECT COALESCE(SUM(e.amount), 0) AS total
         FROM expenses e
-        JOIN branches br ON e.branch_id = br.id
+        JOIN branches br ON e.branch_id = br.id AND e.institute_id = br.institute_id
         WHERE br.institute_id = ? AND strftime('%Y-%m', e.expense_date) = ?
           AND {ledger.noncash_expense_sql('e') if ledger.available(conn) else '1=1'}
     """, [institute_id, current_month])
@@ -259,7 +259,7 @@ def dashboard():
             {ledger.installment_balance_sql(conn)} AS balance_due
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        JOIN students s ON i.student_id = s.id
+        JOIN students s ON i.student_id = s.id AND i.institute_id = s.institute_id
         WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) < ?
           AND i.status <> 'cancelled'
@@ -278,7 +278,7 @@ def dashboard():
             {ledger.installment_balance_sql(conn)} AS balance_due
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        JOIN students s ON i.student_id = s.id
+        JOIN students s ON i.student_id = s.id AND i.institute_id = s.institute_id
         WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) = ?
           AND i.status <> 'cancelled'
@@ -295,7 +295,7 @@ def dashboard():
             COUNT(*) AS cnt
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        JOIN students s ON i.student_id = s.id
+        JOIN students s ON i.student_id = s.id AND i.institute_id = s.institute_id
         WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) > ?
           AND parse_date(ip.due_date) <= ?
@@ -310,8 +310,8 @@ def dashboard():
     cur.execute(
         """SELECT COALESCE(SUM(w.amount_written_off), 0) AS total
            FROM bad_debt_writeoffs w
-           JOIN invoices i ON w.invoice_id = i.id
-           JOIN students s ON i.student_id = s.id
+           JOIN invoices i ON w.invoice_id = i.id AND w.institute_id = i.institute_id
+           JOIN students s ON i.student_id = s.id AND i.institute_id = s.institute_id
            WHERE s.institute_id = ?""",
         [institute_id],
     )
@@ -573,7 +573,7 @@ def _staff_dashboard(institute_id):
             {ledger.installment_balance_sql(conn)} AS balance_due
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        JOIN students s ON i.student_id = s.id
+        JOIN students s ON i.student_id = s.id AND i.institute_id = s.institute_id
         WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) < ?
           AND i.status <> 'cancelled'
@@ -594,7 +594,7 @@ def _staff_dashboard(institute_id):
             {ledger.installment_balance_sql(conn)} AS balance_due
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        JOIN students s ON i.student_id = s.id
+        JOIN students s ON i.student_id = s.id AND i.institute_id = s.institute_id
         WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) = ?
           AND i.status <> 'cancelled'
@@ -712,7 +712,7 @@ def sidebar_badges():
                 SELECT COUNT(DISTINCT ip.id) AS cnt
                 FROM installment_plans ip
                 JOIN invoices i ON ip.invoice_id = i.id
-                JOIN students s ON i.student_id = s.id
+                JOIN students s ON i.student_id = s.id AND i.institute_id = s.institute_id
                 WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
                   AND parse_date(ip.due_date) <= ?
                   AND i.status <> 'cancelled'
@@ -724,7 +724,7 @@ def sidebar_badges():
                 SELECT COUNT(DISTINCT ip.id) AS cnt
                 FROM installment_plans ip
                 JOIN invoices i ON ip.invoice_id = i.id
-                JOIN students s ON i.student_id = s.id
+                JOIN students s ON i.student_id = s.id AND i.institute_id = s.institute_id
                 WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
                   AND parse_date(ip.due_date) <= ?
                   AND i.status <> 'cancelled'

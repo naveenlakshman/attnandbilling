@@ -315,6 +315,7 @@ def cash_movements(conn,institute_id,start,end):
         result.append(dict(r))
     for r in conn.execute('''SELECT r.id,r.receipt_date day,r.amount_received FROM receipts r
         JOIN invoices i ON i.id=r.invoice_id AND i.institute_id=r.institute_id
+        JOIN students s ON s.id=i.student_id AND s.institute_id=i.institute_id
         WHERE r.institute_id=? AND substr(r.receipt_date,1,10)>=? AND substr(r.receipt_date,1,10)<=?
         AND NOT EXISTS(SELECT 1 FROM receipt_details d WHERE d.receipt_id=r.id AND d.institute_id=r.institute_id)''',(institute_id,start,end)).fetchall():
         result.append(dict(id=r['id'],day=str(r['day'])[:10],branch_id=None,amount=paise(r['amount_received'])))
