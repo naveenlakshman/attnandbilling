@@ -1532,7 +1532,24 @@ def export_csv(table_name):
                 WHERE r.institute_id = ?
                 ORDER BY r.id
             """, (current_inst,))
-        elif tbl in ("branches", "invoices", "leads", "students", "installment_plans", "activity_logs", "expense_categories"):
+        elif tbl == "invoices":
+            cur.execute("""
+                SELECT inv.*, COALESCE(NULLIF(u.full_name, ''), u.username) AS created_by_name,
+                       i.name AS institute_name,
+                       ROUND(COALESCE(w.total_written_off, 0), 2) AS total_written_off
+                FROM invoices inv
+                LEFT JOIN users u ON u.id = inv.created_by AND u.institute_id = inv.institute_id
+                LEFT JOIN institutes i ON i.id = inv.institute_id
+                LEFT JOIN (
+                    SELECT invoice_id, institute_id, SUM(amount_written_off) AS total_written_off
+                    FROM bad_debt_writeoffs
+                    WHERE institute_id = ?
+                    GROUP BY invoice_id, institute_id
+                ) w ON w.invoice_id = inv.id AND w.institute_id = inv.institute_id
+                WHERE inv.institute_id = ?
+                ORDER BY inv.id
+            """, (current_inst, current_inst))
+        elif tbl in ("branches", "leads", "students", "installment_plans", "activity_logs", "expense_categories"):
             cur.execute(f"SELECT * FROM {tbl} WHERE institute_id = ?", (current_inst,))
         elif tbl == "invoice_items":
             cur.execute("SELECT ii.* FROM invoice_items ii JOIN invoices inv ON inv.id = ii.invoice_id WHERE inv.institute_id = ?", (current_inst,))
@@ -1544,7 +1561,7 @@ def export_csv(table_name):
             cur.execute(f"SELECT * FROM {tbl}")
         rows = cur.fetchall()
         columns = [description[0] for description in cur.description]
-        if tbl in {"expenses", "receipts"}:
+        if tbl in {"expenses", "receipts", "invoices"}:
             names = ({"branch_id": "branch_name", "category_id": "category_name", "institute_id": "institute_name"}
                      if tbl == "expenses" else {"created_by": "created_by_name", "institute_id": "institute_name"})
             columns = list(dict.fromkeys(names.get(column, column) for column in columns))
@@ -1575,7 +1592,7 @@ def export_csv(table_name):
                         value = dt.strftime("%d-%m-%Y")
                     except (ValueError, AttributeError):
                         pass
-                if tbl in {"expenses", "receipts"} and isinstance(value, str) and (
+                if tbl in {"expenses", "receipts", "invoices"} and isinstance(value, str) and (
                     value.lstrip().startswith(('=', '+', '-', '@')) or value.startswith(('\t', '\r', '\n'))
                 ):
                     value = "'" + value
@@ -1587,7 +1604,7 @@ def export_csv(table_name):
         
         # Create response
         response_file = io.BytesIO()
-        response_file.write(csv_data.encode("utf-8-sig" if tbl in {"expenses", "receipts"} else "utf-8"))
+        response_file.write(csv_data.encode("utf-8-sig" if tbl in {"expenses", "receipts", "invoices"} else "utf-8"))
         response_file.seek(0)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

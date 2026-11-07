@@ -1,0 +1,11 @@
+steps:
+  - id: build-invoice-export
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, deploy/releases/Dockerfile.invoice-export, --tag, '${_IMAGE}', .]
+  - id: compile-report-routes
+    name: gcr.io/cloud-builders/docker
+    args: [run, --rm, '${_IMAGE}', python, -m, py_compile, modules/reports/routes.py]
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s
