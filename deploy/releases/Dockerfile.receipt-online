@@ -1,0 +1,4 @@
+ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:54afc3a35008a688fcfbb6bec5940bce8905e032e7f1673d5fc32650c63283d3
+FROM ${BASE_IMAGE}
+COPY --chown=appuser:appuser modules/billing/routes.py modules/billing/cashfree_routes.py /app/modules/billing/
+COPY --chown=appuser:appuser templates/billing/receipt_new.html /app/templates/billing/receipt_new.html

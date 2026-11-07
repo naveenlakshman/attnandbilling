@@ -6327,7 +6327,7 @@ def receipt_new():
             """, (invoice_id, current_inst, current_inst))
             invoice_data = cur.fetchone()
             
-            # Prevent payments on written-off invoices
+            # Prevent payments on cancelled or written-off invoices
             if invoice_data and invoice_data["status"] in ["cancelled", "write_off", "partially_written_off"]:
                 conn.close()
                 flash("Cannot record payments for cancelled or written-off invoices.", "danger")
@@ -6562,7 +6562,7 @@ def receipt_new():
         flash("Invoice not found.", "danger")
         return redirect(url_for("billing.invoices"))
 
-    # Prevent payments on written-off invoices
+    # Prevent payments on cancelled or written-off invoices
     if invoice["status"] in ["cancelled", "write_off", "partially_written_off"]:
         conn.close()
         flash("Cannot record payments for cancelled or written-off invoices.", "danger")
@@ -6595,7 +6595,7 @@ def receipt_new():
         effective_status="partially_written_off" if total_written_off_new > 0 else invoice["status"],
         student_payment_url=student_payment_url,
         cashfree_available=(
-            current_inst == current_app.config.get("CASHFREE_INSTITUTE_ID", 1)
+            get_current_institute_id() == current_app.config.get("CASHFREE_INSTITUTE_ID", 1)
             and session.get("role") in {"admin", "staff"}
             and cashfree.configured()
         ),

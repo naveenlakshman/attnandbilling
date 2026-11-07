@@ -1,6 +1,6 @@
 ﻿{% extends "base.html" %}
 
-{% block title %}Record Receipt - {{ company.company_short_name }}{% endblock %}
+{% block title %}Collect Payment - {{ company.company_short_name }}{% endblock %}
 
 {% block content %}
 
@@ -115,7 +115,7 @@
 
   <div class="receipt-form-card">
     <h3 class="h5 mb-2">Record a payment received</h3>
-    <p class="text-muted mb-4">Use this form for cash, UPI, card or bank payments you have already received. Cashfree payments are recorded automatically after verification.</p>
+    <p class="text-muted mb-4">Use this form for cash, UPI, card or bank payments you have already received.{% if cashfree_available %} Cashfree payments are recorded automatically after verification.{% endif %}</p>
     <form id="manual-receipt-form" method="POST" action="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="receipt-form-grid">

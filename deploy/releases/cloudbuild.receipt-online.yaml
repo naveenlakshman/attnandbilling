@@ -1,0 +1,14 @@
+steps:
+  - id: build-receipt-checkout
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, deploy/releases/Dockerfile.receipt-online, --tag, '${_IMAGE}', .]
+  - id: compile-payment-routes
+    name: gcr.io/cloud-builders/docker
+    args: [run, --rm, '${_IMAGE}', python, -m, py_compile, modules/billing/routes.py, modules/billing/cashfree_routes.py]
+  - id: compile-receipt-template
+    name: gcr.io/cloud-builders/docker
+    args: [run, --rm, '${_IMAGE}', python, -c, "from jinja2 import Environment,FileSystemLoader; env=Environment(loader=FileSystemLoader('templates')); [env.get_template(p) for p in ['billing/receipt_new.html','billing/_cashfree_checkout.html']]; print('Receipt checkout templates compiled.')"]
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s
