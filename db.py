@@ -1045,6 +1045,9 @@ def init_db():
         )
     """)
 
+    from services.cashfree_payments import init_sqlite_schema
+    init_sqlite_schema(conn)
+
     # ---------- BAD DEBT WRITE-OFFS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS bad_debt_writeoffs (

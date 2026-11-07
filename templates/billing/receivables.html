@@ -665,6 +665,9 @@
           Message <span class="text-muted fw-normal">(you can edit before sending)</span>
         </label>
         <textarea id="rm_message" class="form-control" rows="6" style="font-size:13px;resize:vertical;"></textarea>
+        {% if config.CASHFREE_PAYMENT_LINKS_ENABLED and current_institute_id == config.CASHFREE_INSTITUTE_ID %}
+        <p class="small text-muted mt-2 mb-0">SMS reminders also include a secure payment link. Students can choose their current installment or full outstanding balance.</p>
+        {% endif %}
       </div>
       <div class="modal-footer py-2 px-3 gap-2 flex-wrap justify-content-between">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>

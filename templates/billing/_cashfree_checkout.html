@@ -1,0 +1,42 @@
+{% if cashfree_available and balance_amount > 0 and effective_status not in ['cancelled', 'write_off', 'partially_written_off'] %}
+<style>
+  #cashfree-payment-form { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; max-width:480px; }
+  #cashfree-payment-form input { width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:6px; }
+  #cashfree-payment-form label { margin-top:4px; font-weight:500; }
+  #cashfree-payment-form button[hidden] { display:none; }
+</style>
+{% set sandbox_mode = config.get('CASHFREE_MODE', 'sandbox') == 'sandbox' %}
+<section class="card" style="margin:16px 0;" aria-label="Cashfree payment">
+  <h3>Pay online (Cashfree{% if sandbox_mode %} sandbox{% endif %})</h3>
+  {% if sandbox_mode %}
+  <p>Test payments update this ERP's fee ledger and are labelled SANDBOX on the receipt.</p>
+  {% endif %}
+  {% if student_payment_url %}
+  <label for="student-payment-url">Student payment link</label>
+  <input id="student-payment-url" class="form-control mb-2" type="text" readonly value="{{ student_payment_url }}" onfocus="this.select()">
+  <p><a href="{{ student_payment_url }}" target="_blank" rel="noopener noreferrer">Open student payment page</a> — the student can choose the current installment or full invoice balance.</p>
+  {% endif %}
+  <form id="cashfree-payment-form"
+        data-mode="{{ config.get('CASHFREE_MODE', 'sandbox') }}"
+        data-create-url="{{ url_for('billing.cashfree_create_order') }}"
+        data-verify-url="{{ url_for('billing.cashfree_verify_order', order_id='ORDER_ID') }}"
+        data-student-id="{{ invoice.student_id }}" data-invoice-id="{{ invoice.id }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="cashfree-amount">Amount (INR) *</label>
+    <input id="cashfree-amount" name="amount" type="number" min="1" step="0.01"
+           max="{{ '%.2f'|format(balance_amount) }}" value="{{ '%.2f'|format(balance_amount) }}" required>
+    <label for="cashfree-name">Name *</label>
+    <input id="cashfree-name" name="name" maxlength="100" value="{{ invoice.full_name or '' }}" required>
+    <label for="cashfree-phone">Mobile number *</label>
+    <input id="cashfree-phone" name="phone" type="tel" pattern="(\+91)?[6-9][0-9]{9}"
+           value="{{ invoice.phone or '' }}" autocomplete="tel" required>
+    <label for="cashfree-email">Email *</label>
+    <input id="cashfree-email" name="email" type="email" maxlength="254" value="{{ invoice.email or '' }}" required>
+    <button class="btn btn-primary" id="cashfree-pay" type="submit" disabled>Pay with Cashfree{% if sandbox_mode %} (sandbox){% endif %}</button>
+    <button class="btn btn-secondary" id="cashfree-verify" type="button" hidden>Check payment status</button>
+    <p id="cashfree-status" role="status" aria-live="polite"></p>
+  </form>
+</section>
+<script src="https://sdk.cashfree.com/js/v3/cashfree.js" defer></script>
+<script src="{{ url_for('static', filename='js/cashfree_checkout.js', v='20261031-live-mode') }}" defer></script>
+{% endif %}

@@ -18,6 +18,7 @@ from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
 from services.document_numbers import allocate_document_number
 from services.student_messages import registration_message, invoice_message, receipt_message, personalize_student_message
+from services import cashfree, payment_links
 from services.subscriptions import (
     PlanLimitExceeded,
     SubscriptionAccessDenied,
@@ -641,6 +642,9 @@ def _student_required_error_message(missing):
 
 
 billing_bp = Blueprint("billing", __name__)
+
+from modules.billing.cashfree_routes import register_cashfree_routes
+register_cashfree_routes(billing_bp)
 logger = logging.getLogger(__name__)
 
 
@@ -4997,6 +5001,7 @@ def invoice_view(invoice_id):
     else:
         balance_amount = invoice_total - total_paid - total_written_off
 
+    student_payment_url = payment_links.build_link(conn, get_current_institute_id(default=1), invoice_id)
     conn.close()
 
     return render_template(
@@ -5008,7 +5013,13 @@ def invoice_view(invoice_id):
         total_paid=total_paid,
         balance_amount=balance_amount,
         total_written_off=total_written_off,
-        effective_status=effective_status
+        effective_status=effective_status,
+        student_payment_url=student_payment_url,
+        cashfree_available=(
+            get_current_institute_id() == current_app.config.get("CASHFREE_INSTITUTE_ID", 1)
+            and session.get("role") in {"admin", "staff"}
+            and cashfree.configured()
+        ),
     )
 
 @billing_bp.route("/invoice/<int:invoice_id>/print")
@@ -6611,6 +6622,11 @@ def receipt_edit(receipt_id):
         flash("Receipt not found.", "danger")
         return redirect(url_for("billing.receipts"))
 
+    if receipt["notes"] and receipt["notes"].startswith(("SANDBOX Cashfree order ", "Cashfree order ")):
+        conn.close()
+        flash("Verified Cashfree receipts cannot be edited. Reconcile gateway payments separately.", "warning")
+        return redirect(url_for("billing.invoice_view", invoice_id=receipt["invoice_id"]))
+
     if request.method == "POST":
         try:
             now = datetime.now().isoformat(timespec="seconds")
@@ -7052,6 +7068,7 @@ def invoice_public_download(token):
 def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
     try:
         cur.execute("""
             SELECT
@@ -7064,7 +7081,7 @@ def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
             FROM invoices
             JOIN students ON invoices.student_id = students.id AND students.institute_id = invoices.institute_id
             WHERE invoices.id = ? AND invoices.institute_id = ?
-        """, (invoice_id, get_current_institute_id(default=1)))
+        """, (invoice_id, current_inst))
         invoice = cur.fetchone()
 
         if not invoice:
@@ -7089,6 +7106,7 @@ def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
         amount = float(invoice["total_amount"] or 0)
         invoice_no = invoice["invoice_no"]
         message = invoice_message(invoice["full_name"], invoice_no, amount, download_url)
+        message = payment_links.append_to_message(message, payment_links.build_link(conn, current_inst, invoice_id))
 
         result = send_sms(phone, message)
         if result.get("success"):
@@ -7700,6 +7718,8 @@ def reminder_send_sms():
         conn.close()
         return jsonify({"success": False, "error": "Student has no phone number on record"}), 400
 
+    message_text = payment_links.append_to_message(
+        message_text, payment_links.build_link(conn, current_inst, reminder['invoice_id']))
     message_text = personalize_student_message(message_text, reminder["student_name"])
     result = send_sms(phone, message_text)
     now = datetime.now().isoformat(timespec="seconds")
@@ -8227,7 +8247,6 @@ def expense_category_edit(category_id):
         return render_template("billing/expense_category_form.html", category=dict(category))
     finally:
         conn.close()
-
 
 @billing_bp.route("/activity-logs", methods=["GET"])
 @login_required
