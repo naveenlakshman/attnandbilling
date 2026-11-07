@@ -6302,6 +6302,7 @@ def receipts():
 @login_required
 def receipt_new():
     invoice_id = request.args.get("invoice_id", type=int)
+    current_inst = get_current_institute_id(default=1)
 
     conn = get_conn()
     cur = conn.cursor()
@@ -6319,16 +6320,17 @@ def receipt_new():
 
             # Get invoice details
             cur.execute("""
-                SELECT id, total_amount, branch_id, status
+                SELECT invoices.id, invoices.total_amount, invoices.branch_id, invoices.status
                 FROM invoices
-                WHERE id = ?
-            """, (invoice_id,))
+                JOIN students ON students.id = invoices.student_id
+                WHERE invoices.id = ? AND invoices.institute_id = ? AND students.institute_id = ?
+            """, (invoice_id, current_inst, current_inst))
             invoice_data = cur.fetchone()
             
             # Prevent payments on written-off invoices
-            if invoice_data and invoice_data["status"] in ["write_off", "partially_written_off"]:
+            if invoice_data and invoice_data["status"] in ["cancelled", "write_off", "partially_written_off"]:
                 conn.close()
-                flash("Cannot record payments for written-off invoices.", "danger")
+                flash("Cannot record payments for cancelled or written-off invoices.", "danger")
                 return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
 
             if not invoice_data:
@@ -6356,8 +6358,6 @@ def receipt_new():
 
             # Temporary receipt number
             temp_receipt_no = f"TEMP_{uuid.uuid4().hex[:8]}"
-
-            current_inst = get_current_institute_id(default=1)
 
             cur.execute("""
                 INSERT INTO receipts (
@@ -6550,11 +6550,11 @@ def receipt_new():
 
     # ---------- GET ----------
     cur.execute("""
-        SELECT invoices.*, students.full_name
+        SELECT invoices.*, students.full_name, students.phone, students.email
         FROM invoices
         JOIN students ON invoices.student_id = students.id
-        WHERE invoices.id = ?
-    """, (invoice_id,))
+        WHERE invoices.id = ? AND invoices.institute_id = ? AND students.institute_id = ?
+    """, (invoice_id, current_inst, current_inst))
     invoice = cur.fetchone()
 
     if not invoice:
@@ -6563,9 +6563,9 @@ def receipt_new():
         return redirect(url_for("billing.invoices"))
 
     # Prevent payments on written-off invoices
-    if invoice["status"] in ["write_off", "partially_written_off"]:
+    if invoice["status"] in ["cancelled", "write_off", "partially_written_off"]:
         conn.close()
-        flash("Cannot record payments for written-off invoices.", "danger")
+        flash("Cannot record payments for cancelled or written-off invoices.", "danger")
         return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
 
     cur.execute("""
@@ -6582,7 +6582,8 @@ def receipt_new():
     """, (invoice_id,))
     written_off_result = cur.fetchone()
     total_written_off_new = float(written_off_result["total_written_off"] or 0) if written_off_result else 0.0
-    balance_amount = float(invoice["total_amount"] or 0) - total_paid - total_written_off_new
+    balance_amount = max(0.0, round(float(invoice["total_amount"] or 0) - total_paid - total_written_off_new, 2))
+    student_payment_url = payment_links.build_link(conn, current_inst, invoice_id)
 
     conn.close()
 
@@ -6590,7 +6591,14 @@ def receipt_new():
         "billing/receipt_new.html",
         invoice=invoice,
         total_paid=total_paid,
-        balance_amount=balance_amount
+        balance_amount=balance_amount,
+        effective_status="partially_written_off" if total_written_off_new > 0 else invoice["status"],
+        student_payment_url=student_payment_url,
+        cashfree_available=(
+            current_inst == current_app.config.get("CASHFREE_INSTITUTE_ID", 1)
+            and session.get("role") in {"admin", "staff"}
+            and cashfree.configured()
+        ),
     )
 
 @billing_bp.route("/receipt/<int:receipt_id>/edit", methods=["GET", "POST"])

@@ -57,7 +57,7 @@ def register_cashfree_routes(billing_bp):
             response.headers['Referrer-Policy'] = 'no-referrer'
             response.headers['X-Robots-Tag'] = 'noindex, nofollow'
         if (
-            (request.endpoint == 'billing.invoice_view' or public)
+            (request.endpoint in {'billing.invoice_view', 'billing.receipt_new'} or public)
             and response.status_code == 200
             and current_app.config.get('SECURITY_HEADERS_ENABLED')
             and (public or session.get('role') in {'admin', 'staff'})

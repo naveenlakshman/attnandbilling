@@ -6,7 +6,7 @@
 
 <style>
   .receipt-form-wrap {
-    max-width: 760px;
+    max-width: 1120px;
   }
 
   .page-header-row {
@@ -104,15 +104,20 @@
 
 <div class="receipt-form-wrap">
   <div class="page-header-row">
-    <h2>Record Receipt</h2>
+    <h2>Collect Payment</h2>
 
     <a href="{{ url_for('billing.invoice_view', invoice_id=invoice.id) }}" class="btn btn-secondary">
       ← Back to Invoice
     </a>
   </div>
 
+  {% include 'billing/_cashfree_checkout.html' %}
+
   <div class="receipt-form-card">
-    <form method="POST" action="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">
+    <h3 class="h5 mb-2">Record a payment received</h3>
+    <p class="text-muted mb-4">Use this form for cash, UPI, card or bank payments you have already received. Cashfree payments are recorded automatically after verification.</p>
+    <form id="manual-receipt-form" method="POST" action="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="receipt-form-grid">
         <div class="form-group">
           <label>Invoice No</label>
@@ -206,7 +211,7 @@
     }
   });
 
-  document.querySelector('form').addEventListener('submit', function(e) {
+  document.getElementById('manual-receipt-form').addEventListener('submit', function(e) {
     const amount = parseFloat(amountInput.value) || 0;
 
     if (amount <= 0) {
