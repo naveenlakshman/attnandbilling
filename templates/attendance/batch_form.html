@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}{% if edit %}Edit Batch{% else %}Create Batch{% endif %} - {{ company.company_short_name }}{% endblock %}
 
@@ -125,12 +125,14 @@
         <div class="form-row">
           <div class="form-group">
             <label for="branch_id" class="form-label required">Branch</label>
-            <select class="form-select" id="branch_id" name="branch_id" required>
-              <option value="">Select Branch</option>
+            <select class="form-select" id="branch_id" name="branch_id" required onchange="onBranchChange()">
+              <option value="" data-opening="{{ inst_opening }}" data-closing="{{ inst_closing }}">Select Branch</option>
               {% for branch in branches %}
-              <option value="{{ branch.id }}" 
-                      {% if batch and batch.branch_id == branch.id %}selected{% endif %}>
-                {{ branch.branch_name }}
+              <option value="{{ branch.id if branch.id is defined else branch['id'] }}" 
+                      data-opening="{{ (branch.opening_time if branch.opening_time is defined else branch['opening_time']) or inst_opening }}"
+                      data-closing="{{ (branch.closing_time if branch.closing_time is defined else branch['closing_time']) or inst_closing }}"
+                      {% if (batch and batch.branch_id == branch.id) or (not batch and branches|length == 1) %}selected{% endif %}>
+                {{ branch.branch_name if branch.branch_name is defined else branch['branch_name'] }}
               </option>
               {% endfor %}
             </select>
@@ -169,23 +171,112 @@
           </select>
         </div>
 
+        <!-- Branch Operating Hours Notice -->
+        <div id="branch_operating_hours_alert" class="alert alert-info py-2 px-3 small mb-3 d-none">
+          <i class="bi bi-clock me-1"></i> <span id="branch_operating_hours_text"></span>
+        </div>
+
         <div class="form-row">
+          <!-- Start Time (12-Hour AM/PM Selector) -->
           <div class="form-group">
-            <label for="start_time" class="form-label">Start Time</label>
-            <input type="time" class="form-control" id="start_time" name="start_time"
-                   value="{{ batch.start_time if batch else '' }}"
-                   oninput="updateAmPm('start_time','start_time_ampm')">
-            <div class="form-helper">24-hour format &nbsp;|&nbsp; <span id="start_time_ampm" class="fw-semibold text-primary"></span></div>
+            <label class="form-label d-flex justify-content-between align-items-center mb-1">
+              <span>Start Time</span>
+              <span class="badge bg-success-subtle text-success border border-success-subtle fw-semibold" id="office_opening_display">Opening: --:--</span>
+            </label>
+            <div class="d-flex gap-2 align-items-center">
+              <select class="form-select text-center" id="start_hh" onchange="syncTime('start')" style="min-width: 68px;">
+                <option value="">HH</option>
+                <option value="01">01</option>
+                <option value="02">02</option>
+                <option value="03">03</option>
+                <option value="04">04</option>
+                <option value="05">05</option>
+                <option value="06">06</option>
+                <option value="07">07</option>
+                <option value="08">08</option>
+                <option value="09">09</option>
+                <option value="10">10</option>
+                <option value="11">11</option>
+                <option value="12">12</option>
+              </select>
+              <span class="fw-bold text-muted">:</span>
+              <select class="form-select text-center" id="start_mm" onchange="syncTime('start')" style="min-width: 68px;">
+                <option value="00">00</option>
+                <option value="05">05</option>
+                <option value="10">10</option>
+                <option value="15">15</option>
+                <option value="20">20</option>
+                <option value="25">25</option>
+                <option value="30">30</option>
+                <option value="35">35</option>
+                <option value="40">40</option>
+                <option value="45">45</option>
+                <option value="50">50</option>
+                <option value="55">55</option>
+              </select>
+              <select class="form-select text-center fw-bold text-primary" id="start_period" onchange="syncTime('start')" style="min-width: 75px;">
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+              </select>
+            </div>
+            <div class="form-helper mt-1 d-flex justify-content-between align-items-center">
+              <span class="text-muted">Selected Start:</span>
+              <span class="fw-semibold text-primary" id="start_time_badge">Not Set</span>
+            </div>
+            <input type="hidden" id="start_time" name="start_time" value="{{ batch.start_time if batch else '' }}">
           </div>
 
+          <!-- End Time (12-Hour AM/PM Selector) -->
           <div class="form-group">
-            <label for="end_time" class="form-label">End Time</label>
-            <input type="time" class="form-control" id="end_time" name="end_time"
-                   value="{{ batch.end_time if batch else '' }}"
-                   oninput="updateAmPm('end_time','end_time_ampm')">
-            <div class="form-helper">24-hour format &nbsp;|&nbsp; <span id="end_time_ampm" class="fw-semibold text-primary"></span></div>
+            <label class="form-label d-flex justify-content-between align-items-center mb-1">
+              <span>End Time</span>
+              <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold" id="office_closing_display">Closing: --:--</span>
+            </label>
+            <div class="d-flex gap-2 align-items-center">
+              <select class="form-select text-center" id="end_hh" onchange="syncTime('end')" style="min-width: 68px;">
+                <option value="">HH</option>
+                <option value="01">01</option>
+                <option value="02">02</option>
+                <option value="03">03</option>
+                <option value="04">04</option>
+                <option value="05">05</option>
+                <option value="06">06</option>
+                <option value="07">07</option>
+                <option value="08">08</option>
+                <option value="09">09</option>
+                <option value="10">10</option>
+                <option value="11">11</option>
+                <option value="12">12</option>
+              </select>
+              <span class="fw-bold text-muted">:</span>
+              <select class="form-select text-center" id="end_mm" onchange="syncTime('end')" style="min-width: 68px;">
+                <option value="00">00</option>
+                <option value="05">05</option>
+                <option value="10">10</option>
+                <option value="15">15</option>
+                <option value="20">20</option>
+                <option value="25">25</option>
+                <option value="30">30</option>
+                <option value="35">35</option>
+                <option value="40">40</option>
+                <option value="45">45</option>
+                <option value="50">50</option>
+                <option value="55">55</option>
+              </select>
+              <select class="form-select text-center fw-bold text-primary" id="end_period" onchange="syncTime('end')" style="min-width: 75px;">
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+              </select>
+            </div>
+            <div class="form-helper mt-1 d-flex justify-content-between align-items-center">
+              <span class="text-muted">Selected End:</span>
+              <span class="fw-semibold text-primary" id="end_time_badge">Not Set</span>
+            </div>
+            <input type="hidden" id="end_time" name="end_time" value="{{ batch.end_time if batch else '' }}">
           </div>
         </div>
+        <!-- Dynamic Time Validation Error Alert -->
+        <div id="time_validation_alert" class="alert alert-danger py-2 px-3 small mt-2 mb-0 d-none"></div>
       </div>
 
       <!-- Batch Duration -->
@@ -245,8 +336,181 @@
 </div>
 
 <script>
-  // Form validation
+  // Helper to format HH:MM (24-hour) to 12-hour AM/PM string
+  function format24to12(time24) {
+    if (!time24) return '';
+    const parts = time24.split(':');
+    if (parts.length < 2) return time24;
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (isNaN(h) || isNaN(m)) return time24;
+    const period = h >= 12 ? 'PM' : 'AM';
+    let h12 = h % 12;
+    if (h12 === 0) h12 = 12;
+    return String(h12).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ' ' + period;
+  }
+
+  // Populate 12-hour dropdowns from 24-hour string (e.g., "14:30")
+  function setTimeDropdowns(prefix, time24) {
+    if (!time24) return;
+    const parts = time24.split(':');
+    if (parts.length < 2) return;
+    let h = parseInt(parts[0], 10);
+    let m = parseInt(parts[1], 10);
+    if (isNaN(h) || isNaN(m)) return;
+
+    const period = h >= 12 ? 'PM' : 'AM';
+    let h12 = h % 12;
+    if (h12 === 0) h12 = 12;
+
+    const hhStr = String(h12).padStart(2, '0');
+    const mmStr = String(m).padStart(2, '0');
+
+    document.getElementById(prefix + '_hh').value = hhStr;
+    
+    // Nearest 5 min or exact if in dropdown
+    const mmSelect = document.getElementById(prefix + '_mm');
+    let matched = false;
+    for (let opt of mmSelect.options) {
+      if (opt.value === mmStr) {
+        mmSelect.value = mmStr;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      const newOpt = new Option(mmStr, mmStr, true, true);
+      mmSelect.add(newOpt);
+    }
+    document.getElementById(prefix + '_period').value = period;
+    
+    // Update badge
+    document.getElementById(prefix + '_time_badge').textContent = hhStr + ':' + mmStr + ' ' + period;
+  }
+
+  // Sync 12-hour controls to hidden 24-hour input
+  function syncTime(prefix) {
+    const hh = document.getElementById(prefix + '_hh').value;
+    const mm = document.getElementById(prefix + '_mm').value;
+    const period = document.getElementById(prefix + '_period').value;
+    const hiddenInput = document.getElementById(prefix + '_time');
+    const badge = document.getElementById(prefix + '_time_badge');
+
+    if (!hh) {
+      hiddenInput.value = '';
+      badge.textContent = 'Not Set';
+      badge.className = 'badge bg-secondary-subtle text-secondary border border-secondary-subtle fw-semibold';
+      validateOperatingHours();
+      return;
+    }
+
+    let h24 = parseInt(hh, 10);
+    if (period === 'PM' && h24 < 12) h24 += 12;
+    if (period === 'AM' && h24 === 12) h24 = 0;
+
+    const h24Str = String(h24).padStart(2, '0');
+    const time24 = h24Str + ':' + (mm || '00');
+    
+    hiddenInput.value = time24;
+    badge.textContent = hh + ':' + (mm || '00') + ' ' + period;
+    badge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle fw-semibold';
+
+    validateOperatingHours();
+  }
+
+  // Handle branch selection change
+  function onBranchChange() {
+    const select = document.getElementById('branch_id');
+    const selectedOption = select ? select.options[select.selectedIndex] : null;
+    const alertBox = document.getElementById('branch_operating_hours_alert');
+    const alertText = document.getElementById('branch_operating_hours_text');
+
+    const defaultOp = '{{ inst_opening or "08:00" }}';
+    const defaultCl = '{{ inst_closing or "20:00" }}';
+
+    let opTime = selectedOption ? selectedOption.getAttribute('data-opening') : '';
+    let clTime = selectedOption ? selectedOption.getAttribute('data-closing') : '';
+
+    if (!opTime) opTime = defaultOp;
+    if (!clTime) clTime = defaultCl;
+
+    const opDisplay = document.getElementById('office_opening_display');
+    const clDisplay = document.getElementById('office_closing_display');
+
+    if (opDisplay) {
+      opDisplay.textContent = opTime ? 'Opening: ' + format24to12(opTime) : 'Opening: Not set';
+    }
+    if (clDisplay) {
+      clDisplay.textContent = clTime ? 'Closing: ' + format24to12(clTime) : 'Closing: Not set';
+    }
+
+    if (opTime || clTime) {
+      const opFormatted = opTime ? format24to12(opTime) : 'Opening';
+      const clFormatted = clTime ? format24to12(clTime) : 'Closing';
+      alertText.textContent = `Institute Office Hours: ${opFormatted} – ${clFormatted} (Batches must be scheduled within these hours)`;
+      alertBox.classList.remove('d-none');
+    } else {
+      alertBox.classList.add('d-none');
+    }
+
+    validateOperatingHours();
+  }
+
+  // Validate start and end times against operating hours
+  function validateOperatingHours() {
+    const select = document.getElementById('branch_id');
+    const selectedOption = select ? select.options[select.selectedIndex] : null;
+    
+    const defaultOp = '{{ inst_opening or "08:00" }}';
+    const defaultCl = '{{ inst_closing or "20:00" }}';
+
+    let opTime = selectedOption ? selectedOption.getAttribute('data-opening') : '';
+    let clTime = selectedOption ? selectedOption.getAttribute('data-closing') : '';
+
+    if (!opTime) opTime = defaultOp;
+    if (!clTime) clTime = defaultCl;
+
+    const startTime = document.getElementById('start_time').value;
+    const endTime = document.getElementById('end_time').value;
+    const valAlert = document.getElementById('time_validation_alert');
+    const submitBtn = document.querySelector('button[type="submit"]');
+
+    let errors = [];
+
+    if (startTime && opTime && startTime < opTime) {
+      errors.push(`Start Time (${format24to12(startTime)}) cannot be earlier than Institute Opening Time (${format24to12(opTime)})`);
+    }
+    if (endTime && clTime && endTime > clTime) {
+      errors.push(`End Time (${format24to12(endTime)}) cannot be later than Institute Closing Time (${format24to12(clTime)})`);
+    }
+    if (startTime && clTime && startTime > clTime) {
+      errors.push(`Start Time (${format24to12(startTime)}) cannot be after Institute Closing Time (${format24to12(clTime)})`);
+    }
+    if (endTime && opTime && endTime < opTime) {
+      errors.push(`End Time (${format24to12(endTime)}) cannot be before Institute Opening Time (${format24to12(opTime)})`);
+    }
+    if (startTime && endTime && endTime <= startTime) {
+      errors.push(`End Time (${format24to12(endTime)}) must be strictly after Start Time (${format24to12(startTime)})`);
+    }
+
+    if (errors.length > 0) {
+      valAlert.innerHTML = '⚠️ ' + errors.join('<br>⚠️ ');
+      valAlert.classList.remove('d-none');
+      document.getElementById('start_time').setCustomValidity(errors[0]);
+      document.getElementById('end_time').setCustomValidity(errors[0]);
+      if (submitBtn) submitBtn.disabled = true;
+    } else {
+      valAlert.classList.add('d-none');
+      valAlert.innerHTML = '';
+      document.getElementById('start_time').setCustomValidity('');
+      document.getElementById('end_time').setCustomValidity('');
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
+  // Form validation on submit
   document.querySelector('form').addEventListener('submit', function(e) {
+    validateOperatingHours();
     if (!this.checkValidity()) {
       e.preventDefault();
       e.stopPropagation();
@@ -258,26 +522,23 @@
   const startDate = document.getElementById('start_date');
   const endDate = document.getElementById('end_date');
 
-  endDate.addEventListener('change', function() {
-    if (startDate.value && this.value && this.value < startDate.value) {
-      this.setCustomValidity('End date must be after start date');
-    } else {
-      this.setCustomValidity('');
-    }
-  });
-
-  function updateAmPm(inputId, spanId) {
-    const val = document.getElementById(inputId).value;
-    const span = document.getElementById(spanId);
-    if (!val) { span.textContent = ''; return; }
-    const [h, m] = val.split(':').map(Number);
-    const period = h < 12 ? 'AM' : 'PM';
-    const h12 = h % 12 === 0 ? 12 : h % 12;
-    span.textContent = h12 + ':' + String(m).padStart(2, '0') + ' ' + period;
+  if (endDate) {
+    endDate.addEventListener('change', function() {
+      if (startDate.value && this.value && this.value < startDate.value) {
+        this.setCustomValidity('End date must be after start date');
+      } else {
+        this.setCustomValidity('');
+      }
+    });
   }
 
-  // Run on page load to show AM/PM for pre-filled values
-  updateAmPm('start_time', 'start_time_ampm');
-  updateAmPm('end_time', 'end_time_ampm');
+  // Initialize dropdowns on load
+  const initialStart = document.getElementById('start_time').value;
+  const initialEnd = document.getElementById('end_time').value;
+
+  if (initialStart) setTimeDropdowns('start', initialStart);
+  if (initialEnd) setTimeDropdowns('end', initialEnd);
+
+  onBranchChange();
 </script>
 {% endblock %}

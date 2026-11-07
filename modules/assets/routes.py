@@ -2,8 +2,29 @@ from flask import Blueprint, render_template, request, session, redirect, url_fo
 from datetime import datetime
 from db import get_conn, log_activity
 from modules.core.utils import login_required, admin_required
+from services.document_numbers import allocate_document_number
+from services.tenant_context import get_current_institute_id
 
 assets_bp = Blueprint("assets", __name__)
+
+
+def _active_branches(cur, institute_id):
+    cur.execute("""
+        SELECT id, branch_name
+        FROM branches
+        WHERE institute_id = ? AND is_active = 1
+        ORDER BY branch_name
+    """, (institute_id,))
+    return cur.fetchall()
+
+
+def _tenant_branch_exists(cur, branch_id, institute_id):
+    cur.execute("""
+        SELECT id
+        FROM branches
+        WHERE id = ? AND institute_id = ? AND is_active = 1
+    """, (branch_id, institute_id))
+    return cur.fetchone() is not None
 
 
 @assets_bp.route("/")
@@ -12,6 +33,7 @@ def list_assets():
     """Display list of assets with filters"""
     conn = get_conn()
     cur = conn.cursor()
+    institute_id = get_current_institute_id(default=1)
 
     # Get filters from request
     branch_filter = request.args.get("branch", "").strip()
@@ -22,18 +44,18 @@ def list_assets():
     cur.execute("""
         SELECT id, branch_name 
         FROM branches 
-        WHERE is_active = 1
+        WHERE institute_id = ? AND is_active = 1
         ORDER BY branch_name
-    """)
+    """, (institute_id,))
     branches = cur.fetchall()
 
     # Get all categories for filter dropdown
     cur.execute("""
         SELECT DISTINCT category 
         FROM assets 
-        WHERE category IS NOT NULL
+        WHERE institute_id = ? AND category IS NOT NULL
         ORDER BY category
-    """)
+    """, (institute_id,))
     categories = [row["category"] for row in cur.fetchall()]
 
     # Build the main query for assets
@@ -48,20 +70,36 @@ def list_assets():
         assets.condition,
         branches.branch_name,
         (SELECT COUNT(*) FROM asset_allocation 
-         WHERE asset_id = assets.id AND status = 'Allocated' LIMIT 1) as is_allocated,
+         WHERE asset_id = assets.id
+           AND institute_id = assets.institute_id
+           AND status = 'Allocated' LIMIT 1) as is_allocated,
         (SELECT assigned_to FROM asset_allocation 
-         WHERE asset_id = assets.id AND status = 'Allocated' LIMIT 1) as assigned_to
+         WHERE asset_id = assets.id
+           AND institute_id = assets.institute_id
+           AND status = 'Allocated' LIMIT 1) as assigned_to
     FROM assets
     LEFT JOIN branches ON assets.branch_id = branches.id
-    WHERE 1=1
+                      AND branches.institute_id = assets.institute_id
+    WHERE assets.institute_id = ?
     """
 
-    params = []
+    params = [institute_id]
 
     # Apply filters
     if branch_filter:
-        query += " AND assets.branch_id = ?"
-        params.append(int(branch_filter))
+        try:
+            requested_branch_id = int(branch_filter)
+        except ValueError:
+            requested_branch_id = 0
+        query += """
+            AND assets.branch_id = ?
+            AND EXISTS (
+                SELECT 1 FROM branches scoped_branch
+                WHERE scoped_branch.id = assets.branch_id
+                  AND scoped_branch.institute_id = assets.institute_id
+            )
+        """
+        params.append(requested_branch_id)
 
     if category_filter:
         query += " AND assets.category = ?"
@@ -122,6 +160,7 @@ def add_asset():
     """Add new asset"""
     conn = get_conn()
     cur = conn.cursor()
+    institute_id = get_current_institute_id(default=1)
 
     if request.method == "POST":
         asset_name = request.form.get("asset_name", "").strip()
@@ -141,9 +180,11 @@ def add_asset():
             errors.append("Purchase Date is required")
         if not branch_id:
             errors.append("Branch is required")
+        elif not _tenant_branch_exists(cur, branch_id, institute_id):
+            errors.append("Select an active branch belonging to your institute")
 
         if errors:
-            branches = cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+            branches = _active_branches(cur, institute_id)
             return render_template(
                 "assets/add.html",
                 categories=ASSET_CATEGORIES,
@@ -157,17 +198,18 @@ def add_asset():
         except ValueError:
             purchase_cost = 0
 
-        # Generate asset code (format: AST-XXXXXX)
-        cur.execute("SELECT MAX(CAST(SUBSTR(asset_code, 5) AS INTEGER)) FROM assets WHERE asset_code LIKE 'AST-%'")
-        result = cur.fetchone()
-        next_code = (result[0] or 0) + 1
-        asset_code = f"AST-{next_code:06d}"
-
         now = datetime.now().isoformat(timespec="seconds")
 
         try:
+            if not _tenant_branch_exists(cur, branch_id, institute_id):
+                raise ValueError("Select an active branch belonging to your institute")
+
+            asset_code = allocate_document_number(
+                cur, institute_id, "asset", "AST"
+            )
             cur.execute("""
                 INSERT INTO assets (
+                    institute_id,
                     asset_code,
                     asset_name,
                     category,
@@ -177,8 +219,9 @@ def add_asset():
                     branch_id,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
+                institute_id,
                 asset_code,
                 asset_name,
                 category,
@@ -194,14 +237,16 @@ def add_asset():
             # Create initial asset log entry
             cur.execute("""
                 INSERT INTO asset_logs (
+                    institute_id,
                     asset_id,
                     action,
                     description,
                     done_by,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, (
+                institute_id,
                 asset_id,
                 "Created",
                 f"Asset created: {asset_name}",
@@ -229,7 +274,10 @@ def add_asset():
             conn.rollback()
             conn.close()
             flash(f"Error creating asset: {str(e)}", "danger")
-            branches = cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+            conn_retry = get_conn()
+            cur_retry = conn_retry.cursor()
+            branches = _active_branches(cur_retry, institute_id)
+            conn_retry.close()
             return render_template(
                 "assets/add.html",
                 categories=ASSET_CATEGORIES,
@@ -238,7 +286,7 @@ def add_asset():
             )
 
     # GET request - show form
-    branches = cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+    branches = _active_branches(cur, institute_id)
     conn.close()
 
     return render_template(
@@ -255,9 +303,13 @@ def edit_asset(asset_id):
     """Edit asset details"""
     conn = get_conn()
     cur = conn.cursor()
+    institute_id = get_current_institute_id(default=1)
 
     # Get asset details
-    asset = cur.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
+    asset = cur.execute(
+        "SELECT * FROM assets WHERE id = ? AND institute_id = ?",
+        (asset_id, institute_id),
+    ).fetchone()
     if not asset:
         conn.close()
         flash("Asset not found", "danger")
@@ -281,9 +333,11 @@ def edit_asset(asset_id):
             errors.append("Purchase Date is required")
         if not branch_id:
             errors.append("Branch is required")
+        elif not _tenant_branch_exists(cur, branch_id, institute_id):
+            errors.append("Select an active branch belonging to your institute")
 
         if errors:
-            branches = cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+            branches = _active_branches(cur, institute_id)
             return render_template(
                 "assets/edit.html",
                 asset=asset,
@@ -319,7 +373,7 @@ def edit_asset(asset_id):
                 SET asset_name = ?, category = ?, brand = ?, 
                     purchase_date = ?, purchase_cost = ?, branch_id = ?,
                     updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND institute_id = ?
             """, (
                 asset_name,
                 category,
@@ -328,21 +382,24 @@ def edit_asset(asset_id):
                 purchase_cost,
                 branch_id,
                 now,
-                asset_id
+                asset_id,
+                institute_id
             ))
 
             # Create asset log entry
             change_description = " | ".join(changes) if changes else "Asset details updated"
             cur.execute("""
                 INSERT INTO asset_logs (
+                    institute_id,
                     asset_id,
                     action,
                     description,
                     done_by,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, (
+                institute_id,
                 asset_id,
                 "Updated",
                 change_description,
@@ -372,7 +429,7 @@ def edit_asset(asset_id):
             flash(f"Error updating asset: {str(e)}", "danger")
             # Get branches from fresh connection for re-rendering form
             conn_retry = get_conn()
-            branches = conn_retry.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+            branches = _active_branches(conn_retry.cursor(), institute_id)
             conn_retry.close()
             return render_template(
                 "assets/edit.html",
@@ -383,7 +440,7 @@ def edit_asset(asset_id):
             )
 
     # GET request - show form
-    branches = cur.execute("SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name").fetchall()
+    branches = _active_branches(cur, institute_id)
     conn.close()
 
     return render_template(
@@ -402,6 +459,7 @@ def allocate_asset(asset_id):
     """Allocate asset to staff or student"""
     conn = get_conn()
     cur = conn.cursor()
+    institute_id = get_current_institute_id(default=1)
 
     # Get asset details
     cur.execute("""
@@ -415,8 +473,9 @@ def allocate_asset(asset_id):
             branches.branch_name
         FROM assets
         LEFT JOIN branches ON assets.branch_id = branches.id
-        WHERE assets.id = ?
-    """, (asset_id,))
+                          AND branches.institute_id = assets.institute_id
+        WHERE assets.id = ? AND assets.institute_id = ?
+    """, (asset_id, institute_id))
     asset = cur.fetchone()
 
     if not asset:
@@ -427,8 +486,8 @@ def allocate_asset(asset_id):
     # Check if asset is already allocated
     cur.execute("""
         SELECT * FROM asset_allocation
-        WHERE asset_id = ? AND status = 'Allocated'
-    """, (asset_id,))
+        WHERE asset_id = ? AND institute_id = ? AND status = 'Allocated'
+    """, (asset_id, institute_id))
     current_allocation = cur.fetchone()
 
     if request.method == "POST":
@@ -460,21 +519,23 @@ def allocate_asset(asset_id):
             cur.execute("""
                 UPDATE asset_allocation
                 SET status = 'Returned', return_date = ?
-                WHERE id = ?
-            """, (return_date, current_allocation["id"]))
+                WHERE id = ? AND institute_id = ?
+            """, (return_date, current_allocation["id"], institute_id))
 
             # Log the return action
             now = datetime.now().isoformat(timespec="seconds")
             cur.execute("""
                 INSERT INTO asset_logs (
+                    institute_id,
                     asset_id,
                     action,
                     description,
                     done_by,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, (
+                institute_id,
                 asset_id,
                 "Returned",
                 f"Asset returned by {current_allocation['assigned_to']}",
@@ -487,6 +548,7 @@ def allocate_asset(asset_id):
         try:
             cur.execute("""
                 INSERT INTO asset_allocation (
+                    institute_id,
                     asset_id,
                     assigned_to,
                     assigned_role,
@@ -494,8 +556,9 @@ def allocate_asset(asset_id):
                     status,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
+                institute_id,
                 asset_id,
                 assigned_to,
                 assigned_role,
@@ -508,14 +571,16 @@ def allocate_asset(asset_id):
             role_display = "Trainer" if assigned_role == "staff" else "Student/Location"
             cur.execute("""
                 INSERT INTO asset_logs (
+                    institute_id,
                     asset_id,
                     action,
                     description,
                     done_by,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, (
+                institute_id,
                 asset_id,
                 "Assigned",
                 f"Asset assigned to {assigned_to} ({role_display})",
@@ -566,6 +631,7 @@ def return_asset(asset_id):
     """Return allocated asset"""
     conn = get_conn()
     cur = conn.cursor()
+    institute_id = get_current_institute_id(default=1)
 
     # Get asset details
     cur.execute("""
@@ -580,8 +646,9 @@ def return_asset(asset_id):
             branches.branch_name
         FROM assets
         LEFT JOIN branches ON assets.branch_id = branches.id
-        WHERE assets.id = ?
-    """, (asset_id,))
+                          AND branches.institute_id = assets.institute_id
+        WHERE assets.id = ? AND assets.institute_id = ?
+    """, (asset_id, institute_id))
     asset = cur.fetchone()
 
     if not asset:
@@ -592,10 +659,10 @@ def return_asset(asset_id):
     # Get current allocation
     cur.execute("""
         SELECT * FROM asset_allocation
-        WHERE asset_id = ? AND status = 'Allocated'
+        WHERE asset_id = ? AND institute_id = ? AND status = 'Allocated'
         ORDER BY assigned_date DESC
         LIMIT 1
-    """, (asset_id,))
+    """, (asset_id, institute_id))
     current_allocation = cur.fetchone()
 
     if not current_allocation:
@@ -629,8 +696,8 @@ def return_asset(asset_id):
             cur.execute("""
                 UPDATE asset_allocation
                 SET status = 'Returned', return_date = ?
-                WHERE id = ?
-            """, (return_date, current_allocation["id"]))
+                WHERE id = ? AND institute_id = ?
+            """, (return_date, current_allocation["id"], institute_id))
 
             # Update asset condition and status
             # If condition is Damaged, set status to In Repair
@@ -639,8 +706,8 @@ def return_asset(asset_id):
             cur.execute("""
                 UPDATE assets
                 SET condition = ?, status = ?, updated_at = ?
-                WHERE id = ?
-            """, (asset_condition, new_status, now, asset_id))
+                WHERE id = ? AND institute_id = ?
+            """, (asset_condition, new_status, now, asset_id, institute_id))
 
             # Log the return action
             return_description = f"Asset returned by {current_allocation['assigned_to']}"
@@ -651,14 +718,16 @@ def return_asset(asset_id):
 
             cur.execute("""
                 INSERT INTO asset_logs (
+                    institute_id,
                     asset_id,
                     action,
                     description,
                     done_by,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
             """, (
+                institute_id,
                 asset_id,
                 "Returned",
                 return_description,
@@ -670,14 +739,16 @@ def return_asset(asset_id):
             if asset_condition == "Damaged":
                 cur.execute("""
                     INSERT INTO asset_logs (
+                        institute_id,
                         asset_id,
                         action,
                         description,
                         done_by,
                         created_at
                     )
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 """, (
+                    institute_id,
                     asset_id,
                     "Repaired",
                     f"Asset marked for repair - {return_notes if return_notes else 'Damage noted during return'}",
@@ -715,9 +786,16 @@ def return_asset(asset_id):
             # Get fresh connection if needed
             conn_retry = get_conn()
             cur_retry = conn_retry.cursor()
-            cur_retry.execute("SELECT * FROM assets WHERE id = ?", (asset_id,))
+            cur_retry.execute(
+                "SELECT * FROM assets WHERE id = ? AND institute_id = ?",
+                (asset_id, institute_id),
+            )
             asset_retry = cur_retry.fetchone()
-            cur_retry.execute("SELECT * FROM asset_allocation WHERE asset_id = ? AND status = 'Allocated' ORDER BY assigned_date DESC LIMIT 1", (asset_id,))
+            cur_retry.execute(
+                "SELECT * FROM asset_allocation WHERE asset_id = ? AND institute_id = ? "
+                "AND status = 'Allocated' ORDER BY assigned_date DESC LIMIT 1",
+                (asset_id, institute_id),
+            )
             current_allocation_retry = cur_retry.fetchone()
             conn_retry.close()
             return render_template(
@@ -742,6 +820,7 @@ def asset_history(asset_id):
     """View asset history and audit trail"""
     conn = get_conn()
     cur = conn.cursor()
+    institute_id = get_current_institute_id(default=1)
 
     # Get asset details
     cur.execute("""
@@ -759,8 +838,9 @@ def asset_history(asset_id):
             branches.branch_name
         FROM assets
         LEFT JOIN branches ON assets.branch_id = branches.id
-        WHERE assets.id = ?
-    """, (asset_id,))
+                          AND branches.institute_id = assets.institute_id
+        WHERE assets.id = ? AND assets.institute_id = ?
+    """, (asset_id, institute_id))
     asset = cur.fetchone()
 
     if not asset:
@@ -778,9 +858,10 @@ def asset_history(asset_id):
             users.full_name as done_by_name
         FROM asset_logs
         LEFT JOIN users ON asset_logs.done_by = users.id
-        WHERE asset_logs.asset_id = ?
+                       AND users.institute_id = asset_logs.institute_id
+        WHERE asset_logs.asset_id = ? AND asset_logs.institute_id = ?
         ORDER BY asset_logs.created_at DESC
-    """, (asset_id,))
+    """, (asset_id, institute_id))
     logs = cur.fetchall()
 
     # Get all asset allocations (who used it)
@@ -795,8 +876,9 @@ def asset_history(asset_id):
             asset_allocation.created_at
         FROM asset_allocation
         WHERE asset_allocation.asset_id = ?
+          AND asset_allocation.institute_id = ?
         ORDER BY asset_allocation.assigned_date DESC
-    """, (asset_id,))
+    """, (asset_id, institute_id))
     allocations = cur.fetchall()
 
     conn.close()

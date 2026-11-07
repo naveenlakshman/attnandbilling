@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block content %}
 <style>
@@ -345,6 +345,70 @@
       margin: 5mm;
     }
   }
+
+  /* ── Modal styling ── */
+  .modal {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-content {
+    background-color: #fefefe;
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 90%;
+    max-width: 500px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e5e5e5;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+  }
+  .modal-header h3 {
+    margin: 0;
+  }
+  .close {
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .modal-body .form-group {
+    margin-bottom: 15px;
+  }
+  .modal-body label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
+  .modal-body input, .modal-body textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+  }
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 10px;
+    border-top: 1px solid #e5e5e5;
+  }
 </style>
 
 <div class="bos-page">
@@ -364,7 +428,7 @@
   <a class="btn btn-secondary" href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}" target="_blank"> Print Bill </a>
   <a href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}?mode=pdf" target="_blank" class="btn btn-success">⬇️ Download PDF</a>
   {% if invoice.phone %}
-  <form method="post" action="{{ url_for('billing.invoice_send_sms', invoice_id=invoice.id) }}" style="display:inline;" onsubmit="return confirm('Send invoice download link to {{ invoice.phone }}?');">
+  <form method="post" action="{{ url_for('billing.invoice_send_sms', invoice_id=invoice.id) }}" style="display:inline;" onsubmit="return confirm('Send invoice links to {{ invoice.phone }}?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn btn-info" style="color:#fff;" title="Send invoice download link via SMS">
       📱 Send SMS
@@ -375,6 +439,7 @@
   </form>
   {% endif %}
 </div>
+{% include 'billing/_cashfree_checkout.html' %}
 <div id="invoice-pdf-content">
 
 <div class="grid">

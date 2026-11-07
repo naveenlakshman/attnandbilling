@@ -1,5 +1,17 @@
 # pyrefly: ignore [missing-import]
-from flask import render_template, request, redirect, url_for, session, flash, current_app
+from flask import (
+    abort,
+    current_app,
+    flash,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -10,9 +22,13 @@ import urllib.parse
 import re
 import os
 import uuid
-from db import get_conn
+import mimetypes
+from io import BytesIO
+from db import get_conn, get_company_profile
 from extensions import limiter, public_auth_limit
-from services.storage import get_storage_service
+from services.storage import get_storage_service, tenant_storage_path
+from services.tenant_context import get_current_institute_id
+from services.profile_updates import profile_changes_from_form
 import logging
 from . import students_bp
 
@@ -30,6 +46,8 @@ def _clear_student_session():
     session.pop('student_session_mode', None)
     session.pop('student_force_password_change', None)
     session.pop('demo_mode', None)
+    session.pop('student_institute_id', None)
+    session.pop('institute_id', None)
 
 
 def _is_mobile_app_request():
@@ -67,9 +85,12 @@ def _mark_student_logged_in(student, mode='lab'):
     session.permanent = mode == 'mobile_app'
     session['student_id'] = student['id']
     session['student_name'] = student['full_name']
-    session['student_code'] = student['student_code']
+    inst_id = student.get('institute_id') or get_current_institute_id(default=1)
+    session['institute_id'] = inst_id
+    session['student_institute_id'] = inst_id
     session['student_login_at'] = int(datetime.utcnow().timestamp())
     session['student_session_mode'] = mode
+    session['student_notifications_pending'] = True
     session['student_force_password_change'] = (
         (not _is_demo()) and _is_default_student_password(student)
     )
@@ -79,6 +100,7 @@ def _set_student_mobile_cookie(response, student):
     token = _student_mobile_serializer().dumps({
         'student_id': student['id'],
         'student_code': student['student_code'],
+        'institute_id': get_current_institute_id(default=1),
         'password_fingerprint': _password_fingerprint(student['password_hash']),
     })
     response.set_cookie(
@@ -117,14 +139,19 @@ def _restore_mobile_student_session():
     except (BadSignature, SignatureExpired):
         return False
 
+    current_institute_id = get_current_institute_id(default=1)
+    token_institute_id = payload.get('institute_id')
+    if token_institute_id is not None and int(token_institute_id) != int(current_institute_id):
+        return False
+
     conn = get_conn()
     try:
         student = conn.execute(
             """
             SELECT * FROM students
-            WHERE id = ? AND student_code = ? AND status != 'dropped' AND portal_enabled = 1
+            WHERE id = ? AND student_code = ? AND status != 'dropped' AND portal_enabled = 1 AND institute_id = ?
             """,
-            (payload.get('student_id'), payload.get('student_code')),
+            (payload.get('student_id'), payload.get('student_code'), current_institute_id),
         ).fetchone()
     finally:
         conn.close()
@@ -206,6 +233,12 @@ def student_login_required(f):
             flash('Please log in to access the student portal.', 'warning')
             return redirect(url_for('students.login'))
 
+        current_institute_id = get_current_institute_id(default=1)
+        if session.get('institute_id') and int(session.get('institute_id')) != int(current_institute_id):
+            _clear_student_session()
+            flash('Invalid session for this institute domain.', 'warning')
+            return redirect(url_for('students.login'))
+
         if session.get('student_session_mode') != 'mobile_app':
             timeout_minutes = int(current_app.config.get('STUDENT_SESSION_TIMEOUT_MINUTES', 120))
             now_ts = int(datetime.utcnow().timestamp())
@@ -233,6 +266,27 @@ def student_login_required(f):
             flash('Please change your password before continuing.', 'warning')
             return redirect(url_for('students.change_password'))
 
+        if not _is_demo():
+            from modules.notifications.service import student_fee_access_status
+            fee_access = student_fee_access_status(
+                int(session['student_id']), int(current_institute_id)
+            )
+            g.student_fee_access = fee_access
+            allowed_while_locked = {
+                'students.dashboard', 'students.profile', 'students.profile_document',
+                'students.profile_upload_document', 'students.profile_request_update',
+                'students.profile_save_signature', 'students.change_password',
+                'students.leave_apply', 'students.leave_history', 'students.attendance',
+                'students.logout',
+            }
+            if fee_access.get('locked') and request.endpoint not in allowed_while_locked:
+                flash(
+                    'Course content is temporarily restricted because a fee installment is overdue. '
+                    'Access will resume after payment is recorded.',
+                    'danger',
+                )
+                return redirect(url_for('students.dashboard'))
+
         return f(*args, **kwargs)
     return decorated
 
@@ -244,20 +298,32 @@ def _is_demo():
 
 def _has_program_access(conn, program_id, student_id):
     """Return True if the student is enrolled/has access to program_id.
-    Always returns True in demo mode."""
+    Demo mode remains read-only and is limited to the current institute."""
+    institute_id = get_current_institute_id(default=1)
     if _is_demo():
-        return True
+        return bool(conn.execute(
+            """
+                SELECT 1
+                FROM lms_programs
+                WHERE id = ?
+                  AND institute_id = ?
+                  AND is_active = 1
+                  AND COALESCE(is_deleted, 0) = 0
+            """,
+            (program_id, institute_id),
+        ).fetchone())
 
     access = conn.execute("""
         SELECT 1 FROM lms_programs lp
-        WHERE lp.id = ? AND lp.is_active = 1 AND COALESCE(lp.is_deleted, 0) = 0
+        WHERE lp.id = ? AND lp.institute_id = ?
+          AND lp.is_active = 1 AND COALESCE(lp.is_deleted, 0) = 0
           AND EXISTS (
               SELECT 1 FROM lms_student_program_access spa
               WHERE spa.student_id = ? AND spa.program_id = lp.id AND spa.is_active = 1
                 AND COALESCE(spa.access_status, 'active') = 'active'
                 AND (spa.access_end_date IS NULL OR spa.access_end_date >= date('now'))
           )
-    """, (program_id, student_id)).fetchone()
+    """, (program_id, institute_id, student_id)).fetchone()
     return bool(access)
 
 
@@ -650,11 +716,7 @@ def login():
 
     mobile_app_login = _is_mobile_app_request()
 
-    conn = get_conn()
-    try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
-    finally:
-        conn.close()
+    company = get_company_profile()
 
     if request.method == 'POST':
         student_code = request.form.get('student_code', '').strip().upper()
@@ -662,9 +724,10 @@ def login():
 
         conn = get_conn()
         try:
+            current_institute_id = get_current_institute_id(default=1)
             student = conn.execute(
-                "SELECT * FROM students WHERE student_code = ? AND status != 'dropped' AND portal_enabled = 1",
-                (student_code,)
+                "SELECT * FROM students WHERE student_code = ? AND status != 'dropped' AND portal_enabled = 1 AND institute_id = ?",
+                (student_code, current_institute_id)
             ).fetchone()
         finally:
             conn.close()
@@ -713,9 +776,10 @@ def logout():
 @student_login_required
 def dashboard():
     student_id = session['student_id']
+    institute_id = get_current_institute_id(default=1)
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         if _is_demo():
             # Demo mode: show one published program per course/reference so cloned drafts
@@ -742,6 +806,7 @@ def dashboard():
                     WHERE lp.is_active = 1
                       AND COALESCE(lp.is_deleted, 0) = 0
                       AND lp.is_published = 1
+                      AND lp.institute_id = ?
                 )
                 SELECT
                     lp.id, lp.program_name, lp.description,
@@ -818,7 +883,7 @@ def dashboard():
                 FROM ranked_demo_programs lp
                 WHERE lp.demo_rank = 1
                 ORDER BY COALESCE(lp.program_reference_name, lp.program_name), lp.program_name
-            """).fetchall()
+            """, (institute_id,)).fetchall()
         else:
             # Normal mode: only programs the student is enrolled in
             programs = conn.execute("""
@@ -984,7 +1049,7 @@ def program_view(program_id):
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         # Verify access
         access = _has_program_access(conn, program_id, student_id)
@@ -1076,7 +1141,7 @@ def chapter_view(chapter_id):
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         chapter = conn.execute("""
             SELECT lc.*, lp.program_name, lp.id AS program_id
@@ -1124,7 +1189,7 @@ def topic_view(topic_id):
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         topic = conn.execute("""
             SELECT lt.*, lc.chapter_title, lc.id AS chapter_id,
@@ -1266,7 +1331,7 @@ def master_topic_view(program_id, master_topic_id):
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
 
         access = _has_program_access(conn, program_id, student_id)
         if not access:
@@ -1685,7 +1750,7 @@ def profile():
     student_id = session['student_id']
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
         if _is_demo():
             student = {
                 'id': 0,
@@ -1780,37 +1845,160 @@ def profile():
                            qualification_levels=QUALIFICATION_LEVELS)
 
 
-def calculate_profile_score(student, uploaded_docs):
-    """Calculate the profile completion percentage from 0 to 100 based on 22 criteria."""
+def calculate_profile_completion(student, uploaded_docs):
+    """Return score and missing items using only fields applicable to the student."""
     if not student:
-        return 0
+        return {'score': 0, 'filled_count': 0, 'total_items': 0, 'missing_count': 0, 'missing_labels': []}
     
     student_dict = dict(student)
     uploaded_cats = {d['category'] for d in uploaded_docs}
     
     fields_to_check = [
-        'full_name', 'phone', 'email', 'address', 'gender', 'education_level', 
-        'qualification', 'employment_status', 'date_of_birth', 'parent_name', 
-        'parent_contact', 'father_name', 'mother_name', 'tenth_institution', 
-        'tenth_percentage', 'puc_institution', 'puc_percentage',
-        'student_signature_filename', 'parent_signature_filename'
+        ('full_name', 'Full Name'), ('phone', 'Phone'), ('email', 'Email'),
+        ('address', 'Address'), ('gender', 'Gender'), ('education_level', 'Education Level'),
+        ('qualification', 'Qualification'), ('employment_status', 'Employment Status'),
+        ('date_of_birth', 'Date of Birth'), ('parent_name', 'Parent Name'),
+        ('parent_contact', 'Parent Contact'), ('father_name', 'Father Name'),
+        ('mother_name', 'Mother Name'), ('student_signature_filename', 'Student Signature'),
+        ('parent_signature_filename', 'Parent Signature'),
     ]
+
+    education_level = str(student_dict.get('education_level') or '').strip()
+    qualification = str(student_dict.get('qualification') or '').strip().lower()
+    higher_education_levels = {
+        'Diploma', 'Undergraduate', 'Postgraduate', 'Doctoral',
+        'Technical', 'Professional',
+    }
+
+    # School students below completed 10th must not lose points for academic
+    # history they have not reached yet.
+    needs_tenth_details = (
+        (education_level == 'School' and 'completed' in qualification)
+        or (education_level not in {'', 'School'})
+    )
+    needs_puc_details = (
+        (
+            education_level == 'Pre-University'
+            and any(marker in qualification for marker in ('completed', '2nd', '12th'))
+        )
+        or education_level in higher_education_levels
+    )
+
+    if needs_tenth_details:
+        fields_to_check.extend([
+            ('tenth_institution', '10th Institution'),
+            ('tenth_percentage', '10th Percentage'),
+        ])
+    if needs_puc_details:
+        fields_to_check.extend([
+            ('puc_institution', 'PUC Institution'),
+            ('puc_percentage', 'PUC Percentage'),
+        ])
     
     filled_count = 0
-    for field in fields_to_check:
+    missing_labels = []
+    for field, label in fields_to_check:
         val = student_dict.get(field)
         if val is not None and str(val).strip() != "":
             filled_count += 1
+        else:
+            missing_labels.append(label)
             
-    if 'qualification' in uploaded_cats:
-        filled_count += 1
-    if 'identity' in uploaded_cats:
-        filled_count += 1
-    if 'address' in uploaded_cats:
-        filled_count += 1
+    document_items = [
+        ('qualification', 'Qualification Document'),
+        ('identity', 'Identity Document'),
+        ('address', 'Address Document'),
+    ]
+    for category, label in document_items:
+        if category in uploaded_cats:
+            filled_count += 1
+        else:
+            missing_labels.append(label)
         
-    total_items = len(fields_to_check) + 3
-    return int((filled_count / total_items) * 100)
+    total_items = len(fields_to_check) + len(document_items)
+    return {
+        'score': int((filled_count / total_items) * 100),
+        'filled_count': filled_count,
+        'total_items': total_items,
+        'missing_count': len(missing_labels),
+        'missing_labels': missing_labels,
+    }
+
+
+def calculate_profile_score(student, uploaded_docs):
+    """Backward-compatible profile score used by student and exam workflows."""
+    return calculate_profile_completion(student, uploaded_docs)['score']
+
+
+@students_bp.route('/profile/document/<int:document_id>')
+def profile_document(document_id):
+    """Serve one student document after enforcing owner, tenant and branch access."""
+    student_id = session.get('student_id')
+    staff_user_id = session.get('user_id')
+    is_support_owner = (
+        session.get('platform_role') == 'platform_owner'
+        and session.get('support_session_id')
+    )
+    if not student_id and not staff_user_id and not is_support_owner:
+        abort(401)
+
+    institute_id = get_current_institute_id()
+    if institute_id is None:
+        abort(404)
+
+    conn = get_conn()
+    try:
+        document = conn.execute(
+            """
+            SELECT d.id, d.student_id, d.document_type, d.file_path,
+                   s.institute_id, s.branch_id
+            FROM student_uploaded_documents d
+            JOIN students s ON s.id = d.student_id
+            WHERE d.id = ? AND s.institute_id = ?
+            """,
+            (document_id, institute_id),
+        ).fetchone()
+        if not document:
+            abort(404)
+
+        if student_id:
+            if int(document['student_id']) != int(student_id):
+                abort(403)
+        elif staff_user_id:
+            user = conn.execute(
+                """
+                SELECT role, branch_id, can_view_all_branches
+                FROM users
+                WHERE id = ? AND institute_id = ? AND is_active = 1
+                """,
+                (staff_user_id, institute_id),
+            ).fetchone()
+            if not user or user['role'] not in ('admin', 'staff'):
+                abort(403)
+            if (
+                user['role'] == 'staff'
+                and not int(user['can_view_all_branches'] or 0)
+                and int(user['branch_id'] or 0) != int(document['branch_id'] or 0)
+            ):
+                abort(403)
+    finally:
+        conn.close()
+
+    storage_service = get_storage_service()
+    canonical_path = tenant_storage_path(document['file_path'], institute_id)
+    if not storage_service.file_exists(canonical_path):
+        abort(404)
+
+    data = storage_service.download_file(canonical_path)
+    filename = os.path.basename(document['file_path'])
+    mime_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+    return send_file(
+        BytesIO(data),
+        mimetype=mime_type,
+        download_name=filename,
+        as_attachment=request.args.get('download') == '1',
+        max_age=0,
+    )
 
 
 @students_bp.route('/profile/upload-document', methods=['POST'])
@@ -1907,10 +2095,21 @@ def profile_upload_document():
 @student_login_required
 def profile_request_update():
     student_id = session['student_id']
+    institute_id = get_current_institute_id()
+    if institute_id is None:
+        abort(404)
+    if request.form.get('profile_review_confirmed') != '1':
+        flash('Please review all profile fields and confirm before submitting.', 'warning')
+        return redirect(url_for('students.profile'))
     conn = get_conn()
     try:
         # 1. Fetch current student details
-        student = conn.execute("SELECT * FROM students WHERE id = ?", (student_id,)).fetchone()
+        student = conn.execute(
+            "SELECT * FROM students WHERE id = ? AND institute_id = ?",
+            (student_id, institute_id),
+        ).fetchone()
+        if not student:
+            abort(404)
         
         # Check 3 approved updates limit
         if student.get('profile_approved_updates_count', 0) >= 3:
@@ -1919,29 +2118,16 @@ def profile_request_update():
             
         # Check if there is already a PENDING request
         pending = conn.execute(
-            "SELECT id FROM student_profile_update_requests WHERE student_id = ? AND status = 'PENDING' LIMIT 1",
-            (student_id,)
+            """SELECT id FROM student_profile_update_requests
+               WHERE student_id = ? AND institute_id = ? AND status = 'PENDING' LIMIT 1""",
+            (student_id, institute_id)
         ).fetchone()
         if pending:
             flash('You already have a pending profile update request.', 'warning')
             return redirect(url_for('students.profile'))
             
         # 2. Gather allowed fields from form
-        allowed_fields = [
-            'full_name', 'phone', 'email', 'address', 'gender', 'education_level', 
-            'qualification', 'employment_status', 'date_of_birth', 'parent_name', 
-            'parent_contact', 'father_name', 'mother_name', 'tenth_institution', 
-            'tenth_board', 'tenth_year', 'tenth_percentage', 'puc_institution', 
-            'puc_board', 'puc_stream', 'puc_year', 'puc_percentage'
-        ]
-        
-        requested_data = {}
-        for field in allowed_fields:
-            val = request.form.get(field, '').strip()
-            # Compare with current value to only request changes for modified fields
-            curr_val = str(student[field]) if student[field] is not None else ''
-            if val != curr_val:
-                requested_data[field] = val
+        requested_data = profile_changes_from_form(student, request.form)
                 
         if not requested_data:
             flash('No changes were made to your profile.', 'info')
@@ -1951,10 +2137,10 @@ def profile_request_update():
         import json
         conn.execute(
             """
-            INSERT INTO student_profile_update_requests (student_id, requested_data, status)
-            VALUES (?, ?, 'PENDING')
+            INSERT INTO student_profile_update_requests (student_id, requested_data, status, institute_id)
+            VALUES (?, ?, 'PENDING', ?)
             """,
-            (student_id, json.dumps(requested_data))
+            (student_id, json.dumps(requested_data), institute_id)
         )
         conn.commit()
         flash('Your profile update request has been submitted for staff approval.', 'success')
@@ -1967,14 +2153,86 @@ def profile_request_update():
     return redirect(url_for('students.profile'))
 
 
+@students_bp.route('/profile/save-signature', methods=['POST'])
+@student_login_required
+def save_signature():
+    """Reject student-side signature changes; admission signatures are staff-owned records."""
+    return jsonify({
+        "success": False,
+        "error": "Enrollment signatures are read-only. Contact institute staff for corrections.",
+    }), 403
+
+    # Retained temporarily below for migration history; this code is unreachable.
+    import os, base64
+    student_id = session['student_id']
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, student_code, full_name, institute_id FROM students WHERE id = ?", (student_id,))
+    student = cur.fetchone()
+    if not student:
+        conn.close()
+        return jsonify({"success": False, "error": "Student not found"}), 404
+
+    sig_type = request.form.get("sig_type", "").strip()   # "student" or "parent"
+    sig_data = request.form.get("sig_data", "").strip()   # base64 PNG data URL
+
+    if sig_type not in ("student", "parent"):
+        conn.close()
+        return jsonify({"success": False, "error": "Invalid signature type"}), 400
+    if not sig_data:
+        conn.close()
+        return jsonify({"success": False, "error": "No signature data"}), 400
+
+    try:
+        if ',' in sig_data:
+            sig_data = sig_data.split(',')[1]
+        sig_bytes = base64.b64decode(sig_data)
+
+        code = student["student_code"]
+        filename = f"signatures/{code}_{sig_type}_signature.png"
+        
+        storage_service = get_storage_service()
+        storage_service.upload_file(sig_bytes, filename, content_type="image/png")
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if sig_type == "student":
+            cur.execute(
+                "UPDATE students SET student_signature_filename=?, student_signature_date=?, updated_at=? WHERE id=?",
+                (filename, now, now, student_id)
+            )
+        else:
+            cur.execute(
+                "UPDATE students SET parent_signature_filename=?, parent_signature_date=?, updated_at=? WHERE id=?",
+                (filename, now, now, student_id)
+            )
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "filename": filename, "signed_at": now})
+    except Exception as e:
+        conn.close()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @students_bp.route('/change-password', methods=['GET', 'POST'])
 @student_login_required
 def change_password():
     student_id = session['student_id']
+    current_inst = get_current_institute_id(default=1)
 
     conn = get_conn()
     try:
-        company = conn.execute("SELECT * FROM company_profile LIMIT 1").fetchone()
+        company = get_company_profile()
+        password_record = conn.execute(
+            """
+            SELECT password_changed_at
+            FROM students
+            WHERE id = ? AND institute_id = ?
+            """,
+            (student_id, current_inst),
+        ).fetchone()
+        last_password_change = (
+            password_record['password_changed_at'] if password_record else None
+        )
 
         if _is_demo():
             flash('Demo mode is read-only. Password changes are disabled.', 'warning')
@@ -1997,9 +2255,10 @@ def change_password():
                 """
                 SELECT id, password_hash, student_code
                 FROM students
-                WHERE id = ? AND status != 'dropped' AND portal_enabled = 1
+                WHERE id = ? AND institute_id = ?
+                  AND status != 'dropped' AND portal_enabled = 1
                 """,
-                (student_id,)
+                (student_id, current_inst)
             ).fetchone()
 
             if not student or not student['password_hash']:
@@ -2020,9 +2279,19 @@ def change_password():
                 return redirect(url_for('students.change_password'))
 
             new_password_hash = generate_password_hash(new_password)
+            password_changed_at = datetime.utcnow().isoformat(timespec='seconds')
             conn.execute(
-                "UPDATE students SET password_hash = ? WHERE id = ?",
-                (new_password_hash, student_id)
+                """
+                UPDATE students
+                SET password_hash = ?, password_changed_at = ?
+                WHERE id = ? AND institute_id = ?
+                """,
+                (
+                    new_password_hash,
+                    password_changed_at,
+                    student_id,
+                    current_inst,
+                )
             )
             conn.commit()
             session['student_force_password_change'] = False
@@ -2038,7 +2307,11 @@ def change_password():
     finally:
         conn.close()
 
-    return render_template('students/change_password.html', company=company)
+    return render_template(
+        'students/change_password.html',
+        company=company,
+        last_password_change=last_password_change,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2444,6 +2717,7 @@ def submit_assignment(assignment_id):
         return jsonify({'ok': False, 'error': 'Read-only in demo mode'}), 403
 
     student_id = session['student_id']
+    institute_id = get_current_institute_id(default=1)
     conn = get_conn()
     try:
         a = conn.execute(
@@ -2519,10 +2793,10 @@ def submit_assignment(assignment_id):
         # Insert new submission row
         conn.execute("""
             INSERT INTO lms_assignment_submissions
-                (assignment_id, student_id, file_path, original_filename,
+                (institute_id, assignment_id, student_id, file_path, original_filename,
                  status, review_status, submitted_at, updated_at, is_latest, is_late)
-            VALUES (?, ?, ?, ?, 'submitted', 'submitted', ?, ?, 1, ?)
-        """, (assignment_id, student_id, path_or_err, orig_name, now, now, is_late))
+            VALUES (?, ?, ?, ?, ?, 'submitted', 'submitted', ?, ?, 1, ?)
+        """, (institute_id, assignment_id, student_id, path_or_err, orig_name, now, now, is_late))
         conn.commit()
         return jsonify({'ok': True, 'status': 'submitted', 'review_status': 'submitted',
                         'submitted_at': now[:16], 'original_filename': orig_name,
@@ -2696,6 +2970,13 @@ def attendance_calendar():
 @students_bp.route('/profile/save-signature', methods=['POST'])
 @student_login_required
 def profile_save_signature():
+    """Reject student-side signature changes; admission signatures are staff-owned records."""
+    return {
+        "success": False,
+        "error": "Enrollment signatures are read-only. Contact institute staff for corrections.",
+    }, 403
+
+    # Retained temporarily below for migration history; this code is unreachable.
     import base64
     student_id = session['student_id']
     sig_type = request.form.get('sig_type')

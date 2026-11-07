@@ -220,11 +220,17 @@
     <div class="col-md-4">
       <label class="form-label">Stage</label>
       {% set st = lead.stage if lead else 'New Lead' %}
-      <select class="form-select" name="stage">
-        {% for s in ["New Lead","Contacted","Interested","Counseling Done","Follow-up","Converted","Lost"] %}
-          <option value="{{ s }}" {% if st == s %}selected{% endif %}>{{ s }}</option>
-        {% endfor %}
-      </select>
+      {% if st in ["Converted", "Lost"] %}
+        <input type="hidden" name="stage" value="{{ st }}">
+        <input class="form-control" value="{{ st }}" disabled>
+        <div class="form-text">This is a terminal stage. Use the lead workflow actions to change lead outcomes.</div>
+      {% else %}
+        <select class="form-select" name="stage">
+          {% for s in editable_stages %}
+            <option value="{{ s }}" {% if st == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      {% endif %}
     </div>
 
     {% if mode == 'create' %}

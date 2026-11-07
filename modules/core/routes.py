@@ -1,16 +1,31 @@
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Blueprint, abort, current_app, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import logging
-from db import get_conn, get_company_profile, clear_company_cache
+from db import get_conn, get_company_profile, clear_company_cache, _ensure_lms_batch_topic_progress_table
 from services.storage import get_storage_service
+from services.batch_syllabus_progress import batch_syllabus_progress
+from services.batch_schedule import IST, batch_end_summary
+from services.attendance_summary import get_attendance_summary
 from .utils import login_required, admin_required
 
 logger = logging.getLogger("app.core")
 
 from .sms import send_sms
 from extensions import public_auth_limit
+from services.tenant_context import (
+    get_current_institute_id,
+    is_platform_control_host,
+    normalize_hostname,
+)
+from services.platform_access import close_support_session
+from services.subscriptions import (
+    PlanLimitExceeded,
+    SubscriptionAccessDenied,
+    assert_subscription_access,
+    lock_and_check_limit,
+)
 
 core_bp = Blueprint("core", __name__)
 
@@ -31,7 +46,7 @@ def home():
 @core_bp.route("/login", methods=["GET", "POST"])
 @public_auth_limit()
 def login():
-    if "user_id" in session:
+    if "user_id" in session or "platform_account_id" in session:
         return redirect(url_for("core.dashboard"))
 
     if request.method == "POST":
@@ -40,35 +55,115 @@ def login():
 
         conn = get_conn()
         cur = conn.cursor()
-        cur.execute("""
-            SELECT * FROM users
-            WHERE username = ? AND is_active = 1
-        """, (username,))
-        user = cur.fetchone()
-        conn.close()
+        platform_login_allowed = (
+            is_platform_control_host(request.host)
+            or (
+                current_app.config["APP_ENV"] != "production"
+                and normalize_hostname(request.host) in {"localhost", "127.0.0.1", "::1"}
+            )
+        )
+        platform_account = (
+            cur.execute(
+                """SELECT * FROM platform_accounts
+                   WHERE username = ? AND role = 'platform_owner' AND is_active = 1
+                   LIMIT 1""",
+                (username,),
+            ).fetchone()
+            if platform_login_allowed
+            else None
+        )
+        if platform_account and check_password_hash(
+            platform_account["password_hash"], password
+        ):
+            now = datetime.now().isoformat(timespec="seconds")
+            conn.execute(
+                "UPDATE platform_accounts SET last_login_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, platform_account["id"]),
+            )
+            conn.commit()
+            conn.close()
+            session.clear()
+            session.permanent = True
+            session["platform_account_id"] = int(platform_account["id"])
+            session["full_name"] = platform_account["full_name"]
+            session["username"] = platform_account["username"]
+            session["role"] = "platform_owner"
+            session["platform_role"] = "platform_owner"
+            flash("Platform login successful.", "success")
+            return redirect(url_for("platform_admin.institutes"))
 
+        user = None
+        if not platform_login_allowed:
+            current_institute_id = get_current_institute_id(default=1)
+            cur.execute("""
+                SELECT u.*
+                FROM users u
+                LEFT JOIN institute_memberships im
+                  ON im.user_id = u.id
+                 AND im.institute_id = ?
+                 AND im.is_active = 1
+                WHERE u.username = ?
+                  AND u.is_active = 1
+                  AND u.institute_id = ?
+                  AND im.id IS NOT NULL
+                ORDER BY u.id
+                LIMIT 1
+            """, (current_institute_id, username, current_institute_id))
+            user = cur.fetchone()
         if user and check_password_hash(user["password_hash"], password):
+            try:
+                assert_subscription_access(conn, user["institute_id"])
+            except SubscriptionAccessDenied as exc:
+                conn.close()
+                flash(str(exc), "danger")
+                return render_template("core/login.html")
+            conn.close()
             session.permanent = True
             session["user_id"] = user["id"]
             session["full_name"] = user["full_name"]
             session["username"] = user["username"]
             session["role"] = user["role"]
+            session["platform_role"] = user.get("platform_role")
             session["branch_id"] = user["branch_id"]
             session["can_view_all_branches"] = user["can_view_all_branches"]
+            session["institute_id"] = user["institute_id"]
+
+            membership_conn = get_conn()
+            try:
+                membership = membership_conn.execute(
+                    """SELECT membership_role FROM institute_memberships
+                       WHERE institute_id = ? AND user_id = ? AND is_active = 1
+                       LIMIT 1""",
+                    (session["institute_id"], user["id"]),
+                ).fetchone()
+                session["membership_role"] = (
+                    membership["membership_role"] if membership
+                    else ("institute_admin" if user["role"] == "admin" else user["role"])
+                )
+            finally:
+                membership_conn.close()
 
             flash("Login successful.", "success")
             return redirect(url_for("core.dashboard"))
 
+        conn.close()
         flash("Invalid username or password.", "danger")
 
-    return render_template("core/login.html")
+    return render_template(
+        "core/login.html",
+        platform_control_login=is_platform_control_host(request.host),
+    )
 
 @core_bp.route("/dashboard")
 @login_required
 def dashboard():
+    if session.get("platform_account_id") and not session.get("support_session_id"):
+        return redirect(url_for("platform_admin.institutes"))
+    institute_id = get_current_institute_id(default=1)
+
     # Staff users get their own dedicated dashboard
     if session.get("role") == "staff":
-        return _staff_dashboard()
+        return _staff_dashboard(institute_id)
 
     # ── Admin dashboard below ────────────────────────────────────
     conn = get_conn()
@@ -80,59 +175,72 @@ def dashboard():
 
     # ── Revenue this month ──────────────────────────────────────
     cur.execute("""
-        SELECT COALESCE(SUM(amount_received), 0) AS total
-        FROM receipts
-        WHERE strftime('%Y-%m', receipt_date) = ?
-    """, [current_month])
+        SELECT COALESCE(SUM(r.amount_received), 0) AS total
+        FROM receipts r
+        JOIN invoices i ON r.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE s.institute_id = ? AND strftime('%Y-%m', r.receipt_date) = ?
+    """, [institute_id, current_month])
     revenue_this_month = float(cur.fetchone()["total"] or 0)
 
     # ── Expenses this month ─────────────────────────────────────
     cur.execute("""
-        SELECT COALESCE(SUM(amount), 0) AS total
-        FROM expenses
-        WHERE strftime('%Y-%m', expense_date) = ?
-    """, [current_month])
+        SELECT COALESCE(SUM(e.amount), 0) AS total
+        FROM expenses e
+        JOIN branches br ON e.branch_id = br.id
+        WHERE br.institute_id = ? AND strftime('%Y-%m', e.expense_date) = ?
+    """, [institute_id, current_month])
     expenses_this_month = float(cur.fetchone()["total"] or 0)
 
     # ── Active students ─────────────────────────────────────────
-    cur.execute("SELECT COUNT(*) AS cnt FROM students WHERE status = 'active'")
+    cur.execute(
+        "SELECT COUNT(*) AS cnt FROM students WHERE institute_id = ? AND status = 'active'",
+        [institute_id],
+    )
     active_students = cur.fetchone()["cnt"]
 
     # ── New students this month ─────────────────────────────────
     cur.execute("""
         SELECT COUNT(*) AS cnt FROM students
-        WHERE strftime('%Y-%m', joined_date) = ?
-    """, [current_month])
+        WHERE institute_id = ? AND strftime('%Y-%m', joined_date) = ?
+    """, [institute_id, current_month])
     new_students_this_month = cur.fetchone()["cnt"]
 
     # ── Active leads ────────────────────────────────────────────
     cur.execute("""
         SELECT COUNT(*) AS cnt FROM leads
-        WHERE status = 'active' AND is_deleted = 0
-    """)
+        WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
+    """, [institute_id])
     active_leads = cur.fetchone()["cnt"]
 
     # ── Leads by stage ──────────────────────────────────────────
     cur.execute("""
         SELECT stage, COUNT(*) AS cnt FROM leads
-        WHERE status = 'active' AND is_deleted = 0
+        WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
         GROUP BY stage
         ORDER BY cnt DESC
-    """)
+    """, [institute_id])
     leads_by_stage = cur.fetchall()
 
     # ── Lead conversion stats ───────────────────────────────────
-    cur.execute("SELECT COUNT(*) AS cnt FROM leads WHERE status = 'converted' AND is_deleted = 0")
+    cur.execute(
+        """SELECT COUNT(*) AS cnt FROM leads
+           WHERE institute_id = ? AND status = 'converted' AND is_deleted = 0""",
+        [institute_id],
+    )
     total_converted = cur.fetchone()["cnt"]
-    cur.execute("SELECT COUNT(*) AS cnt FROM leads WHERE is_deleted = 0")
+    cur.execute(
+        "SELECT COUNT(*) AS cnt FROM leads WHERE institute_id = ? AND is_deleted = 0",
+        [institute_id],
+    )
     total_leads_all = cur.fetchone()["cnt"]
     conversion_rate = round((total_converted / total_leads_all * 100), 1) if total_leads_all else 0
 
     # ── Today's new leads ───────────────────────────────────────
     cur.execute("""
         SELECT COUNT(*) AS cnt FROM leads
-        WHERE date(created_at) = ? AND is_deleted = 0
-    """, [today])
+        WHERE institute_id = ? AND date(created_at) = ? AND is_deleted = 0
+    """, [institute_id, today])
     today_new_leads = cur.fetchone()["cnt"]
 
     # ── Past due installments ───────────────────────────────────
@@ -145,11 +253,11 @@ def dashboard():
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE ip.status != 'paid'
+        WHERE s.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
         ORDER BY parse_date(ip.due_date) ASC
-    """, [today])
+    """, [institute_id, today])
     past_dues = cur.fetchall()
     total_past_due = sum(float(r["balance_due"] or 0) for r in past_dues)
 
@@ -163,11 +271,11 @@ def dashboard():
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE ip.status != 'paid'
+        WHERE s.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
         ORDER BY s.full_name ASC
-    """, [today])
+    """, [institute_id, today])
     todays_dues = cur.fetchall()
     total_today_due = sum(float(r["balance_due"] or 0) for r in todays_dues)
 
@@ -178,74 +286,67 @@ def dashboard():
             COUNT(*) AS cnt
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        WHERE ip.status != 'paid'
+        JOIN students s ON i.student_id = s.id
+        WHERE s.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) > ?
           AND parse_date(ip.due_date) <= ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
-    """, [today, seven_days_later])
+    """, [institute_id, today, seven_days_later])
     row = cur.fetchone()
     total_next7_due = float(row["total"] or 0)
     count_next7_due = row["cnt"]
 
     # ── Bad debt total ──────────────────────────────────────────
-    cur.execute("SELECT COALESCE(SUM(amount_written_off), 0) AS total FROM bad_debt_writeoffs")
+    cur.execute(
+        """SELECT COALESCE(SUM(w.amount_written_off), 0) AS total
+           FROM bad_debt_writeoffs w
+           JOIN invoices i ON w.invoice_id = i.id
+           JOIN students s ON i.student_id = s.id
+           WHERE s.institute_id = ?""",
+        [institute_id],
+    )
     total_bad_debt = float(cur.fetchone()["total"] or 0)
 
-    # ── Today's attendance ──────────────────────────────────────
-    cur.execute("""
-        SELECT ar.status, COUNT(*) AS cnt
-        FROM attendance_records ar
-        JOIN batches b ON ar.batch_id = b.id
-        WHERE ar.attendance_date = ?
-          AND b.status = 'active'
-          AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
-          AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
-        GROUP BY ar.status
-    """, [today, today, today])
-    att_rows = cur.fetchall()
-    att_summary = {r["status"]: r["cnt"] for r in att_rows}
-    att_present = att_summary.get("present", 0)
-    att_late = att_summary.get("late", 0)
-    att_absent = att_summary.get("absent", 0)
-    att_leave = att_summary.get("leave", 0)
-    att_marked = att_present + att_late + att_absent + att_leave
+    # Marked and expected counts come from the same current roster.
+    attendance = get_attendance_summary(conn, institute_id, datetime.now(IST).date().isoformat(), include_branches=True)
+    att_present = attendance['counts']['present']
+    att_late = attendance['counts']['late']
+    att_absent = attendance['counts']['absent']
+    att_leave = attendance['counts']['leave']
+    att_marked = attendance['marked']
     att_total = att_marked
-
-    cur.execute("""
-        SELECT COUNT(*) AS cnt
-        FROM student_batches sb
-        JOIN batches b ON sb.batch_id = b.id
-        WHERE b.status = 'active'
-          AND sb.status = 'active'
-          AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
-          AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
-    """, [today, today])
-    total_students_today = cur.fetchone()["cnt"]
-    attendance_rate = _marked_percentage(att_marked, total_students_today)
+    total_students_today = attendance['expected']
+    attendance_rate = attendance['percentage']
+    att_outside_roster = attendance['outside_roster']
 
     # ── Active batches ──────────────────────────────────────────
-    cur.execute("SELECT COUNT(*) AS cnt FROM batches WHERE status = 'active'")
+    cur.execute(
+        """SELECT COUNT(*) AS cnt FROM batches b
+           JOIN branches br ON b.branch_id = br.id
+           WHERE br.institute_id = ? AND b.status = 'active'""",
+        [institute_id],
+    )
     active_batches = cur.fetchone()["cnt"]
 
     # ── Past due leads ──────────────────────────────────────────
     cur.execute("""
         SELECT id, name, phone, next_followup_date, lead_score, stage
         FROM leads
-        WHERE status = 'active' AND is_deleted = 0
+        WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
           AND next_followup_date IS NOT NULL
           AND next_followup_date < ?
         ORDER BY next_followup_date ASC
-    """, [today])
+    """, [institute_id, today])
     past_due_leads = cur.fetchall()
 
     # ── Today's due leads ───────────────────────────────────────
     cur.execute("""
         SELECT id, name, phone, next_followup_date, lead_score, stage
         FROM leads
-        WHERE status = 'active' AND is_deleted = 0
+        WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
           AND next_followup_date = ?
         ORDER BY lead_score DESC
-    """, [today])
+    """, [institute_id, today])
     today_due_leads = cur.fetchall()
 
     # ── Recent activity ─────────────────────────────────────────
@@ -253,13 +354,19 @@ def dashboard():
         SELECT al.action_type, al.module_name, al.description, al.created_at,
                u.full_name AS user_name
         FROM activity_logs al
-        LEFT JOIN users u ON al.user_id = u.id
+        LEFT JOIN users u ON al.user_id = u.id AND u.institute_id = al.institute_id
+        WHERE al.institute_id = ?
         ORDER BY al.created_at DESC
         LIMIT 10
-    """)
+    """, [institute_id])
     recent_activity = cur.fetchall()
 
-    cur.execute("SELECT COUNT(*) AS cnt FROM leave_requests WHERE status = 'pending'")
+    cur.execute(
+        """SELECT COUNT(*) AS cnt FROM leave_requests lr
+           JOIN students s ON lr.student_id = s.id
+           WHERE s.institute_id = ? AND lr.status = 'pending'""",
+        [institute_id],
+    )
     pending_leave_count = cur.fetchone()["cnt"]
 
     conn.close()
@@ -297,6 +404,8 @@ def dashboard():
         att_marked=att_marked,
         total_students_today=total_students_today,
         att_total=att_total,
+        att_outside_roster=att_outside_roster,
+        attendance_branches=attendance['branches'],
         active_batches=active_batches,
         # Leads followup
         past_due_leads=past_due_leads,
@@ -307,7 +416,7 @@ def dashboard():
     )
 
 
-def _staff_dashboard():
+def _staff_dashboard(institute_id):
     """Build and render the staff dashboard for the logged-in staff user."""
     user_id = session.get("user_id")
     branch_id = session.get("branch_id")
@@ -318,82 +427,99 @@ def _staff_dashboard():
     today = datetime.now().date().isoformat()
     current_month = datetime.now().strftime("%Y-%m")
 
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    ist_now = datetime.now(timezone.utc).astimezone(ist_tz)
+    today_start_ist = ist_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow_start_ist = today_start_ist + timedelta(days=1)
+    today_start_utc = today_start_ist.astimezone(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+    tomorrow_start_utc = tomorrow_start_ist.astimezone(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+
+    _ensure_lms_batch_topic_progress_table(conn)
+
     # ── My batches (trainer = me) ───────────────────────────────
     cur.execute("""
-        SELECT b.id, b.batch_name, b.start_time, b.end_time, b.status,
+        SELECT b.id, b.batch_name, b.start_time, b.end_time, b.end_date, b.status,
                c.course_name, br.branch_name,
-               COUNT(sb.id) AS student_count
+               (SELECT COUNT(DISTINCT sb.student_id)
+                FROM student_batches sb
+                WHERE sb.batch_id = b.id AND sb.status = 'active') AS student_count,
+               (SELECT COUNT(DISTINCT ar.student_id)
+                FROM attendance_records ar
+                WHERE ar.batch_id = b.id AND ar.attendance_date = ?
+                  AND EXISTS (SELECT 1 FROM student_batches current_sb
+                              WHERE current_sb.batch_id = ar.batch_id AND current_sb.student_id = ar.student_id
+                                AND current_sb.status = 'active')) AS att_today_count
         FROM batches b
         LEFT JOIN courses c ON b.course_id = c.id
         LEFT JOIN branches br ON b.branch_id = br.id
-        LEFT JOIN student_batches sb ON sb.batch_id = b.id AND sb.status = 'active'
-        WHERE b.trainer_id = ? AND b.status = 'active'
+        WHERE br.institute_id = ? AND b.trainer_id = ? AND b.status = 'active'
         GROUP BY b.id
-        ORDER BY b.batch_name ASC
-    """, [user_id])
-    my_batches = cur.fetchall()
+        ORDER BY CASE WHEN b.start_time IS NULL OR b.start_time = '' THEN 1 ELSE 0 END, b.start_time ASC, b.batch_name ASC
+    """, [ist_now.date().isoformat(), institute_id, user_id])
+    raw_batches = cur.fetchall()
+
+    # Query taught progress for today
+    cur.execute("""
+        SELECT DISTINCT batch_id
+        FROM lms_batch_topic_progress
+        WHERE (taught_at >= ? AND taught_at < ?) OR date(taught_at) = ?
+    """, [today_start_utc, tomorrow_start_utc, today])
+    taught_batch_ids = {r["batch_id"] for r in cur.fetchall()}
+
+    syllabus_progress = batch_syllabus_progress(conn, institute_id, [b['id'] for b in raw_batches])
+    my_batches = []
+    for b in raw_batches:
+        b_dict = dict(b)
+        student_count = int(b_dict.get("student_count") or 0)
+        att_today_count = int(b_dict.get("att_today_count") or 0)
+        b_dict["student_count"] = student_count
+        b_dict["att_today_count"] = att_today_count
+
+        if student_count > 0:
+            att_pct = int(round((att_today_count / student_count) * 100))
+        else:
+            att_pct = 0
+        b_dict["attendance_pct"] = att_pct
+        b_dict["is_attendance_full"] = (att_today_count >= student_count and student_count > 0)
+        b_dict["class_taught_today"] = b_dict["id"] in taught_batch_ids
+        b_dict["syllabus_progress"] = syllabus_progress[b_dict['id']]
+        b_dict["end_summary"] = batch_end_summary(b_dict.get('end_date'), today=ist_now.date())
+        my_batches.append(b_dict)
+
     batch_ids = [row["id"] for row in my_batches]
 
-    # ── Today's attendance (my batches active today) ───────────
-    cur.execute("""
-        SELECT b.id
-        FROM batches b
-        WHERE b.trainer_id = ? AND b.status = 'active'
-          AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
-          AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
-    """, [user_id, today, today])
-    today_batch_ids = [r["id"] for r in cur.fetchall()]
-
-    if today_batch_ids:
-        placeholders = ",".join("?" * len(today_batch_ids))
-        cur.execute(f"""
-            SELECT status, COUNT(*) AS cnt
-            FROM attendance_records
-            WHERE attendance_date = ? AND batch_id IN ({placeholders})
-            GROUP BY status
-        """, [today] + today_batch_ids)
-        att_rows = cur.fetchall()
-    else:
-        att_rows = []
-
-    att_summary = {r["status"]: r["cnt"] for r in att_rows}
-    att_present = att_summary.get("present", 0)
-    att_late = att_summary.get("late", 0)
-    att_absent = att_summary.get("absent", 0)
-    att_leave = att_summary.get("leave", 0)
-    att_marked = att_present + att_late + att_absent + att_leave
+    # Apply the same roster rule to the staff attendance summary.
+    attendance = get_attendance_summary(conn, institute_id, ist_now.date().isoformat(), trainer_id=user_id)
+    att_present = attendance['counts']['present']
+    att_late = attendance['counts']['late']
+    att_absent = attendance['counts']['absent']
+    att_leave = attendance['counts']['leave']
+    att_marked = attendance['marked']
     att_total = att_marked
-
-    if today_batch_ids:
-        placeholders = ",".join("?" * len(today_batch_ids))
-        cur.execute(f"""
-            SELECT COUNT(*) AS cnt
-            FROM student_batches sb
-            WHERE sb.batch_id IN ({placeholders}) AND sb.status = 'active'
-        """, today_batch_ids)
-        total_students_today = cur.fetchone()["cnt"]
-    else:
-        total_students_today = 0
-    attendance_rate = _marked_percentage(att_marked, total_students_today)
+    total_students_today = attendance['expected']
+    attendance_rate = attendance['percentage']
+    att_outside_roster = attendance['outside_roster']
 
     # ── My assigned leads — followup overdue ───────────────────
     cur.execute("""
         SELECT id, name, phone, next_followup_date, lead_score, stage
         FROM leads
-        WHERE assigned_to_id = ? AND status = 'active' AND is_deleted = 0
+        WHERE institute_id = ? AND assigned_to_id = ?
+          AND status = 'active' AND is_deleted = 0
           AND next_followup_date IS NOT NULL AND next_followup_date < ?
         ORDER BY next_followup_date ASC
-    """, [user_id, today])
+    """, [institute_id, user_id, today])
     my_past_due_leads = cur.fetchall()
 
     # ── My assigned leads — followup today ─────────────────────
     cur.execute("""
         SELECT id, name, phone, next_followup_date, lead_score, stage
         FROM leads
-        WHERE assigned_to_id = ? AND status = 'active' AND is_deleted = 0
+        WHERE institute_id = ? AND assigned_to_id = ?
+          AND status = 'active' AND is_deleted = 0
           AND next_followup_date = ?
         ORDER BY lead_score DESC
-    """, [user_id, today])
+    """, [institute_id, user_id, today])
     my_today_leads = cur.fetchall()
 
     # ── Active students in my batches ───────────────────────────
@@ -410,10 +536,14 @@ def _staff_dashboard():
 
     # ── New students this month in my branch ────────────────────
     branch_filter = "" if can_view_all else "AND branch_id = ?"
-    branch_params = [current_month] if can_view_all else [current_month, branch_id]
+    branch_params = (
+        [institute_id, current_month]
+        if can_view_all
+        else [institute_id, current_month, branch_id]
+    )
     cur.execute(f"""
         SELECT COUNT(*) AS cnt FROM students
-        WHERE strftime('%Y-%m', joined_date) = ? {branch_filter}
+        WHERE institute_id = ? AND strftime('%Y-%m', joined_date) = ? {branch_filter}
     """, branch_params)
     new_students_this_month = cur.fetchone()["cnt"]
 
@@ -434,13 +564,13 @@ def _staff_dashboard():
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE ip.status != 'paid'
+        WHERE s.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           {branch_clause}
         ORDER BY parse_date(ip.due_date) ASC
         LIMIT 50
-    """, [today] + branch_param)
+    """, [institute_id, today] + branch_param)
     past_dues = cur.fetchall()
     total_past_due = sum(float(r["balance_due"] or 0) for r in past_dues)
 
@@ -454,12 +584,12 @@ def _staff_dashboard():
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE ip.status != 'paid'
+        WHERE s.institute_id = ? AND ip.status != 'paid'
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           {branch_clause}
         ORDER BY s.full_name ASC
-    """, [today] + branch_param)
+    """, [institute_id, today] + branch_param)
     todays_dues = cur.fetchall()
     total_today_due = sum(float(r["balance_due"] or 0) for r in todays_dues)
 
@@ -467,14 +597,19 @@ def _staff_dashboard():
     cur.execute("""
         SELECT al.action_type, al.module_name, al.description, al.created_at
         FROM activity_logs al
-        WHERE al.user_id = ?
+        WHERE al.institute_id = ? AND al.user_id = ?
         ORDER BY al.created_at DESC
         LIMIT 8
-    """, [user_id])
+    """, [institute_id, user_id])
     recent_activity = cur.fetchall()
 
     # ── Pending leave requests ──────────────────────────────────
-    cur.execute("SELECT COUNT(*) AS cnt FROM leave_requests WHERE status = 'pending'")
+    cur.execute(
+        """SELECT COUNT(*) AS cnt FROM leave_requests lr
+           JOIN students s ON lr.student_id = s.id
+           WHERE s.institute_id = ? AND lr.status = 'pending'""",
+        [institute_id],
+    )
     pending_leave_count = cur.fetchone()["cnt"]
 
     conn.close()
@@ -491,6 +626,7 @@ def _staff_dashboard():
         att_marked=att_marked,
         total_students_today=total_students_today,
         att_total=att_total,
+        att_outside_roster=att_outside_roster,
         attendance_rate=attendance_rate,
         my_past_due_leads=my_past_due_leads,
         my_today_leads=my_today_leads,
@@ -506,6 +642,13 @@ def _staff_dashboard():
 
 @core_bp.route("/logout")
 def logout():
+    if session.get("support_session_id") and session.get("platform_account_id"):
+        conn = get_conn()
+        try:
+            close_support_session(conn, "logout")
+            conn.commit()
+        finally:
+            conn.close()
     session.clear()
     flash("You have been logged out.", "info")
     return redirect(url_for("core.login"))
@@ -518,6 +661,7 @@ def sidebar_badges():
     user_id = session.get("user_id")
     branch_id = session.get("branch_id")
     can_view_all = session.get("can_view_all_branches", 0)
+    institute_id = get_current_institute_id(default=1)
 
     today = datetime.now().date().isoformat()
 
@@ -525,6 +669,8 @@ def sidebar_badges():
     billing_count = 0
     attendance_count = 0
     lms_count = 0
+    profile_updates_count = 0
+    fee_reminders_count = 0
 
     conn = get_conn()
     cur = conn.cursor()
@@ -533,18 +679,19 @@ def sidebar_badges():
         if role == "admin" or can_view_all:
             cur.execute("""
                 SELECT COUNT(*) AS cnt FROM leads
-                WHERE status = 'active' AND is_deleted = 0
+                WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
                   AND next_followup_date IS NOT NULL
                   AND parse_date(next_followup_date) <= ?
-            """, [today])
+            """, [institute_id, today])
             leads_count = cur.fetchone()["cnt"]
         else:
             cur.execute("""
                 SELECT COUNT(*) AS cnt FROM leads
-                WHERE assigned_to_id = ? AND status = 'active' AND is_deleted = 0
+                WHERE institute_id = ? AND assigned_to_id = ?
+                  AND status = 'active' AND is_deleted = 0
                   AND next_followup_date IS NOT NULL
                   AND parse_date(next_followup_date) <= ?
-            """, [user_id, today])
+            """, [institute_id, user_id, today])
             leads_count = cur.fetchone()["cnt"]
 
         # 2. Billing Badge: count of past due / today due installments
@@ -553,30 +700,74 @@ def sidebar_badges():
                 SELECT COUNT(DISTINCT ip.id) AS cnt
                 FROM installment_plans ip
                 JOIN invoices i ON ip.invoice_id = i.id
-                WHERE ip.status != 'paid'
+                JOIN students s ON i.student_id = s.id
+                WHERE s.institute_id = ? AND ip.status != 'paid'
                   AND parse_date(ip.due_date) <= ?
                   AND i.status NOT IN ('write_off', 'partially_written_off')
-            """, [today])
+            """, [institute_id, today])
             billing_count = cur.fetchone()["cnt"]
         else:
             cur.execute("""
                 SELECT COUNT(DISTINCT ip.id) AS cnt
                 FROM installment_plans ip
                 JOIN invoices i ON ip.invoice_id = i.id
-                WHERE ip.status != 'paid'
+                JOIN students s ON i.student_id = s.id
+                WHERE s.institute_id = ? AND ip.status != 'paid'
                   AND parse_date(ip.due_date) <= ?
                   AND i.status NOT IN ('write_off', 'partially_written_off')
                   AND i.branch_id = ?
-            """, [today, branch_id])
+            """, [institute_id, today, branch_id])
             billing_count = cur.fetchone()["cnt"]
 
         # 3. Attendance Badge: count of pending leave requests
-        cur.execute("SELECT COUNT(*) AS cnt FROM leave_requests WHERE status = 'pending'")
+        cur.execute(
+            """SELECT COUNT(*) AS cnt FROM leave_requests lr
+               JOIN students s ON lr.student_id = s.id
+               WHERE s.institute_id = ? AND lr.status = 'pending'""",
+            [institute_id],
+        )
         attendance_count = cur.fetchone()["cnt"]
 
         # 4. LMS Badge: count of pending final exam applications
-        cur.execute("SELECT COUNT(*) AS cnt FROM lms_final_exam_applications WHERE status = 'PENDING'")
+        cur.execute(
+            """SELECT COUNT(*) AS cnt FROM lms_final_exam_applications
+               WHERE institute_id = ? AND status = 'PENDING'""",
+            [institute_id],
+        )
         lms_count = cur.fetchone()["cnt"]
+
+        # 5. Student profile updates awaiting institute review.
+        cur.execute(
+            """SELECT COUNT(*) AS cnt
+               FROM student_profile_update_requests req
+               JOIN students s ON s.id = req.student_id
+               WHERE req.institute_id = ? AND s.institute_id = ?
+                 AND req.status = 'PENDING'""",
+            [institute_id, institute_id],
+        )
+        profile_updates_count = cur.fetchone()["cnt"]
+
+        # 6. Fee reminders currently eligible for automatic sending but not sent.
+        reminder_window_end = (datetime.now().date() + timedelta(days=3)).isoformat()
+        cur.execute(
+            """SELECT COUNT(DISTINCT ip.id) AS cnt
+               FROM installment_plans ip
+               JOIN invoices i ON i.id = ip.invoice_id
+               JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
+               WHERE i.institute_id = ?
+                 AND ip.status != 'paid'
+                 AND (ip.amount_due - ip.amount_paid) > 0
+                 AND i.status NOT IN ('paid', 'cancelled', 'write_off', 'partially_written_off')
+                 AND parse_date(ip.due_date) <= ?
+                 AND NOT EXISTS (
+                     SELECT 1 FROM reminder_logs rl
+                     WHERE rl.institute_id = i.institute_id
+                       AND rl.installment_id = ip.id
+                       AND rl.status IN ('sent', 'delivered')
+                 )""",
+            [institute_id, reminder_window_end],
+        )
+        fee_reminders_count = cur.fetchone()["cnt"]
 
     except Exception as e:
         print(f"Error querying sidebar badges: {e}")
@@ -587,7 +778,9 @@ def sidebar_badges():
         "leads": leads_count,
         "billing": billing_count,
         "attendance": attendance_count,
-        "lms": lms_count
+        "lms": lms_count,
+        "profile_updates": profile_updates_count,
+        "fee_reminders": fee_reminders_count,
     })
 
 
@@ -596,6 +789,7 @@ def sidebar_badges():
 @login_required
 @admin_required
 def users():
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
@@ -605,8 +799,9 @@ def users():
             b.branch_name
         FROM users u
         LEFT JOIN branches b ON u.branch_id = b.id
+        WHERE u.institute_id = ? AND u.platform_role IS NULL
         ORDER BY u.id DESC
-    """)
+    """, (institute_id,))
     users_list = cur.fetchall()
 
     conn.close()
@@ -617,6 +812,7 @@ def users():
 @login_required
 @admin_required
 def user_new():
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
@@ -638,7 +834,20 @@ def user_new():
             conn.close()
             return redirect(url_for("core.user_new"))
 
-        cur.execute("SELECT id FROM users WHERE username = ?", (username,))
+        if branch_id:
+            cur.execute(
+                "SELECT id FROM branches WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (branch_id, institute_id),
+            )
+            if not cur.fetchone():
+                flash("The selected branch is not available in this institute.", "danger")
+                conn.close()
+                return redirect(url_for("core.user_new"))
+
+        cur.execute(
+            "SELECT id FROM users WHERE institute_id = ? AND username = ?",
+            (institute_id, username),
+        )
         existing_user = cur.fetchone()
         if existing_user:
             flash("Username already exists.", "danger")
@@ -646,9 +855,17 @@ def user_new():
             return redirect(url_for("core.user_new"))
 
         now = datetime.now().isoformat(timespec="seconds")
+        try:
+            lock_and_check_limit(conn, institute_id, "staff")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("core.user_new"))
 
         cur.execute("""
             INSERT INTO users (
+                institute_id,
                 full_name,
                 username,
                 password_hash,
@@ -658,8 +875,9 @@ def user_new():
                 is_active,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            institute_id,
             full_name,
             username,
             generate_password_hash(password),
@@ -668,6 +886,18 @@ def user_new():
             can_view_all_branches,
             1,
             now
+        ))
+        user_id = cur.lastrowid
+        cur.execute("""
+            INSERT INTO institute_memberships (
+                institute_id, user_id, membership_role, is_active, created_at, updated_at
+            ) VALUES (?, ?, ?, 1, ?, ?)
+        """, (
+            institute_id,
+            user_id,
+            "institute_admin" if role == "admin" else "staff",
+            now,
+            now,
         ))
 
         conn.commit()
@@ -679,9 +909,9 @@ def user_new():
     cur.execute("""
         SELECT id, branch_name
         FROM branches
-        WHERE is_active = 1
+        WHERE institute_id = ? AND is_active = 1
         ORDER BY branch_name
-    """)
+    """, (institute_id,))
     branches = cur.fetchall()
 
     conn.close()
@@ -692,10 +922,14 @@ def user_new():
 @login_required
 @admin_required
 def user_edit(user_id):
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    cur.execute(
+        "SELECT * FROM users WHERE id = ? AND institute_id = ? AND platform_role IS NULL",
+        (user_id, institute_id),
+    )
     user = cur.fetchone()
 
     if not user:
@@ -721,7 +955,20 @@ def user_edit(user_id):
             conn.close()
             return redirect(url_for("core.user_edit", user_id=user_id))
 
-        cur.execute("SELECT id FROM users WHERE username = ? AND id != ?", (username, user_id))
+        if branch_id:
+            cur.execute(
+                "SELECT id FROM branches WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (branch_id, institute_id),
+            )
+            if not cur.fetchone():
+                flash("The selected branch is not available in this institute.", "danger")
+                conn.close()
+                return redirect(url_for("core.user_edit", user_id=user_id))
+
+        cur.execute(
+            "SELECT id FROM users WHERE institute_id = ? AND username = ? AND id != ?",
+            (institute_id, username, user_id),
+        )
         existing_user = cur.fetchone()
         if existing_user:
             flash("Username already exists.", "danger")
@@ -765,6 +1012,16 @@ def user_edit(user_id):
                 user_id
             ))
 
+        cur.execute("""
+            UPDATE institute_memberships
+            SET membership_role = ?, is_active = 1, updated_at = ?
+            WHERE institute_id = ? AND user_id = ?
+        """, (
+            "institute_admin" if role == "admin" else "staff",
+            datetime.now().isoformat(timespec="seconds"),
+            institute_id,
+            user_id,
+        ))
         conn.commit()
         conn.close()
 
@@ -774,9 +1031,9 @@ def user_edit(user_id):
     cur.execute("""
         SELECT id, branch_name
         FROM branches
-        WHERE is_active = 1
+        WHERE institute_id = ? AND is_active = 1
         ORDER BY branch_name
-    """)
+    """, (institute_id,))
     branches = cur.fetchall()
 
     conn.close()
@@ -787,6 +1044,7 @@ def user_edit(user_id):
 @login_required
 @admin_required
 def user_toggle_status(user_id):
+    institute_id = int(session["institute_id"])
     if user_id == session.get("user_id"):
         flash("You cannot deactivate your own account.", "danger")
         return redirect(url_for("core.users"))
@@ -794,7 +1052,10 @@ def user_toggle_status(user_id):
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    cur.execute(
+        "SELECT * FROM users WHERE id = ? AND institute_id = ? AND platform_role IS NULL",
+        (user_id, institute_id),
+    )
     user = cur.fetchone()
 
     if not user:
@@ -803,12 +1064,30 @@ def user_toggle_status(user_id):
         return redirect(url_for("core.users"))
 
     new_status = 0 if user["is_active"] == 1 else 1
+    if new_status == 1:
+        try:
+            lock_and_check_limit(conn, institute_id, "staff")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("core.users"))
 
     cur.execute("""
         UPDATE users
         SET is_active = ?
-        WHERE id = ?
-    """, (new_status, user_id))
+        WHERE id = ? AND institute_id = ?
+    """, (new_status, user_id, institute_id))
+    cur.execute("""
+        UPDATE institute_memberships
+        SET is_active = ?, updated_at = ?
+        WHERE institute_id = ? AND user_id = ?
+    """, (
+        new_status,
+        datetime.now().isoformat(timespec="seconds"),
+        institute_id,
+        user_id,
+    ))
 
     conn.commit()
     conn.close()
@@ -828,13 +1107,15 @@ def user_toggle_status(user_id):
 @admin_required
 def branches():
     """List all branches"""
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
     cur.execute("""
         SELECT * FROM branches
+        WHERE institute_id = ?
         ORDER BY branch_name DESC
-    """)
+    """, (institute_id,))
     branches_list = cur.fetchall()
 
     conn.close()
@@ -846,6 +1127,7 @@ def branches():
 @admin_required
 def branch_new():
     """Create new branch"""
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
@@ -868,7 +1150,11 @@ def branch_new():
             conn.close()
             return redirect(url_for("core.branch_new"))
 
-        cur.execute("SELECT id FROM branches WHERE branch_name = ? OR branch_code = ?", (branch_name, branch_code))
+        cur.execute(
+            """SELECT id FROM branches
+               WHERE institute_id = ? AND (branch_name = ? OR branch_code = ?)""",
+            (institute_id, branch_name, branch_code),
+        )
         existing_branch = cur.fetchone()
         if existing_branch:
             flash("Branch name or code already exists.", "danger")
@@ -876,11 +1162,22 @@ def branch_new():
             return redirect(url_for("core.branch_new"))
 
         now = datetime.now().isoformat(timespec="seconds")
+        try:
+            lock_and_check_limit(conn, institute_id, "branches")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("core.branch_new"))
 
         cur.execute("""
-            INSERT INTO branches (branch_name, branch_code, address, is_active, no_of_computers, opening_time, closing_time, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO branches (
+                institute_id, branch_name, branch_code, address, is_active,
+                no_of_computers, opening_time, closing_time, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            institute_id,
             branch_name,
             branch_code,
             address,
@@ -906,10 +1203,14 @@ def branch_new():
 @admin_required
 def branch_edit(branch_id):
     """Edit branch"""
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM branches WHERE id = ?", (branch_id,))
+    cur.execute(
+        "SELECT * FROM branches WHERE id = ? AND institute_id = ?",
+        (branch_id, institute_id),
+    )
     branch = cur.fetchone()
 
     if not branch:
@@ -936,8 +1237,17 @@ def branch_edit(branch_id):
             conn.close()
             return redirect(url_for("core.branch_edit", branch_id=branch_id))
 
-        cur.execute("SELECT id FROM branches WHERE (branch_name = ? OR branch_code = ?) AND id != ?", 
-                   (branch_name, branch_code, branch_id))
+        cur.execute(
+            """SELECT id FROM branches
+               WHERE institute_id = ?
+                 AND (branch_name = ? OR branch_code = ?)
+                 AND id != ?""",
+            (institute_id, branch_name, branch_code, branch_id),
+        )
+        existing_branch = cur.fetchone()
+        if existing_branch:
+            flash("Branch name or code already exists.", "danger")
+            conn.close()
         existing_branch = cur.fetchone()
         if existing_branch:
             flash("Branch name or code already exists.", "danger")
@@ -952,7 +1262,7 @@ def branch_edit(branch_id):
                 no_of_computers = ?,
                 opening_time = ?,
                 closing_time = ?
-            WHERE id = ?
+            WHERE id = ? AND institute_id = ?
         """, (
             branch_name,
             branch_code,
@@ -960,7 +1270,8 @@ def branch_edit(branch_id):
             no_of_computers,
             opening_time,
             closing_time,
-            branch_id
+            branch_id,
+            institute_id,
         ))
 
         conn.commit()
@@ -978,10 +1289,14 @@ def branch_edit(branch_id):
 @admin_required
 def branch_toggle_status(branch_id):
     """Toggle branch active/inactive status"""
+    institute_id = int(session["institute_id"])
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM branches WHERE id = ?", (branch_id,))
+    cur.execute(
+        "SELECT * FROM branches WHERE id = ? AND institute_id = ?",
+        (branch_id, institute_id),
+    )
     branch = cur.fetchone()
 
     if not branch:
@@ -990,12 +1305,20 @@ def branch_toggle_status(branch_id):
         return redirect(url_for("core.branches"))
 
     new_status = 0 if branch["is_active"] == 1 else 1
+    if new_status == 1:
+        try:
+            lock_and_check_limit(conn, institute_id, "branches")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("core.branches"))
 
     cur.execute("""
         UPDATE branches
         SET is_active = ?
-        WHERE id = ?
-    """, (new_status, branch_id))
+        WHERE id = ? AND institute_id = ?
+    """, (new_status, branch_id, institute_id))
 
     conn.commit()
     conn.close()
@@ -1015,12 +1338,118 @@ ALLOWED_LOGO_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.svg', '.webp'}
 MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
 
 
+@core_bp.route("/institute/branding", methods=["GET", "POST"])
+@login_required
+@admin_required
+def tenant_branding():
+    """Allow an institute administrator to manage only its own brand."""
+    institute_id = int(session["institute_id"])
+    if institute_id == 1:
+        return redirect(url_for("core.company_profile"))
+    conn = get_conn()
+    try:
+        institute = conn.execute(
+            "SELECT * FROM institutes WHERE id = ? AND status = 'active'",
+            (institute_id,),
+        ).fetchone()
+        branding = conn.execute(
+            "SELECT * FROM institute_branding WHERE institute_id = ?",
+            (institute_id,),
+        ).fetchone()
+        inst_settings = conn.execute(
+            "SELECT invoice_prefix, receipt_prefix, student_prefix FROM institute_settings WHERE institute_id = ?",
+            (institute_id,),
+        ).fetchone() or {}
+
+        if not institute or not branding:
+            abort(404)
+        if request.method == "GET":
+            return render_template(
+                "core/tenant_branding.html",
+                institute=institute,
+                branding=branding,
+                inst_settings=inst_settings,
+            )
+
+        display_name = request.form.get("display_name", "").strip()
+        short_name = request.form.get("short_name", "").strip()
+        invoice_prefix = request.form.get("invoice_prefix", "").strip()
+        receipt_prefix = request.form.get("receipt_prefix", "").strip()
+        student_prefix = request.form.get("student_prefix", "").strip()
+
+        if not display_name or not short_name:
+            flash("Display name and short name are required.", "danger")
+            return redirect(url_for("core.tenant_branding"))
+        from modules.platform_admin.routes import _save_brand_file
+
+        try:
+            logo_path = _save_brand_file(
+                institute_id, "logo", "logos", branding["logo_path"]
+            )
+            favicon_path = _save_brand_file(
+                institute_id, "favicon", "favicons", branding["favicon_path"]
+            )
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("core.tenant_branding"))
+        
+        now = datetime.now().isoformat(timespec="seconds")
+
+        if invoice_prefix or receipt_prefix or student_prefix:
+            conn.execute("""
+                INSERT INTO institute_settings (institute_id, invoice_prefix, receipt_prefix, student_prefix, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    invoice_prefix = VALUES(invoice_prefix),
+                    receipt_prefix = VALUES(receipt_prefix),
+                    student_prefix = VALUES(student_prefix),
+                    updated_at = VALUES(updated_at)
+            """, (institute_id, invoice_prefix, receipt_prefix, student_prefix, now))
+
+        conn.execute(
+            """
+            UPDATE institute_branding
+            SET display_name = ?, short_name = ?, tagline = ?, primary_color = ?,
+                secondary_color = ?, address = ?, phone = ?, email = ?, website = ?,
+                registration_number = ?, logo_path = ?, favicon_path = ?,
+                updated_at = ?
+            WHERE institute_id = ?
+            """,
+            (
+                display_name,
+                short_name,
+                request.form.get("tagline", "").strip(),
+                request.form.get("primary_color", "#2563EB").strip(),
+                request.form.get("secondary_color", "#16A34A").strip(),
+                request.form.get("address", "").strip(),
+                request.form.get("phone", "").strip(),
+                request.form.get("email", "").strip(),
+                request.form.get("website", "").strip(),
+                request.form.get("registration_number", "").strip(),
+                logo_path,
+                favicon_path,
+                now,
+                institute_id,
+            ),
+        )
+        conn.commit()
+        clear_company_cache(institute_id)
+        flash("Institute branding updated.", "success")
+        return redirect(url_for("core.tenant_branding"))
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 @core_bp.route("/company-profile", methods=["GET", "POST"])
 @login_required
 @admin_required
 def company_profile():
     """View and edit company profile (global white-label settings)."""
     profile = get_company_profile()
+    current_inst = get_current_institute_id(default=1)
 
     if request.method == "POST":
         company_name = request.form.get("company_name", "").strip()
@@ -1031,18 +1460,21 @@ def company_profile():
         email = request.form.get("email", "").strip()
         website = request.form.get("website", "").strip()
         reg_number = request.form.get("reg_number", "").strip()
+        invoice_prefix = request.form.get("invoice_prefix", "").strip()
+        receipt_prefix = request.form.get("receipt_prefix", "").strip()
+        student_prefix = request.form.get("student_prefix", "").strip()
 
         if not company_name or not company_short_name:
             flash("Company name and short name are required.", "danger")
             return redirect(url_for("core.company_profile"))
 
         # Handle logo upload
-        logo_filename = profile.get("logo_filename")
+        logo_filename = profile.get("logo_filename") or profile.get("logo_path")
         logo_file = request.files.get("logo_file")
         if logo_file and logo_file.filename:
             ext = os.path.splitext(logo_file.filename)[1].lower()
             if ext not in ALLOWED_LOGO_EXTENSIONS:
-                flash("Invalid logo format. Allowed: PNG, JPG, SVG, WEBP.", "danger")
+                flash("Invalid logo format. Allowed: PNG, JPG, SVG, WEBP, ICO.", "danger")
                 return redirect(url_for("core.company_profile"))
             logo_bytes = logo_file.read()
             if len(logo_bytes) > MAX_LOGO_SIZE_BYTES:
@@ -1060,25 +1492,82 @@ def company_profile():
                 flash(f"Failed to upload logo: {str(e)}", "danger")
                 return redirect(url_for("core.company_profile"))
 
+        # Handle favicon upload
+        favicon_path = profile.get("favicon_path")
+        favicon_file = request.files.get("favicon_file")
+        if favicon_file and favicon_file.filename:
+            ext = os.path.splitext(favicon_file.filename)[1].lower()
+            if ext not in ALLOWED_LOGO_EXTENSIONS:
+                flash("Invalid favicon format. Allowed: PNG, JPG, ICO, SVG, WEBP.", "danger")
+                return redirect(url_for("core.company_profile"))
+            favicon_bytes = favicon_file.read()
+            if len(favicon_bytes) > MAX_LOGO_SIZE_BYTES:
+                flash("Favicon file too large. Maximum size is 2 MB.", "danger")
+                return redirect(url_for("core.company_profile"))
+
+            safe_filename = f"company_favicon{ext}"
+            dest_path = f"favicons/{safe_filename}"
+            try:
+                storage_service = get_storage_service()
+                storage_service.replace_file(favicon_bytes, favicon_path, dest_path, content_type=favicon_file.content_type)
+                favicon_path = dest_path
+            except Exception as e:
+                logger.error(f"Failed to upload favicon: {e}", exc_info=True)
+                flash(f"Failed to upload favicon: {str(e)}", "danger")
+                return redirect(url_for("core.company_profile"))
+
         now = datetime.now().isoformat(timespec="seconds")
         conn = get_conn()
         cur = conn.cursor()
+
+        if invoice_prefix or receipt_prefix or student_prefix:
+            cur.execute("""
+                INSERT INTO institute_settings (institute_id, invoice_prefix, receipt_prefix, student_prefix, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    invoice_prefix = VALUES(invoice_prefix),
+                    receipt_prefix = VALUES(receipt_prefix),
+                    student_prefix = VALUES(student_prefix),
+                    updated_at = VALUES(updated_at)
+            """, (current_inst, invoice_prefix, receipt_prefix, student_prefix, now))
+
+        cur.execute("""
+            INSERT INTO institute_branding
+                (institute_id, display_name, short_name, tagline, logo_path, favicon_path, address, phone, email, website, registration_number, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                display_name = VALUES(display_name),
+                short_name = VALUES(short_name),
+                tagline = VALUES(tagline),
+                logo_path = VALUES(logo_path),
+                favicon_path = VALUES(favicon_path),
+                address = VALUES(address),
+                phone = VALUES(phone),
+                email = VALUES(email),
+                website = VALUES(website),
+                registration_number = VALUES(registration_number),
+                updated_at = VALUES(updated_at)
+        """, (
+            current_inst, company_name, company_short_name, tagline, logo_filename, favicon_path,
+            address, phone, email, website, reg_number, now
+        ))
+
         cur.execute("""
             INSERT INTO company_profile
                 (id, company_name, company_short_name, tagline, address, phone,
                  email, website, logo_filename, reg_number, updated_at)
             VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                company_name = excluded.company_name,
-                company_short_name = excluded.company_short_name,
-                tagline = excluded.tagline,
-                address = excluded.address,
-                phone = excluded.phone,
-                email = excluded.email,
-                website = excluded.website,
-                logo_filename = excluded.logo_filename,
-                reg_number = excluded.reg_number,
-                updated_at = excluded.updated_at
+            ON DUPLICATE KEY UPDATE
+                company_name = VALUES(company_name),
+                company_short_name = VALUES(company_short_name),
+                tagline = VALUES(tagline),
+                address = VALUES(address),
+                phone = VALUES(phone),
+                email = VALUES(email),
+                website = VALUES(website),
+                logo_filename = VALUES(logo_filename),
+                reg_number = VALUES(reg_number),
+                updated_at = VALUES(updated_at)
         """, (
             company_name, company_short_name, tagline, address,
             phone, email, website, logo_filename, reg_number, now
@@ -1089,8 +1578,13 @@ def company_profile():
         flash("Company profile updated successfully.", "success")
         return redirect(url_for("core.company_profile"))
 
-    return render_template("core/company_profile.html", profile=profile)
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT invoice_prefix, receipt_prefix, student_prefix FROM institute_settings WHERE institute_id = ?", (current_inst,))
+    inst_settings = cur.fetchone() or {}
+    conn.close()
 
+    return render_template("core/company_profile.html", profile=profile, inst_settings=inst_settings)
 
 @core_bp.route("/company-profile/remove-logo", methods=["POST"])
 @login_required
@@ -1098,7 +1592,8 @@ def company_profile():
 def company_profile_remove_logo():
     """Remove the current company logo."""
     profile = get_company_profile()
-    old_logo = profile.get("logo_filename")
+    current_inst = get_current_institute_id(default=1)
+    old_logo = profile.get("logo_filename") or profile.get("logo_path")
     if old_logo:
         try:
             storage_service = get_storage_service()
@@ -1113,10 +1608,43 @@ def company_profile_remove_logo():
         "UPDATE company_profile SET logo_filename = NULL, updated_at = ? WHERE id = 1",
         (now,)
     )
+    cur.execute(
+        "UPDATE institute_branding SET logo_path = NULL, updated_at = ? WHERE institute_id = ?",
+        (now, current_inst)
+    )
     conn.commit()
     conn.close()
     clear_company_cache()
     flash("Logo removed.", "success")
+    return redirect(url_for("core.company_profile"))
+
+
+@core_bp.route("/company-profile/remove-favicon", methods=["POST"])
+@login_required
+@admin_required
+def company_profile_remove_favicon():
+    """Remove the current company favicon."""
+    profile = get_company_profile()
+    current_inst = get_current_institute_id(default=1)
+    old_favicon = profile.get("favicon_path")
+    if old_favicon:
+        try:
+            storage_service = get_storage_service()
+            storage_service.delete_file(old_favicon)
+        except Exception as e:
+            logger.error(f"Failed to delete favicon: {e}", exc_info=True)
+
+    now = datetime.now().isoformat(timespec="seconds")
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE institute_branding SET favicon_path = NULL, updated_at = ? WHERE institute_id = ?",
+        (now, current_inst)
+    )
+    conn.commit()
+    conn.close()
+    clear_company_cache()
+    flash("Favicon removed.", "success")
     return redirect(url_for("core.company_profile"))
 
 

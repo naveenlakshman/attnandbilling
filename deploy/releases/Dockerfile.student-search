@@ -1,0 +1,3 @@
+ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:49a4637f0bbf6bf1b5d09a3fa4e1d3797eb56a32b3a1460c8a09e76f3de0e4a2
+FROM ${BASE_IMAGE}
+COPY --chown=appuser:appuser templates/billing/students.html /app/templates/billing/students.html

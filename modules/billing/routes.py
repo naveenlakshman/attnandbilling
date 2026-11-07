@@ -12,12 +12,104 @@ import io
 import csv
 import os
 import base64
+import re
+import hashlib
 from services.storage import get_storage_service
+from services.tenant_context import get_current_institute_id
+from services.document_numbers import allocate_document_number
+from services.student_messages import registration_message, invoice_message, receipt_message, personalize_student_message
+from services import cashfree, payment_links
+from services.subscriptions import (
+    PlanLimitExceeded,
+    SubscriptionAccessDenied,
+    lock_and_check_limit,
+)
 
 logger = logging.getLogger("app.billing")
 
 
 IST_OFFSET = timedelta(hours=5, minutes=30)
+
+_STUDENT_FORM_TOKENS_KEY = "student_form_tokens"
+_STUDENT_FORM_TOKEN_LIMIT = 5
+_student_creation_ledger_ready = False
+
+
+def _issue_student_form_token():
+    tokens = [str(value) for value in session.get(_STUDENT_FORM_TOKENS_KEY, []) if value]
+    token = str(uuid.uuid4())
+    tokens.append(token)
+    session[_STUDENT_FORM_TOKENS_KEY] = tokens[-_STUDENT_FORM_TOKEN_LIMIT:]
+    session["student_form_token"] = token  # Compatibility with already-rendered forms.
+    return token
+
+
+def _valid_student_form_token(token):
+    tokens = session.get(_STUDENT_FORM_TOKENS_KEY, [])
+    return bool(token and (token in tokens or token == session.get("student_form_token")))
+
+
+def _retire_student_form_token(token):
+    session[_STUDENT_FORM_TOKENS_KEY] = [
+        value for value in session.get(_STUDENT_FORM_TOKENS_KEY, []) if value != token
+    ]
+    if session.get("student_form_token") == token:
+        session.pop("student_form_token", None)
+
+
+def _ensure_student_creation_ledger(cur):
+    global _student_creation_ledger_ready
+    if _student_creation_ledger_ready:
+        return
+    ddl = """
+        CREATE TABLE IF NOT EXISTS student_creation_requests (
+            token VARCHAR(64) PRIMARY KEY,
+            institute_id BIGINT NOT NULL,
+            user_id BIGINT NOT NULL,
+            request_fingerprint VARCHAR(64) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'processing',
+            student_id BIGINT,
+            created_at VARCHAR(32) NOT NULL,
+            completed_at VARCHAR(32),
+            UNIQUE (institute_id, request_fingerprint)
+        )
+    """
+    # The MySQL compatibility cursor intentionally ignores SQLite schema DDL;
+    # execute this one portable CREATE directly on its underlying cursor.
+    raw_cursor = getattr(cur, "_cursor", None)
+    if raw_cursor is not None:
+        mysql_ddl = ddl.replace(
+            "UNIQUE (institute_id, request_fingerprint)",
+            "UNIQUE KEY uq_student_creation_fingerprint (institute_id, request_fingerprint)",
+        )
+        raw_cursor.execute(mysql_ddl)
+        try:
+            raw_cursor.execute("""
+                ALTER TABLE student_creation_requests
+                ADD UNIQUE KEY uq_student_creation_fingerprint (institute_id, request_fingerprint)
+            """)
+        except Exception as exc:
+            if getattr(exc, "args", [None])[0] != 1061:  # duplicate key name
+                raise
+    else:
+        cur.execute(ddl)
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_student_creation_fingerprint
+            ON student_creation_requests(institute_id, request_fingerprint)
+        """)
+    _student_creation_ledger_ready = True
+
+
+def _student_creation_fingerprint(institute_id, form):
+    normalized = "|".join((
+        str(institute_id),
+        (form.get("full_name") or "").strip().casefold(),
+        re.sub(r"\D", "", form.get("phone") or ""),
+        (form.get("email") or "").strip().casefold(),
+        (form.get("date_of_birth") or "").strip(),
+        (form.get("lead_id") or "").strip(),
+    ))
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _ist_now():
@@ -156,12 +248,18 @@ def _parse_display_datetime(value):
 
 
 def _format_display_datetime(value):
-    parsed, has_time = _parse_display_datetime(value)
-    if not parsed:
-        return value or "-"
-    if not has_time:
-        return parsed.strftime("%d %b %Y")
-    return parsed.strftime("%d %b %Y, %I:%M %p")
+    if not value:
+        return ""
+    try:
+        from app import format_ist_datetime
+        return format_ist_datetime(value, "%d %b %Y, %I:%M %p")
+    except Exception:
+        parsed, has_time = _parse_display_datetime(value)
+        if not parsed:
+            return str(value) or "-"
+        if not has_time:
+            return parsed.strftime("%d %b %Y")
+        return parsed.strftime("%d %b %Y, %I:%M %p")
 
 
 def _format_display_date(value):
@@ -544,6 +642,9 @@ def _student_required_error_message(missing):
 
 
 billing_bp = Blueprint("billing", __name__)
+
+from modules.billing.cashfree_routes import register_cashfree_routes
+register_cashfree_routes(billing_bp)
 logger = logging.getLogger(__name__)
 
 
@@ -629,7 +730,7 @@ def reset_portal_password(student_id):
     return redirect(url_for('billing.student_profile', student_id=student_id))
 
 
-def save_student_photo(photo_data, student_code):
+def save_student_photo(photo_data, student_code, transaction_conn=None):
     """Save student photo from base64 data"""
     if not photo_data:
         return None
@@ -641,15 +742,30 @@ def save_student_photo(photo_data, student_code):
         
         # Decode and save to storage
         photo_bytes = base64.b64decode(photo_data)
-        dest_path = f"student_photos/{student_code}.jpg"
-        
+        # The storage provider applies the current institute namespace. Keep the
+        # input path relative so it is not accidentally namespaced twice.
+        # Student codes commonly contain separators such as ``STG/STU001``.
+        # Never allow those business identifiers to become storage folders.
+        safe_student_code = re.sub(
+            r"[^A-Za-z0-9._-]+",
+            "_",
+            str(student_code or "").strip(),
+        ).strip("._-")
+        if not safe_student_code:
+            raise ValueError("Student code cannot be converted to a safe photo filename.")
+        dest_path = f"student_photos/{safe_student_code}.jpg"
         storage_service = get_storage_service()
-        storage_service.upload_file(photo_bytes, dest_path, content_type="image/jpeg")
+        stored_path = storage_service.upload_file(
+            photo_bytes,
+            dest_path,
+            content_type="image/jpeg",
+            transaction_conn=transaction_conn,
+        )
         
-        return dest_path
+        return stored_path
     except Exception as e:
         logger.error(f"Error saving photo: {e}", exc_info=True)
-        return None
+        raise RuntimeError("The student photo could not be stored.") from e
 
 @billing_bp.route("/")
 @login_required
@@ -747,6 +863,7 @@ def menu():
 def dashboard():
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     branch_id = request.args.get("branch_id", "").strip()
     period = request.args.get("period", "this_fy").strip()
@@ -804,49 +921,61 @@ def dashboard():
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     branches = cur.fetchall()
 
-    student_query = "SELECT COUNT(*) AS total_students FROM students WHERE substr(created_at, 1, 10) BETWEEN ? AND ?"
-    student_params = [start_date, end_date]
+    student_query = "SELECT COUNT(*) AS total_students FROM students s WHERE substr(s.created_at, 1, 10) BETWEEN ? AND ? AND s.institute_id = ?"
+    student_params = [start_date, end_date, current_inst]
 
-    invoice_count_query = "SELECT COUNT(*) AS total_invoices FROM invoices WHERE parse_date(invoice_date) BETWEEN ? AND ?"
-    invoice_count_params = [start_date, end_date]
+    invoice_count_query = """
+        SELECT COUNT(*) AS total_invoices
+        FROM invoices i
+        JOIN students s ON s.id = i.student_id
+        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ?
+    """
+    invoice_count_params = [start_date, end_date, current_inst]
 
-    sales_query = "SELECT IFNULL(SUM(total_amount), 0) AS total_sales FROM invoices WHERE parse_date(invoice_date) BETWEEN ? AND ?"
-    sales_params = [start_date, end_date]
+    sales_query = """
+        SELECT IFNULL(SUM(i.total_amount), 0) AS total_sales
+        FROM invoices i
+        JOIN students s ON s.id = i.student_id
+        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ?
+    """
+    sales_params = [start_date, end_date, current_inst]
 
     receipt_query = """
-        SELECT IFNULL(SUM(amount_received), 0) AS total_receipts
-        FROM receipts
-        JOIN invoices ON receipts.invoice_id = invoices.id
-        WHERE parse_date(receipts.receipt_date) BETWEEN ? AND ?
+        SELECT IFNULL(SUM(r.amount_received), 0) AS total_receipts
+        FROM receipts r
+        JOIN invoices i ON r.invoice_id = i.id
+        JOIN students s ON s.id = i.student_id
+        WHERE parse_date(r.receipt_date) BETWEEN ? AND ? AND s.institute_id = ?
     """
-    receipt_params = [start_date, end_date]
+    receipt_params = [start_date, end_date, current_inst]
 
     expense_query = """
-        SELECT IFNULL(SUM(amount), 0) AS total_expenses
-        FROM expenses
-        WHERE expense_date BETWEEN ? AND ?
+        SELECT IFNULL(SUM(e.amount), 0) AS total_expenses
+        FROM expenses e
+        JOIN branches b ON b.id = e.branch_id
+        WHERE e.expense_date BETWEEN ? AND ? AND b.institute_id = ?
     """
-    expense_params = [start_date, end_date]
+    expense_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        student_query += " AND branch_id = ?"
+        student_query += " AND s.branch_id = ?"
         student_params.append(branch_id)
 
-        invoice_count_query += " AND branch_id = ?"
+        invoice_count_query += " AND i.branch_id = ?"
         invoice_count_params.append(branch_id)
 
-        sales_query += " AND (branch_id = ? OR branch_id IS NULL)"
+        sales_query += " AND (i.branch_id = ? OR i.branch_id IS NULL)"
         sales_params.append(branch_id)
 
-        receipt_query += " AND (invoices.branch_id = ? OR invoices.branch_id IS NULL)"
+        receipt_query += " AND (i.branch_id = ? OR i.branch_id IS NULL)"
         receipt_params.append(branch_id)
 
-        expense_query += " AND branch_id = ?"
+        expense_query += " AND e.branch_id = ?"
         expense_params.append(branch_id)
 
     cur.execute(student_query, student_params)
@@ -882,9 +1011,10 @@ def dashboard():
             i.branch_id
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        WHERE ip.status IN ('pending', 'partially_paid', 'overdue')
+        JOIN students s ON s.id = i.student_id
+        WHERE ip.status IN ('pending', 'partially_paid', 'overdue') AND s.institute_id = ?
     """
-    aging_params = []
+    aging_params = [current_inst]
 
     if branch_id:
         aging_query += " AND (i.branch_id = ? OR i.branch_id IS NULL)"
@@ -961,15 +1091,16 @@ def dashboard():
 
     monthly_sales_query = """
         SELECT
-            invoice_date,
-            total_amount
-        FROM invoices
-        WHERE parse_date(invoice_date) BETWEEN ? AND ?
+            i.invoice_date,
+            i.total_amount
+        FROM invoices i
+        JOIN students s ON s.id = i.student_id
+        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ?
     """
-    monthly_sales_params = [start_date, end_date]
+    monthly_sales_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        monthly_sales_query += " AND branch_id = ?"
+        monthly_sales_query += " AND i.branch_id = ?"
         monthly_sales_params.append(branch_id)
 
     cur.execute(monthly_sales_query, monthly_sales_params)
@@ -996,19 +1127,20 @@ def dashboard():
 
     monthly_receipts_query = """
         SELECT
-            SUBSTR(parse_date(receipts.receipt_date), 1, 7) AS ym,
-            IFNULL(SUM(receipts.amount_received), 0) AS total_amount
-        FROM receipts
-        JOIN invoices ON receipts.invoice_id = invoices.id
-        WHERE parse_date(receipts.receipt_date) BETWEEN ? AND ?
+            SUBSTR(parse_date(r.receipt_date), 1, 7) AS ym,
+            IFNULL(SUM(r.amount_received), 0) AS total_amount
+        FROM receipts r
+        JOIN invoices i ON r.invoice_id = i.id
+        JOIN students s ON s.id = i.student_id
+        WHERE parse_date(r.receipt_date) BETWEEN ? AND ? AND s.institute_id = ?
     """
-    monthly_receipts_params = [start_date, end_date]
+    monthly_receipts_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        monthly_receipts_query += " AND invoices.branch_id = ?"
+        monthly_receipts_query += " AND i.branch_id = ?"
         monthly_receipts_params.append(branch_id)
 
-    monthly_receipts_query += " GROUP BY SUBSTR(parse_date(receipts.receipt_date), 1, 7)"
+    monthly_receipts_query += " GROUP BY SUBSTR(parse_date(r.receipt_date), 1, 7)"
 
     cur.execute(monthly_receipts_query, monthly_receipts_params)
     for row in cur.fetchall():
@@ -1018,15 +1150,16 @@ def dashboard():
 
     monthly_expenses_query = """
         SELECT
-            substr(expense_date, 1, 7) AS ym,
-            IFNULL(SUM(amount), 0) AS total_amount
-        FROM expenses
-        WHERE expense_date BETWEEN ? AND ?
+            substr(e.expense_date, 1, 7) AS ym,
+            IFNULL(SUM(e.amount), 0) AS total_amount
+        FROM expenses e
+        JOIN branches b ON b.id = e.branch_id
+        WHERE e.expense_date BETWEEN ? AND ? AND b.institute_id = ?
     """
-    monthly_expenses_params = [start_date, end_date]
+    monthly_expenses_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        monthly_expenses_query += " AND branch_id = ?"
+        monthly_expenses_query += " AND e.branch_id = ?"
         monthly_expenses_params.append(branch_id)
 
     monthly_expenses_query += " GROUP BY substr(expense_date, 1, 7)"
@@ -1156,6 +1289,8 @@ def students():
     status_filter = request.args.get("status", "").strip()
     batch_filter = request.args.get("batch", "").strip()
 
+    current_inst = get_current_institute_id(default=1)
+
     # Get student statistics
     cur.execute("""
         SELECT 
@@ -1164,7 +1299,8 @@ def students():
             SUM(CASE WHEN status = 'dropped' THEN 1 ELSE 0 END) AS dropped_count,
             COUNT(*) AS total_count
         FROM students
-    """)
+        WHERE institute_id = ?
+    """, (current_inst,))
     stats = cur.fetchone()
 
     # Get branch-wise student statistics
@@ -1178,11 +1314,11 @@ def students():
             SUM(CASE WHEN students.status = 'dropped' THEN 1 ELSE 0 END) AS dropped_count,
             COUNT(students.id) AS total_count
         FROM branches
-        LEFT JOIN students ON branches.id = students.branch_id
-        WHERE branches.is_active = 1
+        LEFT JOIN students ON branches.id = students.branch_id AND students.institute_id = ?
+        WHERE branches.is_active = 1 AND branches.institute_id = ?
         GROUP BY branches.id, branches.branch_name, branches.branch_code
         ORDER BY branches.branch_name
-    """)
+    """, (current_inst, current_inst))
     branch_stats = cur.fetchall()
 
     import math
@@ -1213,9 +1349,9 @@ def students():
         FROM students
         LEFT JOIN branches
             ON students.branch_id = branches.id
-        WHERE 1=1
+        WHERE students.institute_id = ?
     """
-    params = []
+    params = [current_inst]
 
     # Search filter
     if search_query:
@@ -1361,9 +1497,9 @@ def students():
     cur.execute("""
         SELECT id, branch_name, branch_code
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     branches = cur.fetchall()
 
     # All batches for filter dropdown
@@ -1404,6 +1540,7 @@ def student_batch_progress_monitor():
     conn = get_conn()
     cur = conn.cursor()
 
+    current_inst = get_current_institute_id(default=1)
     current_user_id = session.get("user_id")
     session_role = (session.get("role") or "").strip().lower()
 
@@ -1419,8 +1556,8 @@ def student_batch_progress_monitor():
     is_admin = role == "admin"
 
     cur.execute(
-        "SELECT COUNT(*) AS cnt FROM batches WHERE trainer_id = ? AND status IN ('active', 'completed')",
-        (current_user_id,)
+        "SELECT COUNT(*) AS cnt FROM batches b JOIN branches br ON br.id = b.branch_id WHERE b.trainer_id = ? AND b.status IN ('active', 'completed') AND br.institute_id = ?",
+        (current_user_id, current_inst)
     )
     trainer_batch_count = cur.fetchone()["cnt"] or 0
     trainer_scoped = (not is_admin) and trainer_batch_count > 0 and not can_view_all
@@ -1443,8 +1580,8 @@ def student_batch_progress_monitor():
     if trainer_scoped:
         filters["trainer_id"] = str(current_user_id)
 
-    branch_dropdown_sql = "SELECT id, branch_name FROM branches WHERE is_active = 1"
-    branch_dropdown_params = []
+    branch_dropdown_sql = "SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ?"
+    branch_dropdown_params = [current_inst]
     if (not is_admin) and (not can_view_all) and user_branch_id:
         branch_dropdown_sql += " AND id = ?"
         branch_dropdown_params.append(user_branch_id)
@@ -1462,9 +1599,10 @@ def student_batch_progress_monitor():
         SELECT DISTINCT u.id, u.full_name
         FROM users u
         JOIN batches b ON b.trainer_id = u.id
-        WHERE u.is_active = 1 AND b.status IN ('active', 'completed')
+        JOIN branches br ON br.id = b.branch_id
+        WHERE u.is_active = 1 AND b.status IN ('active', 'completed') AND br.institute_id = ?
     """
-    trainer_dropdown_params = []
+    trainer_dropdown_params = [current_inst]
     if trainer_scoped:
         trainer_dropdown_sql += " AND u.id = ?"
         trainer_dropdown_params.append(current_user_id)
@@ -1479,9 +1617,9 @@ def student_batch_progress_monitor():
         FROM batches b
         LEFT JOIN courses c ON c.id = b.course_id
         LEFT JOIN branches br ON br.id = b.branch_id
-        WHERE b.status IN ('active', 'completed')
+        WHERE b.status IN ('active', 'completed') AND br.institute_id = ?
     """
-    batch_dropdown_params = []
+    batch_dropdown_params = [current_inst]
     if filters["branch_id"].isdigit():
         batch_dropdown_sql += " AND b.branch_id = ?"
         batch_dropdown_params.append(int(filters["branch_id"]))
@@ -1505,8 +1643,8 @@ def student_batch_progress_monitor():
           AND mtx.status = 'active'
     )"""
 
-    where_clauses = ["sb.status IN ('active', 'completed')", "b.status IN ('active', 'completed')"]
-    params = []
+    where_clauses = ["sb.status IN ('active', 'completed')", "b.status IN ('active', 'completed')", "s.institute_id = ?"]
+    params = [current_inst, current_inst, current_inst, current_inst]
 
     if filters["course_id"].isdigit():
         where_clauses.append("c.id = ?")
@@ -1543,7 +1681,7 @@ def student_batch_progress_monitor():
             SELECT b.id AS batch_id, lp.id AS program_id
             FROM batches b
             JOIN lms_programs lp ON lp.course_id = b.course_id
-            WHERE lp.is_active = 1 AND lp.is_deleted = 0
+            WHERE lp.is_active = 1 AND lp.is_deleted = 0 AND lp.institute_id = ?
             UNION
             SELECT bpa.batch_id, bpa.program_id
             FROM lms_batch_program_access bpa
@@ -1551,13 +1689,14 @@ def student_batch_progress_monitor():
             WHERE bpa.is_active = 1
               AND lp.is_active = 1
               AND lp.is_deleted = 0
+              AND lp.institute_id = ?
               AND (bpa.access_end_date IS NULL OR bpa.access_end_date >= date('now'))
             UNION
             SELECT b.id AS batch_id, cpm.program_id
             FROM batches b
             JOIN lms_course_program_map cpm ON cpm.course_id = b.course_id
             JOIN lms_programs lp ON lp.id = cpm.program_id
-            WHERE lp.is_active = 1 AND lp.is_deleted = 0
+            WHERE lp.is_active = 1 AND lp.is_deleted = 0 AND lp.institute_id = ?
         )
         SELECT
             s.id AS student_id,
@@ -1691,8 +1830,6 @@ def student_batch_progress_monitor():
         for sid, names in trainer_names_by_student.items():
             student_trainer_map[sid] = " / ".join(names) if len(names) > 1 else names[0]
 
-    conn.close()
-
     def _batch_time(row):
         start_time = row["start_time"] or ""
         end_time = row["end_time"] or ""
@@ -1819,17 +1956,62 @@ def student_batch_progress_monitor():
             not group["last_activity"] or str(last_activity) > str(group["last_activity"])
         ):
             group["last_activity"] = last_activity
-
     monitor_rows = []
     for group in grouped_rows.values():
         row = group["row"]
-        total = group["total_topics"]
-        done = group["completed_topics"]
-        pct = round((done / total) * 100, 1) if total > 0 else 0.0
+        sid = row["student_id"]
+        
+        # Retrieve actual student program progress matching student profile
+        lms_prog_rows = _student_lms_progress_rows(cur, sid, current_inst)
+        
+        if lms_prog_rows:
+            enhanced_progs = []
+            sum_total = 0
+            sum_done = 0
+            latest_act = None
+            for p in lms_prog_rows:
+                p_tot = p.get("total_topics", 0)
+                p_done = p.get("completed_topics", 0)
+                p_pct = p.get("progress_pct", 0.0)
+                p_act = p.get("last_activity")
+                
+                sum_total += p_tot
+                sum_done += p_done
+                if p_act and (not latest_act or str(p_act) > str(latest_act)):
+                    latest_act = p_act
+                
+                enhanced_progs.append({
+                    "program_id": p.get("program_id"),
+                    "program_name": p.get("program_name"),
+                    "course_name": p.get("course_name"),
+                    "total_topics": p_tot,
+                    "completed_topics": p_done,
+                    "progress_pct": p_pct,
+                    "progress_class": _progress_class(p_pct, p_tot, p_done),
+                    "progress_label": _progress_label(p_pct, p_tot, p_done),
+                    "last_activity": _format_display_datetime(p_act) if p_act else "Not Started"
+                })
+            
+            total = sum_total
+            done = sum_done
+            pct = round((done / total) * 100, 1) if total > 0 else 0.0
+            lms_programs_list = enhanced_progs
+            if latest_act and (not group["last_activity"] or str(latest_act) > str(group["last_activity"])):
+                group["last_activity"] = latest_act
+        else:
+            total = group["total_topics"]
+            done = group["completed_topics"]
+            pct = round((done / total) * 100, 1) if total > 0 else 0.0
+            lms_programs_list = []
+
         photo_filename = _existing_photo_filename(row["photo_filename"])
-        program_ids = group["program_ids"]
+        if lms_programs_list:
+            active_p_ids = [p["program_id"] for p in lms_programs_list if p.get("program_id")]
+            program_id = active_p_ids[0] if len(active_p_ids) == 1 else None
+        else:
+            program_ids = group["program_ids"]
+            program_id = program_ids[0] if len(program_ids) == 1 else None
         program_names = group["program_names"]
-        program_id = program_ids[0] if len(program_ids) == 1 else None
         program_name = " / ".join(program_names) if program_names else "LMS not mapped"
         course_name = " / ".join(group["course_names"]) if group["course_names"] else row["course_name"]
         batch_name = " / ".join(group["batch_names"]) if group["batch_names"] else row["batch_name"]
@@ -1857,9 +2039,12 @@ def student_batch_progress_monitor():
             "progress_pct": pct,
             "progress_class": _progress_class(pct, total, done),
             "progress_label": _progress_label(pct, total, done),
+            "lms_programs_list": lms_programs_list,
             "last_activity": _format_display_datetime(group["last_activity"]) if group["last_activity"] else "Not Started",
         }
         monitor_rows.append(item)
+
+    conn.close()
 
     progress_filter = filters["progress"]
     if progress_filter:
@@ -1932,6 +2117,7 @@ def student_batch_progress_monitor():
 
 
 def _build_institute_day_overview(cur, filters, user, role):
+    current_inst = get_current_institute_id(default=1)
     selected_date = datetime.strptime(filters["date"], "%Y-%m-%d").date()
     now_dt = _ist_now()
     today = now_dt.date()
@@ -1945,9 +2131,9 @@ def _build_institute_day_overview(cur, filters, user, role):
     branch_sql = """
         SELECT id, branch_name, no_of_computers, opening_time, closing_time
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
     """
-    branch_params = []
+    branch_params = [current_inst]
     if (not is_admin) and (not can_view_all) and user_branch_id:
         branch_sql += " AND id = ?"
         branch_params.append(user_branch_id)
@@ -1965,10 +2151,12 @@ def _build_institute_day_overview(cur, filters, user, role):
         SELECT DISTINCT u.id, COALESCE(NULLIF(TRIM(u.full_name), ''), u.username) AS full_name
         FROM users u
         JOIN batches b ON b.trainer_id = u.id
+        JOIN branches br ON br.id = b.branch_id
         WHERE u.is_active = 1
           AND b.status = 'active'
+          AND br.institute_id = ?
     """
-    trainer_params = []
+    trainer_params = [current_inst]
     if (not is_admin) and (not can_view_all) and user_branch_id:
         trainer_sql += " AND b.branch_id = ?"
         trainer_params.append(user_branch_id)
@@ -2084,9 +2272,10 @@ def _build_institute_day_overview(cur, filters, user, role):
              AND ar.batch_id = sb.batch_id
              AND ar.attendance_date = ?
             WHERE sb.status = 'active'
+              AND s.institute_id = ?
               AND sb.batch_id IN ({placeholders})
             ORDER BY s.full_name
-        """, [filters["date"], *batch_ids]).fetchall()
+        """, [filters["date"], current_inst, *batch_ids]).fetchall()
 
         seen_batch_students = set()
         for row in student_rows:
@@ -2326,15 +2515,16 @@ def student_check_duplicate():
 
     conn = get_conn()
     cur = conn.cursor()
+    institute_id = get_current_institute_id(default=1)
     if exclude_id:
         cur.execute(
-            "SELECT id, student_code, full_name, phone FROM students WHERE phone = ? AND id != ?",
-            (phone, exclude_id)
+            "SELECT id, student_code, full_name, phone FROM students WHERE institute_id = ? AND phone = ? AND id != ?",
+            (institute_id, phone, exclude_id)
         )
     else:
         cur.execute(
-            "SELECT id, student_code, full_name, phone FROM students WHERE phone = ?",
-            (phone,)
+            "SELECT id, student_code, full_name, phone FROM students WHERE institute_id = ? AND phone = ?",
+            (institute_id, phone)
         )
     existing = cur.fetchone()
     conn.close()
@@ -2411,15 +2601,31 @@ def pincode_lookup():
 def student_new():
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
+    _ensure_student_creation_ledger(cur)
 
     if request.method == "POST":
-        # Duplicate Prevention Token Check
         form_token = request.form.get("form_token")
-        saved_token = session.get("student_form_token")
-        if not form_token or form_token != saved_token:
+        completed = cur.execute("""
+            SELECT scr.student_id, s.student_code, s.full_name
+            FROM student_creation_requests scr
+            JOIN students s ON s.id=scr.student_id AND s.institute_id=scr.institute_id
+            WHERE scr.token=? AND scr.institute_id=? AND scr.user_id=?
+              AND scr.status='completed'
+        """, (form_token, current_inst, session["user_id"])).fetchone() if form_token else None
+        if completed:
             conn.close()
-            flash("This student has already been registered or the request is no longer valid.", "warning")
-            return redirect(url_for("billing.students"))
+            _retire_student_form_token(form_token)
+            flash(
+                f"This registration was already completed for {completed['full_name']} "
+                f"({completed['student_code']}). No duplicate student was created.",
+                "info",
+            )
+            return redirect(url_for("billing.student_profile", student_id=completed["student_id"]))
+        if not _valid_student_form_token(form_token):
+            conn.close()
+            flash("This form expired or belongs to an earlier login. No student was created. Please open Add Student and try again.", "warning")
+            return redirect(url_for("billing.student_new"))
         branch_id = request.form.get("branch_id", "").strip()
         full_name = request.form.get("full_name", "").strip()
         phone = request.form.get("phone", "").strip()
@@ -2430,7 +2636,7 @@ def student_new():
         import re as _re
         _phone_digits = _re.sub(r'[\s\-\+]', '', phone)
         if not _phone_digits.isdigit() or len(_phone_digits) != 10:
-            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (current_inst,))
             branches = cur.fetchall()
             conn.close()
             return render_template(
@@ -2440,7 +2646,8 @@ def student_new():
                 education_levels=QUALIFICATION_LEVELS.keys(),
                 qualification_levels=QUALIFICATION_LEVELS,
                 error="Invalid phone number. Please enter a valid 10-digit mobile number.",
-                form_data=request.form
+                form_data=request.form,
+                form_token=form_token,
             )
 
         gender = request.form.get("gender", "").strip()
@@ -2493,7 +2700,7 @@ def student_new():
             has_photo=bool(photo_data),
         )
         if missing_required:
-            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (current_inst,))
             branches = cur.fetchall()
             conn.close()
             return render_template(
@@ -2503,7 +2710,8 @@ def student_new():
                 education_levels=QUALIFICATION_LEVELS.keys(),
                 qualification_levels=QUALIFICATION_LEVELS,
                 error=_student_required_error_message(missing_required),
-                form_data=request.form
+                form_data=request.form,
+                form_token=form_token,
             )
 
         # Validate date_of_birth is a real calendar date
@@ -2511,7 +2719,7 @@ def student_new():
             try:
                 datetime.strptime(date_of_birth, "%Y-%m-%d")
             except ValueError:
-                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (current_inst,))
                 branches = cur.fetchall()
                 conn.close()
                 return render_template(
@@ -2521,14 +2729,15 @@ def student_new():
                     education_levels=QUALIFICATION_LEVELS.keys(),
                     qualification_levels=QUALIFICATION_LEVELS,
                     error="Invalid date of birth. Please enter a valid calendar date.",
-                    form_data=request.form
+                    form_data=request.form,
+                    form_token=form_token,
                 )
 
         # Photo is required for new students
         if not photo_data:
             cur.execute("""
-                SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name
-            """)
+                SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name
+            """, (current_inst,))
             branches = cur.fetchall()
             conn.close()
             return render_template(
@@ -2538,19 +2747,20 @@ def student_new():
                 education_levels=QUALIFICATION_LEVELS.keys(),
                 qualification_levels=QUALIFICATION_LEVELS,
                 error="Student photo is required.",
-                form_data=request.form
+                form_data=request.form,
+                form_token=form_token,
             )
 
         # Duplicate phone check
         force_save = request.form.get("force_save") == "1"
         if not force_save:
             cur.execute(
-                "SELECT id, student_code, full_name FROM students WHERE phone = ?",
-                (phone,)
+                "SELECT id, student_code, full_name FROM students WHERE institute_id = ? AND phone = ?",
+                (current_inst, phone)
             )
             dup = cur.fetchone()
             if dup:
-                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (current_inst,))
                 branches = cur.fetchall()
                 conn.close()
                 return render_template(
@@ -2565,40 +2775,127 @@ def student_new():
                         "full_name": dup["full_name"],
                         "phone": phone,
                     },
-                    form_data=request.form
+                    form_data=request.form,
+                    form_token=form_token,
                 )
 
 
 
 
+        # Get tenant student prefix from institute_settings
         cur.execute("""
-            SELECT student_code
-            FROM students
-            ORDER BY CAST(student_code AS INTEGER) DESC
-            LIMIT 1
-        """)
-        result = cur.fetchone()
+            SELECT student_prefix
+            FROM institute_settings
+            WHERE institute_id = ?
+        """, (current_inst,))
+        inst_settings = cur.fetchone()
+        raw_prefix = inst_settings.get("student_prefix") if inst_settings and inst_settings.get("student_prefix") is not None else None
 
-        if result and result["student_code"]:
-            try:
-                max_reg = int(result["student_code"])
-                next_reg_no = max_reg + 1
-            except (ValueError, TypeError):
-                max_reg = 1515000
-                next_reg_no = max_reg + 1
+        if current_inst == 1:
+            # Global IT Education (Primary Tenant): Default to empty prefix for numeric continuation
+            stu_prefix = raw_prefix.strip() if raw_prefix is not None else ""
+            if stu_prefix:
+                cur.execute("""
+                    SELECT MAX(CAST(REGEXP_REPLACE(student_code, '[^0-9]', '') AS UNSIGNED)) AS max_seq
+                    FROM students
+                    WHERE institute_id = 1 AND student_code LIKE ?
+                """, (f"{stu_prefix}%",))
+                max_row = cur.fetchone()
+                next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else 1
+                student_code = f"{stu_prefix}{next_seq:03d}"
+            else:
+                # Continuation of legacy numeric range (1516720 -> 1516721)
+                cur.execute("""
+                    SELECT MAX(CAST(student_code AS UNSIGNED)) AS max_seq
+                    FROM students
+                    WHERE institute_id = 1 AND student_code REGEXP '^[0-9]+$'
+                """)
+                max_row = cur.fetchone()
+                max_val = max_row["max_seq"] if max_row and max_row["max_seq"] else 1515000
+                if max_val < 1515000:
+                    max_val = 1515000
+                student_code = str(max_val + 1)
         else:
-            max_reg = 1515000
-            next_reg_no = max_reg + 1
+            # Secondary Tenants (institute_id != 1): Default to 'STU' prefix, start sequence from 1
+            stu_prefix = raw_prefix.strip() if (raw_prefix is not None and raw_prefix.strip()) else "STU"
+            cur.execute("""
+                SELECT MAX(CAST(REGEXP_REPLACE(student_code, '[^0-9]', '') AS UNSIGNED)) AS max_seq
+                FROM students
+                WHERE institute_id = ? AND student_code LIKE ?
+            """, (current_inst, f"{stu_prefix}%"))
+            max_row = cur.fetchone()
+            next_seq = (max_row["max_seq"] or 0) + 1 if max_row and max_row["max_seq"] else 1
+            student_code = f"{stu_prefix}{next_seq:03d}"
+
+        # Claim this browser submission in the database. Unlike the signed
+        # session cookie, this unique token serializes double-clicks and
+        # concurrent/replayed POST requests across workers and devices.
+        request_fingerprint = _student_creation_fingerprint(current_inst, request.form)
+        try:
+            cur.execute("""
+                INSERT INTO student_creation_requests (
+                    token, institute_id, user_id, request_fingerprint, status, created_at
+                ) VALUES (?, ?, ?, ?, 'processing', ?)
+            """, (
+                form_token, current_inst, session["user_id"], request_fingerprint,
+                datetime.now().isoformat(timespec="seconds"),
+            ))
+        except Exception:
+            conn.rollback()
+            conn.close()
+            replay_conn = get_conn()
+            try:
+                replay = replay_conn.execute("""
+                    SELECT scr.student_id, scr.request_fingerprint, scr.status,
+                           s.student_code, s.full_name
+                    FROM student_creation_requests scr
+                    LEFT JOIN students s ON s.id=scr.student_id AND s.institute_id=scr.institute_id
+                    WHERE scr.institute_id=? AND scr.user_id=?
+                      AND (scr.token=? OR scr.request_fingerprint=?)
+                    ORDER BY CASE WHEN scr.token=? THEN 0 ELSE 1 END
+                    LIMIT 1
+                """, (
+                    current_inst, session["user_id"], form_token,
+                    request_fingerprint, form_token,
+                )).fetchone()
+            finally:
+                replay_conn.close()
+            if replay and replay["status"] == "completed" and replay["student_id"]:
+                _retire_student_form_token(form_token)
+                flash(
+                    f"This registration was already completed for {replay['full_name']} "
+                    f"({replay['student_code']}). No duplicate student was created.",
+                    "info",
+                )
+                return redirect(url_for("billing.student_profile", student_id=replay["student_id"]))
+            flash("Another request is processing this registration. Please check the Students list before retrying.", "warning")
+            return redirect(url_for("billing.students"))
+
+        # Serialize student creation on the subscription row. The student INSERT
+        # below is committed in this same transaction.
+        try:
+            lock_and_check_limit(conn, current_inst, "students")
+        except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("billing.student_new"))
 
         # Save photo if provided
         photo_filename = None
         if photo_data:
-            photo_filename = save_student_photo(photo_data, str(next_reg_no))
+            # Reuse the registration transaction. It already owns the
+            # subscription row lock for the student-limit check; opening a
+            # second quota connection here would self-deadlock on that row.
+            photo_filename = save_student_photo(
+                photo_data, student_code, transaction_conn=conn
+            )
 
         now = datetime.now().isoformat(timespec="seconds")
 
         cur.execute("""
             INSERT INTO students (
+                institute_id,
                 student_code,
                 full_name,
                 phone,
@@ -2643,9 +2940,10 @@ def student_new():
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            str(next_reg_no),
+            current_inst,
+            student_code,
             full_name,
             phone,
             gender,
@@ -2692,6 +2990,15 @@ def student_new():
 
         student_id = cur.lastrowid
 
+        cur.execute("""
+            UPDATE student_creation_requests
+            SET status='completed', student_id=?, completed_at=?
+            WHERE token=? AND institute_id=? AND user_id=?
+        """, (
+            student_id, datetime.now().isoformat(timespec="seconds"),
+            form_token, current_inst, session["user_id"],
+        ))
+
         # ── Lead linkage ────────────────────────────────────────────
         if form_lead_id:
             # Mark the originating lead as converted
@@ -2715,11 +3022,11 @@ def student_new():
             lead_edu = _edu_map.get(education_level, "")
             cur.execute(
                 """INSERT INTO leads
-                       (name, phone, gender, education_status, lead_location,
+                       (institute_id, name, phone, gender, education_status, lead_location,
                         stage, status, lead_source, conversion_date, branch_id,
                         assigned_to_id, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, 'Converted', 'converted', 'Walk-in', ?, ?, ?, ?, ?)""",
-                (full_name, phone, gender, lead_edu, student_location, now[:10], branch_id,
+                   VALUES (?, ?, ?, ?, ?, ?, 'Converted', 'converted', 'Walk-in', ?, ?, ?, ?, ?)""",
+                (current_inst, full_name, phone, gender, lead_edu, student_location, now[:10], branch_id,
                  session["user_id"], now, now)
             )
             new_lead_id = cur.lastrowid
@@ -2736,7 +3043,7 @@ def student_new():
             action_type="create",
             module_name="students",
             record_id=student_id,
-            description=f"Created student {full_name} (Reg No: {next_reg_no})"
+            description=f"Created student {full_name} (Reg No: {student_code})"
         )
 
         if form_lead_id:
@@ -2746,32 +3053,28 @@ def student_new():
                 action_type="lead_converted",
                 module_name="leads",
                 record_id=form_lead_id,
-                description=f"Lead converted on {now[:10]} - Student: {full_name} (Reg No: {next_reg_no})",
+                description=f"Lead converted on {now[:10]} - Student: {full_name} (Reg No: {student_code})",
             )
 
         # Send welcome SMS with registration number
         try:
             sms_phone = "+91" + phone  # phone is already validated 10-digit
-            sms_message = (
-                f"Welcome to Global IT Education, {full_name}! "
-                f"Your Registration Number is {next_reg_no}. "
-                "Keep this number safe for future reference."
-            )
+            sms_message = registration_message(full_name, student_code)
             send_sms(sms_phone, sms_message)
         except Exception:
             pass  # Never block registration if SMS fails
 
         # Invalidate the token only after successful database commit
-        session.pop("student_form_token", None)
+        _retire_student_form_token(form_token)
         flash("Student added successfully.", "success")
         return redirect(url_for("billing.students"))
 
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (get_current_institute_id(default=1),))
     branches = cur.fetchall()
 
     # Pre-fill from a lead if ?from_lead=<id> is provided
@@ -2779,14 +3082,14 @@ def student_new():
     from_lead_raw = request.args.get("from_lead", "").strip()
     if from_lead_raw.isdigit():
         cur.execute(
-            "SELECT * FROM leads WHERE id = ? AND is_deleted = 0",
-            (int(from_lead_raw),)
+            "SELECT * FROM leads WHERE id = ? AND is_deleted = 0 AND institute_id = ?",
+            (int(from_lead_raw), get_current_institute_id(default=1))
         )
         prefill_lead = cur.fetchone()
 
-    # Generate unique idempotency token for new student registration
-    import uuid
-    session["student_form_token"] = str(uuid.uuid4())
+    # Keep several tokens valid so separate Add Student tabs do not invalidate
+    # one another. Each token is also claimed durably in the database on POST.
+    form_token = _issue_student_form_token()
 
     conn.close()
 
@@ -2796,7 +3099,8 @@ def student_new():
         branches=branches,
         education_levels=QUALIFICATION_LEVELS.keys(),
         qualification_levels=QUALIFICATION_LEVELS,
-        prefill_lead=prefill_lead
+        prefill_lead=prefill_lead,
+        form_token=form_token,
     )
 
 @billing_bp.route("/student/<int:student_id>/edit", methods=["GET", "POST"])
@@ -2808,8 +3112,8 @@ def student_edit(student_id):
     cur.execute("""
         SELECT *
         FROM students
-        WHERE id = ?
-    """, (student_id,))
+        WHERE id = ? AND institute_id = ?
+    """, (student_id, get_current_institute_id(default=1)))
     student = cur.fetchone()
 
     if not student:
@@ -3085,9 +3389,17 @@ def student_edit(student_id):
 @login_required
 def student_upload_photo(student_id):
     """Quick photo upload from student profile page."""
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id, student_code, full_name FROM students WHERE id = ?", (student_id,))
+    cur.execute(
+        """
+        SELECT id, student_code, full_name
+        FROM students
+        WHERE id = ? AND institute_id = ?
+        """,
+        (student_id, current_inst),
+    )
     student = cur.fetchone()
     if not student:
         conn.close()
@@ -3100,10 +3412,16 @@ def student_upload_photo(student_id):
 
     try:
         photo_filename = save_student_photo(photo_data, student["student_code"])
+        if not photo_filename:
+            raise RuntimeError("The student photo could not be stored.")
         now = datetime.now().isoformat(timespec="seconds")
         cur.execute(
-            "UPDATE students SET photo_filename = ?, updated_at = ? WHERE id = ?",
-            (photo_filename, now, student_id)
+            """
+            UPDATE students
+            SET photo_filename = ?, updated_at = ?
+            WHERE id = ? AND institute_id = ?
+            """,
+            (photo_filename, now, student_id, current_inst)
         )
         conn.commit()
         log_activity(
@@ -3115,7 +3433,12 @@ def student_upload_photo(student_id):
             description=f"Updated photo for student {student['full_name']} ({student['student_code']})"
         )
         conn.close()
-        return jsonify({"success": True, "photo_filename": photo_filename})
+        photo_url = get_storage_service().generate_public_url(photo_filename)
+        return jsonify({
+            "success": True,
+            "photo_filename": photo_filename,
+            "photo_url": photo_url,
+        })
     except Exception as e:
         conn.close()
         return jsonify({"success": False, "error": str(e)}), 500
@@ -3126,9 +3449,15 @@ def student_upload_photo(student_id):
 def student_save_signature(student_id):
     """Save student or parent digital signature from profile page."""
     import os, base64
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id, student_code, full_name FROM students WHERE id = ?", (student_id,))
+    cur.execute(
+        """SELECT id, student_code, full_name
+           FROM students
+           WHERE id = ? AND institute_id = ?""",
+        (student_id, current_inst),
+    )
     student = cur.fetchone()
     if not student:
         conn.close()
@@ -3153,18 +3482,24 @@ def student_save_signature(student_id):
         filename = f"signatures/{code}_{sig_type}_signature.png"
         
         storage_service = get_storage_service()
-        storage_service.upload_file(sig_bytes, filename, content_type="image/png")
+        stored_path = storage_service.upload_file(
+            sig_bytes, filename, content_type="image/png"
+        )
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if sig_type == "student":
             cur.execute(
-                "UPDATE students SET student_signature_filename=?, student_signature_date=?, updated_at=? WHERE id=?",
-                (filename, now, now, student_id)
+                """UPDATE students
+                   SET student_signature_filename=?, student_signature_date=?, updated_at=?
+                   WHERE id=? AND institute_id=?""",
+                (stored_path, now, now, student_id, current_inst)
             )
         else:
             cur.execute(
-                "UPDATE students SET parent_signature_filename=?, parent_signature_date=?, updated_at=? WHERE id=?",
-                (filename, now, now, student_id)
+                """UPDATE students
+                   SET parent_signature_filename=?, parent_signature_date=?, updated_at=?
+                   WHERE id=? AND institute_id=?""",
+                (stored_path, now, now, student_id, current_inst)
             )
         conn.commit()
         log_activity(
@@ -3176,7 +3511,12 @@ def student_save_signature(student_id):
             description=f"Saved {sig_type} signature for {student['full_name']} ({code})"
         )
         conn.close()
-        return jsonify({"success": True, "filename": filename, "signed_at": now})
+        return jsonify({
+            "success": True,
+            "filename": stored_path,
+            "signature_url": storage_service.generate_public_url(stored_path),
+            "signed_at": now,
+        })
     except Exception as e:
         conn.close()
         return jsonify({"success": False, "error": str(e)}), 500
@@ -3261,7 +3601,7 @@ def student_add_to_batch(student_id):
     return jsonify({"success": True, "batch_name": batch["batch_name"]})
 
 
-def _student_lms_progress_rows(cur, student_id):
+def _student_lms_progress_rows(cur, student_id, institute_id):
     """Return per-program LMS progress summaries for the student profile."""
     cur.execute("""
         SELECT DISTINCT
@@ -3295,6 +3635,7 @@ def _student_lms_progress_rows(cur, student_id):
         LEFT JOIN courses c ON c.id = lp.course_id
         WHERE lp.is_active = 1
           AND COALESCE(lp.is_deleted, 0) = 0
+          AND lp.institute_id = ?
           AND EXISTS (
               SELECT 1
               FROM lms_student_program_access spa
@@ -3302,7 +3643,7 @@ def _student_lms_progress_rows(cur, student_id):
                 AND spa.program_id = lp.id
           )
         ORDER BY course_name, lp.program_name
-    """, (student_id, student_id, student_id))
+    """, (student_id, student_id, institute_id, student_id))
     programs = cur.fetchall()
 
     progress_rows = []
@@ -3441,6 +3782,7 @@ def _student_lms_progress_rows(cur, student_id):
 def student_profile(student_id):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT
@@ -3449,8 +3791,8 @@ def student_profile(student_id):
         FROM students
         LEFT JOIN branches
             ON students.branch_id = branches.id
-        WHERE students.id = ?
-    """, (student_id,))
+        WHERE students.id = ? AND students.institute_id = ?
+    """, (student_id, current_inst))
     student = cur.fetchone()
 
     if not student:
@@ -3742,7 +4084,31 @@ def student_profile(student_id):
     if current_course is None and student_invoiced_courses:
         current_course = student_invoiced_courses[0]
 
-    lms_progress_rows = _student_lms_progress_rows(cur, student_id)
+    lms_progress_rows = _student_lms_progress_rows(cur, student_id, current_inst)
+
+    # Programs that can be granted directly without changing billing records.
+    cur.execute("""
+        SELECT lp.id, lp.program_name,
+               COALESCE(c.course_name, lp.program_name) AS course_name,
+               CASE WHEN EXISTS (
+                   SELECT 1 FROM lms_student_program_access spa
+                   WHERE spa.student_id = ? AND spa.program_id = lp.id
+                     AND spa.is_active = 0
+               ) THEN 1 ELSE 0 END AS was_suspended
+        FROM lms_programs lp
+        LEFT JOIN courses c
+          ON c.id = lp.course_id AND c.institute_id = ?
+        WHERE lp.institute_id = ?
+          AND lp.is_active = 1
+          AND COALESCE(lp.is_deleted, 0) = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM lms_student_program_access spa
+              WHERE spa.student_id = ? AND spa.program_id = lp.id
+                AND spa.is_active = 1
+          )
+        ORDER BY course_name, lp.program_name
+    """, (student_id, current_inst, current_inst, student_id))
+    available_lms_programs = cur.fetchall()
 
     student_batch_courses = []
     for b in student_batches:
@@ -3816,8 +4182,9 @@ def student_profile(student_id):
         (student_id,)
     ).fetchone()
 
-    from modules.students.routes import calculate_profile_score
-    profile_score = calculate_profile_score(student, uploaded_docs)
+    from modules.students.routes import calculate_profile_completion
+    profile_completion = calculate_profile_completion(student, uploaded_docs)
+    profile_score = profile_completion['score']
 
     conn.close()
 
@@ -3840,6 +4207,7 @@ def student_profile(student_id):
         attendance_summary=attendance_summary,
         attendance_percentage=attendance_percentage,
         lms_progress_rows=lms_progress_rows,
+        available_lms_programs=available_lms_programs,
         recent_activity=recent_activity,
         origin_lead=origin_lead,
         exam_applications=exam_applications,
@@ -3847,6 +4215,7 @@ def student_profile(student_id):
         uploaded_docs=uploaded_docs,
         pending_update=pending_update,
         profile_score=profile_score,
+        profile_completion=profile_completion,
         format_datetime=_format_display_datetime,
         format_date=_format_display_date,
         format_inr=_format_inr,
@@ -3985,6 +4354,7 @@ def export_students_csv():
     try:
         conn = get_conn()
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
 
         cur.execute("""
             SELECT
@@ -4004,8 +4374,10 @@ def export_students_csv():
             FROM students
             LEFT JOIN branches
                 ON students.branch_id = branches.id
+               AND branches.institute_id = ?
+            WHERE students.institute_id = ?
             ORDER BY students.id DESC
-        """)
+        """, (current_inst, current_inst))
         students_data = cur.fetchall()
         conn.close()
 
@@ -4074,16 +4446,18 @@ def export_students_csv():
 def courses():
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT *
         FROM courses
+        WHERE institute_id = ?
         ORDER BY
             CASE WHEN course_domain IS NULL OR course_domain = '' THEN 1 ELSE 0 END,
             course_domain,
             CASE WHEN duration_hours IS NULL THEN 9999 ELSE duration_hours END,
             course_name
-    """)
+    """, (current_inst,))
     courses = cur.fetchall()
     conn.close()
 
@@ -4120,6 +4494,7 @@ COURSE_CATEGORIES = [
 @billing_bp.route("/course/new", methods=["GET", "POST"])
 @login_required
 def course_new():
+    current_inst = get_current_institute_id(default=1)
     if request.method == "POST":
         course_name = request.form["course_name"].strip()
         duration = request.form["duration"].strip()
@@ -4140,6 +4515,7 @@ def course_new():
 
         cur.execute("""
             INSERT INTO courses (
+                institute_id,
                 course_name,
                 duration,
                 fee,
@@ -4151,8 +4527,9 @@ def course_new():
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            current_inst,
             course_name,
             duration,
             fee,
@@ -4190,12 +4567,13 @@ def course_new():
 def course_edit(id):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT *
         FROM courses
-        WHERE id = ?
-    """, (id,))
+        WHERE id = ? AND institute_id = ?
+    """, (id, current_inst))
     course = cur.fetchone()
 
     if not course:
@@ -4229,7 +4607,7 @@ def course_edit(id):
                 duration_hours = ?,
                 course_slug = ?,
                 updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND institute_id = ?
         """, (
             course_name,
             duration,
@@ -4240,8 +4618,17 @@ def course_edit(id):
             duration_hours,
             course_slug,
             now,
-            id
+            id,
+            current_inst,
         ))
+
+        if duration or duration_hours:
+            dur_text = (duration or "").strip() or (f"{duration_hours} Hours" if duration_hours else "")
+            cur.execute("""
+                UPDATE certificates
+                SET snapshot_course_duration = ?
+                WHERE course_id = ? AND (snapshot_course_duration IS NULL OR TRIM(snapshot_course_duration) = '')
+            """, (dur_text, id))
 
         conn.commit()
         conn.close()
@@ -4269,8 +4656,12 @@ def course_edit(id):
 def course_toggle_active(id):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
-    cur.execute("SELECT id, course_name, is_active FROM courses WHERE id = ?", (id,))
+    cur.execute(
+        "SELECT id, course_name, is_active FROM courses WHERE id = ? AND institute_id = ?",
+        (id, current_inst),
+    )
     course = cur.fetchone()
 
     if not course:
@@ -4282,7 +4673,10 @@ def course_toggle_active(id):
     label = "activated" if new_status else "deactivated"
 
     now = datetime.now().isoformat(timespec="seconds")
-    cur.execute("UPDATE courses SET is_active = ?, updated_at = ? WHERE id = ?", (new_status, now, id))
+    cur.execute(
+        "UPDATE courses SET is_active = ?, updated_at = ? WHERE id = ? AND institute_id = ?",
+        (new_status, now, id, current_inst),
+    )
     conn.commit()
     conn.close()
 
@@ -4305,8 +4699,13 @@ def course_toggle_active(id):
 def course_toggle_website(id):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
-    cur.execute("SELECT id, course_name, is_active, show_on_website FROM courses WHERE id = ?", (id,))
+    cur.execute(
+        """SELECT id, course_name, is_active, show_on_website
+           FROM courses WHERE id = ? AND institute_id = ?""",
+        (id, current_inst),
+    )
     course = cur.fetchone()
 
     if not course:
@@ -4323,8 +4722,11 @@ def course_toggle_website(id):
     label = "added to" if new_val else "removed from"
 
     now = datetime.now().isoformat(timespec="seconds")
-    cur.execute("UPDATE courses SET show_on_website = ?, updated_at = ? WHERE id = ?",
-                (new_val, now, id))
+    cur.execute(
+        """UPDATE courses SET show_on_website = ?, updated_at = ?
+           WHERE id = ? AND institute_id = ?""",
+        (new_val, now, id, current_inst),
+    )
     conn.commit()
     conn.close()
 
@@ -4349,6 +4751,7 @@ def invoices():
     conn = get_conn()
     cur = conn.cursor()
 
+    current_inst = get_current_institute_id(default=1)
     today = datetime.now().date().isoformat()
     current_year = datetime.now().year
     current_month = datetime.now().month
@@ -4368,11 +4771,13 @@ def invoices():
                 WHERE receipts.invoice_id = invoices.id
             ), 0)) as outstanding_amount
         FROM invoices
-        WHERE DATE(invoices.invoice_date) = ?
-    """, (today,))
+        JOIN students s ON invoices.student_id = s.id
+        WHERE substr(invoices.invoice_date, 1, 10) = ?
+          AND s.institute_id = ?
+    """, (today, current_inst))
     today_stats = cur.fetchone()
 
-    # MONTH STATS - Using invoice_date instead of created_at
+    # MONTH STATS
     cur.execute("""
         SELECT 
             COUNT(*) as total_invoices,
@@ -4386,8 +4791,10 @@ def invoices():
                 WHERE receipts.invoice_id = invoices.id
             ), 0)) as outstanding_amount
         FROM invoices
-        WHERE strftime('%Y-%m', invoices.invoice_date) = ?
-    """, (f"{current_year}-{current_month:02d}",))
+        JOIN students s ON invoices.student_id = s.id
+        WHERE substr(invoices.invoice_date, 1, 7) = ?
+          AND s.institute_id = ?
+    """, (f"{current_year}-{current_month:02d}", current_inst))
     month_stats = cur.fetchone()
 
     # OVERALL STATS
@@ -4404,7 +4811,9 @@ def invoices():
                 WHERE receipts.invoice_id = invoices.id
             ), 0)) as all_outstanding_amount
         FROM invoices
-    """)
+        JOIN students s ON invoices.student_id = s.id
+        WHERE s.institute_id = ?
+    """, (current_inst,))
     overall_stats = cur.fetchone()
 
     query = """
@@ -4426,16 +4835,18 @@ def invoices():
         ON invoices.branch_id = branches.id
     LEFT JOIN receipts
         ON receipts.invoice_id = invoices.id
+    WHERE students.institute_id = ?
     """
 
-    params = []
+    params = [current_inst]
 
     if search:
         query += """
-        WHERE
+        AND (
             invoices.invoice_no LIKE ?
             OR students.full_name LIKE ?
             OR students.student_code LIKE ?
+        )
         """
         like = f"%{search}%"
         params.extend([like, like, like])
@@ -4484,12 +4895,13 @@ def invoice_view(invoice_id):
             students.phone,
             students.email,
             students.address,
-            branches.branch_name
+            branches.branch_name,
+            branches.address AS branch_address
         FROM invoices
         JOIN students ON invoices.student_id = students.id
         LEFT JOIN branches ON invoices.branch_id = branches.id
-        WHERE invoices.id = ?
-    """, (invoice_id,))
+        WHERE invoices.id = ? AND students.institute_id = ?
+    """, (invoice_id, get_current_institute_id(default=1)))
     invoice = cur.fetchone()
 
     if not invoice:
@@ -4589,6 +5001,7 @@ def invoice_view(invoice_id):
     else:
         balance_amount = invoice_total - total_paid - total_written_off
 
+    student_payment_url = payment_links.build_link(conn, get_current_institute_id(default=1), invoice_id)
     conn.close()
 
     return render_template(
@@ -4600,7 +5013,13 @@ def invoice_view(invoice_id):
         total_paid=total_paid,
         balance_amount=balance_amount,
         total_written_off=total_written_off,
-        effective_status=effective_status
+        effective_status=effective_status,
+        student_payment_url=student_payment_url,
+        cashfree_available=(
+            get_current_institute_id() == current_app.config.get("CASHFREE_INSTITUTE_ID", 1)
+            and session.get("role") in {"admin", "staff"}
+            and cashfree.configured()
+        ),
     )
 
 @billing_bp.route("/invoice/<int:invoice_id>/print")
@@ -4627,12 +5046,13 @@ def invoice_print(invoice_id):
             students.phone AS student_phone,
             students.email,
             students.address,
-            branches.branch_name
+            branches.branch_name,
+            branches.address AS branch_address
         FROM invoices
         JOIN students ON invoices.student_id = students.id
         LEFT JOIN branches ON invoices.branch_id = branches.id
-        WHERE invoices.id = ?
-    """, (invoice_id,))
+        WHERE invoices.id = ? AND students.institute_id = ?
+    """, (invoice_id, get_current_institute_id(default=1)))
     invoice = cur.fetchone()
 
     if not invoice:
@@ -4737,10 +5157,12 @@ def installment_edit(installment_id):
 
         # Get current installment details
         cur.execute("""
-            SELECT id, invoice_id, amount_paid
-            FROM installment_plans
-            WHERE id = ?
-        """, (installment_id,))
+            SELECT ip.id, ip.invoice_id, ip.amount_paid
+            FROM installment_plans ip
+            JOIN invoices i ON ip.invoice_id = i.id
+            JOIN students s ON i.student_id = s.id
+            WHERE ip.id = ? AND s.institute_id = ?
+        """, (installment_id, get_current_institute_id(default=1)))
         installment = cur.fetchone()
 
         if not installment:
@@ -4848,6 +5270,30 @@ def _provision_program_access_for_course(cur, student_id, course_id):
             """, (student_id, program_id, now_date, now_iso, now_iso))
 
 
+def _resolve_invoice_item_course_id(cur, raw_course_id, description, institute_id):
+    course_id_raw = (raw_course_id or "").strip()
+    if course_id_raw:
+        return int(course_id_raw)
+
+    description = (description or "").strip()
+    if not description:
+        return None
+
+    row = cur.execute(
+        """
+        SELECT id
+        FROM courses
+        WHERE institute_id = ?
+          AND is_active = 1
+          AND LOWER(TRIM(course_name)) = LOWER(TRIM(?))
+        ORDER BY id
+        LIMIT 1
+        """,
+        (institute_id, description),
+    ).fetchone()
+    return row["id"] if row else None
+
+
 @billing_bp.route("/invoice/new", methods=["GET", "POST"])
 @login_required
 def invoice_new():
@@ -4887,11 +5333,12 @@ def invoice_new():
                 flash("Please add at least one bill item.", "danger")
                 return redirect(url_for("billing.invoice_new"))
 
+            current_inst = get_current_institute_id(default=1)
             cur.execute("""
-                SELECT id, branch_id, full_name
+                SELECT id, branch_id, full_name, status
                 FROM students
-                WHERE id = ?
-            """, (student_id,))
+                WHERE id = ? AND institute_id = ?
+            """, (student_id, current_inst))
             student = cur.fetchone()
 
             if not student:
@@ -4901,8 +5348,28 @@ def invoice_new():
             branch_id = student["branch_id"]
 
             if not branch_id:
-                flash("Selected student does not have a branch assigned.", "danger")
-                return redirect(url_for("billing.invoice_new"))
+                cur.execute(
+                    "SELECT id FROM branches WHERE institute_id = ? AND is_active = 1 LIMIT 1",
+                    (current_inst,)
+                )
+                fallback_branch = cur.fetchone()
+                if fallback_branch:
+                    branch_id = fallback_branch["id"]
+                    cur.execute(
+                        "UPDATE students SET branch_id = ? WHERE id = ?",
+                        (branch_id, student_id)
+                    )
+                else:
+                    flash("Selected student does not have a branch assigned.", "danger")
+                    return redirect(url_for("billing.invoice_new"))
+
+            if student["status"] != "active":
+                try:
+                    lock_and_check_limit(conn, current_inst, "students")
+                except (PlanLimitExceeded, SubscriptionAccessDenied) as exc:
+                    conn.rollback()
+                    flash(str(exc), "danger")
+                    return redirect(url_for("billing.invoice_new"))
 
             now = datetime.now().isoformat(timespec="seconds")
 
@@ -4913,15 +5380,21 @@ def invoice_new():
 
             for i in range(len(item_course_ids)):
                 course_id_raw = (item_course_ids[i] or "").strip()
+                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
+                course_id = _resolve_invoice_item_course_id(
+                    cur,
+                    course_id_raw,
+                    description,
+                    current_inst,
+                )
                 qty_raw = (item_qtys[i] or "0").strip()
                 rate_raw = (item_rates[i] or "0").strip()
                 discount_raw = (item_discounts[i] or "0").strip()
 
                 # Skip empty rows (no course selected)
-                if not course_id_raw:
+                if not course_id:
                     continue
 
-                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
                 qty = float(qty_raw or 0)
                 rate = float(rate_raw or 0)
                 row_discount = float(discount_raw or 0)
@@ -4948,8 +5421,6 @@ def invoice_new():
                 discount_amount += row_discount
                 total_amount += line_total
 
-                course_id = int(course_id_raw) if course_id_raw else None
-
                 invoice_items_to_save.append({
                     "course_id": course_id,
                     "description": description,
@@ -4966,11 +5437,14 @@ def invoice_new():
             # Invalidate the token now that all validations have passed
             session.pop("invoice_form_token", None)
 
+            current_inst = get_current_institute_id(default=1)
+
             cur.execute("""
                 INSERT INTO invoices (
                     invoice_no,
                     student_id,
                     branch_id,
+                    institute_id,
                     invoice_date,
                     subtotal,
                     discount_type,
@@ -4984,11 +5458,12 @@ def invoice_new():
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 "TEMP",
                 student_id,
                 branch_id,
+                current_inst,
                 invoice_date,
                 subtotal,
                 "none",
@@ -5005,31 +5480,17 @@ def invoice_new():
 
             invoice_id = cur.lastrowid
 
+            # Get tenant numbering prefix from institute_settings
             cur.execute("""
-                SELECT invoice_no
-                FROM invoices
-                WHERE invoice_no NOT LIKE 'INV-%'
-                  AND invoice_no NOT LIKE 'TEMP'
-                ORDER BY invoice_no DESC
-                LIMIT 1
-            """)
-            result = cur.fetchone()
-
-            if result and result["invoice_no"]:
-                existing_no = result["invoice_no"]
-                try:
-                    parts = existing_no.split("/")
-                    if len(parts) >= 2:
-                        numeric_part = int(parts[-1])
-                        prefix = "/".join(parts[:-1])
-                        next_number = numeric_part + 1
-                        invoice_no = f"{prefix}/{next_number}"
-                    else:
-                        invoice_no = f"GIT/B/{invoice_id}"
-                except (ValueError, IndexError, TypeError):
-                    invoice_no = f"GIT/B/{invoice_id}"
-            else:
-                invoice_no = f"GIT/B/{invoice_id}"
+                SELECT invoice_prefix
+                FROM institute_settings
+                WHERE institute_id = ?
+            """, (current_inst,))
+            inst_settings = cur.fetchone()
+            inv_prefix = (inst_settings["invoice_prefix"] if inst_settings and inst_settings["invoice_prefix"] else ("MEI/B/" if current_inst == 16 else "GIT/B/")).strip()
+            invoice_no = allocate_document_number(
+                cur, current_inst, "invoice", inv_prefix
+            )
 
             cur.execute("""
                 UPDATE invoices
@@ -5214,12 +5675,15 @@ def invoice_new():
     conn = get_conn()
     cur = conn.cursor()
 
+    current_inst = get_current_institute_id(default=1)
+
     cur.execute("""
         SELECT students.*, branches.branch_name
         FROM students
         LEFT JOIN branches ON students.branch_id = branches.id
+        WHERE students.institute_id = ?
         ORDER BY students.full_name ASC
-    """)
+    """, (current_inst,))
     students = cur.fetchall()
 
     cur.execute("""
@@ -5284,8 +5748,8 @@ def invoice_edit(invoice_id):
             ON invoices.student_id = students.id
         LEFT JOIN branches
             ON invoices.branch_id = branches.id
-        WHERE invoices.id = ?
-    """, (invoice_id,))
+        WHERE invoices.id = ? AND students.institute_id = ?
+    """, (invoice_id, get_current_institute_id(default=1)))
     invoice = cur.fetchone()
 
     if not invoice:
@@ -5364,15 +5828,21 @@ def invoice_edit(invoice_id):
 
             for i in range(len(item_course_ids)):
                 course_id_raw = (item_course_ids[i] or "").strip()
+                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
+                course_id = _resolve_invoice_item_course_id(
+                    cur,
+                    course_id_raw,
+                    description,
+                    invoice["institute_id"],
+                )
                 qty_raw = (item_qtys[i] or "0").strip()
                 rate_raw = (item_rates[i] or "0").strip()
                 discount_raw = (item_discounts[i] or "0").strip()
 
                 # Skip empty rows (no course selected)
-                if not course_id_raw:
+                if not course_id:
                     continue
 
-                description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
                 qty = float(qty_raw or 0)
                 rate = float(rate_raw or 0)
                 row_discount = float(discount_raw or 0)
@@ -5400,8 +5870,6 @@ def invoice_edit(invoice_id):
                 subtotal += gross
                 discount_amount += row_discount
                 total_amount += line_total
-
-                course_id = int(course_id_raw) if course_id_raw else None
 
                 invoice_items_to_save.append({
                     "course_id": course_id,
@@ -5683,8 +6151,9 @@ def invoice_edit(invoice_id):
     cur.execute("""
         SELECT *
         FROM students
+        WHERE institute_id = ?
         ORDER BY student_code ASC
-    """)
+    """, (get_current_institute_id(default=1),))
     students = cur.fetchall()
 
     conn.close()
@@ -5725,7 +6194,7 @@ def receipts():
     conn = get_conn()
     cur = conn.cursor()
 
-    # Get today's date and month range
+    current_inst = get_current_institute_id(default=1)
     today = datetime.now().date()
     first_day_of_month = today.replace(day=1)
 
@@ -5740,30 +6209,36 @@ def receipts():
     cur.execute("""
         SELECT
             COUNT(*) AS total_receipts,
-            IFNULL(SUM(amount_received), 0) AS total_amount,
-            SUM(CASE WHEN payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
-            SUM(CASE WHEN payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
-            IFNULL(SUM(CASE WHEN payment_mode = 'cash' THEN amount_received ELSE 0 END), 0) AS cash_amount,
-            IFNULL(SUM(CASE WHEN payment_mode = 'upi' THEN amount_received ELSE 0 END), 0) AS upi_amount,
-            IFNULL(AVG(amount_received), 0) AS avg_amount
+            IFNULL(SUM(receipts.amount_received), 0) AS total_amount,
+            SUM(CASE WHEN receipts.payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
+            SUM(CASE WHEN receipts.payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
+            IFNULL(SUM(CASE WHEN receipts.payment_mode = 'cash' THEN receipts.amount_received ELSE 0 END), 0) AS cash_amount,
+            IFNULL(SUM(CASE WHEN receipts.payment_mode = 'upi' THEN receipts.amount_received ELSE 0 END), 0) AS upi_amount,
+            IFNULL(AVG(receipts.amount_received), 0) AS avg_amount
         FROM receipts
-        WHERE parse_date(receipt_date) = ?
-    """, [stats_date.isoformat()])
+        JOIN invoices i ON receipts.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE parse_date(receipts.receipt_date) = ?
+          AND s.institute_id = ?
+    """, [stats_date.isoformat(), current_inst])
     date_stats = cur.fetchone()
 
     # This month's statistics
     cur.execute("""
         SELECT
             COUNT(*) AS total_receipts,
-            IFNULL(SUM(amount_received), 0) AS total_amount,
-            SUM(CASE WHEN payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
-            SUM(CASE WHEN payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
-            IFNULL(SUM(CASE WHEN payment_mode = 'cash' THEN amount_received ELSE 0 END), 0) AS cash_amount,
-            IFNULL(SUM(CASE WHEN payment_mode = 'upi' THEN amount_received ELSE 0 END), 0) AS upi_amount,
-            IFNULL(AVG(amount_received), 0) AS avg_amount
+            IFNULL(SUM(receipts.amount_received), 0) AS total_amount,
+            SUM(CASE WHEN receipts.payment_mode = 'cash' THEN 1 ELSE 0 END) AS cash_count,
+            SUM(CASE WHEN receipts.payment_mode = 'upi' THEN 1 ELSE 0 END) AS upi_count,
+            IFNULL(SUM(CASE WHEN receipts.payment_mode = 'cash' THEN receipts.amount_received ELSE 0 END), 0) AS cash_amount,
+            IFNULL(SUM(CASE WHEN receipts.payment_mode = 'upi' THEN receipts.amount_received ELSE 0 END), 0) AS upi_amount,
+            IFNULL(AVG(receipts.amount_received), 0) AS avg_amount
         FROM receipts
-        WHERE parse_date(receipt_date) >= ? AND parse_date(receipt_date) <= ?
-    """, [first_day_of_month.isoformat(), today.isoformat()])
+        JOIN invoices i ON receipts.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE parse_date(receipts.receipt_date) >= ? AND parse_date(receipts.receipt_date) <= ?
+          AND s.institute_id = ?
+    """, [first_day_of_month.isoformat(), today.isoformat(), current_inst])
     month_stats = cur.fetchone()
 
     query = """
@@ -5787,17 +6262,19 @@ def receipts():
         ON invoices.student_id = students.id
     LEFT JOIN users
         ON receipts.created_by = users.id
+    WHERE students.institute_id = ?
     """
 
-    params = []
+    params = [current_inst]
 
     if search:
         query += """
-        WHERE
+        AND (
             receipts.receipt_no LIKE ?
             OR invoices.invoice_no LIKE ?
             OR students.full_name LIKE ?
             OR students.student_code LIKE ?
+        )
         """
         like = f"%{search}%"
         params.extend([like, like, like, like])
@@ -5880,10 +6357,13 @@ def receipt_new():
             # Temporary receipt number
             temp_receipt_no = f"TEMP_{uuid.uuid4().hex[:8]}"
 
+            current_inst = get_current_institute_id(default=1)
+
             cur.execute("""
                 INSERT INTO receipts (
                     receipt_no,
                     invoice_id,
+                    institute_id,
                     receipt_date,
                     amount_received,
                     payment_mode,
@@ -5891,10 +6371,11 @@ def receipt_new():
                     created_by,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 temp_receipt_no,
                 invoice_id,
+                current_inst,
                 receipt_date,
                 amount_received,
                 payment_mode,
@@ -5905,8 +6386,17 @@ def receipt_new():
 
             receipt_id = cur.lastrowid
 
-            # Final receipt number - Keep GIT/ prefix for receipts
-            receipt_no = f"GIT/{receipt_id}"
+            # Get tenant receipt numbering prefix from institute_settings
+            cur.execute("""
+                SELECT receipt_prefix
+                FROM institute_settings
+                WHERE institute_id = ?
+            """, (current_inst,))
+            inst_settings = cur.fetchone()
+            rec_prefix = (inst_settings["receipt_prefix"] if inst_settings and inst_settings["receipt_prefix"] else ("MEI/" if current_inst == 16 else "GIT/")).strip()
+            receipt_no = allocate_document_number(
+                cur, current_inst, "receipt", rec_prefix
+            )
 
             cur.execute("""
                 UPDATE receipts
@@ -6016,12 +6506,7 @@ def receipt_new():
                         token=token,
                         _external=True
                     )
-                    first_name = student["full_name"].split()[0]
-                    message = (
-                        f"Dear {first_name}, payment of Rs.{amount_received:.0f} received "
-                        f"against {receipt_no}. Download your receipt: {download_url} "
-                        f"- Global IT Education"
-                    )
+                    message = receipt_message(student["full_name"], receipt_no, amount_received, download_url)
                     sms_result = send_sms(phone, message)
                     if sms_result.get("success"):
                         sms_now = datetime.now().isoformat(timespec="seconds")
@@ -6128,14 +6613,19 @@ def receipt_edit(receipt_id):
             ON receipts.invoice_id = invoices.id
         JOIN students
             ON invoices.student_id = students.id
-        WHERE receipts.id = ?
-    """, (receipt_id,))
+        WHERE receipts.id = ? AND students.institute_id = ?
+    """, (receipt_id, get_current_institute_id(default=1)))
     receipt = cur.fetchone()
 
     if not receipt:
         conn.close()
         flash("Receipt not found.", "danger")
         return redirect(url_for("billing.receipts"))
+
+    if receipt["notes"] and receipt["notes"].startswith(("SANDBOX Cashfree order ", "Cashfree order ")):
+        conn.close()
+        flash("Verified Cashfree receipts cannot be edited. Reconcile gateway payments separately.", "warning")
+        return redirect(url_for("billing.invoice_view", invoice_id=receipt["invoice_id"]))
 
     if request.method == "POST":
         try:
@@ -6325,7 +6815,8 @@ def receipt_view(receipt_id):
         LEFT JOIN branches
             ON invoices.branch_id = branches.id
         WHERE receipts.id = ?
-    """, (receipt_id,))
+          AND students.institute_id = ?
+    """, (receipt_id, get_current_institute_id(default=1)))
     receipt = cur.fetchone()
 
     if not receipt:
@@ -6360,7 +6851,8 @@ def receipt_print(receipt_id):
         JOIN students ON invoices.student_id = students.id
         LEFT JOIN users ON receipts.created_by = users.id
         WHERE receipts.id = ?
-    """, (receipt_id,))
+          AND students.institute_id = ?
+    """, (receipt_id, get_current_institute_id(default=1)))
     receipt = cur.fetchone()
     conn.close()
 
@@ -6422,7 +6914,8 @@ def _load_invoice_print_context(invoice_id, prepared_by_user_id=None):
                 students.phone AS student_phone,
                 students.email,
                 students.address,
-                branches.branch_name
+                branches.branch_name,
+                branches.address AS branch_address
             FROM invoices
             JOIN students ON invoices.student_id = students.id
             LEFT JOIN branches ON invoices.branch_id = branches.id
@@ -6575,6 +7068,7 @@ def invoice_public_download(token):
 def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
     try:
         cur.execute("""
             SELECT
@@ -6585,9 +7079,9 @@ def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
                 students.full_name,
                 students.phone
             FROM invoices
-            JOIN students ON invoices.student_id = students.id
-            WHERE invoices.id = ?
-        """, (invoice_id,))
+            JOIN students ON invoices.student_id = students.id AND students.institute_id = invoices.institute_id
+            WHERE invoices.id = ? AND invoices.institute_id = ?
+        """, (invoice_id, current_inst))
         invoice = cur.fetchone()
 
         if not invoice:
@@ -6609,13 +7103,10 @@ def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
             _external=True,
         )
 
-        student_name = (invoice["full_name"] or "Student").split()[0]
         amount = float(invoice["total_amount"] or 0)
         invoice_no = invoice["invoice_no"]
-        message = (
-            f"Dear {student_name}, invoice {invoice_no} for Rs.{amount:.0f} is ready. "
-            f"Download your invoice: {download_url} - Global IT Education"
-        )
+        message = invoice_message(invoice["full_name"], invoice_no, amount, download_url)
+        message = payment_links.append_to_message(message, payment_links.build_link(conn, current_inst, invoice_id))
 
         result = send_sms(phone, message)
         if result.get("success"):
@@ -6670,9 +7161,9 @@ def receipt_send_sms(receipt_id):
             students.phone
         FROM receipts
         JOIN invoices ON receipts.invoice_id = invoices.id
-        JOIN students ON invoices.student_id = students.id
-        WHERE receipts.id = ?
-    """, (receipt_id,))
+        JOIN students ON invoices.student_id = students.id AND students.institute_id = invoices.institute_id
+        WHERE receipts.id = ? AND invoices.institute_id = ?
+    """, (receipt_id, get_current_institute_id(default=1)))
     receipt = cur.fetchone()
 
     if not receipt:
@@ -6704,14 +7195,10 @@ def receipt_send_sms(receipt_id):
     if not phone.startswith("+"):
         phone = "+91" + phone.lstrip("0")
 
-    student_name = receipt["full_name"].split()[0]  # first name only
     amount = receipt["amount_received"]
     receipt_no = receipt["receipt_no"]
 
-    message = (
-        f"Dear {student_name}, payment of Rs.{amount:.0f} received against {receipt_no}. "
-        f"Download your receipt: {download_url} - Global IT Education"
-    )
+    message = receipt_message(receipt["full_name"], receipt_no, amount, download_url)
 
     result = send_sms(phone, message)
 
@@ -6743,6 +7230,7 @@ def receipt_send_sms(receipt_id):
 def receivables():
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     today = datetime.now().date().isoformat()
     branch_id = request.args.get("branch_id", "").strip()
@@ -6753,9 +7241,9 @@ def receivables():
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     branches = cur.fetchall()
 
     # Trainers for filter dropdown (only for admin)
@@ -6765,9 +7253,9 @@ def receivables():
             SELECT DISTINCT u.id, u.full_name
             FROM users u
             JOIN batches bt ON bt.trainer_id = u.id
-            WHERE bt.status = 'active'
+            WHERE bt.status = 'active' AND u.institute_id = ?
             ORDER BY u.full_name ASC
-        """)
+        """, (current_inst,))
         available_trainers = cur.fetchall()
 
     # Trainer filter SQL snippet (added to WHERE clause of each query)
@@ -6820,6 +7308,7 @@ def receivables():
         LEFT JOIN branches b
             ON i.branch_id = b.id
         WHERE ip.status != 'paid'
+          AND (i.institute_id = ? OR s.institute_id = ?)
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           AND (
@@ -6827,7 +7316,7 @@ def receivables():
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
           ) < i.total_amount
     """
-    past_dues_params = [today]
+    past_dues_params = [current_inst, current_inst, today]
 
     if branch_id:
         past_dues_query += " AND i.branch_id = ?"
@@ -6878,6 +7367,7 @@ def receivables():
         LEFT JOIN branches b
             ON i.branch_id = b.id
         WHERE ip.status != 'paid'
+          AND (i.institute_id = ? OR s.institute_id = ?)
           AND parse_date(ip.due_date) = ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           AND (
@@ -6885,7 +7375,7 @@ def receivables():
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
           ) < i.total_amount
     """
-    todays_dues_params = [today]
+    todays_dues_params = [current_inst, current_inst, today]
 
     if branch_id:
         todays_dues_query += " AND i.branch_id = ?"
@@ -6936,6 +7426,7 @@ def receivables():
         LEFT JOIN branches b
             ON i.branch_id = b.id
         WHERE ip.status != 'paid'
+          AND (i.institute_id = ? OR s.institute_id = ?)
           AND parse_date(ip.due_date) > ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
           AND (
@@ -6943,7 +7434,7 @@ def receivables():
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
           ) < i.total_amount
     """
-    upcoming_dues_params = [today]
+    upcoming_dues_params = [current_inst, current_inst, today]
 
     if branch_id:
         upcoming_dues_query += " AND i.branch_id = ?"
@@ -6985,6 +7476,7 @@ def receivables():
         JOIN students s
             ON i.student_id = s.id
         WHERE ip.status != 'paid'
+          AND (i.institute_id = ? OR s.institute_id = ?)
           AND parse_date(ip.due_date) >= ?
           AND parse_date(ip.due_date) < ?
           AND i.status NOT IN ('write_off', 'partially_written_off')
@@ -6994,6 +7486,8 @@ def receivables():
           ) < i.total_amount
     """
     monthly_expected_params = [
+        current_inst,
+        current_inst,
         current_month_start.isoformat(),
         receivables_window_end.isoformat(),
     ]
@@ -7091,9 +7585,10 @@ def receivables():
         cur.execute(f"""
             SELECT installment_id, COUNT(*) as count, MAX(sent_at) as last_sent_at
             FROM reminder_logs
-            WHERE installment_id IN ({placeholders})
+            WHERE institute_id = ?
+              AND installment_id IN ({placeholders})
             GROUP BY installment_id
-        """, all_ids)
+        """, [current_inst] + all_ids)
         reminder_stats = {row['installment_id']: dict(row) for row in cur.fetchall()}
 
     conn.close()
@@ -7141,15 +7636,33 @@ def reminder_log():
 
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
     now = datetime.now().isoformat(timespec="seconds")
     user_id = session.get("user_id")
 
     cur.execute("""
+        SELECT ip.id AS installment_id, i.id AS invoice_id, s.id AS student_id
+        FROM installment_plans ip
+        JOIN invoices i ON i.id = ip.invoice_id
+        JOIN students s ON s.id = i.student_id
+        WHERE ip.id = ?
+          AND i.id = ?
+          AND s.id = ?
+          AND i.institute_id = ?
+          AND s.institute_id = ?
+        LIMIT 1
+    """, (installment_id, invoice_id, student_id, current_inst, current_inst))
+    reminder = cur.fetchone()
+    if not reminder:
+        conn.close()
+        return jsonify({"success": False, "error": "Reminder target not found"}), 404
+
+    cur.execute("""
         INSERT INTO reminder_logs (
-            student_id, invoice_id, installment_id, phone_number,
+            institute_id, student_id, invoice_id, installment_id, phone_number,
             reminder_type, message_text, status, sent_via, sent_by, sent_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (student_id, invoice_id, installment_id, phone_number,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (current_inst, student_id, invoice_id, installment_id, phone_number,
           reminder_type, message_text, status, sent_via, user_id, now))
     conn.commit()
     log_id = cur.lastrowid
@@ -7174,6 +7687,7 @@ def reminder_send_sms():
 
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT
@@ -7190,7 +7704,9 @@ def reminder_send_sms():
         JOIN students s
             ON i.student_id = s.id
         WHERE ip.id = ?
-    """, (installment_id,))
+          AND i.institute_id = ?
+          AND s.institute_id = ?
+    """, (installment_id, current_inst, current_inst))
     reminder = cur.fetchone()
 
     if not reminder:
@@ -7202,6 +7718,9 @@ def reminder_send_sms():
         conn.close()
         return jsonify({"success": False, "error": "Student has no phone number on record"}), 400
 
+    message_text = payment_links.append_to_message(
+        message_text, payment_links.build_link(conn, current_inst, reminder['invoice_id']))
+    message_text = personalize_student_message(message_text, reminder["student_name"])
     result = send_sms(phone, message_text)
     now = datetime.now().isoformat(timespec="seconds")
     status = "sent" if result.get("success") else "failed"
@@ -7209,10 +7728,11 @@ def reminder_send_sms():
 
     cur.execute("""
         INSERT INTO reminder_logs (
-            student_id, invoice_id, installment_id, phone_number,
+            institute_id, student_id, invoice_id, installment_id, phone_number,
             reminder_type, message_text, status, sent_via, sent_by, sent_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
+        current_inst,
         reminder["student_id"],
         reminder["invoice_id"],
         reminder["installment_id"],
@@ -7255,11 +7775,151 @@ def reminder_send_sms():
     }), 502
 
 
+def _classify_fee_reminder(due_date, logs, today=None):
+    """Return the admin-facing reminder status for one installment."""
+    today = today or date.today()
+    successful = next(
+        (log for log in logs if str(log.get("status") or "").lower() in {"sent", "delivered"}),
+        None,
+    )
+    if successful:
+        return "sent", successful
+
+    latest = logs[0] if logs else None
+    if latest and str(latest.get("status") or "").lower() == "failed":
+        return "failed", latest
+
+    days_until_due = (due_date - today).days
+    if days_until_due <= 3:
+        return "pending", latest
+    return "upcoming", latest
+
+
+@billing_bp.route("/admin/fee-reminders")
+@admin_required
+def reminder_dashboard():
+    """Tenant-scoped visibility into sent and pending fee reminders."""
+    current_inst = get_current_institute_id(default=1)
+    today = _ist_now().date()
+    status_filter = (request.args.get("status") or "all").strip().lower()
+    if status_filter not in {"all", "sent", "pending", "failed", "upcoming"}:
+        status_filter = "all"
+    search = (request.args.get("q") or "").strip().lower()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    per_page = 25
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT
+                ip.id AS installment_id,
+                parse_date(ip.due_date) AS due_date_iso,
+                ip.amount_due,
+                ip.amount_paid,
+                (ip.amount_due - ip.amount_paid) AS balance_due,
+                i.id AS invoice_id,
+                i.invoice_no,
+                i.branch_id,
+                s.id AS student_id,
+                s.student_code,
+                s.full_name AS student_name,
+                s.phone AS student_phone,
+                b.branch_name
+            FROM installment_plans ip
+            JOIN invoices i ON i.id = ip.invoice_id
+            JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
+            LEFT JOIN branches b ON b.id = i.branch_id AND b.institute_id = i.institute_id
+            WHERE i.institute_id = ?
+              AND ip.status != 'paid'
+              AND (ip.amount_due - ip.amount_paid) > 0
+              AND i.status NOT IN ('paid', 'cancelled', 'write_off', 'partially_written_off')
+              AND parse_date(ip.due_date) <= ?
+            ORDER BY parse_date(ip.due_date), s.full_name
+        """, (current_inst, (today + timedelta(days=30)).isoformat()))
+        installments = [dict(row) for row in cur.fetchall()]
+
+        installment_ids = [row["installment_id"] for row in installments]
+        logs_by_installment = {}
+        if installment_ids:
+            placeholders = ",".join(["?"] * len(installment_ids))
+            cur.execute(f"""
+                SELECT id, installment_id, reminder_type, status, sent_via,
+                       sent_by, sent_at, message_text, phone_number
+                FROM reminder_logs
+                WHERE institute_id = ?
+                  AND installment_id IN ({placeholders})
+                ORDER BY sent_at DESC, id DESC
+            """, [current_inst] + installment_ids)
+            for log_row in cur.fetchall():
+                log = dict(log_row)
+                logs_by_installment.setdefault(log["installment_id"], []).append(log)
+    finally:
+        conn.close()
+
+    rows = []
+    for installment in installments:
+        try:
+            due_date = date.fromisoformat(str(installment["due_date_iso"])[:10])
+        except (TypeError, ValueError):
+            continue
+        logs = logs_by_installment.get(installment["installment_id"], [])
+        reminder_status, latest_log = _classify_fee_reminder(due_date, logs, today=today)
+        installment.update({
+            "due_date": due_date,
+            "days_until_due": (due_date - today).days,
+            "reminder_status": reminder_status,
+            "latest_log": latest_log,
+            "reminder_count": len(logs),
+        })
+        rows.append(installment)
+
+    summary = {
+        key: sum(1 for row in rows if row["reminder_status"] == key)
+        for key in ("sent", "pending", "failed", "upcoming")
+    }
+    summary["all"] = len(rows)
+
+    if status_filter != "all":
+        rows = [row for row in rows if row["reminder_status"] == status_filter]
+    if search:
+        rows = [
+            row for row in rows
+            if search in " ".join([
+                str(row.get("student_name") or ""),
+                str(row.get("student_code") or ""),
+                str(row.get("invoice_no") or ""),
+                str(row.get("student_phone") or ""),
+            ]).lower()
+        ]
+
+    total = len(rows)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    start = (page - 1) * per_page
+    return render_template(
+        "billing/reminder_dashboard.html",
+        reminders=rows[start:start + per_page],
+        summary=summary,
+        status_filter=status_filter,
+        search=request.args.get("q", ""),
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        today=today,
+    )
+
+
 @billing_bp.route("/expenses")
 @login_required
 def expenses():
     conn = get_conn()
     cur = conn.cursor()
+
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT
@@ -7274,14 +7934,16 @@ def expenses():
             ON expenses.category_id = expense_categories.id
         LEFT JOIN users
             ON expenses.created_by = users.id
+        WHERE expenses.institute_id = ?
         ORDER BY expenses.expense_date DESC, expenses.id DESC
-    """)
+    """, (current_inst,))
     expenses = cur.fetchall()
 
     cur.execute("""
         SELECT IFNULL(SUM(amount), 0) AS total_expense
         FROM expenses
-    """)
+        WHERE institute_id = ?
+    """, (current_inst,))
     total_expense = float(cur.fetchone()["total_expense"] or 0)
 
     conn.close()
@@ -7297,6 +7959,8 @@ def expenses():
 def expense_new():
     conn = get_conn()
     cur = conn.cursor()
+
+    current_inst = get_current_institute_id(default=1)
 
     if request.method == "POST":
         try:
@@ -7318,6 +7982,18 @@ def expense_new():
                 flash("Expense amount must be greater than 0.", "danger")
                 return redirect(url_for("billing.expense_new"))
 
+            branch = cur.execute(
+                "SELECT id FROM branches WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (branch_id, current_inst),
+            ).fetchone()
+            category = cur.execute(
+                "SELECT id FROM expense_categories WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (category_id, current_inst),
+            ).fetchone()
+            if not branch or not category:
+                flash("Select an active branch and expense category from your institute.", "danger")
+                return redirect(url_for("billing.expense_new"))
+
             now = datetime.now().isoformat(timespec="seconds")
 
             cur.execute("""
@@ -7331,10 +8007,11 @@ def expense_new():
                     reference_no,
                     notes,
                     created_by,
+                    institute_id,
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 expense_date,
                 branch_id,
@@ -7345,6 +8022,7 @@ def expense_new():
                 reference_no,
                 notes,
                 session.get("user_id"),
+                current_inst,
                 now,
                 now
             ))
@@ -7377,17 +8055,17 @@ def expense_new():
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     branches = cur.fetchall()
 
     cur.execute("""
         SELECT *
         FROM expense_categories
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY category_name
-    """)
+    """, (current_inst,))
     categories = cur.fetchall()
 
     conn.close()
@@ -7410,8 +8088,9 @@ def expense_categories():
     cur.execute("""
         SELECT *
         FROM expense_categories
+        WHERE institute_id = ?
         ORDER BY category_name ASC
-    """)
+    """, (get_current_institute_id(default=1),))
     categories = cur.fetchall()
 
     conn.close()
@@ -7424,12 +8103,15 @@ def expense_categories():
 @billing_bp.route("/expense-category/new", methods=["GET", "POST"])
 @login_required
 def expense_category_new():
-
+    current_inst = get_current_institute_id(default=1)
     if request.method == "POST":
         category_name = request.form.get("category_name", "").strip()
 
         if not category_name:
             flash("Category name is required.", "danger")
+            return redirect(url_for("billing.expense_category_new"))
+        if len(category_name) > 255:
+            flash("Category name must be 255 characters or fewer.", "danger")
             return redirect(url_for("billing.expense_category_new"))
 
         conn = get_conn()
@@ -7438,8 +8120,8 @@ def expense_category_new():
         # Check duplicate
         cur.execute("""
             SELECT id FROM expense_categories 
-            WHERE category_name = ?
-        """, (category_name,))
+            WHERE category_name = ? AND institute_id = ?
+        """, (category_name, current_inst))
         existing = cur.fetchone()
 
         if existing:
@@ -7452,19 +8134,20 @@ def expense_category_new():
 
             cur.execute("""
                 INSERT INTO expense_categories (
+                    institute_id,
                     category_name,
                     is_active,
                     created_at
                 )
-                VALUES (?, ?, ?)
+                VALUES (?, ?, ?, ?)
             """, (
+                current_inst,
                 category_name,
                 1,
                 now
             ))
 
             category_id = cur.lastrowid
-            conn.commit()
 
             # ✅ ERP logging (as you requested)
             log_activity(
@@ -7473,21 +8156,97 @@ def expense_category_new():
                 action_type="create",
                 module_name="expense_category",
                 record_id=category_id,
-                description=f"Created expense category '{category_name}'"
+                description=f"Created expense category '{category_name}'",
+                conn=conn,
+                institute_id=current_inst,
             )
+            conn.commit()
 
             flash("Expense category created successfully.", "success")
             return redirect(url_for("billing.expense_categories"))
 
         except Exception as e:
             conn.rollback()
-            flash(f"Error: {str(e)}", "danger")
+            if e.args and e.args[0] == 1062:
+                flash("Category name is already in use. Choose another name.", "danger")
+            else:
+                flash(f"Error: {str(e)}", "danger")
             return redirect(url_for("billing.expense_category_new"))
 
         finally:
             conn.close()
 
     return render_template("billing/expense_category_form.html")
+
+@billing_bp.route("/expense-category/<int:category_id>/edit", methods=["GET", "POST"])
+@login_required
+def expense_category_edit(category_id):
+    current_inst = get_current_institute_id(default=1)
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        category = cur.execute(
+            "SELECT * FROM expense_categories WHERE id = ? AND institute_id = ?",
+            (category_id, current_inst),
+        ).fetchone()
+        if not category:
+            return "Expense category not found.", 404
+
+        if request.method == "POST":
+            category_name = request.form.get("category_name", "").strip()
+            is_active = request.form.get("is_active", str(category["is_active"]))
+            error = None
+            if not category_name:
+                error = "Category name is required."
+            elif len(category_name) > 255:
+                error = "Category name must be 255 characters or fewer."
+            elif is_active not in ("0", "1"):
+                error = "Select a valid category status."
+            elif cur.execute(
+                "SELECT id FROM expense_categories WHERE category_name = ? AND institute_id = ? AND id <> ?",
+                (category_name, current_inst, category_id),
+            ).fetchone():
+                error = "Category already exists."
+
+            if error:
+                flash(error, "danger")
+                category = dict(category)
+                category.update(category_name=category_name)
+                if is_active in ("0", "1"):
+                    category["is_active"] = int(is_active)
+                return render_template("billing/expense_category_form.html", category=category)
+
+            try:
+                cur.execute(
+                    "UPDATE expense_categories SET category_name = ?, is_active = ? WHERE id = ? AND institute_id = ?",
+                    (category_name, int(is_active), category_id, current_inst),
+                )
+                log_activity(
+                    user_id=session.get("user_id"),
+                    branch_id=session.get("branch_id"),
+                    action_type="update",
+                    module_name="expense_category",
+                    record_id=category_id,
+                    description=f"Updated expense category '{category['category_name']}' to '{category_name}' ({'active' if is_active == '1' else 'inactive'})",
+                    conn=conn,
+                    institute_id=current_inst,
+                )
+                conn.commit()
+            except Exception as exc:
+                conn.rollback()
+                if exc.args and exc.args[0] == 1062:
+                    flash("Category name is already in use. Choose another name.", "danger")
+                else:
+                    logger.exception("Failed to update expense category %s", category_id)
+                    flash("Unable to update the expense category. Please try again.", "danger")
+                return redirect(url_for("billing.expense_category_edit", category_id=category_id))
+
+            flash("Expense category updated successfully.", "success")
+            return redirect(url_for("billing.expense_categories"))
+
+        return render_template("billing/expense_category_form.html", category=dict(category))
+    finally:
+        conn.close()
 
 @billing_bp.route("/activity-logs", methods=["GET"])
 @login_required
@@ -7498,6 +8257,7 @@ def activity_logs():
 
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     from_date = request.args.get("from_date", "").strip()
     to_date = request.args.get("to_date", "").strip()
@@ -7515,24 +8275,26 @@ def activity_logs():
     cur.execute("""
         SELECT id, full_name, username
         FROM users
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY full_name
-    """)
+    """, (current_inst,))
     users = cur.fetchall()
 
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (current_inst,))
     branches = cur.fetchall()
 
     cur.execute("""
-        SELECT DISTINCT module_name
-        FROM activity_logs
-        ORDER BY module_name
-    """)
+        SELECT DISTINCT al.module_name
+        FROM activity_logs al
+        LEFT JOIN users u ON al.user_id = u.id
+        WHERE (al.institute_id = ? OR (al.institute_id IS NULL AND u.institute_id = ?))
+        ORDER BY al.module_name
+    """, (current_inst, current_inst))
     modules = cur.fetchall()
 
     query = """
@@ -7540,15 +8302,59 @@ def activity_logs():
             activity_logs.*,
             users.full_name,
             users.username,
-            branches.branch_name
+            branches.branch_name,
+            COALESCE(
+                writeoffs.reference_no,
+                invoices.invoice_no,
+                receipts.receipt_no,
+                expenses.reference_no,
+                students.student_code
+            ) AS record_reference
         FROM activity_logs
         LEFT JOIN users
             ON activity_logs.user_id = users.id
+           AND users.institute_id = ?
         LEFT JOIN branches
             ON activity_logs.branch_id = branches.id
+           AND branches.institute_id = ?
+        LEFT JOIN bad_debt_writeoffs writeoffs
+            ON activity_logs.record_id = writeoffs.id
+           AND LOWER(activity_logs.module_name) IN (
+               'bad debt write-off', 'bad debt write-offs', 'bad_debt_writeoffs'
+           )
+           AND writeoffs.institute_id = ?
+        LEFT JOIN invoices
+            ON activity_logs.record_id = invoices.id
+           AND LOWER(activity_logs.module_name) IN ('invoice', 'invoices')
+           AND invoices.institute_id = ?
+        LEFT JOIN receipts
+            ON activity_logs.record_id = receipts.id
+           AND LOWER(activity_logs.module_name) IN ('receipt', 'receipts')
+           AND receipts.institute_id = ?
+        LEFT JOIN expenses
+            ON activity_logs.record_id = expenses.id
+           AND LOWER(activity_logs.module_name) IN ('expense', 'expenses')
+           AND expenses.institute_id = ?
+        LEFT JOIN students
+            ON activity_logs.record_id = students.id
+           AND LOWER(activity_logs.module_name) IN ('student', 'students')
+           AND students.institute_id = ?
         WHERE substr(activity_logs.created_at, 1, 10) BETWEEN ? AND ?
+          AND (activity_logs.institute_id = ? OR (activity_logs.institute_id IS NULL AND users.institute_id = ?))
     """
-    params = [from_date, to_date]
+    params = [
+        current_inst,
+        current_inst,
+        current_inst,
+        current_inst,
+        current_inst,
+        current_inst,
+        current_inst,
+        from_date,
+        to_date,
+        current_inst,
+        current_inst,
+    ]
 
     if user_id:
         query += " AND activity_logs.user_id = ? "
@@ -7589,15 +8395,23 @@ def activity_logs():
 def student_toggle_program_access(student_id, program_id):
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
     
-    cur.execute("SELECT id, full_name, branch_id FROM students WHERE id = ?", (student_id,))
+    cur.execute(
+        "SELECT id, full_name, branch_id FROM students WHERE id = ? AND institute_id = ?",
+        (student_id, current_inst),
+    )
     student = cur.fetchone()
     if not student:
         conn.close()
         flash("Student not found.", "danger")
         return redirect(url_for("billing.students"))
         
-    cur.execute("SELECT id, program_name FROM lms_programs WHERE id = ?", (program_id,))
+    cur.execute(
+        """SELECT id, program_name FROM lms_programs
+           WHERE id = ? AND institute_id = ? AND COALESCE(is_deleted, 0) = 0""",
+        (program_id, current_inst),
+    )
     program = cur.fetchone()
     if not program:
         conn.close()
@@ -7643,5 +8457,92 @@ def student_toggle_program_access(student_id, program_id):
     
     flash(f"LMS Access for '{program['program_name']}' was {action} successfully.", "success")
     return redirect(url_for("billing.student_profile", student_id=student_id))
+
+
+@billing_bp.post("/student/<int:student_id>/grant-program-access")
+@login_required
+@admin_required
+def student_grant_program_access(student_id):
+    """Grant or restore selected direct LMS program access within the tenant."""
+    conn = get_conn()
+    cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
+    try:
+        cur.execute(
+            """SELECT id, full_name, branch_id FROM students
+               WHERE id = ? AND institute_id = ?""",
+            (student_id, current_inst),
+        )
+        student = cur.fetchone()
+        if not student:
+            flash("Student not found.", "danger")
+            return redirect(url_for("billing.students"))
+
+        requested_ids = sorted({
+            int(value) for value in request.form.getlist("program_ids[]")
+            if value.isdigit() and int(value) > 0
+        })
+        if not requested_ids:
+            flash("Select at least one LMS program.", "warning")
+            return redirect(url_for("billing.student_profile", student_id=student_id))
+
+        placeholders = ",".join("?" for _ in requested_ids)
+        cur.execute(
+            f"""SELECT id, program_name FROM lms_programs
+                WHERE institute_id = ? AND is_active = 1
+                  AND COALESCE(is_deleted, 0) = 0
+                  AND id IN ({placeholders})""",
+            [current_inst, *requested_ids],
+        )
+        programs = cur.fetchall()
+        if len(programs) != len(requested_ids):
+            flash("One or more selected programs are unavailable for this institute.", "danger")
+            return redirect(url_for("billing.student_profile", student_id=student_id))
+
+        now_date = datetime.now().strftime("%Y-%m-%d")
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        granted = 0
+        for program in programs:
+            cur.execute(
+                """SELECT id, is_active FROM lms_student_program_access
+                   WHERE student_id = ? AND program_id = ?""",
+                (student_id, program["id"]),
+            )
+            existing = cur.fetchone()
+            if existing:
+                if not existing["is_active"]:
+                    cur.execute(
+                        """UPDATE lms_student_program_access
+                           SET is_active = 1, access_status = 'active', updated_at = ?
+                           WHERE id = ?""",
+                        (now_iso, existing["id"]),
+                    )
+                    granted += 1
+            else:
+                cur.execute(
+                    """INSERT INTO lms_student_program_access (
+                           student_id, program_id, access_start_date,
+                           access_status, is_active, created_at, updated_at
+                       ) VALUES (?, ?, ?, 'active', 1, ?, ?)""",
+                    (student_id, program["id"], now_date, now_iso, now_iso),
+                )
+                granted += 1
+
+        conn.commit()
+        log_activity(
+            user_id=session["user_id"],
+            branch_id=student["branch_id"] or session.get("branch_id"),
+            action_type="update",
+            module_name="students",
+            record_id=student_id,
+            description=f"Granted direct LMS access to {granted} program(s) for {student['full_name']}",
+        )
+        flash(f"LMS access granted for {granted} program(s).", "success")
+        return redirect(url_for("billing.student_profile", student_id=student_id))
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 

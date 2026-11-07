@@ -1,0 +1,180 @@
+<section class="sc-start-page">
+  @if (loading()) {
+    <div class="sc-state-card" role="status"><span class="sc-spinner" aria-hidden="true"></span><strong>Loading counselling session…</strong></div>
+  } @else if (!session()) {
+    <div class="sc-state-card sc-state-error" role="alert">
+      <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+      <div><strong>Session unavailable</strong><p>{{ error() }}</p></div>
+      <a class="sc-button sc-button-secondary" routerLink="/">Back to dashboard</a>
+    </div>
+  } @else {
+    <sc-page-header eyebrow="New walk-in" title="Start Counselling"
+      description="Verify the prospect's mobile number before identification.">
+      <a class="sc-button sc-button-ghost" routerLink="/"><i class="bi bi-arrow-left" aria-hidden="true"></i> Dashboard</a>
+    </sc-page-header>
+
+    <div class="sc-session-strip" aria-label="Current counselling session">
+      <span><i class="bi bi-shield-check" aria-hidden="true"></i> Session #{{ session()?.id }}</span>
+      <span>{{ session()?.branch?.name }}</span>
+      <span class="sc-status-pill">{{ session()?.status?.replaceAll('_', ' ') }}</span>
+    </div>
+    <sc-counselling-stepper [current]="1" />
+
+    @if (error()) { <div class="sc-inline-alert" role="alert"><i class="bi bi-exclamation-circle"></i>{{ error() }}</div> }
+
+    <div class="sc-start-layout">
+      <section class="sc-card sc-verification-card" aria-live="polite">
+        @if (screen() === 'MOBILE') {
+          <div class="sc-card-kicker"><i class="bi bi-phone"></i> Step 1 of 7</div>
+          <h2>Enter Mobile Number</h2>
+          <p>We use a one-time password to confirm access to this number before checking CRM records.</p>
+
+          <label class="sc-field-label" for="prospect-mobile">Mobile Number</label>
+          <div class="sc-phone-field" [class.has-error]="mobile.invalid && mobile.touched">
+            <span>+91</span>
+            <input id="prospect-mobile" type="tel" inputmode="numeric" autocomplete="tel-national"
+              placeholder="Enter 10-digit mobile number" [formControl]="mobile" (input)="keepDigitsOnly()"
+              aria-describedby="mobile-help">
+          </div>
+          <div class="sc-field-meta" id="mobile-help">
+            <span>{{ mobile.value.length }}/10 digits</span>
+            @if (mobile.invalid && mobile.touched) { <span class="sc-field-error">Enter a valid Indian mobile number.</span> }
+          </div>
+          <button class="sc-button sc-button-primary sc-button-block" type="button"
+            [disabled]="mobile.invalid || busy()" (click)="sendOtp()">
+            @if (busy()) { <span class="sc-spinner sc-spinner-small"></span> } @else { Send OTP <i class="bi bi-arrow-right"></i> }
+          </button>
+
+          @if (canOverride()) {
+            <div class="sc-divider"><span>Exceptional in-person case</span></div>
+            <button class="sc-button sc-button-outline sc-button-block" type="button" (click)="showOverride.set(!showOverride())">
+              <i class="bi bi-shield-lock"></i> Authorized OTP Override
+            </button>
+            @if (showOverride()) {
+              <div class="sc-override-panel">
+                <label class="sc-field-label" for="override-reason">Override reason</label>
+                <select id="override-reason" class="sc-select" [formControl]="overrideReason">
+                  <option value="">Select a reason</option>
+                  <option value="SMS_NOT_RECEIVED">SMS not received</option>
+                  <option value="NETWORK_ISSUE">Network issue</option>
+                  <option value="PROSPECT_DECLINED">Prospect declined</option>
+                  <option value="NO_PHONE_ACCESS">No phone access</option>
+                  <option value="OTHER">Other</option>
+                </select>
+                @if (overrideReason.value === 'OTHER') {
+                  <label class="sc-field-label" for="override-note">Required note</label>
+                  <textarea id="override-note" class="sc-textarea" maxlength="500" [formControl]="overrideNote"></textarea>
+                }
+                <button class="sc-button sc-button-primary sc-button-block" type="button" (click)="submitOverride()" [disabled]="busy()">Record Override</button>
+              </div>
+            }
+          }
+        } @else if (screen() === 'OTP') {
+          <div class="sc-card-kicker"><i class="bi bi-shield-check"></i> Secure verification</div>
+          <h2>Verify Mobile Number</h2>
+          <p>OTP sent to <strong>{{ challenge()?.mobileMasked }}</strong>. It is valid for five minutes.</p>
+
+          <fieldset class="sc-otp-fieldset">
+            <legend>Enter six-digit OTP</legend>
+            <div class="sc-otp-inputs" (paste)="handleOtpPaste($event)">
+              @for (control of otpControls; track $index) {
+                <input [id]="'otp-' + $index" type="text" inputmode="numeric" autocomplete="one-time-code"
+                  maxlength="1" [formControl]="control" [attr.aria-label]="'OTP digit ' + ($index + 1)"
+                  (input)="handleOtpInput($index, $event)" (keydown)="handleOtpKey($index, $event)">
+              }
+            </div>
+          </fieldset>
+          <button class="sc-button sc-button-primary sc-button-block" type="button" (click)="verifyOtp()"
+            [disabled]="busy() || otpControls[0].invalid || otpControls[1].invalid || otpControls[2].invalid || otpControls[3].invalid || otpControls[4].invalid || otpControls[5].invalid">
+            Verify &amp; Continue
+          </button>
+          <div class="sc-otp-actions">
+            <button type="button" class="sc-link-button" (click)="resendOtp()" [disabled]="secondsToResend() > 0 || busy()">
+              @if (secondsToResend() > 0) { Resend OTP in 00:{{ secondsToResend().toString().padStart(2, '0') }} } @else { Resend OTP }
+            </button>
+            <button type="button" class="sc-link-button" (click)="changeMobile()" [disabled]="busy()">Change Number</button>
+          </div>
+        } @else if (identification(); as result) {
+          <div class="sc-result-icon" [class.is-unverified]="!result.verification.verified"><i class="bi" [class.bi-check-lg]="result.verification.verified" [class.bi-exclamation-lg]="!result.verification.verified"></i></div>
+          <div class="sc-card-kicker">{{ result.verification.verified ? 'Mobile verified' : 'Identity unverified' }}</div>
+          <h2>{{ resultTitle(result.prospect.status) }}</h2>
+          <p>{{ result.verification.mobileMasked }}</p>
+
+          @if (result.prospect.lead; as lead) {
+            <div class="sc-prospect-card">
+              <strong>{{ lead.name }}</strong>
+              <dl>
+                @if (lead.stage) { <div><dt>Current status</dt><dd>{{ lead.stage }}</dd></div> }
+                @if (lead.studentCode) { <div><dt>Student code</dt><dd>{{ lead.studentCode }}</dd></div> }
+              </dl>
+            </div>
+          }
+
+          @switch (result.prospect.status) {
+            @case ('NEW') { <p>Mobile verified successfully. The prospect profile can be created in Phase 4.</p> }
+            @case ('EXISTING_LEAD') { <p>The existing CRM lead has been linked safely to this counselling session.</p> }
+            @case ('EXISTING_STUDENT') { <p>This prospect is already converted. Starting another admission is not supported here.</p> }
+            @case ('EXISTING_LEAD_RESTRICTED') { <p>This prospect is assigned to another counsellor. Contact an administrator for assistance.</p> }
+            @case ('MULTIPLE_MATCHES') { <p>Multiple CRM records use this mobile. Resolve the duplicates in CRM before continuing.</p> }
+            @case ('SOFT_DELETED_MATCH') { <p>An archived CRM record exists. It was not restored automatically.</p> }
+            @case ('UNVERIFIED_MATCH_REQUIRES_CONFIRMATION') { <p>A CRM record uses this primary phone number. Review the match below before linking it to this counselling session.</p> }
+            @case ('UNVERIFIED_NEW') { <p>No CRM record uses this primary phone number. Continue to create the prospect profile with an unverified identity marker.</p> }
+            @default { <p>OTP was overridden, so ownership remains unverified. An administrator must confirm the CRM identity.</p> }
+          }
+
+          @if (result.nextStep === 'PROFILE') {
+            <a class="sc-button sc-button-primary sc-button-block" [routerLink]="['/session', session()?.id, 'profile']">Continue to Profile</a>
+          } @else if (result.prospect.status === 'UNVERIFIED_MATCH_REQUIRES_CONFIRMATION') {
+            @if (!resolution()) {
+              <button class="sc-button sc-button-outline sc-button-block" type="button"
+                [disabled]="resolutionLoading()" (click)="loadIdentityResolution()">
+                {{ resolutionLoading() ? 'Loading CRM matches…' : 'Review CRM Match' }}
+              </button>
+            } @else if (resolution(); as review) {
+              <div class="sc-resolution-panel">
+                <div class="sc-resolution-heading">
+                  <strong>Administrator identity review</strong>
+                  <span>{{ review.mobileMasked }}</span>
+                </div>
+                @for (candidate of review.candidates; track candidate.id) {
+                  <article class="sc-resolution-candidate">
+                    <div><strong>{{ candidate.name }}</strong><span>Lead #{{ candidate.id }}</span></div>
+                    <dl>
+                      <div><dt>Status</dt><dd>{{ candidate.stage || candidate.status || 'Active' }}</dd></div>
+                      <div><dt>Branch</dt><dd>{{ candidate.branch || 'Not assigned' }}</dd></div>
+                      <div><dt>Counsellor</dt><dd>{{ candidate.assignedCounsellor || 'Unassigned' }}</dd></div>
+                      @if (candidate.studentCode) { <div><dt>Student</dt><dd>{{ candidate.studentCode }}</dd></div> }
+                    </dl>
+                    <div class="sc-resolution-actions">
+                      <a class="sc-button sc-button-ghost" [href]="candidate.viewUrl" target="_blank" rel="noopener">Open CRM Record</a>
+                      <button class="sc-button sc-button-primary" type="button" [disabled]="busy() || candidate.archived"
+                        (click)="confirmIdentity(candidate.id)">Confirm This Identity</button>
+                    </div>
+                  </article>
+                } @empty {
+                  <div class="sc-inline-alert">No accessible active CRM match remains. Re-enter the mobile number.</div>
+                }
+                <button class="sc-link-button" type="button" [disabled]="busy()" (click)="useDifferentMobile()">This is not the same person — use a different mobile</button>
+              </div>
+            }
+          } @else if (result.prospect.lead; as resolvedLead) {
+            <a class="sc-button sc-button-outline sc-button-block" [href]="'/leads/' + resolvedLead.id">Open Confirmed CRM Record</a>
+          } @else {
+            <button class="sc-button sc-button-outline sc-button-block" type="button" (click)="useDifferentMobile()">Use a Different Mobile</button>
+          }
+        }
+      </section>
+
+      <aside class="sc-card sc-help-card">
+        <span class="sc-help-icon"><i class="bi bi-shield-check"></i></span>
+        <h2>Privacy-first verification</h2>
+        <p>CRM existence is checked only after successful verification. OTP does not sign the prospect into the ERP.</p>
+        <ul>
+          <li><i class="bi bi-check-circle-fill"></i> OTP is never stored as plaintext</li>
+          <li><i class="bi bi-check-circle-fill"></i> Institute and branch isolation</li>
+          <li><i class="bi bi-check-circle-fill"></i> Attempts, resend and abuse limits</li>
+        </ul>
+      </aside>
+    </div>
+  }
+</section>

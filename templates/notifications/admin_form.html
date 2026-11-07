@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if notice else 'New' }} Notification{% endblock %}
+{% block page_title %}Student Notifications{% endblock %}
+
+{% block content %}
+<div class="mb-4"><a href="{{ url_for('notifications.admin_list') }}" class="text-decoration-none">&larr; Back to notifications</a></div>
+<form method="post" class="card border-0 shadow-sm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-header bg-white py-3"><h1 class="h4 mb-0">{{ 'Edit notification' if notice else 'Create notification' }}</h1></div>
+  <div class="card-body p-4">
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label">Type</label><select class="form-select" id="notificationType" name="notification_type" required>{% for key, item in type_options.items() %}<option value="{{ key }}" data-icon="{{ item.icon }}" data-color="{{ item.color }}" {{ 'selected' if notice and notice.notification_type == key else '' }}>{{ item.label }}</option>{% endfor %}</select></div>
+      <div class="col-md-6"><label class="form-label">Priority (1–100)</label><input class="form-control" type="number" min="1" max="100" name="priority" value="{{ notice.priority if notice else 50 }}" required><div class="form-text">Higher priority appears first.</div></div>
+      <div class="col-12"><label class="form-label">Title</label><input class="form-control" maxlength="160" name="title" value="{{ notice.title if notice else '' }}" required></div>
+      <div class="col-12"><label class="form-label">Message</label><textarea class="form-control" rows="4" name="message" required>{{ notice.message if notice else '' }}</textarea></div>
+      <div class="col-md-4"><label class="form-label">Bootstrap icon</label><input class="form-control" id="noticeIcon" name="icon" value="{{ notice.icon if notice else '' }}" placeholder="Filled from type"></div>
+      <div class="col-md-4"><label class="form-label">Color</label><select class="form-select" id="noticeColor" name="color">{% for color in ['primary','danger','success','info','warning','secondary','dark'] %}<option value="{{ color }}" {{ 'selected' if notice and notice.color == color else '' }}>{{ color|title }}</option>{% endfor %}</select></div>
+      <div class="col-md-4 d-flex align-items-end"><div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="isActive" {{ 'checked' if not notice or notice.is_active else '' }}><label class="form-check-label" for="isActive">Active</label></div></div>
+      <div class="col-md-6"><label class="form-label">Action button label <span class="text-muted">(optional)</span></label><input class="form-control" maxlength="80" name="action_label" value="{{ notice.action_label if notice and notice.action_label else '' }}" placeholder="View details"></div>
+      <div class="col-md-6"><label class="form-label">Action URL <span class="text-muted">(optional)</span></label><input class="form-control" maxlength="500" name="action_url" value="{{ notice.action_url if notice and notice.action_url else '' }}" placeholder="/student/profile or https://..."></div>
+      <div class="col-md-6"><label class="form-label">Starts (IST)</label><input class="form-control" type="datetime-local" name="starts_at" value="{{ datetime_local_value(notice.starts_at) if notice else '' }}" required></div>
+      <div class="col-md-6"><label class="form-label">Ends (IST) <span class="text-muted">(optional)</span></label><input class="form-control" type="datetime-local" name="ends_at" value="{{ datetime_local_value(notice.ends_at) if notice and notice.ends_at else '' }}"></div>
+      <div class="col-md-5"><label class="form-label">Target audience</label><select class="form-select" id="audienceType" name="audience_type" required>{% for key, label in audience_options.items() %}<option value="{{ key }}" {{ 'selected' if notice and notice.audience_type == key else '' }}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="col-md-7" id="targetWrap"><label class="form-label">Audience members</label><select class="form-select" id="targetIds" name="target_ids" multiple size="7">
+        {% set selected_ids = notice.targets|map(attribute='target_id')|list if notice else [] %}
+        {% for row in batches %}<option data-audience="batches" value="{{ row.id }}" {{ 'selected' if notice and notice.audience_type == 'batches' and row.id in selected_ids else '' }}>{{ row.batch_name }}</option>{% endfor %}
+        {% for row in courses %}<option data-audience="courses" value="{{ row.id }}" {{ 'selected' if notice and notice.audience_type == 'courses' and row.id in selected_ids else '' }}>{{ row.course_name }}</option>{% endfor %}
+        {% for row in students %}<option data-audience="students" value="{{ row.id }}" {{ 'selected' if notice and notice.audience_type == 'students' and row.id in selected_ids else '' }}>{{ row.full_name }} ({{ row.student_code }})</option>{% endfor %}
+      </select><div class="form-text">Hold Ctrl/Cmd to select multiple entries.</div></div>
+    </div>
+  </div>
+  <div class="card-footer bg-white text-end py-3"><a class="btn btn-outline-secondary me-2" href="{{ url_for('notifications.admin_list') }}">Cancel</a><button class="btn btn-primary" type="submit">Save notification</button></div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  const audience=document.getElementById('audienceType'), targetWrap=document.getElementById('targetWrap'), target=document.getElementById('targetIds');
+  function updateTargets(){const value=audience.value;targetWrap.style.display=value==='all_students'?'none':'';Array.from(target.options).forEach(o=>{o.hidden=o.dataset.audience!==value;if(o.hidden)o.selected=false;});}
+  audience.addEventListener('change',updateTargets);updateTargets();
+  const type=document.getElementById('notificationType'),icon=document.getElementById('noticeIcon'),color=document.getElementById('noticeColor');
+  type.addEventListener('change',function(){const option=type.options[type.selectedIndex];icon.value=option.dataset.icon;color.value=option.dataset.color;});
+  {% if not notice %}type.dispatchEvent(new Event('change'));{% endif %}
+})();
+</script>
+{% endblock %}

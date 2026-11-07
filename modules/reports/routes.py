@@ -1,49 +1,51 @@
 import io
 import csv
 import calendar
+import openpyxl
+import openpyxl.styles
 from collections import defaultdict
 from flask import Blueprint, render_template, send_file, flash, redirect, url_for, session, request, jsonify
-from db import get_conn, log_activity
+from db import get_conn, get_company_profile, log_activity
 from modules.core.utils import login_required, admin_required
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta, timezone
+from services.tenant_context import get_current_institute_id
+from services.subscriptions import lock_and_check_limit
 
 reports_bp = Blueprint("reports", __name__)
 
 
 def parse_date(date_str):
-    """
-    Parse date in multiple formats: DD-MM-YYYY or YYYY-MM-DD
-    Returns date in YYYY-MM-DD format for database storage
-    """
     if not date_str:
         return None
-    
-    date_str = date_str.strip()
-    
-    # Try YYYY-MM-DD format first
+    date_str = str(date_str).strip()
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(date_str, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return date_str
+
+
+def _auto_enable_portal(student_id):
+    """Set portal_enabled=1 and default password (=student_code) if not already set."""
     try:
-        parsed = datetime.strptime(date_str, "%Y-%m-%d")
-        return parsed.strftime("%Y-%m-%d")
-    except ValueError:
+        conn = get_conn()
+        row = conn.execute(
+            "SELECT student_code, portal_enabled, password_hash FROM students WHERE id = ?",
+            (student_id,)
+        ).fetchone()
+        if row and not row['portal_enabled']:
+            ph = generate_password_hash(row['student_code'])
+            conn.execute(
+                "UPDATE students SET portal_enabled = 1, password_hash = ? WHERE id = ?",
+                (ph, student_id)
+            )
+            conn.commit()
+        conn.close()
+    except Exception:
         pass
-    
-    # Try DD-MM-YYYY format
-    try:
-        parsed = datetime.strptime(date_str, "%d-%m-%Y")
-        return parsed.strftime("%Y-%m-%d")
-    except ValueError:
-        pass
-    
-    # Try DD/MM/YYYY format
-    try:
-        parsed = datetime.strptime(date_str, "%d/%m/%Y")
-        return parsed.strftime("%Y-%m-%d")
-    except ValueError:
-        pass
-    
-    # If all fail, return None indicating invalid format
-    return None
+
 
 @reports_bp.route("/")
 @login_required
@@ -52,10 +54,8 @@ def dashboard():
     """Analytics and Reports Dashboard"""
     conn = get_conn()
     cur = conn.cursor()
-    
-    # Get record counts for each table
+    current_inst = get_current_institute_id(default=1)
     stats = {}
-    
     tables = [
         ("branches", "Branches"),
         ("users", "Users"),
@@ -74,7 +74,16 @@ def dashboard():
     
     for table_name, display_name in tables:
         try:
-            cur.execute(f"SELECT COUNT(*) as count FROM {table_name}")
+            if table_name in ("branches", "expenses", "invoices", "leads", "receipts", "students", "installment_plans", "activity_logs", "expense_categories"):
+                cur.execute(f"SELECT COUNT(*) as count FROM {table_name} WHERE institute_id = ?", (current_inst,))
+            elif table_name == "invoice_items":
+                cur.execute("SELECT COUNT(*) as count FROM invoice_items ii JOIN invoices inv ON inv.id = ii.invoice_id WHERE inv.institute_id = ?", (current_inst,))
+            elif table_name == "followups":
+                cur.execute("SELECT COUNT(*) as count FROM followups f JOIN leads l ON l.id = f.lead_id WHERE l.institute_id = ?", (current_inst,))
+            elif table_name == "users":
+                cur.execute("SELECT COUNT(*) as count FROM users WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?)", (current_inst,))
+            else:
+                cur.execute(f"SELECT COUNT(*) as count FROM {table_name}")
             result = cur.fetchone()
             stats[table_name] = {
                 "name": display_name,
@@ -88,65 +97,7 @@ def dashboard():
             }
     
     conn.close()
-    
     return render_template("reports/dashboard.html", stats=stats)
-
-
-@reports_bp.route("/daily")
-@login_required
-def daily_report():
-    """Daily consolidated report: Leads, Invoices, Receipts, Attendance"""
-    IST = timezone(timedelta(hours=5, minutes=30))
-    today_default = datetime.now(IST).strftime("%Y-%m-%d")
-
-    report_date = request.args.get("date", today_default).strip()
-    # Validate date
-    try:
-        datetime.strptime(report_date, "%Y-%m-%d")
-    except ValueError:
-        report_date = today_default
-
-    conn = get_conn()
-    cur = conn.cursor()
-
-    # ── Branches ──────────────────────────────────────────────────
-    cur.execute("SELECT id, branch_name, branch_code FROM branches WHERE is_active = 1 ORDER BY branch_name")
-    branches = cur.fetchall()
-
-    # Branch selection
-    can_view_all = session.get("can_view_all_branches", False) or session.get("role") == "admin"
-    user_branch_id = session.get("branch_id")
-    branch_param = request.args.get("branch_id", "").strip()
-    if can_view_all:
-        if branch_param in ("", "all") or not branch_param:
-            selected_branch_id = None
-        else:
-            selected_branch_id = int(branch_param) if branch_param.isdigit() else None
-    else:
-        selected_branch_id = user_branch_id
-
-    # ── 1. Today's Leads (global – no branch_id on leads table) ──
-    cur.execute("""
-        SELECT l.id, l.name, l.phone, l.lead_source, l.stage, l.status, l.created_at,
-               u.full_name AS owner_name
-        FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
-        WHERE substr(l.created_at, 1, 10) = ? AND l.is_deleted = 0
-        ORDER BY l.created_at DESC
-    """, (report_date,))
-    new_leads = cur.fetchall()
-
-    # ── 2. Today's Followups due ──────────────────────────────────
-    cur.execute("""
-        SELECT l.id, l.name, l.phone, l.stage, l.status, l.next_followup_date,
-               u.full_name AS owner_name
-        FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
-        WHERE l.next_followup_date = ? AND l.is_deleted = 0
-          AND l.status NOT IN ('converted', 'lost', 'not_interested')
-        ORDER BY l.name
-    """, (report_date,))
-    followups_due = cur.fetchall()
 
     # ── 2a. Overdue Followups (past due, not yet done today) ─────
     cur.execute("""
@@ -540,17 +491,26 @@ def daily_report_download():
 
 def _resolve_report_branch(cur):
     """Return branch filter details using the same access rules as daily reports."""
-    cur.execute("SELECT id, branch_name, branch_code FROM branches WHERE is_active = 1 ORDER BY branch_name")
+    current_inst = get_current_institute_id(default=1)
+    cur.execute(
+        """SELECT id, branch_name, branch_code
+           FROM branches
+           WHERE is_active = 1 AND institute_id = ?
+           ORDER BY branch_name""",
+        (current_inst,),
+    )
     branches = cur.fetchall()
 
     can_view_all = session.get("can_view_all_branches", False) or session.get("role") == "admin"
     user_branch_id = session.get("branch_id")
     branch_param = request.args.get("branch_id", "").strip()
 
+    allowed_branch_ids = {branch["id"] for branch in branches}
     if can_view_all:
-        selected_branch_id = int(branch_param) if branch_param.isdigit() else None
+        requested_branch_id = int(branch_param) if branch_param.isdigit() else None
+        selected_branch_id = requested_branch_id if requested_branch_id in allowed_branch_ids else None
     else:
-        selected_branch_id = user_branch_id
+        selected_branch_id = user_branch_id if user_branch_id in allowed_branch_ids else None
 
     selected_branch_name = "All Branches"
     if selected_branch_id:
@@ -598,14 +558,18 @@ def _calculation_window(start_date, end_date):
 
 
 def _attendance_where(selected_branch_id):
-    where = ["ar.attendance_date BETWEEN ? AND ?"]
+    where = [
+        "ar.attendance_date BETWEEN ? AND ?",
+        "EXISTS (SELECT 1 FROM branches tenant_branch "
+        "WHERE tenant_branch.id = ar.branch_id AND tenant_branch.institute_id = ?)",
+    ]
     if selected_branch_id:
         where.append("ar.branch_id = ?")
     return " AND ".join(where)
 
 
 def _attendance_params(start_date, end_date, selected_branch_id):
-    params = [start_date, end_date]
+    params = [start_date, end_date, get_current_institute_id(default=1)]
     if selected_branch_id:
         params.append(selected_branch_id)
     return params
@@ -624,33 +588,45 @@ def _date_range(start_date, end_date):
 def _ensure_attendance_calendar_tables(cur):
     now = datetime.now(REPORT_IST).strftime("%Y-%m-%d %H:%M:%S")
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS attendance_calendar_settings (
-            id INTEGER PRIMARY KEY CHECK(id = 1),
+        CREATE TABLE IF NOT EXISTS tenant_attendance_calendar_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL UNIQUE,
             working_days TEXT NOT NULL DEFAULT '0,1,2,3,4,5',
             created_at TEXT NOT NULL,
             updated_at TEXT
         )
     """)
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS attendance_holidays (
+        CREATE TABLE IF NOT EXISTS tenant_attendance_holidays (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            holiday_date TEXT NOT NULL UNIQUE,
+            institute_id INTEGER NOT NULL,
+            holiday_date TEXT NOT NULL,
             title TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            updated_at TEXT
+            updated_at TEXT,
+            UNIQUE(institute_id, holiday_date)
         )
     """)
-    cur.execute("SELECT id FROM attendance_calendar_settings WHERE id = 1")
+    current_inst = get_current_institute_id(default=1)
+    cur.execute(
+        "SELECT id FROM tenant_attendance_calendar_settings WHERE institute_id = ?",
+        (current_inst,),
+    )
     if not cur.fetchone():
         cur.execute("""
-            INSERT INTO attendance_calendar_settings (id, working_days, created_at)
-            VALUES (1, '0,1,2,3,4,5', ?)
-        """, (now,))
+            INSERT INTO tenant_attendance_calendar_settings
+                (institute_id, working_days, created_at)
+            VALUES (?, '0,1,2,3,4,5', ?)
+        """, (current_inst, now))
 
 
 def _get_attendance_calendar(cur, start_date=None, end_date=None):
     _ensure_attendance_calendar_tables(cur)
-    row = cur.execute("SELECT working_days FROM attendance_calendar_settings WHERE id = 1").fetchone()
+    current_inst = get_current_institute_id(default=1)
+    row = cur.execute(
+        "SELECT working_days FROM tenant_attendance_calendar_settings WHERE institute_id = ?",
+        (current_inst,),
+    ).fetchone()
     raw_days = (row["working_days"] if row else "0,1,2,3,4,5") or "0,1,2,3,4,5"
     working_days = {
         int(day)
@@ -663,16 +639,17 @@ def _get_attendance_calendar(cur, start_date=None, end_date=None):
     if start_date and end_date:
         cur.execute("""
             SELECT id, holiday_date, title
-            FROM attendance_holidays
-            WHERE holiday_date BETWEEN ? AND ?
+            FROM tenant_attendance_holidays
+            WHERE institute_id = ? AND holiday_date BETWEEN ? AND ?
             ORDER BY holiday_date
-        """, (start_date, end_date))
+        """, (current_inst, start_date, end_date))
     else:
         cur.execute("""
             SELECT id, holiday_date, title
-            FROM attendance_holidays
+            FROM tenant_attendance_holidays
+            WHERE institute_id = ?
             ORDER BY holiday_date DESC
-        """)
+        """, (current_inst,))
     holidays = [dict(row) for row in cur.fetchall()]
     holiday_map = {row["holiday_date"]: row["title"] for row in holidays}
 
@@ -726,10 +703,13 @@ def _load_expected_attendance(cur, start_date, end_date, selected_branch_id, cal
         LEFT JOIN users u ON b.trainer_id = u.id
         WHERE sb.status = 'active'
           AND b.status = 'active'
+          AND s.institute_id = ?
+          AND br.institute_id = ?
           AND (b.start_date IS NULL OR date(b.start_date) <= date(?))
           AND (b.end_date IS NULL OR date(b.end_date) >= date(?))
     """
-    params = [end_date, start_date]
+    current_inst = get_current_institute_id(default=1)
+    params = [current_inst, current_inst, end_date, start_date]
     if selected_branch_id:
         query += " AND b.branch_id = ?"
         params.append(selected_branch_id)
@@ -1123,7 +1103,6 @@ def attendance_monthly_report():
 @login_required
 def attendance_unmarked_details():
     date_str = request.args.get("date")
-    branch_id_str = request.args.get("branch_id")
     
     if not date_str:
         return redirect(url_for("reports.attendance_monthly_report"))
@@ -1132,26 +1111,21 @@ def attendance_unmarked_details():
     cur = conn.cursor()
     try:
         branches, selected_branch_id, selected_branch_name, can_view_all = _resolve_report_branch(cur)
-        if branch_id_str:
-            try:
-                selected_branch_id = int(branch_id_str)
-                selected_branch_row = next((b for b in branches if b["id"] == selected_branch_id), None)
-                selected_branch_name = selected_branch_row["branch_name"] if selected_branch_row else "Selected Branch"
-            except ValueError:
-                pass
 
         calendar_settings = _get_attendance_calendar(cur, date_str, date_str)
         expected_data = _load_expected_attendance(cur, date_str, date_str, selected_branch_id, calendar_settings)
         marked_keys = _load_marked_keys(cur, date_str, date_str, selected_branch_id)
         
         # Get active trainers for dropdown
+        current_inst = get_current_institute_id(default=1)
         trainers_rows = cur.execute("""
             SELECT DISTINCT u.id, u.full_name
             FROM batches b
             JOIN users u ON b.trainer_id = u.id
-            WHERE b.status = 'active'
+            JOIN branches br ON br.id = b.branch_id
+            WHERE b.status = 'active' AND br.institute_id = ?
             ORDER BY u.full_name
-        """).fetchall()
+        """, (current_inst,)).fetchall()
         trainers = [dict(r) for r in trainers_rows]
 
         selected_trainer_id = request.args.get("trainer_id")
@@ -1250,16 +1224,37 @@ def attendance_quick_mark():
     conn = get_conn()
     cur = conn.cursor()
     try:
+        current_inst = get_current_institute_id(default=1)
         cur.execute("SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
         if not user:
             return jsonify({"success": False, "error": "Unauthorized"}), 401
 
+        # Never trust object IDs supplied by the browser. Verify that the complete
+        # student/batch/branch relationship belongs to the active tenant.
+        cur.execute("""
+            SELECT sb.student_id
+            FROM student_batches sb
+            JOIN students s ON s.id = sb.student_id
+            JOIN batches b ON b.id = sb.batch_id
+            JOIN branches br ON br.id = b.branch_id
+            WHERE sb.student_id = ? AND sb.batch_id = ? AND b.branch_id = ?
+              AND s.institute_id = ? AND br.institute_id = ?
+        """, (student_id, batch_id, branch_id, current_inst, current_inst))
+        if not cur.fetchone():
+            return jsonify({"success": False, "error": "Invalid tenant attendance target"}), 403
+
+        can_view_all = bool(user["can_view_all_branches"]) or session.get("role") == "admin"
+        if not can_view_all and int(user["branch_id"] or 0) != int(branch_id):
+            return jsonify({"success": False, "error": "Branch access denied"}), 403
+
         # Check if record already exists
         cur.execute("""
-            SELECT id FROM attendance_records
-            WHERE batch_id = ? AND student_id = ? AND attendance_date = ?
-        """, (batch_id, student_id, attendance_date))
+            SELECT ar.id FROM attendance_records ar
+            JOIN branches br ON br.id = ar.branch_id
+            WHERE ar.batch_id = ? AND ar.student_id = ? AND ar.attendance_date = ?
+              AND br.institute_id = ?
+        """, (batch_id, student_id, attendance_date, current_inst))
         existing = cur.fetchone()
 
         now = datetime.now().isoformat(timespec="seconds")
@@ -1267,8 +1262,8 @@ def attendance_quick_mark():
             cur.execute("""
                 UPDATE attendance_records
                 SET status = ?, remarks = ?, marked_by = ?, updated_at = ?
-                WHERE batch_id = ? AND student_id = ? AND attendance_date = ?
-            """, (status, remarks, user_id, now, batch_id, student_id, attendance_date))
+                WHERE id = ?
+            """, (status, remarks, user_id, now, existing["id"]))
         else:
             cur.execute("""
                 INSERT INTO attendance_records (
@@ -1405,6 +1400,7 @@ def attendance_calendar_settings():
     cur = conn.cursor()
     try:
         _ensure_attendance_calendar_tables(cur)
+        current_inst = get_current_institute_id(default=1)
         now = datetime.now(REPORT_IST).strftime("%Y-%m-%d %H:%M:%S")
 
         if request.method == "POST":
@@ -1421,10 +1417,10 @@ def attendance_calendar_settings():
 
                 working_days = ",".join(sorted(set(selected_days), key=int))
                 cur.execute("""
-                    UPDATE attendance_calendar_settings
+                    UPDATE tenant_attendance_calendar_settings
                     SET working_days = ?, updated_at = ?
-                    WHERE id = 1
-                """, (working_days, now))
+                    WHERE institute_id = ?
+                """, (working_days, now, current_inst))
                 conn.commit()
                 flash("Attendance working days updated.", "success")
                 return redirect(url_for("reports.attendance_calendar_settings"))
@@ -1442,12 +1438,13 @@ def attendance_calendar_settings():
                     return redirect(url_for("reports.attendance_calendar_settings"))
 
                 cur.execute("""
-                    INSERT INTO attendance_holidays (holiday_date, title, created_at, updated_at)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(holiday_date) DO UPDATE SET
+                    INSERT INTO tenant_attendance_holidays
+                        (institute_id, holiday_date, title, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(institute_id, holiday_date) DO UPDATE SET
                         title = excluded.title,
                         updated_at = excluded.updated_at
-                """, (holiday_date, title, now, now))
+                """, (current_inst, holiday_date, title, now, now))
                 conn.commit()
                 flash("Holiday saved.", "success")
                 return redirect(url_for("reports.attendance_calendar_settings"))
@@ -1455,7 +1452,10 @@ def attendance_calendar_settings():
             if action == "delete_holiday":
                 holiday_id = request.form.get("holiday_id")
                 if holiday_id and holiday_id.isdigit():
-                    cur.execute("DELETE FROM attendance_holidays WHERE id = ?", (int(holiday_id),))
+                    cur.execute(
+                        "DELETE FROM tenant_attendance_holidays WHERE id = ? AND institute_id = ?",
+                        (int(holiday_id), current_inst),
+                    )
                     conn.commit()
                     flash("Holiday deleted.", "success")
                 return redirect(url_for("reports.attendance_calendar_settings"))
@@ -1484,8 +1484,6 @@ def attendance_calendar_settings():
 @admin_required
 def export_csv(table_name):
     """Export any table to CSV"""
-    
-    # Allowed tables for export
     allowed_tables = {
         "activity_logs": "activity_logs",
         "branches": "branches",
@@ -1510,8 +1508,18 @@ def export_csv(table_name):
     cur = conn.cursor()
     
     try:
-        # Get all data from the table
-        cur.execute(f"SELECT * FROM {allowed_tables[table_name]}")
+        current_inst = get_current_institute_id(default=1)
+        tbl = allowed_tables[table_name]
+        if tbl in ("branches", "expenses", "invoices", "leads", "receipts", "students", "installment_plans", "activity_logs", "expense_categories"):
+            cur.execute(f"SELECT * FROM {tbl} WHERE institute_id = ?", (current_inst,))
+        elif tbl == "invoice_items":
+            cur.execute("SELECT ii.* FROM invoice_items ii JOIN invoices inv ON inv.id = ii.invoice_id WHERE inv.institute_id = ?", (current_inst,))
+        elif tbl == "followups":
+            cur.execute("SELECT f.* FROM followups f JOIN leads l ON l.id = f.lead_id WHERE l.institute_id = ?", (current_inst,))
+        elif tbl == "users":
+            cur.execute("SELECT * FROM users WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?) OR id = ?", (current_inst, session.get("user_id")))
+        else:
+            cur.execute(f"SELECT * FROM {tbl}")
         rows = cur.fetchall()
         conn.close()
         
@@ -1519,39 +1527,28 @@ def export_csv(table_name):
             flash(f"No data in {table_name}.", "warning")
             return redirect(url_for("reports.dashboard"))
         
-        # Get column names
         columns = [description[0] for description in cur.description]
-        
-        # Create CSV
         output = io.StringIO()
         writer = csv.writer(output)
-        
-        # Write headers
         writer.writerow(columns)
         
-        # Write data
         for row in rows:
             row_data = []
             for col in columns:
                 value = row[col]
-                
-                # Format created_at for followups table to match import format
                 if table_name == "followups" and col == "created_at" and value:
                     try:
                         if 'T' in str(value):
                             dt = datetime.fromisoformat(value)
-                            value = dt.strftime("%d-%m-%Y %I:%M %p")  # 23-03-2026 02:30 PM
+                            value = dt.strftime("%d-%m-%Y %I:%M %p")
                     except (ValueError, AttributeError):
                         pass
-                
-                # Format next_followup_date for followups table
                 if table_name == "followups" and col == "next_followup_date" and value:
                     try:
                         dt = datetime.strptime(str(value), "%Y-%m-%d")
-                        value = dt.strftime("%d-%m-%Y")  # 23-03-2026
+                        value = dt.strftime("%d-%m-%Y")
                     except (ValueError, AttributeError):
                         pass
-                
                 row_data.append(value if value is not None else "")
             writer.writerow(row_data)
         
@@ -1792,7 +1789,8 @@ def import_page():
 @login_required
 @admin_required
 def download_sample(table_name):
-    """Download sample CSV file for a table"""
+    """Generate sample CSV or Excel file for data import with automatic Reference Sheets."""
+    file_type = request.args.get("file_type", "xlsx").strip().lower()
     
     samples = {
         "branches": {
@@ -1817,10 +1815,37 @@ def download_sample(table_name):
             ]
         },
         "students": {
-            "headers": ["student_code", "full_name", "phone", "email", "gender", "address", "education_level", "qualification", "student_location", "employment_status", "status", "branch_id", "joined_date"],
+            "headers": [
+                "branch_name", "full_name", "phone", "email", "gender", "date_of_birth",
+                "father_name", "mother_name", "parent_name", "parent_contact",
+                "address", "locality", "city", "state", "pincode", "landmark", "alternate_phone", "address_type",
+                "education_level", "qualification",
+                "tenth_institution", "tenth_board", "tenth_year", "tenth_percentage",
+                "puc_institution", "puc_board", "puc_stream", "puc_year", "puc_percentage",
+                "degree_institution", "degree_university", "degree_course", "degree_year", "degree_percentage",
+                "student_location", "employment_status", "status", "joined_date"
+            ],
             "rows": [
-                ["1515001", "Student Name", "9876543210", "student@example.com", "Male", "Address", "Undergraduate", "BE", "urban", "student", "active", "1", "21-03-2026"],
-                ["1515002", "Another Student", "9123456789", "student2@example.com", "Female", "Address", "School", "12th", "rural", "unemployed", "active", "1", "21-03-2026"],
+                [
+                    "Main Branch", "Student Name", "9876543210", "student@example.com", "Male", "2002-05-15",
+                    "Father Name", "Mother Name", "Parent Name", "9876543211",
+                    "MG Road, 4th Cross", "Indiranagar", "Bengaluru", "Karnataka", "560038", "Near Metro Station", "9876543212", "Home",
+                    "Undergraduate", "BE",
+                    "St. Joseph High School", "SSLC", "2018", "85%",
+                    "National PU College", "PU Board", "Science", "2020", "88%",
+                    "PES University", "VTU", "B.E Computer Science", "2024", "8.5 CGPA",
+                    "urban", "student", "active", "21-03-2026"
+                ],
+                [
+                    "Main Branch", "Another Student", "9123456789", "student2@example.com", "Female", "2004-08-20",
+                    "Father Name 2", "Mother Name 2", "Parent Name 2", "9123456780",
+                    "Station Road", "Town Area", "Mysore", "Karnataka", "570001", "Opposite Bus Stand", "9123456781", "Home",
+                    "Pre-University", "12th",
+                    "Government School", "State Board", "2020", "78%",
+                    "Government PU College", "PU Board", "Commerce", "2022", "80%",
+                    "", "", "", "", "",
+                    "rural", "unemployed", "active", "21-03-2026"
+                ],
             ]
         },
         "invoices": {
@@ -1903,124 +1928,240 @@ def download_sample(table_name):
         return redirect(url_for("reports.import_page"))
     
     sample = samples[table_name]
-    
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    # Write headers
-    writer.writerow(sample["headers"])
-    
-    # Write sample rows
-    for row in sample["rows"]:
-        writer.writerow(row)
-    
-    csv_data = output.getvalue()
-    output.close()
-    
-    response_file = io.BytesIO()
-    response_file.write(csv_data.encode())
-    response_file.seek(0)
-    
-    filename = f"{table_name}_sample.csv"
-    
-    return send_file(
-        response_file,
-        mimetype="text/csv",
-        as_attachment=True,
-        download_name=filename
-    )
+    conn = get_conn()
+    current_inst = get_current_institute_id(default=1)
+
+    if file_type == "xlsx":
+        from openpyxl.worksheet.datavalidation import DataValidation
+        wb = openpyxl.Workbook()
+        ws_data = wb.active
+        ws_data.title = f"{table_name.capitalize()} Data"
+        
+        # Style headers
+        ws_data.append(sample["headers"])
+        header_fill = openpyxl.styles.PatternFill(start_color="0D6EFD", end_color="0D6EFD", fill_type="solid")
+        header_font = openpyxl.styles.Font(bold=True, color="FFFFFF")
+        for cell in ws_data[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+
+        # Fetch active branches for logged-in institute to build dynamic dropdown & pre-fill sample rows
+        b_rows = conn.execute("SELECT branch_name FROM branches WHERE institute_id = ? AND is_active = 1 ORDER BY id", (current_inst,)).fetchall()
+        branch_names = [b["branch_name"] for b in b_rows] if b_rows else ["Main Branch"]
+        branch_formula = f'"{", ".join(branch_names)}"'
+        primary_branch = branch_names[0]
+
+        for row in sample["rows"]:
+            row_copy = list(row)
+            if sample["headers"][0] == "branch_name":
+                row_copy[0] = primary_branch
+            ws_data.append(row_copy)
+
+        # Add DataValidation dropdown for branch_name (Column A) if header starts with branch_name
+        if sample["headers"][0] == "branch_name":
+            dv_branch = DataValidation(type="list", formula1=branch_formula, allow_blank=True)
+            ws_data.add_data_validation(dv_branch)
+            dv_branch.add("A2:A5000")
+
+        # Specific Data Validation Dropdowns for Students sheet (without student_code)
+        if table_name == "students":
+            # Gender (Col E)
+            dv_gender = DataValidation(type="list", formula1='"Male, Female, Other"', allow_blank=True)
+            ws_data.add_data_validation(dv_gender)
+            dv_gender.add("E2:E5000")
+
+            # State (Col N)
+            states = [
+                'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
+                'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
+                'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
+                'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
+                'Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Delhi','Puducherry'
+            ]
+            dv_state = DataValidation(type="list", formula1=f'"{", ".join(states)}"', allow_blank=True)
+            ws_data.add_data_validation(dv_state)
+            dv_state.add("N2:N5000")
+
+            # Address Type (Col R)
+            dv_addr = DataValidation(type="list", formula1='"Home, Office, Other"', allow_blank=True)
+            ws_data.add_data_validation(dv_addr)
+            dv_addr.add("R2:R5000")
+
+            # Education Level (Col S)
+            edu_levels = ['School','Pre-University','Diploma','Undergraduate','Postgraduate','Doctoral','Technical','Professional']
+            dv_edu = DataValidation(type="list", formula1=f'"{", ".join(edu_levels)}"', allow_blank=True)
+            ws_data.add_data_validation(dv_edu)
+            dv_edu.add("S2:S5000")
+
+            # Student Location (Col AI)
+            dv_loc = DataValidation(type="list", formula1='"urban, rural"', allow_blank=True)
+            ws_data.add_data_validation(dv_loc)
+            dv_loc.add("AI2:AI5000")
+
+            # Employment Status (Col AJ)
+            dv_emp = DataValidation(type="list", formula1='"student, unemployed, employed, self_employed"', allow_blank=True)
+            ws_data.add_data_validation(dv_emp)
+            dv_emp.add("AJ2:AJ5000")
+
+            # Status (Col AK)
+            dv_stat = DataValidation(type="list", formula1='"active, completed, dropped"', allow_blank=True)
+            ws_data.add_data_validation(dv_stat)
+            dv_stat.add("AK2:AK5000")
+
+        conn.close()
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        filename = f"{table_name}_sample.xlsx"
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=filename
+        )
+    else:
+        conn.close()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(sample["headers"])
+        for row in sample["rows"]:
+            writer.writerow(row)
+        
+        csv_data = output.getvalue()
+        output.close()
+        
+        response_file = io.BytesIO()
+        response_file.write(csv_data.encode("utf-8"))
+        response_file.seek(0)
+        
+        filename = f"{table_name}_sample.csv"
+        return send_file(
+            response_file,
+            mimetype="text/csv",
+            as_attachment=True,
+            download_name=filename
+        )
 
 
 @reports_bp.route("/upload", methods=["POST"])
 @login_required
 @admin_required
 def upload_csv():
-    """Handle CSV file upload and import"""
+    """Handle Excel (.xlsx/.xls) or CSV file upload and import"""
     
-    if "csv_file" not in request.files:
-        flash("No file selected", "danger")
-        return redirect(url_for("reports.import_page"))
-    
-    file = request.files["csv_file"]
-    table_name = request.form.get("table_name", "").strip()
-    
+    file = request.files.get("csv_file") or request.files.get("file")
     if not file or not file.filename:
         flash("No file selected", "danger")
         return redirect(url_for("reports.import_page"))
     
+    table_name = request.form.get("table_name", "").strip()
     if not table_name:
         flash("No table selected", "danger")
         return redirect(url_for("reports.import_page"))
     
-    # Allowed tables for import
     allowed_tables = ["activity_logs", "branches", "courses", "expense_categories", "expenses", "followups", "installment_plans", "invoice_items", "invoices", "leads", "receipts", "students", "users"]
-    
     if table_name not in allowed_tables:
         flash(f"Invalid table: {table_name}", "danger")
         return redirect(url_for("reports.import_page"))
     
     try:
-        # Read file content as bytes and decode to string
         file_content = file.read()
         if not file_content:
-            flash("❌ CSV file is empty. Please upload a file with data.", "danger")
+            flash("❌ Uploaded file is empty. Please select a valid Excel or CSV file.", "danger")
             return redirect(url_for("reports.import_page"))
         
-        # Decode bytes to string
-        try:
-            text_content = file_content.decode('utf-8')
-        except UnicodeDecodeError:
-            flash("❌ File encoding error. Please save your CSV file as UTF-8 format.", "danger")
+        raw_rows = []
+        filename_lower = file.filename.lower()
+
+        if filename_lower.endswith(".xlsx") or filename_lower.endswith(".xls"):
+            try:
+                wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
+                sheet = wb.active  # Uses the primary data sheet
+                rows_iter = list(sheet.iter_rows(values_only=True))
+                if not rows_iter or len(rows_iter) < 2:
+                    flash("❌ Excel file has no data rows. First row must be headers.", "danger")
+                    return redirect(url_for("reports.import_page"))
+                
+                raw_headers = [str(h).replace('\ufeff', '').strip() if h is not None else '' for h in rows_iter[0]]
+                for row_vals in rows_iter[1:]:
+                    if not any(v is not None and str(v).strip() for v in row_vals):
+                        continue
+                    row_dict = {}
+                    for idx, h in enumerate(raw_headers):
+                        if h:
+                            val = row_vals[idx] if idx < len(row_vals) else None
+                            row_dict[h] = str(val).strip() if val is not None else ""
+                    raw_rows.append(row_dict)
+            except Exception as e:
+                flash(f"❌ Unable to parse Excel file: {str(e)}", "danger")
+                return redirect(url_for("reports.import_page"))
+        else:
+            try:
+                text_content = file_content.decode('utf-8')
+            except UnicodeDecodeError:
+                try:
+                    text_content = file_content.decode('latin-1')
+                except UnicodeDecodeError:
+                    flash("❌ File encoding error. Please save your file in UTF-8 format.", "danger")
+                    return redirect(url_for("reports.import_page"))
+            
+            stream = io.StringIO(text_content)
+            reader = csv.DictReader(stream)
+            if not reader.fieldnames:
+                flash("❌ CSV file has no headers. First row must contain column names.", "danger")
+                return redirect(url_for("reports.import_page"))
+            
+            fieldnames = [name.replace('\ufeff', '').strip() if name else name for name in reader.fieldnames]
+            for row in reader:
+                normalized_row = {k.replace('\ufeff', '').strip() if k else k: (v.strip() if v else "") for k, v in row.items()}
+                if any(normalized_row.values()):
+                    raw_rows.append(normalized_row)
+
+        if not raw_rows:
+            flash("❌ No valid data rows found in uploaded file.", "danger")
             return redirect(url_for("reports.import_page"))
-        
-        # Parse CSV from string content
-        stream = io.StringIO(text_content)
-        reader = csv.DictReader(stream)
-        
-        if not reader.fieldnames:
-            flash("❌ CSV file has no headers. First row must contain column names.", "danger")
-            return redirect(url_for("reports.import_page"))
-        
-        # Normalize fieldnames (strip whitespace and BOM from headers)
-        if reader.fieldnames:
-            reader.fieldnames = [name.replace('\ufeff', '').strip() if name else name for name in reader.fieldnames]
-        
+
         conn = get_conn()
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         
         rows_imported = 0
         errors = []
         
-        for idx, row in enumerate(reader, start=2):  # Start from row 2 (row 1 is headers)
-            # Normalize row keys (in case of whitespace or BOM in headers)
-            normalized_row = {k.replace('\ufeff', '').strip() if k else k: v for k, v in row.items()} if row else {}
-            row = normalized_row
-            
-            # Debug: Log raw row data if empty
+        for idx, row in enumerate(raw_rows, start=2):
             if not row or not any(row.values()):
-                error_msg = f"Row {idx}: Empty/blank row detected - skipping"
-                errors.append(error_msg)
                 continue
             
             try:
                 if table_name == "branches":
+                    is_active = int(row.get("is_active", 1))
+                    if is_active:
+                        lock_and_check_limit(conn, current_inst, "branches")
                     cur.execute("""
-                        INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO branches (
+                            institute_id, branch_name, branch_code, address, is_active, created_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("branch_name", "").strip(),
                         row.get("branch_code", "").strip(),
                         row.get("address", "").strip(),
-                        int(row.get("is_active", 1)),
+                        is_active,
                         datetime.now().isoformat(timespec="seconds")
                     ))
                     rows_imported += 1
                 
                 elif table_name == "courses":
                     cur.execute("""
-                        INSERT INTO courses (course_name, duration, fee, course_type, is_active, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO courses (
+                            institute_id, course_name, duration, fee, course_type, is_active, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("course_name", "").strip(),
                         row.get("duration", "").strip(),
                         float(row.get("fee", 0)) if row.get("fee") else 0,
@@ -2057,14 +2198,15 @@ def upload_csv():
                     
                     cur.execute("""
                         INSERT INTO leads (
-                            name, phone, whatsapp, gender, age, education_status, stream,
+                            institute_id, name, phone, whatsapp, gender, age, education_status, stream,
                             institute_name, career_goal, interested_courses, lead_source, decision_maker, 
                             lead_location, start_timeframe, lead_score, stage, status, lost_reason,
                             last_contact_date, next_followup_date, followup_count, notes, 
                             is_deleted, assigned_to_id, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("name", "").strip(),
                         row.get("phone", "").strip(),
                         row.get("whatsapp", "").strip() or None,
@@ -2095,37 +2237,151 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "students":
-                    # Validate student_location field
                     student_location = row.get("student_location", "").strip() if row.get("student_location") else None
                     if student_location and student_location.lower() not in ['rural', 'urban']:
-                        error_msg = f"Row {idx + 1}: student_location must be 'rural' or 'urban' (got '{student_location}')"
+                        error_msg = f"Row {idx}: student_location must be 'rural' or 'urban' (got '{student_location}')"
                         errors.append(error_msg)
                         continue
-                    
-                    # Normalize location to lowercase
                     if student_location:
                         student_location = student_location.lower()
                     
+                    student_status = row.get("status", "active").strip() or "active"
+                    if student_status == "active":
+                        lock_and_check_limit(conn, current_inst, "students")
+
+                    # Smart Branch Resolution (branch_id, branch_name, or branch_code)
+                    branch_id = None
+                    raw_b_id = str(row.get("branch_id", "")).strip()
+                    raw_b_name = str(row.get("branch_name", "")).strip()
+                    raw_b_code = str(row.get("branch_code", "")).strip()
+
+                    # Strict Branch Resolution (exact branch_id, branch_name, or branch_code)
+                    branch_id = None
+                    raw_b_id = str(row.get("branch_id", "")).strip()
+                    raw_b_name = str(row.get("branch_name", "")).strip()
+                    raw_b_code = str(row.get("branch_code", "")).strip()
+
+                    if raw_b_id and raw_b_id.isdigit():
+                        b_chk = conn.execute("SELECT id FROM branches WHERE id = ? AND institute_id = ?", (int(raw_b_id), current_inst)).fetchone()
+                        if b_chk:
+                            branch_id = b_chk["id"]
+
+                    if not branch_id and raw_b_name:
+                        b_chk = conn.execute("SELECT id FROM branches WHERE (LOWER(branch_name) = LOWER(?) OR LOWER(branch_code) = LOWER(?)) AND institute_id = ?", (raw_b_name, raw_b_name, current_inst)).fetchone()
+                        if b_chk:
+                            branch_id = b_chk["id"]
+
+                    if not branch_id and raw_b_code:
+                        b_chk = conn.execute("SELECT id FROM branches WHERE LOWER(branch_code) = LOWER(?) AND institute_id = ?", (raw_b_code, current_inst)).fetchone()
+                        if b_chk:
+                            branch_id = b_chk["id"]
+
+                    if not branch_id:
+                        branch_id = session.get("branch_id")
+                        if branch_id:
+                            b_chk = conn.execute("SELECT id FROM branches WHERE id = ? AND institute_id = ?", (branch_id, current_inst)).fetchone()
+                            if not b_chk:
+                                branch_id = None
+                        if not branch_id:
+                            b_first = conn.execute("SELECT id FROM branches WHERE institute_id = ? ORDER BY id ASC LIMIT 1", (current_inst,)).fetchone()
+                            if b_first:
+                                branch_id = b_first["id"]
+
+                    if not branch_id:
+                        errors.append(f"Row {idx}: Unable to determine valid branch for this institute")
+                        continue
+
+                    full_name = row.get("full_name", "").strip()
+                    phone = row.get("phone", "").strip()
+                    if not full_name:
+                        errors.append(f"Row {idx}: full_name is required")
+                        continue
+                    if not phone:
+                        errors.append(f"Row {idx}: phone is required")
+                        continue
+
+                    # Auto-generate Student Code using Company Profile Prefix if missing/blank
+                    student_code = row.get("student_code", "").strip()
+                    if not student_code:
+                        company = get_company_profile(current_inst)
+                        raw_prefix = company.get("student_prefix", "").strip() if company else ""
+                        existing_codes = conn.execute(
+                            "SELECT student_code FROM students WHERE institute_id = ?",
+                            (current_inst,)
+                        ).fetchall()
+
+                        stu_prefix = raw_prefix if raw_prefix else ("" if current_inst == 1 else "STU")
+                        max_seq = 0
+                        for sc in existing_codes:
+                            code_str = sc["student_code"] or ""
+                            if stu_prefix and code_str.startswith(stu_prefix):
+                                num_part = code_str[len(stu_prefix):]
+                                if num_part.isdigit():
+                                    max_seq = max(max_seq, int(num_part))
+                            elif not stu_prefix and code_str.isdigit():
+                                max_seq = max(max_seq, int(code_str))
+
+                        if not stu_prefix and current_inst == 1 and max_seq < 1515000:
+                            max_seq = 1515000
+
+                        next_seq = max_seq + 1
+                        if stu_prefix:
+                            student_code = f"{stu_prefix}{next_seq:03d}"
+                        else:
+                            student_code = str(next_seq)
+
                     cur.execute("""
                         INSERT INTO students (
-                            student_code, full_name, phone, email, gender, address,
-                            education_level, qualification, student_location, employment_status,
-                            status, branch_id, joined_date, created_at, updated_at
+                            institute_id, student_code, full_name, phone, email, gender, date_of_birth,
+                            father_name, mother_name, parent_name, parent_contact,
+                            address, locality, city, state, pincode, landmark, alternate_phone, address_type,
+                            education_level, qualification,
+                            tenth_institution, tenth_board, tenth_year, tenth_percentage,
+                            puc_institution, puc_board, puc_stream, puc_year, puc_percentage,
+                            degree_institution, degree_university, degree_course, degree_year, degree_percentage,
+                            student_location, employment_status, status, branch_id, joined_date, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        row.get("student_code", "").strip(),
-                        row.get("full_name", "").strip(),
-                        row.get("phone", "").strip(),
+                        current_inst,
+                        student_code,
+                        full_name,
+                        phone,
                         row.get("email", "").strip() or None,
                         row.get("gender", "").strip() or None,
+                        parse_date(row.get("date_of_birth", "")) or None,
+                        row.get("father_name", "").strip() or None,
+                        row.get("mother_name", "").strip() or None,
+                        row.get("parent_name", "").strip() or None,
+                        row.get("parent_contact", "").strip() or None,
                         row.get("address", "").strip() or None,
+                        row.get("locality", "").strip() or None,
+                        row.get("city", "").strip() or None,
+                        row.get("state", "").strip() or None,
+                        row.get("pincode", "").strip() or None,
+                        row.get("landmark", "").strip() or None,
+                        row.get("alternate_phone", "").strip() or None,
+                        row.get("address_type", "Home").strip() or "Home",
                         row.get("education_level", "").strip() or None,
                         row.get("qualification", "").strip() or None,
+                        row.get("tenth_institution", "").strip() or None,
+                        row.get("tenth_board", "").strip() or None,
+                        row.get("tenth_year", "").strip() or None,
+                        row.get("tenth_percentage", "").strip() or None,
+                        row.get("puc_institution", "").strip() or None,
+                        row.get("puc_board", "").strip() or None,
+                        row.get("puc_stream", "").strip() or None,
+                        row.get("puc_year", "").strip() or None,
+                        row.get("puc_percentage", "").strip() or None,
+                        row.get("degree_institution", "").strip() or None,
+                        row.get("degree_university", "").strip() or None,
+                        row.get("degree_course", "").strip() or None,
+                        row.get("degree_year", "").strip() or None,
+                        row.get("degree_percentage", "").strip() or None,
                         student_location,
                         row.get("employment_status", "unemployed").strip() or "unemployed",
-                        row.get("status", "active").strip() or "active",
-                        int(row.get("branch_id", 1)) if row.get("branch_id") else 1,
+                        student_status,
+                        branch_id,
                         parse_date(row.get("joined_date", "")) or datetime.now().isoformat(timespec="seconds"),
                         datetime.now().isoformat(timespec="seconds"),
                         datetime.now().isoformat(timespec="seconds")
@@ -2177,29 +2433,46 @@ def upload_csv():
                             errors.append(f"Row {idx}: invalid number format - {str(e)}")
                             continue
                         
-                        # Convert IDs
+                        # Convert IDs and validate tenant scoping
                         try:
                             student_id = int(student_id)
-                            created_by = int(created_by)
+                            created_by = int(created_by) if created_by else session.get("user_id")
                             branch_id = int(branch_id)
                         except ValueError:
                             errors.append(f"Row {idx}: student_id, created_by, and branch_id must be valid integers")
                             continue
+
+                        # Verify student_id belongs to current institute
+                        if not conn.execute(
+                            "SELECT id FROM students WHERE id = ? AND institute_id = ?",
+                            (student_id, current_inst),
+                        ).fetchone():
+                            errors.append(f"Row {idx}: student_id {student_id} does not exist in this institute")
+                            continue
+
+                        # Verify branch_id belongs to current institute
+                        if not conn.execute(
+                            "SELECT id FROM branches WHERE id = ? AND institute_id = ?",
+                            (branch_id, current_inst),
+                        ).fetchone():
+                            errors.append(f"Row {idx}: branch_id {branch_id} does not exist in this institute")
+                            continue
                         
-                        # Insert invoice with all 13 columns
+                        # Insert invoice with institute_id
                         cur.execute("""
                             INSERT INTO invoices (
-                                invoice_no, student_id, invoice_date, subtotal, 
+                                institute_id, invoice_no, student_id, invoice_date, subtotal, 
                                 discount_type, discount_value, discount_amount, total_amount,
                                 installment_type, notes, status, created_by, branch_id, created_at
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (
-                            invoice_number, student_id, invoice_date, subtotal,
+                            current_inst, invoice_number, student_id, invoice_date, subtotal,
                             discount_type, discount_value, discount_amount, total_amount,
                             installment_type, notes, status, created_by, branch_id,
                             datetime.now().isoformat(timespec="seconds")
                         ))
+                        _auto_enable_portal(student_id)
                         rows_imported += 1
                     except Exception as e:
                         errors.append(f"Row {idx}: {str(e)}")
@@ -2209,12 +2482,20 @@ def upload_csv():
                     receipt_invoice_id = int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0
                     receipt_amount = float(row.get("amount_received", 0)) if row.get("amount_received") else 0
                     
+                    if receipt_invoice_id <= 0 or not conn.execute(
+                        "SELECT id FROM invoices WHERE id = ? AND institute_id = ?",
+                        (receipt_invoice_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: invoice_id {receipt_invoice_id} does not exist in this institute")
+                        continue
+
                     cur.execute("""
                         INSERT INTO receipts (
-                            receipt_no, invoice_id, receipt_date, amount_received, payment_mode, notes, created_by, created_at
+                            institute_id, receipt_no, invoice_id, receipt_date, amount_received, payment_mode, notes, created_by, created_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("receipt_number", "").strip(),
                         receipt_invoice_id,
                         parse_date(row.get("receipt_date", "")) or None,
@@ -2226,69 +2507,61 @@ def upload_csv():
                     ))
                     
                     # Update invoice status based on total receipts
-                    if receipt_invoice_id > 0:
-                        cur.execute("""
-                            SELECT total_amount FROM invoices WHERE id = ?
-                        """, (receipt_invoice_id,))
-                        invoice_row = cur.fetchone()
+                    cur.execute("""
+                        SELECT total_amount FROM invoices WHERE id = ? AND institute_id = ?
+                    """, (receipt_invoice_id, current_inst))
+                    invoice_row = cur.fetchone()
+                    
+                    if invoice_row:
+                        invoice_total = float(invoice_row["total_amount"] or 0)
                         
-                        if invoice_row:
-                            invoice_total = float(invoice_row["total_amount"] or 0)
-                            
-                            cur.execute("""
-                                SELECT IFNULL(SUM(amount_received), 0) AS total_received
-                                FROM receipts
-                                WHERE invoice_id = ?
-                            """, (receipt_invoice_id,))
-                            total_received = float(cur.fetchone()["total_received"] or 0)
-                            
-                            # Determine new status
-                            if total_received >= invoice_total:
-                                new_status = "paid"
-                            elif total_received > 0:
-                                new_status = "partially_paid"
-                            else:
-                                new_status = "unpaid"
-                            
-                            cur.execute("""
-                                UPDATE invoices
-                                SET status = ?, updated_at = ?
-                                WHERE id = ?
-                            """, (new_status, datetime.now().isoformat(timespec="seconds"), receipt_invoice_id))
+                        cur.execute("""
+                            SELECT IFNULL(SUM(amount_received), 0) AS total_received
+                            FROM receipts
+                            WHERE invoice_id = ? AND institute_id = ?
+                        """, (receipt_invoice_id, current_inst))
+                        total_received = float(cur.fetchone()["total_received"] or 0)
+                        
+                        # Determine new status
+                        if total_received >= invoice_total:
+                            new_status = "paid"
+                        elif total_received > 0:
+                            new_status = "partially_paid"
+                        else:
+                            new_status = "unpaid"
+                        
+                        cur.execute("""
+                            UPDATE invoices
+                            SET status = ?, updated_at = ?
+                            WHERE id = ? AND institute_id = ?
+                        """, (new_status, datetime.now().isoformat(timespec="seconds"), receipt_invoice_id, current_inst))
                     
                     rows_imported += 1
                 
-                elif table_name == "installments":
+                elif table_name == "installments" or table_name == "installment_plans":
+                    inv_id = int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0
+                    if inv_id <= 0 or not conn.execute(
+                        "SELECT id FROM invoices WHERE id = ? AND institute_id = ?",
+                        (inv_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: invoice_id {inv_id} does not exist in this institute")
+                        continue
+
+                    inst_no = int(row.get("installment_number") or row.get("installment_no") or 0)
+                    amt_due = float(row.get("amount") or row.get("amount_due") or 0)
+                    amt_paid = float(row.get("amount_paid", 0)) if row.get("amount_paid") else 0
+                    
                     cur.execute("""
                         INSERT INTO installment_plans (
                             invoice_id, installment_no, due_date, amount_due, amount_paid, status, remarks, created_at, updated_at
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
-                        int(row.get("installment_number", 0)) if row.get("installment_number") else 0,
-                        row.get("due_date", "").strip() or None,
-                        float(row.get("amount", 0)) if row.get("amount") else 0,
-                        float(row.get("amount_paid", 0)) if row.get("amount_paid") else 0,
-                        row.get("status", "pending").strip() or "pending",
-                        row.get("remarks", "").strip() or None,
-                        datetime.now().isoformat(timespec="seconds"),
-                        datetime.now().isoformat(timespec="seconds")
-                    ))
-                    rows_imported += 1
-                
-                elif table_name == "installment_plans":
-                    cur.execute("""
-                        INSERT INTO installment_plans (
-                            invoice_id, installment_no, due_date, amount_due, amount_paid, status, remarks, created_at, updated_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
-                        int(row.get("installment_no", 0)) if row.get("installment_no") else 0,
+                        inv_id,
+                        inst_no,
                         parse_date(row.get("due_date", "")) or None,
-                        float(row.get("amount_due", 0)) if row.get("amount_due") else 0,
-                        float(row.get("amount_paid", 0)) if row.get("amount_paid") else 0,
+                        amt_due,
+                        amt_paid,
                         row.get("status", "pending").strip() or "pending",
                         row.get("remarks", "").strip() or None,
                         datetime.now().isoformat(timespec="seconds"),
@@ -2297,14 +2570,16 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "activity_logs":
+                    log_branch_id = int(row.get("branch_id", session.get("branch_id") or 1)) if row.get("branch_id") else session.get("branch_id")
                     cur.execute("""
                         INSERT INTO activity_logs (
-                            user_id, branch_id, action_type, module_name, record_id, description, created_at
+                            institute_id, user_id, branch_id, action_type, module_name, record_id, description, created_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         int(row.get("user_id", session.get("user_id"))) if row.get("user_id") else session.get("user_id"),
-                        int(row.get("branch_id", session.get("branch_id"))) if row.get("branch_id") else session.get("branch_id"),
+                        log_branch_id,
                         row.get("action_type", "").strip() or "import",
                         row.get("module_name", "").strip() or "import_export",
                         int(row.get("record_id", 0)) if row.get("record_id") else None,
@@ -2315,9 +2590,10 @@ def upload_csv():
                 
                 elif table_name == "expense_categories":
                     cur.execute("""
-                        INSERT INTO expense_categories (category_name, is_active, created_at)
-                        VALUES (?, ?, ?)
+                        INSERT INTO expense_categories (institute_id, category_name, is_active, created_at)
+                        VALUES (?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("category_name", "").strip(),
                         int(row.get("is_active", 1)),
                         datetime.now().isoformat(timespec="seconds")
@@ -2332,7 +2608,6 @@ def upload_csv():
                     # Validate lead_id exists
                     lead_id_str = row.get("lead_id", "").strip()
                     if not lead_id_str:
-                        # Show available columns for debugging
                         available_cols = ", ".join([k for k in row.keys() if k])
                         non_empty_values = {k: v for k, v in row.items() if v and v.strip()}
                         error_msg = f"Row {idx}: lead_id is required (available: {available_cols} | data: {non_empty_values})"
@@ -2346,10 +2621,10 @@ def upload_csv():
                         errors.append(error_msg)
                         continue
                     
-                    # Check if lead exists
-                    cur.execute("SELECT id FROM leads WHERE id = ? AND is_deleted = 0", (lead_id,))
+                    # Check if lead exists in current institute
+                    cur.execute("SELECT id FROM leads WHERE id = ? AND institute_id = ? AND is_deleted = 0", (lead_id, current_inst))
                     if not cur.fetchone():
-                        error_msg = f"Row {idx + 1}: Lead ID {lead_id} not found or is deleted"
+                        error_msg = f"Row {idx + 1}: Lead ID {lead_id} not found in this institute"
                         errors.append(error_msg)
                         continue
                     
@@ -2358,9 +2633,9 @@ def upload_csv():
                     if row.get("user_id", "").strip():
                         try:
                             user_id = int(row.get("user_id"))
-                            cur.execute("SELECT id FROM users WHERE id = ? AND is_active = 1", (user_id,))
+                            cur.execute("SELECT id FROM users WHERE id = ? AND institute_id = ? AND is_active = 1", (user_id, current_inst))
                             if not cur.fetchone():
-                                error_msg = f"Row {idx + 1}: User ID {user_id} not found or is inactive"
+                                error_msg = f"Row {idx + 1}: User ID {user_id} not found in this institute"
                                 errors.append(error_msg)
                                 continue
                         except ValueError:
@@ -2369,48 +2644,40 @@ def upload_csv():
                             continue
                     
                     # Insert followup
-                    # Handle created_at: parse from CSV if provided, otherwise use current time
                     created_at_str = row.get("created_at", "").strip()
                     if created_at_str:
-                        # Try to parse datetime from CSV (multiple formats supported)
                         try:
-                            # Try format with time: DD-MM-YYYY HH:MM AM/PM
                             created_at_parsed = datetime.strptime(created_at_str, "%d-%m-%Y %I:%M %p")
                             created_at_value = created_at_parsed.isoformat()
                         except ValueError:
                             try:
-                                # Try format with time: DD-MM-YYYY HH:MM
                                 created_at_parsed = datetime.strptime(created_at_str, "%d-%m-%Y %H:%M")
                                 created_at_value = created_at_parsed.isoformat()
                             except ValueError:
                                 try:
-                                    # Try abbreviated month format: DD-Mon-YYYY HH:MM (e.g., 03-Mar-2026 15:09)
                                     created_at_parsed = datetime.strptime(created_at_str, "%d-%b-%Y %H:%M")
                                     created_at_value = created_at_parsed.isoformat()
                                 except ValueError:
                                     try:
-                                        # Try abbreviated month format with AM/PM: DD-Mon-YYYY HH:MM AM/PM (e.g., 03-Mar-2026 3:09 PM)
                                         created_at_parsed = datetime.strptime(created_at_str, "%d-%b-%Y %I:%M %p")
                                         created_at_value = created_at_parsed.isoformat()
                                     except ValueError:
-                                        # Try date only: DD-MM-YYYY
                                         try:
                                             created_at_parsed = datetime.strptime(created_at_str, "%d-%m-%Y")
                                             created_at_value = created_at_parsed.isoformat()
                                         except ValueError:
-                                            # Invalid format, use current time
                                             errors.append(f"Row {rows_imported + 1}: Invalid created_at format '{created_at_str}', using current timestamp")
                                             created_at_value = datetime.now().isoformat(timespec="seconds")
                     else:
-                        # Empty created_at, use current time
                         created_at_value = datetime.now().isoformat(timespec="seconds")
                     
                     cur.execute("""
                         INSERT INTO followups (
-                            lead_id, user_id, method, outcome, note, next_followup_date, created_at
+                            institute_id, lead_id, user_id, method, outcome, note, next_followup_date, created_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         lead_id,
                         user_id,
                         row.get("method", "").strip() or None,
@@ -2422,14 +2689,30 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "invoice_items":
+                    inv_id = int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0
+                    if inv_id <= 0 or not conn.execute(
+                        "SELECT id FROM invoices WHERE id = ? AND institute_id = ?",
+                        (inv_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: invoice_id {inv_id} does not exist in this institute")
+                        continue
+
+                    course_id = int(row.get("course_id")) if row.get("course_id") else None
+                    if course_id and not conn.execute(
+                        "SELECT id FROM courses WHERE id = ? AND institute_id = ?",
+                        (course_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: course_id {course_id} does not exist in this institute")
+                        continue
+
                     cur.execute("""
                         INSERT INTO invoice_items (
                             invoice_id, course_id, description, quantity, unit_price, discount, line_total, created_at
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0,
-                        int(row.get("course_id")) if row.get("course_id") else None,
+                        inv_id,
+                        course_id,
                         row.get("description", "").strip(),
                         int(row.get("quantity", 1)) if row.get("quantity") else 1,
                         float(row.get("unit_price", 0)) if row.get("unit_price") else 0,
@@ -2440,38 +2723,77 @@ def upload_csv():
                     rows_imported += 1
                 
                 elif table_name == "users":
+                    user_active = int(row.get("is_active", 1))
+                    if user_active:
+                        lock_and_check_limit(conn, current_inst, "staff")
+                    branch_id = (
+                        int(row.get("branch_id"))
+                        if row.get("branch_id") else session.get("branch_id")
+                    )
+                    if branch_id and not conn.execute(
+                        "SELECT id FROM branches WHERE id = ? AND institute_id = ?",
+                        (branch_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: branch_id must belong to this institute")
+                        continue
                     cur.execute("""
                         INSERT INTO users (
-                            full_name, username, password_hash, role, phone, branch_id, 
+                            institute_id, full_name, username, password_hash, role, phone, branch_id,
                             can_view_all_branches, is_active, created_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("full_name", "").strip(),
                         row.get("username", "").strip(),
                         generate_password_hash(row.get("username", "")),  # Default password = username
                         row.get("role", "staff").strip() or "staff",
                         row.get("phone", "").strip() or None,
-                        int(row.get("branch_id")) if row.get("branch_id") else 1,
+                        branch_id,
                         int(row.get("can_view_all_branches", 0)),
-                        int(row.get("is_active", 1)),
+                        user_active,
                         datetime.now().isoformat(timespec="seconds")
                     ))
+                    imported_user_id = cur.lastrowid
+                    cur.execute(
+                        """INSERT INTO institute_memberships (
+                               institute_id, user_id, membership_role, is_active,
+                               created_at, updated_at
+                           ) VALUES (?, ?, ?, ?, ?, ?)""",
+                        (
+                            current_inst, imported_user_id,
+                            "institute_admin"
+                            if (row.get("role", "staff").strip() or "staff") == "admin"
+                            else "staff",
+                            user_active,
+                            datetime.now().isoformat(timespec="seconds"),
+                            datetime.now().isoformat(timespec="seconds"),
+                        ),
+                    )
                     rows_imported += 1
                 
                 elif table_name == "expenses":
+                    exp_branch_id = int(row.get("branch_id", session.get("branch_id") or 1)) if row.get("branch_id") else session.get("branch_id")
+                    if exp_branch_id and not conn.execute(
+                        "SELECT id FROM branches WHERE id = ? AND institute_id = ?",
+                        (exp_branch_id, current_inst),
+                    ).fetchone():
+                        errors.append(f"Row {idx}: branch_id {exp_branch_id} does not exist in this institute")
+                        continue
+
                     cur.execute("""
                         INSERT INTO expenses (
-                            expense_type, category, amount, description, expense_date, branch_id, created_at, updated_at
+                            institute_id, expense_type, category, amount, description, expense_date, branch_id, created_at, updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         row.get("expense_type", "").strip() or "other",
                         row.get("category", "").strip() or None,
                         float(row.get("amount", 0)) if row.get("amount") else 0,
                         row.get("description", "").strip() or None,
                         parse_date(row.get("expense_date", "")) or datetime.now().isoformat(timespec="seconds"),
-                        int(row.get("branch_id", 1)) if row.get("branch_id") else 1,
+                        exp_branch_id,
                         datetime.now().isoformat(timespec="seconds"),
                         datetime.now().isoformat(timespec="seconds")
                     ))
@@ -2529,6 +2851,7 @@ def lms_attendance_gap():
     conn = get_conn()
     try:
         cur = conn.cursor()
+        current_inst = get_current_institute_id(default=1)
         
         # Determine accessible branch context
         cur.execute("SELECT id, branch_id, can_view_all_branches, role FROM users WHERE id = ?", (user_id,))
@@ -2560,12 +2883,13 @@ def lms_attendance_gap():
         # Load dropdown filters
         if can_view_all:
             branches = cur.execute(
-                "SELECT id, branch_name FROM branches WHERE is_active = 1 ORDER BY branch_name"
+                "SELECT id, branch_name FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name",
+                (current_inst,)
             ).fetchall()
         else:
             branches = cur.execute(
-                "SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1",
-                (user_branch_id,)
+                "SELECT id, branch_name FROM branches WHERE id = ? AND is_active = 1 AND institute_id = ?",
+                (user_branch_id, current_inst)
             ).fetchall()
 
         if selected_branch_id:
@@ -2580,11 +2904,13 @@ def lms_attendance_gap():
             ).fetchall()
         else:
             batches = cur.execute(
-                "SELECT id, batch_name FROM batches WHERE status = 'active' ORDER BY batch_name"
+                "SELECT id, batch_name FROM batches WHERE status = 'active' AND branch_id IN (SELECT id FROM branches WHERE institute_id = ?) ORDER BY batch_name",
+                (current_inst,)
             ).fetchall()
 
         programs = cur.execute(
-            "SELECT id, program_name FROM lms_programs WHERE is_active = 1 AND is_deleted = 0 ORDER BY program_name"
+            "SELECT id, program_name FROM lms_programs WHERE is_active = 1 AND is_deleted = 0 AND institute_id = ? ORDER BY program_name",
+            (current_inst,)
         ).fetchall()
 
         # Enforce program enrollment explicit check
@@ -2599,12 +2925,14 @@ def lms_attendance_gap():
 
         where_clauses = [
             "s.status = 'active'",
+            "s.institute_id = ?",
             "lp.is_active = 1",
             "lp.is_deleted = 0",
+            "lp.institute_id = ?",
             _enroll_check,
             "EXISTS (SELECT 1 FROM student_batches sb_act WHERE sb_act.student_id = s.id AND sb_act.status = 'active')"
         ]
-        params = []
+        params = [current_inst, current_inst]
 
         if selected_program_id:
             where_clauses.append("lp.id = ?")
@@ -2733,12 +3061,12 @@ def lms_attendance_gap():
             if gap >= min_gap:
                 progress_pct = round((completed / total * 100), 1) if total > 0 else 0.0
                 
-                # Format last activity date
+                # Format last activity date in IST
                 last_act_str = "—"
                 if r["last_activity"]:
                     try:
-                        from datetime import datetime as _dt
-                        last_act_str = _dt.fromisoformat(str(r["last_activity"]).replace('T', ' ').split('.')[0]).strftime('%d %b %Y %I:%M %p')
+                        from app import format_ist_datetime
+                        last_act_str = format_ist_datetime(r["last_activity"], '%d %b %Y, %I:%M %p')
                     except Exception:
                         last_act_str = str(r["last_activity"])[:16]
 

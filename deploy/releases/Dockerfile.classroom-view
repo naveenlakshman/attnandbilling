@@ -1,0 +1,4 @@
+ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:399561f673040b90be034dfbd4d367cddd59d1945c206347719702b1eaa8848e
+FROM ${BASE_IMAGE}
+COPY --chown=appuser:appuser templates/lms_admin/classroom_teaching_dashboard.html /app/templates/lms_admin/classroom_teaching_dashboard.html
+COPY --chown=appuser:appuser static/js/classroom_teaching_dashboard.js /app/static/js/classroom_teaching_dashboard.js

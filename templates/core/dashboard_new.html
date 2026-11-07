@@ -125,6 +125,10 @@
           <div class="kpi-value text-muted mb-1">—</div>
           <p class="text-muted small mb-0">Not Marked Yet</p>
           {% endif %}
+          <div class="small text-muted mt-1">Current batch roster</div>
+          {% if att_outside_roster %}
+          <div class="small text-muted mt-2">{{ att_outside_roster }} additional attendance record{{ 's' if att_outside_roster != 1 else '' }} outside the current roster.</div>
+          {% endif %}
         </div>
         <div class="col-sm-8">
           <div class="d-flex justify-content-around text-center mt-2 mt-sm-0">
@@ -155,6 +159,49 @@
             <a href="{{ url_for('attendance.dashboard') }}" class="btn btn-sm btn-outline-secondary">Analytics</a>
           </div>
         </div>
+      </div>
+      <div class="table-responsive mt-3 border-top pt-3">
+        <table class="table table-sm align-middle mb-0" id="branch-attendance-table">
+          <caption class="caption-top text-muted small pt-0">Attendance by branch</caption>
+          <thead class="table-light">
+            <tr>
+              <th scope="col">Branch</th>
+              <th scope="col">Marked</th>
+              <th scope="col" class="text-center">Present</th>
+              <th scope="col" class="text-center">Late</th>
+              <th scope="col" class="text-center">Absent</th>
+              <th scope="col" class="text-center">Leave</th>
+              <th scope="col" class="text-center">Pending</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for branch in attendance_branches %}
+            <tr data-attendance-branch-id="{{ branch.branch_id }}">
+              <th scope="row">
+                {{ branch.branch_name }}
+                {% if branch.outside_roster %}
+                <div class="small text-muted fw-normal">{{ branch.outside_roster }} additional record{{ 's' if branch.outside_roster != 1 else '' }} outside roster</div>
+                {% endif %}
+              </th>
+              <td class="text-nowrap">
+                <div>{{ branch.marked }} of {{ branch.expected }}</div>
+                {% if branch.percentage is not none %}
+                <div class="small text-muted">{{ branch.percentage }}%</div>
+                {% else %}
+                <div class="small text-muted">No current roster</div>
+                {% endif %}
+              </td>
+              <td class="text-center text-success">{{ branch.counts.present }}</td>
+              <td class="text-center text-warning">{{ branch.counts.late }}</td>
+              <td class="text-center text-danger">{{ branch.counts.absent }}</td>
+              <td class="text-center text-info">{{ branch.counts.leave }}</td>
+              <td class="text-center fw-semibold">{{ branch.pending }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-muted text-center py-3">No branches found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -370,7 +417,7 @@
             class="bi bi-wallet2"></i> Receivables</a>
         <a href="{{ url_for('billing.expenses') }}" class="btn btn-outline-primary quick-action-btn"><i
             class="bi bi-box-arrow-right"></i> Expenses</a>
-        <a href="{{ url_for('reports.daily_report') }}" class="btn btn-outline-primary quick-action-btn"><i
+        <a href="{{ url_for('attendance.daily_report') }}" class="btn btn-outline-primary quick-action-btn"><i
             class="bi bi-graph-up-arrow"></i> Daily Report</a>
       </div>
     </div>

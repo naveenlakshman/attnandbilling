@@ -1,12 +1,15 @@
 <nav class="mobile-bottom-nav no-print" aria-label="Mobile navigation">
   <!-- Leads Tab -->
-  <div class="mobile-nav-item {{ 'active' if request.endpoint and (request.endpoint.startswith('leads.') or request.endpoint.startswith('reports.')) else '' }}" onclick="toggleMobileSubmenu(event, this)">
+  <div class="mobile-nav-item {{ 'active' if request.endpoint and (request.endpoint.startswith('leads.') or request.endpoint.startswith('reports.') or request.endpoint.startswith('smart_counselling.')) else '' }}" onclick="toggleMobileSubmenu(event, this)">
     <span class="nav-icon">👥</span>
     <span>Leads</span>
     <div class="nav-submenu">
       <a href="{{ url_for('leads.lead_create') }}">➕ New Lead</a>
       <a href="{{ url_for('leads.followups_today') }}">📞 Followups</a>
       <a href="{{ url_for('leads.dashboard') }}">🎯 Dashboard</a>
+      {% if smart_counselling_enabled %}
+      <a href="{{ url_for('smart_counselling.host') }}">💬 Smart Counselling</a>
+      {% endif %}
     </div>
   </div>
 

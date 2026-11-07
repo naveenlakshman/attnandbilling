@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}{{ company.company_short_name }} - Receivables{% endblock %}
 
@@ -450,7 +450,7 @@
            class="receivable-student-link"
            title="Open {{ item.student_name }} profile">
         {% if item.photo_filename %}
-        <img src="{{ url_for('static', filename='images/student_photos/' ~ item.photo_filename) }}"
+        <img src="{{ storage_url(item.photo_filename) }}"
              alt="{{ item.student_name }}"
              class="receivable-avatar"
              style="border-color: {{ border_color }};"
@@ -665,6 +665,9 @@
           Message <span class="text-muted fw-normal">(you can edit before sending)</span>
         </label>
         <textarea id="rm_message" class="form-control" rows="6" style="font-size:13px;resize:vertical;"></textarea>
+        {% if config.CASHFREE_PAYMENT_LINKS_ENABLED and current_institute_id == config.CASHFREE_INSTITUTE_ID %}
+        <p class="small text-muted mt-2 mb-0">SMS reminders also include a secure payment link. Students can choose their current installment or full outstanding balance.</p>
+        {% endif %}
       </div>
       <div class="modal-footer py-2 px-3 gap-2 flex-wrap justify-content-between">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
@@ -736,16 +739,16 @@ function openReminderModal(btn) {
 }
 
 function generateMessage(type, name, balance, invoiceNo, dueDate) {
-  const firstName = name.split(' ')[0];
+  const fullName = String(name || '').trim().replace(/\s+/g, ' ') || 'Student';
   const amt = '₹' + parseInt(parseFloat(balance)).toLocaleString('en-IN');
   const dateStr = formatDateDisplay(dueDate);
 
   if (type === 'overdue') {
-    return `Dear ${firstName}, this is a reminder from ${COMPANY_NAME} that your pending fee amount of ${amt} for Invoice ${invoiceNo} was due on ${dateStr}. Kindly make the payment at the earliest. For any clarification, contact ${CONTACT_NUMBER}.`;
+    return `Dear ${fullName}, this is a reminder from ${COMPANY_NAME} that your pending fee amount of ${amt} for Invoice ${invoiceNo} was due on ${dateStr}. Kindly make the payment at the earliest. For any clarification, contact ${CONTACT_NUMBER}.`;
   } else if (type === 'due_today') {
-    return `Dear ${firstName}, this is a reminder from ${COMPANY_NAME} that your fee amount of ${amt} for Invoice ${invoiceNo} is due today. Kindly make the payment on time. For any clarification, contact ${CONTACT_NUMBER}.`;
+    return `Dear ${fullName}, this is a reminder from ${COMPANY_NAME} that your fee amount of ${amt} for Invoice ${invoiceNo} is due today. Kindly make the payment on time. For any clarification, contact ${CONTACT_NUMBER}.`;
   } else {
-    return `Dear ${firstName}, this is a friendly reminder from ${COMPANY_NAME} that your upcoming installment of ${amt} is due on ${dateStr}. Kindly be prepared to make the payment on or before the due date. For any clarification, contact ${CONTACT_NUMBER}.`;
+    return `Dear ${fullName}, this is a friendly reminder from ${COMPANY_NAME} that your upcoming installment of ${amt} is due on ${dateStr}. Kindly be prepared to make the payment on or before the due date. For any clarification, contact ${CONTACT_NUMBER}.`;
   }
 }
 
@@ -763,8 +766,26 @@ function formatDateDisplay(dateStr) {
   return dateStr;
 }
 
+function getReminderMessage() {
+  const field = document.getElementById('rm_message');
+  let message = field.value.trim();
+  if (!message) return message;
+  const name = String(currentReminder.studentName || '').trim().replace(/\s+/g, ' ') || 'Student';
+  const normalized = message.replace(/\s+/g, ' ').toLocaleLowerCase();
+  const needle = name.toLocaleLowerCase();
+  let found = false;
+  for (let pos = normalized.indexOf(needle); pos !== -1; pos = normalized.indexOf(needle, pos + 1)) {
+    const before = normalized[pos - 1] || '';
+    const after = normalized[pos + needle.length] || '';
+    if (!/[\p{L}\p{N}_]/u.test(before) && !/[\p{L}\p{N}_]/u.test(after)) { found = true; break; }
+  }
+  if (!found) message = `Dear ${name},\n${message}`;
+  field.value = message;
+  return message;
+}
+
 async function logReminder(status, sentVia) {
-  const message = document.getElementById('rm_message').value;
+  const message = getReminderMessage();
   const payload = {
     installment_id: currentReminder.installmentId,
     invoice_id: currentReminder.invoiceId,
@@ -817,7 +838,7 @@ function updateReminderInfo(installmentId, sentAt) {
 }
 
 function copyReminderMessage() {
-  const msg = document.getElementById('rm_message').value;
+  const msg = getReminderMessage();
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(msg).then(() => {
       showToast('Message copied!', 'success');
@@ -833,7 +854,7 @@ function copyReminderMessage() {
 }
 
 function openWhatsApp() {
-  const msg = document.getElementById('rm_message').value;
+  const msg = getReminderMessage();
   let phone = (currentReminder.phone || '').replace(/\D/g, '');
   if (phone.length === 10) phone = '91' + phone;
   const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
@@ -842,7 +863,7 @@ function openWhatsApp() {
 }
 
 async function sendReminderSms() {
-  const msg = document.getElementById('rm_message').value.trim();
+  const msg = getReminderMessage();
   if (!msg) {
     showToast('Message cannot be empty.', 'danger');
     return;

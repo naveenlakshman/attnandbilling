@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'includes/batch_end_summary.html' import batch_end %}
 
 {% block title %}Dashboard - {{ company.company_short_name }}{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
@@ -26,9 +27,29 @@
   .activity-item { border-left: 3px solid #dee2e6; padding: 6px 0 6px 12px; margin-bottom: 6px; }
   .toggle-btn { cursor: pointer; border: none; background: none; color: inherit; font-size: .8rem; }
   .batch-card {
-    border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 8px;
     background: #f8f9ff; border: 1px solid #e0e7ff;
-    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+    transition: all .15s ease;
+    width: 100%; min-width: 0;
+  }
+  .batch-card:last-child { margin-bottom: 0; }
+  .batch-card:hover { background: #f1f4ff; border-color: #c7d2fe; }
+  .staff-content-card {
+    width: 100%;
+    height: auto !important;
+    min-height: 0;
+  }
+  .staff-content-card > .card-body { flex: 0 0 auto; width: 100%; }
+  .batch-card-main { flex: 1 1 320px; min-width: 0; }
+  .staff-batch-progress { width: 100px; height: 7px; accent-color: #198754; }
+  .batch-card-actions {
+    flex: 0 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+  @media (max-width: 1199.98px) {
+    .batch-card-actions { flex: 1 1 100%; justify-content: flex-start; }
   }
 </style>
 
@@ -115,6 +136,10 @@
         <div class="kpi-value text-muted">—</div>
         <div class="kpi-label">Not Marked Yet</div>
       {% endif %}
+      <div class="small text-muted mt-1">Current batch roster</div>
+      {% if att_outside_roster %}
+      <div class="small text-muted mt-2">{{ att_outside_roster }} additional attendance record{{ 's' if att_outside_roster != 1 else '' }} outside the current roster.</div>
+      {% endif %}
     </div>
   </div>
   <div class="col-6 col-md">
@@ -145,29 +170,69 @@
 
 <!-- My Batches list -->
 {% if my_batches %}
-<div class="card kpi-card mb-4">
-  <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom">
-    <span class="fw-semibold">My Batches</span>
-    <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-sm btn-outline-info">Mark Attendance</a>
+<div class="card kpi-card staff-content-card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom py-2 px-3">
+    <div class="d-flex align-items-center gap-2">
+      <span class="fw-semibold">My Batches</span>
+      <span class="badge bg-primary text-white rounded-pill px-2" style="font-size:.75rem;">{{ my_batches|length }}</span>
+    </div>
+    <a href="{{ url_for('attendance.list_batches') }}" class="btn btn-sm btn-outline-info" style="font-size:.78rem; padding: 2px 10px;">Mark Attendance</a>
   </div>
-  <div class="card-body p-3">
+  <div class="card-body p-2">
     {% for batch in my_batches %}
-    <div class="batch-card">
-      <div>
-        <strong>{{ batch.batch_name }}</strong>
-        <small class="text-muted ms-2">{{ batch.course_name or '' }}</small>
+    <div class="batch-card" data-batch-id="{{ batch.id }}">
+      <div class="batch-card-main me-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+        <strong class="text-dark" style="font-size: 0.92rem;">{{ batch.batch_name }}</strong>
+        {% if batch.course_name %}
+          <small class="text-muted" style="font-size: 0.8rem;">{{ batch.course_name }}</small>
+        {% endif %}
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap mt-1" style="font-size:.78rem;">
+          {{ batch_end(batch.end_summary) }}
+          {% set progress = batch.syllabus_progress %}
+          {% if progress.total_topics %}
+          <progress class="staff-batch-progress" value="{{ progress.percent }}" max="100" aria-label="Syllabus completed for {{ batch.batch_name }}">{{ progress.percent }}%</progress>
+          <span><strong>{{ progress.percent }}%</strong> · {{ progress.completed_topics }}/{{ progress.total_topics }} topics completed</span>
+          {% else %}
+          <span class="text-muted">No syllabus configured</span>
+          {% endif %}
+        </div>
       </div>
-      <div class="d-flex align-items-center gap-3">
-        <small class="text-muted">🕐 {{ batch.start_time or '—' }} – {{ batch.end_time or '—' }}</small>
-        <span class="badge bg-primary">{{ batch.student_count }} students</span>
-        <a href="{{ url_for('attendance.batch_planner', batch_id=batch.id) }}" class="btn btn-xs btn-outline-secondary" style="font-size:.75rem; padding:2px 8px;">View</a>
+      
+      <div class="batch-card-actions d-flex align-items-center gap-2 flex-wrap">
+        <span class="badge bg-white text-secondary border font-monospace py-1 px-2" style="font-size: 0.72rem;">
+          🕐 {{ batch.start_time | format_time if batch.start_time else '—' }}{% if batch.end_time %} – {{ batch.end_time | format_time }}{% endif %}
+        </span>
+
+        <!-- Label 1: Attendance Marked Status -->
+        {% if batch.student_count == 0 %}
+          <span class="badge bg-secondary" style="font-size:.72rem; padding: 4px 8px;">Attendance N/A</span>
+        {% elif batch.is_attendance_full %}
+          <span class="badge bg-success text-white" style="font-size:.72rem; padding: 4px 8px;" title="{{ batch.att_today_count }}/{{ batch.student_count }} students marked">✓ Attendance Marked (100%)</span>
+        {% elif batch.att_today_count > 0 %}
+          <span class="badge bg-warning text-dark" style="font-size:.72rem; padding: 4px 8px;" title="{{ batch.att_today_count }}/{{ batch.student_count }} students marked">⚠️ Attendance {{ batch.attendance_pct }}% Marked</span>
+        {% else %}
+          <span class="badge bg-danger text-white" style="font-size:.72rem; padding: 4px 8px;">❌ Attendance Pending</span>
+        {% endif %}
+
+        <!-- Label 2: Class Marked Taught Status -->
+        {% if batch.class_taught_today %}
+          <span class="badge bg-info text-dark" style="font-size:.72rem; padding: 4px 8px;">🎓 Class Taught</span>
+        {% else %}
+          <span class="badge bg-light text-secondary border" style="font-size:.72rem; padding: 4px 8px;">📖 Class Pending</span>
+        {% endif %}
+
+        <span class="badge bg-primary" style="font-size:.72rem; padding: 4px 8px;">{{ batch.student_count }} student{{ 's' if batch.student_count != 1 else '' }}</span>
+        <a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}" class="btn btn-sm btn-outline-secondary" style="font-size:.72rem; padding:2px 8px;">View</a>
+        <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=batch.id) }}" class="btn btn-sm btn-primary" style="font-size:.72rem; padding:2px 8px; font-weight: 600;">🎓 Teach Batch</a>
       </div>
     </div>
     {% endfor %}
   </div>
 </div>
 {% else %}
-<div class="alert alert-info mb-4">No active batches assigned to you yet.</div>
+<div class="alert alert-info mb-3">No active batches assigned to you yet.</div>
 {% endif %}
 
 <!-- ════════════════════════════════════════════════════════
@@ -175,7 +240,7 @@
      ════════════════════════════════════════════════════════ -->
 {% if past_dues or todays_dues %}
 <p class="section-title">Overdue Payments — My Branch</p>
-<div class="card kpi-card mb-4">
+<div class="card kpi-card staff-content-card mb-3">
   <div class="card-header d-flex justify-content-between align-items-center" style="background:#fff0f0; border-bottom:1px solid #f5c6cb;">
     <div>
       <span style="color:#dc3545; font-weight:600;">⚠️ Overdue Payments</span>
@@ -327,7 +392,7 @@
           <div class="col-6"><a href="{{ url_for('billing.students') }}" class="btn btn-outline-secondary w-100 btn-sm">👥 All Students</a></div>
           <div class="col-6"><a href="{{ url_for('leads.followups_today') }}" class="btn btn-outline-warning w-100 btn-sm">📞 My Followups</a></div>
           <div class="col-6"><a href="{{ url_for('billing.receivables') }}" class="btn btn-outline-danger w-100 btn-sm">💰 Receivables</a></div>
-          <div class="col-6"><a href="{{ url_for('reports.daily_report') }}" class="btn btn-outline-dark w-100 btn-sm">📋 Daily Report</a></div>
+          <div class="col-6"><a href="{{ url_for('attendance.daily_report') }}" class="btn btn-outline-dark w-100 btn-sm">📋 Daily Report</a></div>
         </div>
       </div>
     </div>

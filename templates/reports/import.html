@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}CSV Import - {{ company.company_short_name }}{% endblock %}
 
@@ -271,21 +271,19 @@
           <optgroup label="📊 Audit & Logs">
             <option value="activity_logs">Activity Logs</option>
           </optgroup>
-        </select>
-      </div>
-
-      <div class="form-section">
-        <label for="csv_file">CSV File *</label>
-        <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
-        <small>
-          ✓ Upload .csv files only<br>
-          ✓ Use same column names as samples<br>
-          ✓ First row should be headers
+        </select>      <div class="form-section">
+        <label for="csv_file">Data File (Excel .xlsx / .xls or CSV .csv) *</label>
+        <input type="file" id="csv_file" name="csv_file" accept=".xlsx,.xls,.csv" required>
+        <small style="color: #4b5563; display: block; margin-top: 6px; line-height: 1.5;">
+          ✓ Supports Excel (<strong>.xlsx</strong> / <strong>.xls</strong>) and CSV (<strong>.csv</strong>) files<br>
+          ✓ Multi-sheet Excel files supported (Reference Sheets for Branches & Courses included in Excel downloads)<br>
+          ✓ Smart Branch matching by <strong>Branch Name</strong>, <strong>Branch Code</strong>, or <strong>Branch ID</strong><br>
+          ✓ First row must contain column headers matching sample templates
         </small>
       </div>
 
       <div class="btn-group">
-        <button type="submit" class="btn-submit">⬆️ Import</button>
+        <button type="submit" class="btn-submit">⬆️ Import File</button>
         <button type="reset" class="btn-reset">Clear</button>
       </div>
     </form>
@@ -293,107 +291,115 @@
 
   <!-- Sample Files -->
   <div class="import-card">
-    <div class="section-title">Download Sample CSV Files</div>
+    <div class="section-title">Download Sample Templates with Built-In Dropdowns</div>
+    <p style="font-size: 13px; color: #4b5563; margin-top: -8px; margin-bottom: 16px;">
+      💡 <strong>Tip:</strong> Download Excel templates (<strong>.xlsx</strong>) to get built-in interactive dropdowns for <strong>Branch Name</strong>, <strong>Gender</strong>, <strong>State</strong>, <strong>Education Level</strong>, <strong>Address Type</strong>, and <strong>Status</strong>!
+    </p>
 
     <div class="sample-section">
-      <div class="sample-title">� Settings & Configuration</div>
+      <div class="sample-title">⚙️ Settings & Configuration</div>
       <div class="sample-grid">
-        <a href="{{ url_for('reports.download_sample', table_name='branches') }}" class="sample-link">
-          📥 Branches
-        </a>
-        <a href="{{ url_for('reports.download_sample', table_name='courses') }}" class="sample-link">
-          📥 Courses
-        </a>
-        <a href="{{ url_for('reports.download_sample', table_name='expense_categories') }}" class="sample-link">
-          📥 Expense Categories
-        </a>
-        <a href="{{ url_for('reports.download_sample', table_name='users') }}" class="sample-link">
-          📥 Users
-        </a>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='branches', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Branches (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='branches', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='courses', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Courses (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='courses', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='expense_categories', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Expense Categories (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='expense_categories', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='users', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Users (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='users', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
       </div>
     </div>
 
     <div class="sample-section">
       <div class="sample-title">👥 People & Leads</div>
       <div class="sample-grid">
-        <a href="{{ url_for('reports.download_sample', table_name='leads') }}" class="sample-link">
-          📥 Leads
-        </a>
-        <a href="{{ url_for('reports.download_sample', table_name='students') }}" class="sample-link">
-          📥 Students
-        </a>
-        <a href="{{ url_for('reports.download_sample', table_name='followups') }}" class="sample-link">
-          📥 Follow-ups
-        </a>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='leads', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Leads (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='leads', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='students', file_type='xlsx') }}" class="sample-link" style="flex:1; background: linear-gradient(135deg, #0d6efd, #0b5ed7); color: white;">📊 Students (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='students', file_type='csv') }}" class="sample-link" style="background:#e2e8f0; color:#1e293b; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='followups', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Follow-ups (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='followups', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
       </div>
     </div>
 
     <div class="sample-section">
       <div class="sample-title">💳 Billing & Finance</div>
       <div class="sample-grid">
-        <a href="{{ url_for('reports.download_sample', table_name='invoices') }}" class="sample-link">
-          📥 Invoices
-        </a>
-        <a href="{{ url_for('reports.download_sample', table_name='invoice_items') }}" class="sample-link">
-          📥 Invoice Items
-        </a>
-        <a href="{{ url_for('reports.download_sample', table_name='receipts') }}" class="sample-link">
-          📥 Receipts
-        </a>
-        <a href="{{ url_for('reports.download_sample', table_name='installment_plans') }}" class="sample-link">
-          📥 Installment Plans
-        </a>
-        <a href="{{ url_for('reports.download_sample', table_name='expenses') }}" class="sample-link">
-          📥 Expenses
-        </a>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='invoices', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Invoices (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='invoices', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='invoice_items', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Invoice Items (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='invoice_items', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='receipts', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Receipts (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='receipts', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='installment_plans', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Installment Plans (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='installment_plans', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='expenses', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Expenses (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='expenses', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
       </div>
     </div>
 
     <div class="sample-section">
       <div class="sample-title">📊 Audit & Logs</div>
       <div class="sample-grid">
-        <a href="{{ url_for('reports.download_sample', table_name='activity_logs') }}" class="sample-link">
-          📥 Activity Logs
-        </a>
+        <div style="display: flex; gap: 6px;">
+          <a href="{{ url_for('reports.download_sample', table_name='activity_logs', file_type='xlsx') }}" class="sample-link" style="flex:1;">📊 Activity Logs (.xlsx)</a>
+          <a href="{{ url_for('reports.download_sample', table_name='activity_logs', file_type='csv') }}" class="sample-link" style="background:#f1f5f9; color:#475569; width: auto; padding: 10px 12px;">📄 CSV</a>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Instructions -->
   <div class="import-card">
-    <div class="section-title">How to Import</div>
+    <div class="section-title">How to Import Excel or CSV Data</div>
 
     <ol class="instructions-list">
-      <li><strong>Download Sample:</strong> Click the sample link for the table you want to import</li>
-      <li><strong>Prepare Data:</strong> Update the sample file with your own data (keep column names)</li>
-      <li><strong>Select Table:</strong> Choose which table from the dropdown above</li>
-      <li><strong>Upload:</strong> Select your CSV file and click Import</li>
-      <li><strong>Check Results:</strong> View success/error count in the notification message</li>
+      <li><strong>Download Template:</strong> Download the sample Excel template (<strong>.xlsx</strong>) for your desired entity. Open it to use built-in dropdown selections for your institute's branches and common fields.</li>
+      <li><strong>Branch Name Selection:</strong> Click any cell in the <strong>branch_name</strong> column to choose from a pre-filled dropdown list of your institute's active branches (e.g. <em>Sulibele</em>, <em>Main Branch</em>).</li>
+      <li><strong>Automatic Student Code:</strong> Leave the <strong>student_code</strong> column blank if you want the system to automatically generate student registration codes based on your <strong>Company Profile Prefix</strong>.</li>
+      <li><strong>Select & Upload:</strong> Choose the target table from the dropdown above, select your Excel or CSV file, and click <strong>Import File</strong>.</li>
+      <li><strong>Check Results:</strong> View success and validation error messages upon completion.</li>
     </ol>
 
     <div class="warning-box">
-      <strong>⚠️ Important:</strong>
+      <strong>⚠️ Multi-Tenant & Data Safety Rules:</strong>
       <ul>
-        <li>Column names must exactly match the samples</li>
-        <li>Dates should be in DD-MM-YYYY format (e.g., 21-03-2026)</li>
-        <li>Numbers without currency symbols (e.g., 5000, not $5,000)</li>
-        <li>Empty cells are allowed and become NULL</li>
+        <li><strong>Automatic Institute Scoping:</strong> All imported records are automatically isolated and assigned to your current active institute.</li>
+        <li><strong>Referential Integrity:</strong> ID columns (such as <code>branch_id</code>, <code>student_id</code>, <code>invoice_id</code>, <code>lead_id</code>, <code>user_id</code>) must exist and belong to your active institute.</li>
+        <li><strong>Date Format:</strong> Use <code>DD-MM-YYYY</code> format (e.g., <code>21-03-2026</code>) or <code>YYYY-MM-DD</code>.</li>
+        <li><strong>Numbers & Currency:</strong> Use raw numbers without currency symbols (e.g. <code>5000</code>, not <code>₹5,000</code>).</li>
+        <li><strong>Plan Limits:</strong> Bulk imports respect active student, branch, and staff user limits for your institute's subscription plan.</li>
         <li><strong>CSV Export Tips:</strong>
           <ul>
-            <li>Save Excel/Sheets as "CSV UTF-8 (.csv)" format</li>
-            <li>Multi-line text in cells must be enclosed in quotes</li>
-            <li>Avoid trailing spaces in column headers</li>
-            <li>If text contains commas, Excel will auto-quote—this is normal</li>
+            <li>Save Excel/Sheets as "CSV UTF-8 (.csv)" format.</li>
+            <li>Multi-line text in cells must be enclosed in quotes.</li>
+            <li>Avoid trailing spaces in column headers.</li>
           </ul>
         </li>
-      </ul>
-    </div>
-
-    <div class="warning-box">
-      <strong>ℹ️ Additional Notes:</strong>
-      <ul>
-        <li>Failed rows are reported with error messages</li>
-        <li>Data is inserted in order, so relationships may fail if referenced data doesn't exist</li>
       </ul>
     </div>
   </div>

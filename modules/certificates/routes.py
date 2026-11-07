@@ -1,15 +1,16 @@
 import datetime
 # pyrefly: ignore [missing-import]
 from flask import render_template, request, redirect, url_for, session, flash, jsonify, abort, current_app
-from db import get_conn
+from db import get_conn, get_company_profile
 from services.storage import get_storage_service
+from services.tenant_context import get_current_institute_id
 import logging
 from modules.core.utils import lms_content_manager_required, admin_required
 from . import certificates_bp
 
 logger = logging.getLogger("app.certificates")
 from .services import EligibilityService, CertificateService
-from .verifier import verify_certificate_number
+from .verifier import verify_certificate_number, verify_certificate_signed
 from .generator import get_certificate_render_data
 from .audit import log_certificate_action
 
@@ -52,6 +53,30 @@ def verify_certificate(cert_no=None):
             )
             conn.commit()
         return render_template("certificates/verify.html", cert=data, cert_no=cert_no)
+    finally:
+        conn.close()
+
+
+@certificates_bp.route("/verify-certificate/<int:cert_id>/<token>", methods=["GET"])
+def verify_certificate_qr(cert_id, token):
+    conn = get_conn()
+    try:
+        data = verify_certificate_signed(conn, cert_id, token)
+        if data:
+            ip, ua = _get_client_info()
+            log_certificate_action(
+                conn, data["certificate_id"], "Verified",
+                performed_by=None,
+                ip_address=ip,
+                user_agent=ua,
+                reason="Public signed certificate QR verification page queried"
+            )
+            conn.commit()
+        return render_template(
+            "certificates/verify.html",
+            cert=data,
+            cert_no=data["certificate_number"] if data else None
+        )
     finally:
         conn.close()
 
@@ -195,7 +220,7 @@ def student_certificates_list():
         ).fetchall()
         
         # Load Company Info
-        company = conn.execute("SELECT * FROM company_profile WHERE id = 1").fetchone()
+        company = get_company_profile()
         
         return render_template("certificates/my_certificates.html", certs=certs, company=company)
     finally:
@@ -235,7 +260,7 @@ def student_certificate_view(cert_id):
         base_url = request.url_root
         data = get_certificate_render_data(conn.cursor(), cert_id, base_url)
         settings = EligibilityService.get_settings(conn.cursor())
-        company = conn.execute("SELECT * FROM company_profile WHERE id = 1").fetchone()
+        company = get_company_profile()
 
         layout = "base.html" if is_admin else "students/base.html"
 
@@ -254,9 +279,38 @@ def student_certificate_view(cert_id):
         )
     finally:
         conn.close()
+from db import get_conn
+from services.tenant_context import get_current_institute_id
+from modules.core.utils import lms_content_manager_required, admin_required
+from . import certificates_bp
+
+logger = logging.getLogger("app.certificates")
+from .services import EligibilityService, CertificateService
+from .verifier import verify_certificate_number, verify_certificate_signed
+from .generator import get_certificate_render_data
+from .audit import log_certificate_action
 
 # ---------------------------------------------------------------------------
-# Admin Panel - Certificate Dashboard & List
+# Student Portal Auth Helper
+# ---------------------------------------------------------------------------
+def _student_required():
+    if "student_id" not in session:
+        return True, redirect(url_for("students.login"))
+    return False, None
+
+def _get_client_info():
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ip and ',' in ip:
+        ip = ip.split(',')[0].strip()
+    ua = request.headers.get('User-Agent', '')
+    return ip, ua
+
+# ---------------------------------------------------------------------------
+# Public Verification Route
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Admin Panel - Certificate List / Search
 # ---------------------------------------------------------------------------
 @certificates_bp.route("/lms_admin/certificates", methods=["GET"])
 @lms_content_manager_required
@@ -264,18 +318,19 @@ def admin_list():
     conn = get_conn()
     try:
         cur = conn.cursor()
-        
+        current_inst = get_current_institute_id(default=1)
+
         # 1. Fetch search filters
         student_filter = request.args.get("student", "").strip()
         course_filter = request.args.get("course", "").strip()
         branch_filter = request.args.get("branch", "").strip()
         status_filter = request.args.get("status", "").strip()
-        
+
         # Build dynamic query
         query_parts = ["SELECT c.*, cr.course_name, s.full_name AS student_name, s.student_code, b.branch_name FROM certificates c JOIN students s ON s.id = c.student_id JOIN courses cr ON cr.id = c.course_id LEFT JOIN branches b ON b.id = s.branch_id"]
-        where_parts = []
-        params = []
-        
+        where_parts = ["(c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))"]
+        params = [current_inst, current_inst]
+
         if student_filter:
             where_parts.append("(s.full_name LIKE ? OR s.student_code LIKE ?)")
             params.extend([f"%{student_filter}%", f"%{student_filter}%"])
@@ -288,33 +343,31 @@ def admin_list():
         if status_filter:
             where_parts.append("c.status = ?")
             params.append(status_filter)
-            
-        if where_parts:
-            query_parts.append("WHERE " + " AND ".join(where_parts))
-            
+
+        query_parts.append("WHERE " + " AND ".join(where_parts))
         query_parts.append("ORDER BY c.issue_date DESC, c.id DESC")
         certs = cur.execute(" ".join(query_parts), params).fetchall()
 
         # 2. Fetch metrics
-        total_issued = cur.execute("SELECT COUNT(*) AS count FROM certificates").fetchone()["count"]
-        
+        total_issued = cur.execute("SELECT COUNT(*) AS count FROM certificates c JOIN students s ON s.id = c.student_id WHERE (c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))", (current_inst, current_inst)).fetchone()["count"]
+
         today_date = datetime.date.today().isoformat()
-        issued_today = cur.execute("SELECT COUNT(*) AS count FROM certificates WHERE issue_date = ?", (today_date,)).fetchone()["count"]
-        
+        issued_today = cur.execute("SELECT COUNT(*) AS count FROM certificates c JOIN students s ON s.id = c.student_id WHERE c.issue_date = ? AND (c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))", (today_date, current_inst, current_inst)).fetchone()["count"]
+
         this_month_prefix = today_date[:7] + "%"
-        issued_month = cur.execute("SELECT COUNT(*) AS count FROM certificates WHERE issue_date LIKE ?", (this_month_prefix,)).fetchone()["count"]
-        
-        revoked_count = cur.execute("SELECT COUNT(*) AS count FROM certificates WHERE status = 'Revoked'").fetchone()["count"]
-        reissued_count = cur.execute("SELECT COUNT(*) AS count FROM certificates WHERE status = 'Re-issued'").fetchone()["count"]
-        
+        issued_month = cur.execute("SELECT COUNT(*) AS count FROM certificates c JOIN students s ON s.id = c.student_id WHERE c.issue_date LIKE ? AND (c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))", (this_month_prefix, current_inst, current_inst)).fetchone()["count"]
+
+        revoked_count = cur.execute("SELECT COUNT(*) AS count FROM certificates c JOIN students s ON s.id = c.student_id WHERE c.status = 'Revoked' AND (c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))", (current_inst, current_inst)).fetchone()["count"]
+        reissued_count = cur.execute("SELECT COUNT(*) AS count FROM certificates c JOIN students s ON s.id = c.student_id WHERE c.status = 'Re-issued' AND (c.institute_id = ? OR (c.institute_id IS NULL AND s.institute_id = ?))", (current_inst, current_inst)).fetchone()["count"]
+
         # Operational verification metrics from audit log
-        verifications = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs WHERE action = 'Verified'").fetchone()["count"]
-        downloads = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs WHERE action = 'Downloaded'").fetchone()["count"]
-        prints = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs WHERE action = 'Printed'").fetchone()["count"]
-        views = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs WHERE action = 'Viewed'").fetchone()["count"]
+        verifications = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs cal JOIN certificates c ON c.id = cal.certificate_id JOIN students s ON s.id = c.student_id WHERE cal.action = 'Verified' AND (cal.institute_id = ? OR c.institute_id = ? OR s.institute_id = ?)", (current_inst, current_inst, current_inst)).fetchone()["count"]
+        downloads = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs cal JOIN certificates c ON c.id = cal.certificate_id JOIN students s ON s.id = c.student_id WHERE cal.action = 'Downloaded' AND (cal.institute_id = ? OR c.institute_id = ? OR s.institute_id = ?)", (current_inst, current_inst, current_inst)).fetchone()["count"]
+        prints = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs cal JOIN certificates c ON c.id = cal.certificate_id JOIN students s ON s.id = c.student_id WHERE cal.action = 'Printed' AND (cal.institute_id = ? OR c.institute_id = ? OR s.institute_id = ?)", (current_inst, current_inst, current_inst)).fetchone()["count"]
+        views = cur.execute("SELECT COUNT(*) AS count FROM certificate_audit_logs cal JOIN certificates c ON c.id = cal.certificate_id JOIN students s ON s.id = c.student_id WHERE cal.action = 'Viewed' AND (cal.institute_id = ? OR c.institute_id = ? OR s.institute_id = ?)", (current_inst, current_inst, current_inst)).fetchone()["count"]
 
         # Fetch branches and courses for dropdown filters
-        branches = cur.execute("SELECT branch_name FROM branches WHERE is_active = 1").fetchall()
+        branches = cur.execute("SELECT branch_name FROM branches WHERE is_active = 1 AND institute_id = ?", (current_inst,)).fetchall()
         courses = cur.execute("SELECT course_name FROM courses WHERE is_active = 1").fetchall()
 
         return render_template(
@@ -381,10 +434,20 @@ def admin_issue():
 
         selected_student_id = request.args.get("student_id", type=int)
         selected_course_id = request.args.get("course_id", type=int)
+        current_inst = get_current_institute_id(default=1)
 
-        # Handle GET request: list students eligible or search
-        # We fetch active students enrolled in batches
-        students = cur.execute("SELECT id, student_code, full_name FROM students WHERE status = 'active' ORDER BY full_name").fetchall()
+        # Handle GET request: list students eligible or search.
+        # Include completed students because they may need manual certificate issuance.
+        students = cur.execute(
+            """
+            SELECT id, student_code, full_name, status
+            FROM students
+            WHERE institute_id = ?
+              AND status IN ('active', 'completed')
+            ORDER BY full_name
+            """,
+            (current_inst,),
+        ).fetchall()
         
         # Fetch invoiced courses for the selected student
         courses_list = []
@@ -537,6 +600,7 @@ def admin_templates():
     conn = get_conn()
     try:
         cur = conn.cursor()
+        institute_id = get_current_institute_id(default=1)
         
         if request.method == "POST":
             # Action: Create or edit a template or field positioning
@@ -560,7 +624,9 @@ def admin_templates():
                     bg_filename = f"certificates/{safe_name}"
                     try:
                         storage_service = get_storage_service()
-                        storage_service.upload_file(bg_file, bg_filename, content_type=bg_file.content_type)
+                        bg_filename = storage_service.upload_file(
+                            bg_file, bg_filename, content_type=bg_file.content_type
+                        )
                     except Exception as e:
                         logger.error(f"Failed to upload background image: {e}", exc_info=True)
                         flash(f"Failed to upload background image: {str(e)}", "danger")
@@ -575,11 +641,15 @@ def admin_templates():
                 cur.execute(
                     """
                     INSERT INTO certificate_templates (
-                        template_name, template_code, background_filename, version, effective_from, is_default, is_active,
+                        institute_id, template_name, template_code, background_filename, version, effective_from, is_default, is_active,
                         authorized_signature_name, authorized_signature_designation, orientation, created_at
-                    ) VALUES (?, ?, ?, ?, ?, 0, 1, ?, ?, ?, datetime('now'))
+                    ) VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, datetime('now'))
                     """,
-                    (name, code, bg_filename, version, datetime.date.today().isoformat(), sig_name, sig_desig, orientation)
+                    (
+                        institute_id, name, code, bg_filename, version,
+                        datetime.date.today().isoformat(), sig_name, sig_desig,
+                        orientation,
+                    )
                 )
                 template_id = cur.lastrowid
                 
@@ -616,7 +686,10 @@ def admin_templates():
                 sig_desig = request.form.get("authorized_signature_designation", "").strip()
                 
                 # Check template
-                template = cur.execute("SELECT * FROM certificate_templates WHERE id = ?", (template_id,)).fetchone()
+                template = cur.execute(
+                    "SELECT * FROM certificate_templates WHERE id = ? AND institute_id = ?",
+                    (template_id, institute_id),
+                ).fetchone()
                 if not template:
                     flash("Template not found.", "danger")
                     return redirect(url_for("certificates.admin_templates"))
@@ -630,8 +703,10 @@ def admin_templates():
                     safe_name = secure_filename(bg_file.filename)
                     new_bg_filename = f"certificates/{safe_name}"
                     try:
-                        storage_service.replace_file(bg_file, bg_filename, new_bg_filename, content_type=bg_file.content_type)
-                        bg_filename = new_bg_filename
+                        bg_filename = storage_service.replace_file(
+                            bg_file, bg_filename, new_bg_filename,
+                            content_type=bg_file.content_type,
+                        )
                     except Exception as e:
                         logger.error(f"Failed to upload background image: {e}", exc_info=True)
                         flash(f"Failed to upload background image: {str(e)}", "danger")
@@ -646,8 +721,10 @@ def admin_templates():
                     safe_name = secure_filename(sig_file.filename)
                     new_sig_filename = f"certificates/{safe_name}"
                     try:
-                        storage_service.replace_file(sig_file, sig_filename, new_sig_filename, content_type=sig_file.content_type)
-                        sig_filename = new_sig_filename
+                        sig_filename = storage_service.replace_file(
+                            sig_file, sig_filename, new_sig_filename,
+                            content_type=sig_file.content_type,
+                        )
                     except Exception as e:
                         logger.error(f"Failed to upload signature image: {e}", exc_info=True)
                         flash(f"Failed to upload signature image: {str(e)}", "danger")
@@ -662,8 +739,10 @@ def admin_templates():
                     safe_name = secure_filename(seal_file.filename)
                     new_seal_filename = f"certificates/{safe_name}"
                     try:
-                        storage_service.replace_file(seal_file, seal_filename, new_seal_filename, content_type=seal_file.content_type)
-                        seal_filename = new_seal_filename
+                        seal_filename = storage_service.replace_file(
+                            seal_file, seal_filename, new_seal_filename,
+                            content_type=seal_file.content_type,
+                        )
                     except Exception as e:
                         logger.error(f"Failed to upload seal image: {e}", exc_info=True)
                         flash(f"Failed to upload seal image: {str(e)}", "danger")
@@ -679,9 +758,13 @@ def admin_templates():
                     SET template_name = ?, template_code = ?, background_filename = ?,
                         authorized_signature_name = ?, authorized_signature_designation = ?,
                         authorized_signature_image = ?, seal_image = ?, orientation = ?, updated_at = datetime('now')
-                    WHERE id = ?
+                    WHERE id = ? AND institute_id = ?
                     """,
-                    (name, code, bg_filename, sig_name, sig_desig, sig_filename, seal_filename, orientation, template_id)
+                    (
+                        name, code, bg_filename, sig_name, sig_desig,
+                        sig_filename, seal_filename, orientation, template_id,
+                        institute_id,
+                    )
                 )
                 conn.commit()
                 flash("Template details updated successfully.", "success")
@@ -702,6 +785,14 @@ def admin_templates():
                 visible = 1 if request.form.get("is_visible") else 0
                 rotation = request.form.get("rotation", type=int, default=0)
 
+                owned_template = cur.execute(
+                    "SELECT 1 FROM certificate_templates WHERE id = ? AND institute_id = ?",
+                    (template_id, institute_id),
+                ).fetchone()
+                if not owned_template:
+                    flash("Template not found.", "danger")
+                    return redirect(url_for("certificates.admin_templates"))
+
                 cur.execute(
                     """
                     UPDATE certificate_template_fields
@@ -716,7 +807,15 @@ def admin_templates():
                 flash("Field position coordinates updated successfully.", "success")
                 return redirect(url_for("certificates.admin_templates", selected_id=template_id))
 
-        templates = cur.execute("SELECT * FROM certificate_templates ORDER BY template_name, version DESC").fetchall()
+        templates = cur.execute(
+            """
+            SELECT *
+            FROM certificate_templates
+            WHERE institute_id = ?
+            ORDER BY template_name, version DESC
+            """,
+            (institute_id,),
+        ).fetchall()
         
         selected_template_id = request.args.get("selected_id", type=int)
         if not selected_template_id and templates:
@@ -725,8 +824,23 @@ def admin_templates():
         selected_fields = []
         sel_template = None
         if selected_template_id:
-            selected_fields = cur.execute("SELECT * FROM certificate_template_fields WHERE template_id = ?", (selected_template_id,)).fetchall()
-            sel_template = cur.execute("SELECT * FROM certificate_templates WHERE id = ?", (selected_template_id,)).fetchone()
+            sel_template = cur.execute(
+                "SELECT * FROM certificate_templates WHERE id = ? AND institute_id = ?",
+                (selected_template_id, institute_id),
+            ).fetchone()
+            if sel_template:
+                selected_fields = cur.execute(
+                    "SELECT * FROM certificate_template_fields WHERE template_id = ?",
+                    (selected_template_id,),
+                ).fetchall()
+            else:
+                selected_template_id = templates[0]["id"] if templates else None
+                if selected_template_id:
+                    sel_template = templates[0]
+                    selected_fields = cur.execute(
+                        "SELECT * FROM certificate_template_fields WHERE template_id = ?",
+                        (selected_template_id,),
+                    ).fetchall()
 
         return render_template("certificates/admin_templates.html", templates=templates, selected_id=selected_template_id, fields=selected_fields, sel_template=sel_template)
     finally:

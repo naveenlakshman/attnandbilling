@@ -121,12 +121,16 @@ class MySQLCursorWrapper:
         self._cursor = cursor
 
     def execute(self, query, args=None):
-        if query.strip().upper().startswith("PRAGMA") or re.search(r"^\s*CREATE\s+(TABLE|INDEX)", query, re.IGNORECASE):
+        if query.strip().upper().startswith("PRAGMA") or re.search(r"^\s*CREATE\s+(UNIQUE\s+)?(TABLE|INDEX)", query, re.IGNORECASE):
             return self
             
         # Translate SQLite strftime(format, col) to MySQL DATE_FORMAT(col, format)
         query = re.sub(r"\bstrftime\s*\(\s*('[^']+'|\"[^\"]+\")\s*,\s*([^)]+)\)", r"DATE_FORMAT(\2, \1)", query, flags=re.IGNORECASE)
         
+        # Translate INSERT OR IGNORE and INSERT OR REPLACE to MySQL syntax
+        query = re.sub(r"\bINSERT\s+OR\s+IGNORE\b", "INSERT IGNORE", query, flags=re.IGNORECASE)
+        query = re.sub(r"\bINSERT\s+OR\s+REPLACE\b", "REPLACE", query, flags=re.IGNORECASE)
+
         # Translate COLLATE NOCASE to empty string for MySQL compatibility
         query = re.sub(r"\bCOLLATE\s+NOCASE\b", "", query, flags=re.IGNORECASE)
         
@@ -212,10 +216,14 @@ class MySQLCursorWrapper:
         return self
 
     def executemany(self, query, args=None):
-        if query.strip().upper().startswith("PRAGMA") or re.search(r"^\s*CREATE\s+(TABLE|INDEX)", query, re.IGNORECASE):
+        if query.strip().upper().startswith("PRAGMA") or re.search(r"^\s*CREATE\s+(UNIQUE\s+)?(TABLE|INDEX)", query, re.IGNORECASE):
             return self
             
         query = re.sub(r"\bstrftime\s*\(\s*('[^']+'|\"[^\"]+\")\s*,\s*([^)]+)\)", r"DATE_FORMAT(\2, \1)", query, flags=re.IGNORECASE)
+        
+        # Translate INSERT OR IGNORE and INSERT OR REPLACE to MySQL syntax
+        query = re.sub(r"\bINSERT\s+OR\s+IGNORE\b", "INSERT IGNORE", query, flags=re.IGNORECASE)
+        query = re.sub(r"\bINSERT\s+OR\s+REPLACE\b", "REPLACE", query, flags=re.IGNORECASE)
         
         # Translate COLLATE NOCASE to empty string for MySQL compatibility
         query = re.sub(r"\bCOLLATE\s+NOCASE\b", "", query, flags=re.IGNORECASE)
@@ -375,19 +383,57 @@ def get_conn():
     return conn
 
 
-_company_cache = {"data": None, "ts": 0}
+_company_cache = {}
 
 
-def get_company_profile():
+def get_company_profile(institute_id=None):
     """Return company profile, cached for 5 minutes to avoid a DB hit on every request."""
     global _company_cache
-    if _company_cache["data"] is not None and (time.time() - _company_cache["ts"]) < 300:
-        return _company_cache["data"]
+    if institute_id is None:
+        try:
+            from services.tenant_context import get_current_institute_id
+            institute_id = get_current_institute_id(default=1)
+        except Exception:
+            institute_id = 1
+    cache_key = int(institute_id or 1)
+    cached = _company_cache.get(cache_key)
+    if cached and (time.time() - cached["ts"]) < 300:
+        return cached["data"]
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM company_profile WHERE id = 1")
+        # Institute 1 was historically special-cased to the singleton
+        # company_profile table. That leaks the legacy Global IT identity after
+        # institute 1 is renamed/rebranded. All tenants, including ID 1, must
+        # read their identity from the tenant-owned branding tables.
+        cur.execute(
+            """
+            SELECT i.id, COALESCE(b.display_name, i.name) AS company_name,
+                   COALESCE(b.short_name, i.short_name) AS company_short_name,
+                   COALESCE(b.tagline, 'ERP System') AS tagline,
+                   COALESCE(b.address, '') AS address,
+                   COALESCE(b.phone, '') AS phone,
+                   COALESCE(b.email, '') AS email,
+                   COALESCE(b.website, '') AS website,
+                   b.logo_path AS logo_filename,
+                   b.logo_path,
+                   b.favicon_path,
+                   b.primary_color,
+                   b.secondary_color,
+                   COALESCE(b.registration_number, '') AS reg_number,
+                   b.updated_at
+            FROM institutes i
+            LEFT JOIN institute_branding b ON b.institute_id = i.id
+            WHERE i.id = ?
+            """,
+            (cache_key,),
+        )
         row = cur.fetchone()
+        # Preserve compatibility only for an incompletely migrated legacy
+        # database where institute 1 itself is absent.
+        if not row and cache_key == 1:
+            cur.execute("SELECT * FROM company_profile WHERE id = 1")
+            row = cur.fetchone()
         if row:
             result = dict(row)
         else:
@@ -404,22 +450,23 @@ def get_company_profile():
                 "reg_number": "",
                 "updated_at": None,
             }
-        _company_cache["data"] = result
-        _company_cache["ts"] = time.time()
+        _company_cache[cache_key] = {"data": result, "ts": time.time()}
         return result
     finally:
         conn.close()
 
 
-def clear_company_cache():
+def clear_company_cache(institute_id=None):
     """Call this after saving company profile so the cache refreshes immediately."""
     global _company_cache
-    _company_cache["data"] = None
-    _company_cache["ts"] = 0
+    if institute_id is None:
+        _company_cache.clear()
+    else:
+        _company_cache.pop(int(institute_id), None)
 
 
 
-def log_activity(user_id, branch_id, action_type, module_name, record_id, description, conn=None):
+def log_activity(user_id, branch_id, action_type, module_name, record_id, description, conn=None, institute_id=None):
     """
     Insert an activity log entry.
     Pass an existing `conn` to reuse it (caller must commit).
@@ -429,10 +476,17 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
     if _own_conn:
         conn = get_conn()
     try:
+        if institute_id is None:
+            try:
+                from services.tenant_context import get_current_institute_id
+                institute_id = get_current_institute_id(default=1)
+            except Exception:
+                institute_id = 1
         cur = conn.cursor()
         now = datetime.now().isoformat(timespec="seconds")
         cur.execute("""
             INSERT INTO activity_logs (
+                institute_id,
                 user_id,
                 branch_id,
                 action_type,
@@ -441,8 +495,9 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
                 description,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            institute_id,
             user_id,
             branch_id,
             action_type,
@@ -460,25 +515,91 @@ def log_activity(user_id, branch_id, action_type, module_name, record_id, descri
             conn.close()
 
 
+def _get_table_columns_set(cur, table_name):
+    """Return a set of column names for a table, compatible with PyMySQL and SQLite."""
+    try:
+        cur.execute(f"SHOW COLUMNS FROM `{table_name}`")
+        rows = cur.fetchall()
+        return {r["Field"] if isinstance(r, dict) else r[0] for r in rows}
+    except Exception:
+        try:
+            cur.execute(f"PRAGMA table_info({table_name})")
+            rows = cur.fetchall()
+            return {r["name"] if isinstance(r, dict) else r[1] for r in rows}
+        except Exception:
+            return set()
+
+
 def add_column_if_not_exists(cur, table_name, column_name, column_def):
     try:
-        cur.execute(f"PRAGMA table_info({table_name})")
-        columns = [row["name"] for row in cur.fetchall()]
-        if column_name not in columns:
+        cols = _get_table_columns_set(cur, table_name)
+        if column_name not in cols:
             clean_def = column_def.replace(" UNIQUE", "").replace("UNIQUE ", "")
             cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {clean_def}")
     except Exception as e:
         print(f"Warning: Could not add column {column_name} to {table_name}: {e}")
 
 
+def _ensure_lms_batch_topic_progress_table(conn=None):
+    close_conn = False
+    if not conn:
+        conn = get_conn()
+        close_conn = True
+    try:
+        cur = conn.cursor()
+        raw_cur = getattr(cur, '_cursor', cur)
+        if Config.DB_TYPE == "mysql":
+            raw_cur.execute("""
+                CREATE TABLE IF NOT EXISTS lms_batch_topic_progress (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    batch_id INT NOT NULL,
+                    program_id INT NOT NULL,
+                    master_topic_id INT,
+                    topic_id INT,
+                    taught_by_user_id INT NOT NULL,
+                    taught_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    notes TEXT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_lms_batch_topic_progress_batch_topic (batch_id, program_id, master_topic_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+        else:
+            raw_cur.execute("""
+                CREATE TABLE IF NOT EXISTS lms_batch_topic_progress (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    batch_id INTEGER NOT NULL,
+                    program_id INTEGER NOT NULL,
+                    master_topic_id INTEGER,
+                    topic_id INTEGER,
+                    taught_by_user_id INTEGER NOT NULL,
+                    taught_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    notes TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+            """)
+            raw_cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_lms_batch_topic_progress_batch_topic
+                ON lms_batch_topic_progress(batch_id, program_id, master_topic_id)
+            """)
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        if close_conn:
+            conn.close()
+
+
 def init_db():
-    if getattr(Config, "DB_TYPE", "sqlite") == "mysql":
+    _ensure_lms_batch_topic_progress_table()
+    if Config.DB_TYPE == "mysql":
         return
-        
+
     conn = get_conn()
-    # One-time DB configuration (WAL mode + performance settings)
-    conn.execute("PRAGMA journal_mode = WAL;")
-    conn.execute("PRAGMA synchronous = NORMAL;")
+    try:
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+    except Exception:
+        pass
     cur = conn.cursor()
     now = datetime.now().isoformat(timespec="seconds")
 
@@ -503,11 +624,14 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS branches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            branch_name TEXT NOT NULL UNIQUE,
-            branch_code TEXT NOT NULL UNIQUE,
+            institute_id INTEGER NOT NULL DEFAULT 1,
+            branch_name TEXT NOT NULL,
+            branch_code TEXT NOT NULL,
             address TEXT,
             is_active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            UNIQUE (institute_id, branch_name),
+            UNIQUE (institute_id, branch_code)
         )
     """)
 
@@ -515,24 +639,65 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             full_name TEXT NOT NULL,
-            username TEXT NOT NULL UNIQUE,
+            username TEXT NOT NULL,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('admin', 'staff')),
+            platform_role TEXT,
             phone TEXT,
             branch_id INTEGER,
             can_view_all_branches INTEGER NOT NULL DEFAULT 1,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            FOREIGN KEY (branch_id) REFERENCES branches(id)
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            UNIQUE (institute_id, username)
         )
     """)
+
+    # ---------- PLATFORM CONTROL PLANE ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS platform_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT NOT NULL,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'platform_owner',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_login_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS platform_support_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            platform_account_id INTEGER NOT NULL,
+            institute_id INTEGER NOT NULL,
+            support_user_id INTEGER,
+            reason TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            last_activity_at TEXT NOT NULL,
+            ended_at TEXT,
+            end_reason TEXT,
+            request_ip TEXT,
+            user_agent TEXT,
+            FOREIGN KEY (platform_account_id) REFERENCES platform_accounts(id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id),
+            FOREIGN KEY (support_user_id) REFERENCES users(id)
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_platform_accounts_active_role ON platform_accounts(is_active, role)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_platform_support_active ON platform_support_sessions(platform_account_id, ended_at, expires_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_platform_support_institute ON platform_support_sessions(institute_id, started_at)")
 
     # ---------- LEADS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS leads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             name TEXT NOT NULL,
             phone TEXT NOT NULL,
             whatsapp TEXT,
@@ -560,7 +725,8 @@ def init_db():
             assigned_to_id INTEGER,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            FOREIGN KEY (assigned_to_id) REFERENCES users(id)
+            FOREIGN KEY (assigned_to_id) REFERENCES users(id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id)
         )
     """)
 
@@ -568,6 +734,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS followups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             lead_id INTEGER NOT NULL,
             user_id INTEGER,
             method TEXT,
@@ -576,7 +743,8 @@ def init_db():
             next_followup_date TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES users(id)
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id)
         )
     """)
 
@@ -584,7 +752,8 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_code TEXT NOT NULL UNIQUE,
+            institute_id INTEGER NOT NULL DEFAULT 1,
+            student_code TEXT NOT NULL,
             full_name TEXT NOT NULL,
             phone TEXT NOT NULL,
             email TEXT,
@@ -618,7 +787,9 @@ def init_db():
             degree_percentage TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            FOREIGN KEY (branch_id) REFERENCES branches(id)
+            UNIQUE(institute_id, student_code),
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id)
         )
     """)
 
@@ -741,10 +912,35 @@ def init_db():
         )
     """)
 
+    # Tenant-scoped calendar rules used by the Reports attendance module.
+    # The legacy singleton tables above remain for backward compatibility.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_attendance_calendar_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL UNIQUE,
+            working_days TEXT NOT NULL DEFAULT '0,1,2,3,4,5',
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_attendance_holidays (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
+            holiday_date TEXT NOT NULL,
+            title TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE(institute_id, holiday_date)
+        )
+    """)
+
     # ---------- ATTENDANCE FOLLOWUPS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS attendance_followups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             student_id INTEGER NOT NULL,
             branch_id INTEGER NOT NULL,
             batch_id INTEGER,
@@ -757,6 +953,9 @@ def init_db():
             remarks TEXT,
             notes TEXT,
             created_by INTEGER,
+            contact_channel TEXT,
+            contact_person TEXT,
+            next_followup_date TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT,
             FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
@@ -846,10 +1045,14 @@ def init_db():
         )
     """)
 
+    from services.cashfree_payments import init_sqlite_schema
+    init_sqlite_schema(conn)
+
     # ---------- BAD DEBT WRITE-OFFS ----------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS bad_debt_writeoffs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference_no TEXT,
             invoice_id INTEGER NOT NULL,
             amount_written_off REAL NOT NULL,
             paid_amount REAL NOT NULL DEFAULT 0,
@@ -901,6 +1104,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS activity_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER,
             user_id INTEGER,
             branch_id INTEGER,
             action_type TEXT NOT NULL,
@@ -909,7 +1113,8 @@ def init_db():
             description TEXT NOT NULL,
             created_at TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id),
-            FOREIGN KEY (branch_id) REFERENCES branches(id)
+            FOREIGN KEY (branch_id) REFERENCES branches(id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id)
         )
     """)
 
@@ -917,7 +1122,8 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS assets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            asset_code TEXT NOT NULL UNIQUE,
+            institute_id INTEGER NOT NULL,
+            asset_code TEXT NOT NULL,
             asset_name TEXT NOT NULL,
             category TEXT NOT NULL,
             brand TEXT,
@@ -930,6 +1136,8 @@ def init_db():
             branch_id INTEGER,
             created_at TEXT NOT NULL,
             updated_at TEXT,
+            UNIQUE (institute_id, asset_code),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
             FOREIGN KEY (branch_id) REFERENCES branches(id)
         )
     """)
@@ -938,6 +1146,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS asset_allocation (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
             asset_id INTEGER NOT NULL,
             assigned_to TEXT NOT NULL,
             assigned_role TEXT NOT NULL
@@ -948,6 +1157,7 @@ def init_db():
                 CHECK(status IN ('Allocated', 'Returned')),
             created_at TEXT NOT NULL,
             updated_at TEXT,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
             FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
         )
     """)
@@ -956,12 +1166,14 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS asset_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
             asset_id INTEGER NOT NULL,
             action TEXT NOT NULL
                 CHECK(action IN ('Created', 'Assigned', 'Returned', 'Repaired', 'Disposed', 'Updated')),
             description TEXT,
             done_by INTEGER,
             created_at TEXT NOT NULL,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
             FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
             FOREIGN KEY (done_by) REFERENCES users(id)
         )
@@ -970,6 +1182,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS reminder_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             student_id INTEGER NOT NULL,
             invoice_id INTEGER NOT NULL,
             installment_id INTEGER NOT NULL,
@@ -981,6 +1194,7 @@ def init_db():
             followup_note TEXT,
             sent_by INTEGER,
             sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
             FOREIGN KEY(student_id) REFERENCES students(id),
             FOREIGN KEY(invoice_id) REFERENCES invoices(id),
             FOREIGN KEY(installment_id) REFERENCES installment_plans(id),
@@ -1030,8 +1244,7 @@ def init_db():
         )
     """)
     # Migration: add is_deleted to lms_programs if it doesn't exist yet
-    cur.execute("PRAGMA table_info(lms_programs)")
-    _lp_cols = {row[1] for row in cur.fetchall()}
+    _lp_cols = _get_table_columns_set(cur, "lms_programs")
     if 'program_reference_name' not in _lp_cols:
         cur.execute("ALTER TABLE lms_programs ADD COLUMN program_reference_name TEXT")
         cur.execute("""
@@ -1270,8 +1483,7 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_lms_question_bank_chapter ON lms_question_bank(chapter_id)")
 
     # Migration: add master_topic_id to lms_question_bank if it doesn't exist yet
-    cur.execute("PRAGMA table_info(lms_question_bank)")
-    _qb_cols = {row[1] for row in cur.fetchall()}
+    _qb_cols = _get_table_columns_set(cur, "lms_question_bank")
     if 'master_topic_id' not in _qb_cols:
         cur.execute("ALTER TABLE lms_question_bank ADD COLUMN master_topic_id INTEGER")
 
@@ -1386,15 +1598,10 @@ def init_db():
         )
     """)
 
-    cur.execute("""
-        SELECT name
-        FROM sqlite_master
-        WHERE type = 'table' AND name = 'student_program_last_activity'
-    """)
-    last_activity_exists = cur.fetchone() is not None
-    if not last_activity_exists:
+    last_activity_cols = _get_table_columns_set(cur, "student_program_last_activity")
+    if not last_activity_cols:
         cur.execute("""
-            CREATE TABLE student_program_last_activity (
+            CREATE TABLE IF NOT EXISTS student_program_last_activity (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 student_id INTEGER NOT NULL,
                 program_id INTEGER NOT NULL,
@@ -1406,63 +1613,158 @@ def init_db():
             )
         """)
     else:
-        cur.execute("PRAGMA table_info(student_program_last_activity)")
-        last_activity_cols = {row["name"] for row in cur.fetchall()}
+        last_activity_cols = _get_table_columns_set(cur, "student_program_last_activity")
         # Existing production tables may have been created with an older shape.
         # Add only missing columns; do not drop/recreate or discard data.
         if "id" not in last_activity_cols:
-            cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN id INTEGER")
+            try:
+                cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN id INTEGER")
+            except Exception:
+                pass
         if "student_id" not in last_activity_cols:
-            cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN student_id INTEGER")
+            try:
+                cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN student_id INTEGER")
+            except Exception:
+                pass
         if "program_id" not in last_activity_cols:
-            cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN program_id INTEGER")
+            try:
+                cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN program_id INTEGER")
+            except Exception:
+                pass
         if "master_topic_id" not in last_activity_cols:
-            cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN master_topic_id INTEGER")
+            try:
+                cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN master_topic_id INTEGER")
+            except Exception:
+                pass
         if "updated_at" not in last_activity_cols:
-            cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN updated_at TEXT")
+            try:
+                cur.execute("ALTER TABLE student_program_last_activity ADD COLUMN updated_at TEXT")
+            except Exception:
+                pass
+    # --- Phase 7 Migration: LMS & Exams Multi-Tenant Scoping ---
+    lms_tenant_tables = [
+        "lms_programs",
+        "lms_assignments",
+        "lms_assignment_submissions",
+        "lms_batch_program_access",
+        "lms_student_program_access",
+        "lms_student_topic_progress",
+        "lms_master_topic_progress",
+        "lms_final_exam_applications",
+        "lms_final_exam_attempts",
+        "lms_chapter_mock_attempts",
+        "lms_master_chapters",
+        "lms_master_topics",
+        "lms_question_bank",
+        "certificates",
+        "certificate_templates",
+        "certificate_settings",
+        "certificate_audit_logs",
+        "activity_logs",
+        "bad_debt_writeoffs",
+        "company_profile",
+    ]
+    for tbl in lms_tenant_tables:
+        cols = _get_table_columns_set(cur, tbl)
+        if "institute_id" not in cols:
+            try:
+                cur.execute(f"ALTER TABLE `{tbl}` ADD COLUMN institute_id INT DEFAULT 1")
+            except Exception:
+                pass
+        if "is_shared" not in cols and tbl in ("lms_master_chapters", "lms_master_topics", "lms_question_bank"):
+            try:
+                cur.execute(f"ALTER TABLE `{tbl}` ADD COLUMN is_shared INT DEFAULT 1")
+            except Exception:
+                pass
 
+    # Backfill institute_id from student/batch tables where available
     cur.execute("""
-        UPDATE student_program_last_activity
-        SET updated_at = datetime('now')
-        WHERE updated_at IS NULL OR updated_at = ''
+        UPDATE lms_assignment_submissions
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_assignment_submissions.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_batch_program_access
+        SET institute_id = COALESCE((SELECT institute_id FROM batches WHERE batches.id = lms_batch_program_access.batch_id), 1)
+        WHERE batch_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_student_program_access
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_student_program_access.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_student_topic_progress
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_student_topic_progress.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_master_topic_progress
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_master_topic_progress.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_final_exam_applications
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_final_exam_applications.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_final_exam_attempts
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_final_exam_attempts.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
+    """)
+    cur.execute("""
+        UPDATE lms_chapter_mock_attempts
+        SET institute_id = COALESCE((SELECT institute_id FROM students WHERE students.id = lms_chapter_mock_attempts.student_id), 1)
+        WHERE student_id IS NOT NULL AND (institute_id IS NULL OR institute_id = 1)
     """)
 
-    cur.execute("PRAGMA index_list(student_program_last_activity)")
-    has_last_activity_unique = False
-    for idx in cur.fetchall():
-        if not idx["unique"]:
-            continue
-        cur.execute(f"PRAGMA index_info({idx['name']})")
-        idx_cols = [row["name"] for row in cur.fetchall()]
-        if idx_cols == ["student_id", "program_id"]:
-            has_last_activity_unique = True
-            break
+    if getattr(Config, "DB_TYPE", "sqlite") != "mysql":
+        try:
+            cur.execute("""
+                UPDATE student_program_last_activity
+                SET updated_at = datetime('now')
+                WHERE updated_at IS NULL OR updated_at = ''
+            """)
 
-    if not has_last_activity_unique:
-        cur.execute("""
-            DELETE FROM student_program_last_activity
-            WHERE student_id IS NOT NULL
-              AND program_id IS NOT NULL
-              AND rowid NOT IN (
-                  SELECT rowid
-                  FROM (
-                      SELECT
-                          rowid,
-                          ROW_NUMBER() OVER (
-                              PARTITION BY student_id, program_id
-                              ORDER BY datetime(updated_at) DESC, COALESCE(id, rowid) DESC, rowid DESC
-                          ) AS rn
-                      FROM student_program_last_activity
-                      WHERE student_id IS NOT NULL
-                        AND program_id IS NOT NULL
-                  )
-                  WHERE rn = 1
-              )
-        """)
-        cur.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_student_program_last_activity_unique
-            ON student_program_last_activity(student_id, program_id)
-        """)
+            cur.execute("PRAGMA index_list(student_program_last_activity)")
+            has_last_activity_unique = False
+            for idx in cur.fetchall():
+                if not idx["unique"]:
+                    continue
+                cur.execute(f"PRAGMA index_info({idx['name']})")
+                idx_cols = [row["name"] for row in cur.fetchall()]
+                if idx_cols == ["student_id", "program_id"]:
+                    has_last_activity_unique = True
+                    break
+
+            if not has_last_activity_unique:
+                cur.execute("""
+                    DELETE FROM student_program_last_activity
+                    WHERE student_id IS NOT NULL
+                      AND program_id IS NOT NULL
+                      AND rowid NOT IN (
+                          SELECT rowid
+                          FROM (
+                              SELECT
+                                  rowid,
+                                  ROW_NUMBER() OVER (
+                                      PARTITION BY student_id, program_id
+                                      ORDER BY datetime(updated_at) DESC, COALESCE(id, rowid) DESC, rowid DESC
+                                  ) AS rn
+                              FROM student_program_last_activity
+                              WHERE student_id IS NOT NULL
+                                AND program_id IS NOT NULL
+                          )
+                          WHERE rn = 1
+                      )
+                """)
+                cur.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_student_program_last_activity_unique
+                    ON student_program_last_activity(student_id, program_id)
+                """)
+        except Exception:
+            pass
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS lms_master_topic_bridge (
@@ -1506,6 +1808,17 @@ def init_db():
     """)
 
     # ---------- SAFE MIGRATIONS ----------
+    add_column_if_not_exists(cur, "leads", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "followups", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "students", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "student_uploaded_documents", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "student_profile_update_requests", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "student_notes", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "attendance_followups", "institute_id", "INTEGER")
+    add_column_if_not_exists(cur, "attendance_followups", "contact_channel", "TEXT")
+    add_column_if_not_exists(cur, "attendance_followups", "contact_person", "TEXT")
+    add_column_if_not_exists(cur, "attendance_followups", "next_followup_date", "TEXT")
+
     add_column_if_not_exists(cur, "users", "phone", "TEXT")
     add_column_if_not_exists(cur, "users", "branch_id", "INTEGER")
     add_column_if_not_exists(cur, "users", "can_view_all_branches", "INTEGER NOT NULL DEFAULT 1")
@@ -1544,6 +1857,7 @@ def init_db():
     # Student portal login
     add_column_if_not_exists(cur, "students", "password_hash", "TEXT")
     add_column_if_not_exists(cur, "students", "portal_enabled", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_not_exists(cur, "students", "password_changed_at", "TEXT")
     # Lead-to-student linkage
     add_column_if_not_exists(cur, "students", "lead_id", "INTEGER")
     add_column_if_not_exists(cur, "leads", "branch_id", "INTEGER")
@@ -1595,11 +1909,13 @@ def init_db():
     """)
 
     add_column_if_not_exists(cur, "courses", "course_type", "TEXT DEFAULT 'standard'")
+    add_column_if_not_exists(cur, "courses", "institute_id", "INTEGER NOT NULL DEFAULT 1")
     add_column_if_not_exists(cur, "courses", "course_domain", "TEXT")
     add_column_if_not_exists(cur, "courses", "course_category", "TEXT")
     add_column_if_not_exists(cur, "courses", "show_on_website", "INTEGER NOT NULL DEFAULT 0")
     add_column_if_not_exists(cur, "courses", "duration_hours", "INTEGER")
     add_column_if_not_exists(cur, "courses", "course_slug", "TEXT")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_courses_institute_public ON courses(institute_id, is_active, show_on_website)")
 
     add_column_if_not_exists(cur, "invoices", "branch_id", "INTEGER")
     add_column_if_not_exists(cur, "invoices", "sms_token", "TEXT")
@@ -1732,6 +2048,159 @@ def init_db():
     except:
         pass
 
+    # ---------- MULTI-INSTITUTE PHASE 1 FOUNDATION ----------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institutes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            short_name TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'active',
+            timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+            locale TEXT NOT NULL DEFAULT 'en-IN',
+            currency_code TEXT NOT NULL DEFAULT 'INR',
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_domains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
+            hostname TEXT NOT NULL UNIQUE,
+            domain_type TEXT NOT NULL DEFAULT 'platform',
+            is_primary INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',
+            verified_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_branding (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            short_name TEXT,
+            tagline TEXT,
+            logo_path TEXT,
+            favicon_path TEXT,
+            primary_color TEXT NOT NULL DEFAULT '#2563EB',
+            secondary_color TEXT NOT NULL DEFAULT '#16A34A',
+            address TEXT,
+            phone TEXT,
+            email TEXT,
+            website TEXT,
+            registration_number TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL UNIQUE,
+            invoice_prefix TEXT NOT NULL DEFAULT 'INV',
+            receipt_prefix TEXT NOT NULL DEFAULT 'RCP',
+            student_prefix TEXT NOT NULL DEFAULT 'STU',
+            certificate_prefix TEXT NOT NULL DEFAULT 'CERT',
+            date_format TEXT NOT NULL DEFAULT 'DD-MMM-YYYY',
+            settings_json TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_document_sequences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
+            document_type TEXT NOT NULL,
+            series_prefix TEXT NOT NULL,
+            next_value INTEGER NOT NULL DEFAULT 1 CHECK (next_value > 0),
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE (institute_id, document_type, series_prefix),
+            CHECK (document_type IN ('invoice', 'receipt', 'writeoff', 'asset')),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_integrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
+            integration_type TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'inactive',
+            secret_reference TEXT,
+            configuration_json TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE (institute_id, integration_type),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institute_memberships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            membership_role TEXT NOT NULL DEFAULT 'staff',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT,
+            UNIQUE (institute_id, user_id),
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_migration_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER,
+            migration_key TEXT NOT NULL,
+            status TEXT NOT NULL,
+            checkpoint_json TEXT,
+            started_by INTEGER,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            error_message TEXT,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE SET NULL,
+            FOREIGN KEY (started_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_security_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER,
+            user_id INTEGER,
+            student_id INTEGER,
+            event_type TEXT NOT NULL,
+            request_host TEXT,
+            request_path TEXT,
+            details_json TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE SET NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL
+        )
+    """)
+    add_column_if_not_exists(cur, "activity_logs", "institute_id", "INTEGER")
+    add_column_if_not_exists(cur, "branches", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "users", "institute_id", "INTEGER NOT NULL DEFAULT 1")
+    add_column_if_not_exists(cur, "users", "platform_role", "TEXT")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_institute_created ON activity_logs(institute_id, created_at)")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_branches_institute_code ON branches(institute_id, branch_code)")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_branches_institute_name ON branches(institute_id, branch_name)")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_institute_username ON users(institute_id, username)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_branches_institute_active ON branches(institute_id, is_active)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_users_institute_active ON users(institute_id, is_active)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_institute_domains_institute ON institute_domains(institute_id, status)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_institute_memberships_user ON institute_memberships(user_id, is_active)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_tenant_security_audit_institute ON tenant_security_audit(institute_id, created_at)")
+
     # ---------- DEFAULT COMPANY PROFILE ----------
     cur.execute("SELECT id FROM company_profile WHERE id = 1")
     if not cur.fetchone():
@@ -1753,77 +2222,66 @@ def init_db():
             now
         ))
 
-    # ---------- DEFAULT BRANCHES ----------
-    cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HO",))
-    ho_branch = cur.fetchone()
-    if not ho_branch:
-        cur.execute("""
-            INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            "Global IT Education Head Office",
-            "HO",
-            "T G Extension, Opposite to B M Lab, Hoskote",
-            1,
-            now
-        ))
-
-    cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HB",))
-    hb_branch = cur.fetchone()
-    if not hb_branch:
-        cur.execute("""
-            INSERT INTO branches (branch_name, branch_code, address, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            "Global IT Education – Hoskote Branch",
-            "HB",
-            "College Road, Near Ayyappa Swamy Temple, Hoskote",
-            1,
-            now
-        ))
-
-    cur.execute("SELECT id FROM branches WHERE branch_code = ?", ("HO",))
-    head_office = cur.fetchone()
-    head_office_id = head_office["id"] if head_office else 1
-
-    # ---------- DEFAULT ADMIN USER ----------
-    cur.execute("SELECT id FROM users WHERE username = ?", ("admin",))
-    existing_admin = cur.fetchone()
-
-    if not existing_admin:
-        cur.execute("""
-            INSERT INTO users (
-                full_name,
-                username,
-                password_hash,
-                role,
-                phone,
-                branch_id,
-                can_view_all_branches,
-                is_active,
-                created_at,
-                updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            "Administrator",
-            "admin",
-            generate_password_hash("admin123"),
-            "admin",
-            "",
-            head_office_id,
-            1,
-            1,
-            now,
-            now
-        ))
-
     # ---------- BACKFILL OLD DATA ----------
-    cur.execute("UPDATE users SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+    # Startup must never create shared credentials or branches. Existing
+    # single-institute installations can still have branchless historical rows,
+    # so attach them only when institute 1 already has a branch.
+    cur.execute("""
+        SELECT id
+        FROM branches
+        WHERE institute_id = 1
+        ORDER BY CASE WHEN branch_code = 'HO' THEN 0 ELSE 1 END, id
+        LIMIT 1
+    """)
+    head_office = cur.fetchone()
+    head_office_id = head_office["id"] if head_office else None
+    if head_office_id is not None:
+        cur.execute("UPDATE users SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+        cur.execute("UPDATE students SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+        cur.execute("UPDATE invoices SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
     cur.execute("UPDATE users SET can_view_all_branches = 1 WHERE can_view_all_branches IS NULL")
+    cur.execute("UPDATE branches SET institute_id = 1 WHERE institute_id IS NULL")
+    cur.execute("UPDATE users SET institute_id = 1 WHERE institute_id IS NULL")
 
-    cur.execute("UPDATE students SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
-    cur.execute("UPDATE invoices SET branch_id = ? WHERE branch_id IS NULL", (head_office_id,))
+    cur.execute("""
+        INSERT OR IGNORE INTO institutes (
+            id, name, short_name, slug, status, timezone, locale,
+            currency_code, created_at, updated_at
+        ) VALUES (1, 'Global IT Education', 'Global IT', 'global-it-education',
+                  'active', 'Asia/Kolkata', 'en-IN', 'INR', ?, ?)
+    """, (now, now))
+    for hostname, is_primary in (("www.globaliterp.com", 1), ("globaliterp.com", 0)):
+        cur.execute("""
+            INSERT OR IGNORE INTO institute_domains (
+                institute_id, hostname, domain_type, is_primary, status,
+                verified_at, created_at
+            ) VALUES (1, ?, 'custom', ?, 'active', ?, ?)
+        """, (hostname, is_primary, now, now))
+    cur.execute("""
+        INSERT OR IGNORE INTO institute_branding (
+            institute_id, display_name, short_name, tagline, logo_path, address,
+            phone, email, website, registration_number, created_at, updated_at
+        )
+        SELECT 1, company_name, company_short_name, tagline, logo_filename, address,
+               phone, email, website, reg_number, ?, ?
+        FROM company_profile WHERE id = 1
+    """, (now, now))
+    cur.execute("""
+        INSERT OR IGNORE INTO institute_settings (
+            institute_id, invoice_prefix, receipt_prefix, student_prefix,
+            certificate_prefix, date_format, created_at, updated_at
+        ) VALUES (1, 'GIT/B', 'GIT', 'STU', 'GIT', 'DD-MMM-YYYY', ?, ?)
+    """, (now, now))
+    cur.execute("""
+        INSERT OR IGNORE INTO institute_memberships (
+            institute_id, user_id, membership_role, is_active, created_at, updated_at
+        )
+        SELECT institute_id, id,
+               CASE WHEN role = 'admin' THEN 'institute_admin' ELSE role END,
+               is_active, ?, ?
+        FROM users
+    """, (now, now))
+    cur.execute("UPDATE activity_logs SET institute_id = 1 WHERE institute_id IS NULL")
 
     # ---------- DEFAULT EXPENSE CATEGORIES ----------
     default_categories = [
@@ -1950,52 +2408,23 @@ def init_db():
         
         # Add remarks to attendance_followups if missing
         add_column_if_not_exists(cur, 'attendance_followups', 'remarks', 'TEXT')
+        add_column_if_not_exists(cur, 'attendance_followups', 'institute_id', 'INTEGER')
+        add_column_if_not_exists(cur, 'attendance_followups', 'created_by', 'INTEGER')
+        add_column_if_not_exists(cur, 'attendance_followups', 'contact_channel', 'TEXT')
+        add_column_if_not_exists(cur, 'attendance_followups', 'contact_person', 'TEXT')
+        add_column_if_not_exists(cur, 'attendance_followups', 'next_followup_date', 'TEXT')
+        cur.execute("""
+            UPDATE attendance_followups
+            SET institute_id = (
+                SELECT institute_id FROM students
+                WHERE students.id = attendance_followups.student_id
+            )
+            WHERE institute_id IS NULL
+        """)
 
         # Add reason to attendance_time_warnings if missing (added Apr 2026)
         add_column_if_not_exists(cur, 'attendance_time_warnings', 'reason', 'TEXT')
-
-        # Remove UNIQUE(batch_id, student_id, attendance_date) from attendance_time_warnings
-        # so multiple warnings per student per day can be stored (added Apr 2026)
-        res = cur.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name='attendance_time_warnings'"
-        ).fetchone()
-        if res and 'UNIQUE(batch_id, student_id, attendance_date)' in res[0]:
-            cur.execute("""
-                CREATE TABLE attendance_time_warnings_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    batch_id INTEGER NOT NULL,
-                    branch_id INTEGER NOT NULL,
-                    student_id INTEGER NOT NULL,
-                    attendance_date TEXT NOT NULL,
-                    attendance_status TEXT NOT NULL,
-                    marked_at TEXT NOT NULL,
-                    actual_time TEXT NOT NULL,
-                    batch_start_time TEXT,
-                    batch_end_time TEXT,
-                    warning_type TEXT NOT NULL
-                        CHECK(warning_type IN ('before_start', 'after_end')),
-                    reason TEXT,
-                    marked_by INTEGER,
-                    FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE CASCADE,
-                    FOREIGN KEY (branch_id) REFERENCES branches(id),
-                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-                    FOREIGN KEY (marked_by) REFERENCES users(id)
-                )
-            """)
-            cur.execute("""
-                INSERT INTO attendance_time_warnings_new
-                    (id, batch_id, branch_id, student_id, attendance_date,
-                     attendance_status, marked_at, actual_time,
-                     batch_start_time, batch_end_time, warning_type, reason, marked_by)
-                SELECT
-                    id, batch_id, branch_id, student_id, attendance_date,
-                    attendance_status, marked_at, actual_time,
-                    batch_start_time, batch_end_time, warning_type, reason, marked_by
-                FROM attendance_time_warnings
-            """)
-            cur.execute("DROP TABLE attendance_time_warnings")
-            cur.execute("ALTER TABLE attendance_time_warnings_new RENAME TO attendance_time_warnings")
-    except:
+    except Exception:
         pass
 
     # ---------- ADDRESS FIELDS MIGRATION (Apr 2026) ----------
@@ -2295,7 +2724,7 @@ def init_db():
     cur.execute("SELECT id FROM certificate_settings WHERE id = 1")
     if not cur.fetchone():
         cur.execute("""
-            INSERT INTO certificate_settings (
+            INSERT OR IGNORE INTO certificate_settings (
                 id, prefix, default_template_id, default_pass_percentage, qr_verification_url_pattern,
                 auto_generate_certificates, allow_manual_issue, allow_reissue, show_student_photo,
                 show_grade, enable_certificate_verification, year_format, sequence_length, created_at
@@ -2305,36 +2734,42 @@ def init_db():
     cur.execute("SELECT id FROM attendance_calendar_settings WHERE id = 1")
     if not cur.fetchone():
         cur.execute("""
-            INSERT INTO attendance_calendar_settings (id, working_days, created_at)
+            INSERT OR IGNORE INTO attendance_calendar_settings (id, working_days, created_at)
             VALUES (1, '0,1,2,3,4,5', ?)
         """, (now,))
 
     # Migration: Add profile_approved_updates_count to students if not exists
-    student_cols = [row["name"] for row in cur.execute("PRAGMA table_info(students)").fetchall()]
+    student_cols = _get_table_columns_set(cur, "students")
     if "profile_approved_updates_count" not in student_cols:
-        cur.execute("ALTER TABLE students ADD COLUMN profile_approved_updates_count INTEGER DEFAULT 0")
+        try:
+            cur.execute("ALTER TABLE students ADD COLUMN profile_approved_updates_count INTEGER DEFAULT 0")
+        except Exception:
+            pass
 
     # Create student_uploaded_documents table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS student_uploaded_documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             student_id INTEGER NOT NULL,
             category TEXT NOT NULL CHECK(category IN ('qualification', 'identity', 'address')),
             document_type TEXT NOT NULL,
             file_path TEXT NOT NULL,
             uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(institute_id) REFERENCES institutes(id),
             FOREIGN KEY(student_id) REFERENCES students(id)
         )
     """)
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_student_uploaded_documents_student
-        ON student_uploaded_documents(student_id, category)
+        ON student_uploaded_documents(institute_id, student_id, category)
     """)
 
     # Create student_profile_update_requests table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS student_profile_update_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL DEFAULT 1,
             student_id INTEGER NOT NULL,
             requested_data TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED')),
@@ -2342,6 +2777,7 @@ def init_db():
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             processed_by INTEGER,
             processed_at TEXT,
+            FOREIGN KEY(institute_id) REFERENCES institutes(id),
             FOREIGN KEY(student_id) REFERENCES students(id)
         )
     """)
@@ -2350,5 +2786,29 @@ def init_db():
         ON student_profile_update_requests(student_id, status)
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lms_batch_topic_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id INTEGER NOT NULL,
+            program_id INTEGER NOT NULL,
+            master_topic_id INTEGER,
+            topic_id INTEGER,
+            taught_by_user_id INTEGER NOT NULL,
+            taught_at TEXT NOT NULL DEFAULT (datetime('now')),
+            notes TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lms_batch_topic_progress_batch_topic
+        ON lms_batch_topic_progress(batch_id, program_id, master_topic_id)
+    """)
+
+    # ---------- SMART COUNSELLING PHASE 2 ----------
+    from modules.smart_counselling.schema import ensure_smart_counselling_schema
+    ensure_smart_counselling_schema(conn)
+
     conn.commit()
+    if Config.DB_TYPE == "mysql":
+        conn.execute("SELECT RELEASE_LOCK('attn_billing_init_db')")
     conn.close()

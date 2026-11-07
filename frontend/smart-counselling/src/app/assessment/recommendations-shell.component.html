@@ -1,0 +1,31 @@
+<section>
+  <sc-page-header eyebrow="Assessment complete" title="Recommended Learning Path" description="Deterministic recommendations based on the saved prospect assessment and approved Course Intelligence.">
+    <a class="sc-button sc-button-ghost" routerLink="/">Dashboard</a>
+    @if(selected().length>=2){<a class="sc-button sc-button-primary" [routerLink]="['/session',sessionId,'compare']" [queryParams]="{courses:selected().join(',')}">Compare {{selected().length}} Courses</a>}
+    @if (data()?.run) { <button class="sc-button sc-button-outline" type="button" [disabled]="recalculating()" (click)="recalculate()">{{ recalculating() ? 'Recalculating…' : 'Recalculate' }}</button> }
+  </sc-page-header>
+  <sc-counselling-stepper [current]="5" />
+  @if (loading()) {
+    <div class="sc-recommendation-loading sc-card" role="status"><span class="sc-spinner"></span><h2>{{ loadingMessages[loadingStep()] }}</h2><p>No generative AI is used. The configured eligibility and matching rules are being applied.</p><div class="sc-loading-track"><span></span></div></div>
+  } @else if (error()) {
+    <div class="sc-inline-alert">{{ error() }}</div><div class="sc-review-actions"><a class="sc-button sc-button-outline" [routerLink]="review('skills')">Review Skills</a><button class="sc-button sc-button-primary" type="button" (click)="recalculate()">Try Again</button></div>
+  } @else if (data()?.status === 'MATCHES_FOUND') {
+    <div class="sc-recommendation-grid">
+      @for (item of data()!.recommendations; track item.courseId) {
+        <article class="sc-recommendation-card sc-card" [class.is-best]="item.bestMatch">
+          <div class="sc-recommendation-rank"><span>#{{ item.rank }}</span>@if(item.bestMatch){<strong><i class="bi bi-stars"></i> Best Match</strong>}</div>
+          <div class="sc-course-heading"><div><p>{{ item.courseCategory || 'Recommended course' }}</p><h2>{{ item.courseName }}</h2><span class="sc-match-label">{{ label(item.matchLabel) }}</span></div><div class="sc-score-ring" [style.--score]="item.score"><strong>{{ item.score }}%</strong><small>match</small></div></div>
+          @if(item.skillChips.length){<div class="sc-recommendation-chips">@for(chip of item.skillChips;track chip){<span>{{ label(chip) }}</span>}</div>}
+          <div class="sc-reason-columns"><div><h3>Why recommended</h3><ul>@for(reason of item.whyRecommended;track reason){<li><i class="bi bi-check-circle-fill"></i>{{ reason }}</li>}</ul></div>@if(item.considerations.length){<div><h3>Considerations</h3><ul>@for(note of item.considerations;track note){<li class="is-note"><i class="bi bi-exclamation-circle"></i>{{ note }}</li>}</ul></div>}</div>
+          <sc-course-interest-control [sessionId]="sessionId" [courseId]="item.courseId" [initial]="interestFor(item.courseId)"/>
+          <div class="sc-recommendation-actions"><a class="sc-button sc-button-primary" [routerLink]="['/session',sessionId,'course',item.courseId]">View Course</a><a class="sc-button sc-button-outline" [routerLink]="['/session',sessionId,'course',item.courseId]" fragment="syllabus">View Syllabus</a><button class="sc-button sc-button-ghost" type="button" [class.is-selected]="selectedForCompare(item.courseId)" (click)="toggleCompare(item.courseId)"><i class="bi" [class.bi-check-square-fill]="selectedForCompare(item.courseId)" [class.bi-square]="!selectedForCompare(item.courseId)"></i>{{selectedForCompare(item.courseId)?'Selected':'Compare'}}</button></div>
+        </article>
+      }
+    </div>
+    @if(data()!.otherSuitableCourses.length){<section class="sc-other-courses"><h2>Other suitable courses</h2><p>Eligible options below the primary recommendation threshold.</p><div class="sc-other-grid">@for(item of data()!.otherSuitableCourses;track item.courseId){<article class="sc-card"><div><strong>{{ item.courseName }}</strong><span>{{ label(item.matchLabel) }}</span></div><b>{{ item.score }}%</b></article>}</div></section>}
+    <p class="sc-judgment-note"><i class="bi bi-info-circle"></i>{{ data()!.decisionSupportNote }}</p><div class="sc-review-actions"><a class="sc-button sc-button-primary" [routerLink]="['/session',sessionId,'outcome']">Continue to Outcome →</a></div>
+  } @else {
+    <div class="sc-no-match sc-card"><span><i class="bi bi-compass"></i></span><h2>No strong course match found</h2><p>None of the currently configured courses strongly match this profile.</p><div class="sc-review-actions"><a class="sc-button sc-button-outline" [routerLink]="review('profile')">Review Profile</a><a class="sc-button sc-button-outline" [routerLink]="review('goals')">Review Goals</a><a class="sc-button sc-button-primary" [routerLink]="review('skills')">Review Skills</a></div></div>
+    <p class="sc-judgment-note"><i class="bi bi-info-circle"></i>{{ data()?.decisionSupportNote }}</p><div class="sc-review-actions"><a class="sc-button sc-button-primary" [routerLink]="['/session',sessionId,'outcome']">Record Outcome →</a></div>
+  }
+</section>

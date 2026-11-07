@@ -1,0 +1,7 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+# Keep the deployed application, dependencies, and compiled frontend unchanged.
+COPY --chown=appuser:appuser modules/billing/routes.py /app/modules/billing/routes.py
+COPY --chown=appuser:appuser templates/billing/expense_category_form.html /app/templates/billing/expense_category_form.html
+COPY --chown=appuser:appuser templates/billing/expense_categories.html /app/templates/billing/expense_categories.html

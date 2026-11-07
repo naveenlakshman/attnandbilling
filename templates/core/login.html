@@ -4,8 +4,14 @@
 
 {% block content %}
 <div class="card shadow-sm p-4 login-card">
+    {% if company.logo_path or company.logo_filename %}
+    <div class="text-center mb-3">
+      <img src="{{ storage_url(company.logo_path) if company.logo_path else url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+           alt="{{ company.company_name }}" style="max-height:72px;max-width:240px">
+    </div>
+    {% endif %}
     <h3 class="text-center mb-1">{{ company.company_short_name }}</h3>
-    <p class="text-center text-muted mb-4">Login to your account</p>
+    <p class="text-center text-muted mb-4">{{ 'Platform owner login' if platform_control_login else 'Login to your account' }}</p>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -19,18 +25,27 @@
     {% endwith %}
 
     <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
             <label class="form-label">Username</label>
             <input type="text" name="username" class="form-control" placeholder="Enter username" required>
         </div>
 
         <div class="mb-3">
-            <label class="form-label">Password</label>
-            <input type="password" name="password" class="form-control" placeholder="Enter password" required>
+            <label class="form-label" for="password">Password</label>
+            <div class="input-group">
+                <input type="password" id="password" name="password" class="form-control"
+                       placeholder="Enter password" required autocomplete="current-password">
+                <button type="button" class="btn btn-outline-secondary" id="toggle-password"
+                        aria-label="Show password" aria-pressed="false" title="Show password">
+                    <span aria-hidden="true">👁️</span>
+                </button>
+            </div>
         </div>
 
         <button type="submit" class="btn btn-primary w-100">Login</button>
     </form>
+    {% if not platform_control_login %}
     <hr class="my-3">
     <div class="text-center">
         <p class="text-muted mb-2" style="font-size: 0.9rem;">Are you a student?</p>
@@ -41,5 +56,21 @@
             🔍 Verify Student Certificate
         </a>
     </div>
+    {% endif %}
 </div>
+
+<script>
+  (() => {
+    const passwordInput = document.getElementById('password');
+    const toggleButton = document.getElementById('toggle-password');
+
+    toggleButton.addEventListener('click', () => {
+      const showPassword = passwordInput.type === 'password';
+      passwordInput.type = showPassword ? 'text' : 'password';
+      toggleButton.setAttribute('aria-pressed', String(showPassword));
+      toggleButton.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
+      toggleButton.title = showPassword ? 'Hide password' : 'Show password';
+    });
+  })();
+</script>
 {% endblock %}

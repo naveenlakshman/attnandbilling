@@ -22,7 +22,7 @@ def run_phase7(fixtures, other_branch, actors):
 
     conn = get_conn()
     pending = conn.execute(
-        """SELECT s.id FROM lms_assignment_submissions s
+        """SELECT s.id, s.student_id FROM lms_assignment_submissions s
            JOIN students st ON st.id = s.student_id
            WHERE st.full_name LIKE ? AND s.is_latest = 1 AND s.review_status = 'submitted'
            ORDER BY s.id""",
@@ -31,6 +31,13 @@ def run_phase7(fixtures, other_branch, actors):
     conn.close()
     assert len(pending) == 20
     first_id, next_id = pending[0]['id'], pending[1]['id']
+    conn = get_conn()
+    conn.execute(
+        'UPDATE students SET photo_filename = ? WHERE id = ?',
+        ('phase7-student-photo.jpg', pending[0]['student_id']),
+    )
+    conn.commit()
+    conn.close()
     context = f"program_id={fixtures['program']}&status_filter=submitted&sort=submitted&direction=asc&per_page=25"
 
     queue = admin.get(f'/lms_admin/master/reviews?{context}')
@@ -40,6 +47,9 @@ def run_phase7(fixtures, other_branch, actors):
     detail = admin.get(f'/lms_admin/master/reviews/{first_id}?{context}')
     assert detail.status_code == 200
     assert b'Review Submission' in detail.data
+    assert b'review-student-avatar' in detail.data
+    assert b'student_photos/phase7-student-photo.jpg' in detail.data
+    assert b'review-student-fallback' in detail.data
     assert b'Assignment instructions' in detail.data
     assert b'PDF submission preview' in detail.data
     assert b'Accept' in detail.data and b'Reject' in detail.data

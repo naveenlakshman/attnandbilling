@@ -1,0 +1,24 @@
+steps:
+  - id: build-cashfree-live
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, deploy/releases/Dockerfile.cashfree-live, --tag, '${_IMAGE}', .]
+  - id: compile-cashfree-live
+    name: gcr.io/cloud-builders/docker
+    args: [run, --rm, '${_IMAGE}', python, -m, py_compile, config.py, db.py, modules/billing/routes.py, modules/billing/cashfree_routes.py, modules/billing/auto_reminders.py, services/cashfree.py, services/cashfree_payments.py, services/payment_links.py, scripts/run_fee_reminders.py]
+  - id: check-runtime-without-database-or-gateway-calls
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --env
+      - SECRET_KEY=cashfree-build-check-only-000000000000
+      - --env
+      - APP_ENV=testing
+      - '${_IMAGE}'
+      - python
+      - -c
+      - "from zoneinfo import ZoneInfo; from services import cashfree; from modules.billing.auto_reminders import _build_message; assert ZoneInfo('Asia/Kolkata'); assert cashfree.valid_configuration(dict(APP_ENV='production',CASHFREE_MODE='production',CASHFREE_API_URL='https://api.cashfree.com/pg',CASHFREE_APP_ID='LIVE-build-fixture',CASHFREE_SECRET_KEY='build-fixture')); assert 'Sujan H C' in _build_message(dict(student_name='Sujan H C',balance_due=500,due_date_iso='2026-11-07',invoice_no='INV-TEST'),'due_today',{}); print('Live configuration, job imports and full-name formatting verified without external calls.')"
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1200s

@@ -22,7 +22,6 @@
         <table class="table table-hover table-striped">
             <thead class="table-dark">
                 <tr>
-                    <th>ID</th>
                     <th>Branch Name</th>
                     <th>Branch Code</th>
                     <th>Address</th>
@@ -35,7 +34,6 @@
             <tbody>
                 {% for branch in branches %}
                 <tr>
-                    <td>{{ branch.id }}</td>
                     <td><strong>{{ branch.branch_name }}</strong></td>
                     <td><code>{{ branch.branch_code }}</code></td>
                     <td>{{ branch.address or '-' }}</td>
@@ -47,7 +45,9 @@
                             <span class="badge bg-danger">Inactive</span>
                         {% endif %}
                     </td>
-                    <td>{{ branch.created_at }}</td>
+                    <td class="text-nowrap">
+                        {{ branch.created_at | format_ist_datetime('%d-%b-%Y %I:%M %p') if branch.created_at else '—' }}
+                    </td>
                     <td>
                         <a href="{{ url_for('core.branch_edit', branch_id=branch.id) }}" class="btn btn-sm btn-warning">
                             <i class="fas fa-edit"></i> Edit

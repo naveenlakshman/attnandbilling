@@ -1,3 +1,15 @@
+FROM node:24-bookworm-slim AS smart-counselling-build
+
+WORKDIR /app/frontend/smart-counselling
+
+RUN corepack enable && corepack prepare pnpm@11.19.0 --activate
+
+COPY frontend/smart-counselling/package.json frontend/smart-counselling/pnpm-lock.yaml frontend/smart-counselling/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY frontend/smart-counselling/ ./
+RUN pnpm build
+
 # Use the official lightweight Python 3.12 slim image
 FROM python:3.12-slim
 
@@ -27,6 +39,10 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 # Copy the rest of the application code
 COPY --chown=appuser:appuser . .
+
+# Angular is built separately and mounted into the existing Jinja ERP shell.
+COPY --from=smart-counselling-build --chown=appuser:appuser \
+    /app/static/smart-counselling/browser ./static/smart-counselling/browser
 
 # Create directory for uploads if they do not exist
 RUN mkdir -p uploads static/images/student_photos \

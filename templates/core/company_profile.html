@@ -48,8 +48,8 @@
 <div class="profile-card">
   <div class="d-flex align-items-center gap-3 mb-2">
     <div class="logo-preview">
-      {% if profile.logo_filename %}
-        <img src="{{ url_for('static', filename='images/company_logo/' + profile.logo_filename) }}"
+      {% if profile.logo_path or profile.logo_filename %}
+        <img src="{{ storage_url(profile.logo_path) if profile.logo_path else url_for('static', filename='images/company_logo/' + profile.logo_filename) }}"
              alt="{{ profile.company_name }} Logo">
       {% else %}
         <div class="no-logo">No Logo</div>
@@ -93,20 +93,42 @@
       <div class="form-text">Optional subtitle shown below the company name in the sidebar.</div>
     </div>
 
-    <div class="section-heading">Logo</div>
+    <div class="section-heading">Logo & Favicon</div>
 
     <div class="mb-3">
       <label class="form-label fw-semibold">Upload Logo</label>
       <input type="file" class="form-control" name="logo_file"
-             accept=".png,.jpg,.jpeg,.svg,.webp">
-      <div class="form-text">PNG, JPG, SVG or WEBP. Max 2 MB. Displayed in sidebar and PDF print headers.</div>
+             accept=".png,.jpg,.jpeg,.svg,.webp,.ico">
+      <div class="form-text">PNG, JPG, SVG, WEBP or ICO. Max 2 MB. Displayed in sidebar and PDF print headers.</div>
     </div>
 
-    {% if profile.logo_filename %}
+    {% if profile.logo_path or profile.logo_filename %}
     <div class="mb-3">
       <button type="button" class="btn btn-sm btn-outline-danger"
               onclick="if(confirm('Remove the current logo?')) document.getElementById('removeLogoForm').submit()">
         🗑 Remove Current Logo
+      </button>
+    </div>
+    {% endif %}
+
+    <div class="mb-3 mt-4">
+      <label class="form-label fw-semibold">Upload Favicon (Browser Icon)</label>
+      {% if profile.favicon_path %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <img src="{{ storage_url(profile.favicon_path) }}" alt="Favicon" style="width: 24px; height: 24px; object-fit: contain;">
+          <span class="text-muted small">Current Favicon Icon</span>
+        </div>
+      {% endif %}
+      <input type="file" class="form-control" name="favicon_file"
+             accept=".png,.ico,.jpg,.jpeg,.svg,.webp">
+      <div class="form-text">PNG, ICO, JPG, SVG or WEBP. Max 2 MB. Displayed in browser tab header.</div>
+    </div>
+
+    {% if profile.favicon_path %}
+    <div class="mb-3">
+      <button type="button" class="btn btn-sm btn-outline-danger"
+              onclick="if(confirm('Remove the current favicon icon?')) document.getElementById('removeFaviconForm').submit()">
+        🗑 Remove Current Favicon
       </button>
     </div>
     {% endif %}
@@ -152,15 +174,49 @@
       <div class="form-text">Shown on bill of supply / invoice print. Leave blank if not applicable.</div>
     </div>
 
+    <div class="section-heading">Document Numbering Prefixes</div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Invoice Number Prefix</label>
+        <input type="text" class="form-control" name="invoice_prefix"
+               value="{{ inst_settings.invoice_prefix if inst_settings and inst_settings.invoice_prefix else '' }}" maxlength="50"
+               placeholder="e.g. MEI/B/">
+        <div class="form-text">Prefix used for new invoices (e.g. MEI/B/1).</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Receipt Number Prefix</label>
+        <input type="text" class="form-control" name="receipt_prefix"
+               value="{{ inst_settings.receipt_prefix if inst_settings and inst_settings.receipt_prefix else '' }}" maxlength="50"
+               placeholder="e.g. MEI/">
+        <div class="form-text">Prefix used for new receipts (e.g. MEI/1).</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Student Code Prefix</label>
+        <input type="text" class="form-control" name="student_prefix"
+               value="{{ inst_settings.student_prefix if inst_settings and inst_settings.student_prefix else '' }}" maxlength="50"
+               placeholder="e.g. STU">
+        <div class="form-text">Prefix used for new student codes (e.g. STU001).</div>
+      </div>
+    </div>
+
     <div class="d-flex gap-2 mt-4">
       <button type="submit" class="btn btn-primary">💾 Save Company Profile</button>
       <a href="{{ url_for('core.dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
     </div>
   </form>
 
-  {% if profile.logo_filename %}
+  {% if profile.logo_path or profile.logo_filename %}
   <form id="removeLogoForm" method="POST"
         action="{{ url_for('core.company_profile_remove_logo') }}"
+        style="display:none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  </form>
+  {% endif %}
+
+  {% if profile.favicon_path %}
+  <form id="removeFaviconForm" method="POST"
+        action="{{ url_for('core.company_profile_remove_favicon') }}"
         style="display:none;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   </form>

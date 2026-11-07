@@ -419,11 +419,10 @@
         </thead>
         <tbody>
           {% for l in leads %}
-          {% set wa_num = ((l.whatsapp or l.phone or '')|replace(' ', '')|replace('+', '')|replace('-', '')) %}
           <tr>
             <td class="row-num">{{ loop.index }}</td>
             <td data-sort-key="name" data-sort-value="{{ l.name }}">
-              {{ l.name }}
+              <a class="fw-semibold text-decoration-none" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}">{{ l.name }}</a>
               {% if l.parent_discussion_status == 'Pending' and l.status == 'active' %}
                 <br><span class="badge bg-warning text-dark" style="font-size:9px;">Parent Pending</span>
               {% endif %}
@@ -468,12 +467,7 @@
               </span>
             </td>
             <td class="action-cell">
-              <span style="display:inline-flex;gap:3px;align-items:center;">
-                <a class="lead-action-btn" href="tel:{{ l.phone }}" title="Call {{ l.name }}">📞</a>
-                {% if wa_num %}<a class="lead-action-btn" href="https://wa.me/{{ wa_num }}" target="_blank" title="WhatsApp">💬</a>{% endif %}
-                <a class="lead-action-btn" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}#followup-form" title="Add Follow-up">📅</a>
-                <a class="lead-action-btn btn-open" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}" title="Open Lead">👁</a>
-              </span>
+              <a class="lead-action-btn" href="{{ url_for('leads.lead_detail', lead_id=l.id) }}#followup-form" title="Add Follow-up" aria-label="Add follow-up for {{ l.name }}">📅</a>
             </td>
           </tr>
           {% endfor %}

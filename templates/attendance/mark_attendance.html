@@ -818,11 +818,10 @@
                     📋 Leave
                   </option>
                 </select>
-                {% set first_name = student.full_name.split(' ')[0] %}
                 <a id="wa_absent_{{ student.student_id }}"
                    class="wa-absent-btn"
                    href="#"
-                   data-name="{{ first_name }}"
+                   data-name="{{ student.full_name or 'Student' }}"
                    data-phone="{{ student.phone or '' }}"
                    target="_blank"
                    style="{% if cur_status in ['absent', 'late'] %}display:inline-flex;{% else %}display:none;{% endif %}">

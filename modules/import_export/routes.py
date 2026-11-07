@@ -13,7 +13,10 @@ from modules.core.utils import login_required, admin_required
 import_export_bp = Blueprint("import_export", __name__)
 
 
-def get_all_tables_data():
+from services.tenant_context import get_current_institute_id
+
+
+def get_all_tables_data(current_inst=1):
     """
     Retrieves all tables and their data from the database.
     Returns a dictionary where keys are table names and values are lists of dictionaries.
@@ -28,7 +31,6 @@ def get_all_tables_data():
     if is_mysql:
         cursor.execute("SHOW TABLES")
         tables = cursor.fetchall()
-        # Since it uses DictCursor, tables is a list of dicts. Extract values:
         table_names = [list(row.values())[0] for row in tables]
     else:
         cursor.execute("""
@@ -41,27 +43,76 @@ def get_all_tables_data():
     tables_data = {}
     
     for table_name in table_names:
-        # Get all data from the table
-        cursor.execute(f"SELECT * FROM `{table_name}`")
+        # Get column names
+        if is_mysql:
+            cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
+            cols_info = cursor.fetchall()
+            columns = [col['Field'] for col in cols_info]
+        else:
+            cursor.execute(f"PRAGMA table_info([{table_name}])")
+            cols_info = cursor.fetchall()
+            columns = [col[1] for col in cols_info]
+
+        where_clause = ""
+        params = []
+        if table_name == "institutes":
+            where_clause = "WHERE id = ?"
+            params = [current_inst]
+        elif "institute_id" in columns:
+            where_clause = "WHERE institute_id = ?"
+            params = [current_inst]
+        elif table_name in ("installment_plans", "invoice_items", "invoice_payments"):
+            where_clause = "WHERE invoice_id IN (SELECT id FROM invoices WHERE institute_id = ?)"
+            params = [current_inst]
+        elif table_name in ("leave_requests", "student_batches", "student_notes", "student_documents", "student_qualifications", "lms_student_topic_progress", "lms_topic_progress"):
+            where_clause = "WHERE student_id IN (SELECT id FROM students WHERE institute_id = ?)"
+            params = [current_inst]
+        elif table_name == "followups":
+            where_clause = "WHERE lead_id IN (SELECT id FROM leads WHERE institute_id = ?)"
+            params = [current_inst]
+        elif table_name == "attendance_records":
+            where_clause = "WHERE student_id IN (SELECT id FROM students WHERE institute_id = ?) OR batch_id IN (SELECT id FROM batches WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?))"
+            params = [current_inst, current_inst]
+        elif table_name in ("lms_program_chapters", "lms_chapters"):
+            where_clause = "WHERE program_id IN (SELECT id FROM lms_programs WHERE institute_id = ?)"
+            params = [current_inst]
+        elif table_name == "lms_topics":
+            where_clause = "WHERE chapter_id IN (SELECT lc.id FROM lms_chapters lc WHERE lc.program_id IN (SELECT id FROM lms_programs WHERE institute_id = ?))"
+            params = [current_inst]
+        elif "branch_id" in columns:
+            where_clause = "WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?)"
+            params = [current_inst]
+
+        cursor.execute(f"SELECT * FROM `{table_name}` {where_clause}", params)
         rows = cursor.fetchall()
         
         # Convert rows to list of dictionaries
         data = []
         if rows:
             for row in rows:
-                data.append(dict(row))
-        
-        # Get column names
-        columns = []
-        if rows:
-            columns = list(rows[0].keys())
-        else:
-            if is_mysql:
-                cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
-                columns = [col['Field'] for col in cursor.fetchall()]
-            else:
-                cursor.execute(f"PRAGMA table_info([{table_name}])")
-                columns = [col[1] for col in cursor.fetchall()]
+                row_dict = dict(row)
+                for k, v in row_dict.items():
+                    if isinstance(v, (bytes, bytearray)):
+                        row_dict[k] = "<binary>"
+                    elif hasattr(v, 'isoformat'):
+                        row_dict[k] = str(v)
+                data.append(row_dict)
+
+        # Fallback for company_profile when empty for tenant
+        if table_name == "company_profile" and not data:
+            from db import get_company_profile
+            prof = get_company_profile(current_inst)
+            if prof:
+                prof_dict = dict(prof)
+                for k, v in prof_dict.items():
+                    if isinstance(v, (bytes, bytearray)):
+                        prof_dict[k] = "<binary>"
+                    elif hasattr(v, 'isoformat'):
+                        prof_dict[k] = str(v)
+                data.append(prof_dict)
+                for k in prof_dict.keys():
+                    if k not in columns:
+                        columns.append(k)
         
         tables_data[table_name] = {
             'columns': columns,
@@ -103,7 +154,12 @@ def create_excel_workbook(tables_data):
         for row_idx, row_data in enumerate(table_info['data'], 2):
             for col_idx, column_name in enumerate(columns, 1):
                 cell = sheet.cell(row=row_idx, column=col_idx)
-                cell.value = row_data.get(column_name)
+                val = row_data.get(column_name)
+                if isinstance(val, (bytes, bytearray)):
+                    val = "<binary>"
+                elif hasattr(val, 'isoformat'):
+                    val = str(val)
+                cell.value = val
                 cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=False)
         
         # Adjust column widths
@@ -137,8 +193,9 @@ def export_all_tables():
     Each table is in a separate sheet with the table name as sheet name.
     """
     try:
+        current_inst = get_current_institute_id(default=1)
         # Get all tables and their data
-        tables_data = get_all_tables_data()
+        tables_data = get_all_tables_data(current_inst=current_inst)
         
         if not tables_data:
             flash("No tables found in the database.", "warning")

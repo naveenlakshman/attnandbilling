@@ -1,0 +1,99 @@
+<section class="sc-dashboard">
+  <sc-page-header
+    eyebrow="Walk-in counselling workspace"
+    title="Smart Counselling"
+    description="Guide every prospect through a consistent, informed counselling journey.">
+    <a class="sc-button sc-button-secondary" routerLink="/start">
+      <i class="bi bi-plus-lg" aria-hidden="true"></i> Start New Counselling
+    </a>
+  </sc-page-header>
+
+  @if (loading()) {
+    <div class="sc-state-card" role="status">
+      <span class="sc-spinner" aria-hidden="true"></span>
+      <strong>Loading counselling workspace…</strong>
+    </div>
+  } @else if (error()) {
+    <div class="sc-state-card sc-state-error" role="alert">
+      <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+      <div><strong>We could not load the dashboard.</strong><p>{{ error() }}</p></div>
+      <button class="sc-button sc-button-secondary" type="button" (click)="load()">Try again</button>
+    </div>
+  } @else {
+    <section class="sc-quick-actions" aria-label="Quick actions">
+      <a class="sc-quick-card" href="#recent-sessions">
+        <span class="sc-quick-icon"><i class="bi bi-clock-history" aria-hidden="true"></i></span>
+        <span><strong>Counselling History</strong><small>Review recent prospect journeys</small></span>
+        <i class="bi bi-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a class="sc-quick-card" href="#recent-sessions">
+        <span class="sc-quick-icon"><i class="bi bi-search" aria-hidden="true"></i></span>
+        <span><strong>Search Prospect</strong><small>Find an existing lead safely</small></span>
+        <i class="bi bi-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a class="sc-quick-card" routerLink="/analytics">
+        <span class="sc-quick-icon"><i class="bi bi-bar-chart" aria-hidden="true"></i></span>
+        <span><strong>Management Analytics</strong><small>Funnel, outcomes and course insights</small></span>
+        <i class="bi bi-chevron-right" aria-hidden="true"></i>
+      </a>
+      <a class="sc-quick-card sc-quick-card-primary" routerLink="/start">
+        <span class="sc-quick-icon"><i class="bi bi-chat-square-heart" aria-hidden="true"></i></span>
+        <span><strong>Start New Counselling</strong><small>Begin a guided session</small></span>
+        <i class="bi bi-arrow-right" aria-hidden="true"></i>
+      </a>
+    </section>
+
+    <section class="sc-metrics" aria-label="Counselling metrics">
+      @for (metric of metricCards(); track metric.label) {
+        <article class="sc-metric-card">
+          <span class="sc-metric-icon" [class]="'sc-metric-icon tone-' + metric.tone">
+            <i class="bi" [class]="'bi ' + metric.icon" aria-hidden="true"></i>
+          </span>
+          <span><strong>{{ metric.value }}</strong><small>{{ metric.label }}</small></span>
+        </article>
+      }
+    </section>
+
+    <section class="sc-card sc-sessions" id="recent-sessions">
+      <div class="sc-card-heading">
+        <div><h2>Recent Counselling Sessions</h2><p>Continue or review the latest prospect conversations.</p></div>
+        <div class="sc-table-tools">
+          <label class="sc-search"><i class="bi bi-search" aria-hidden="true"></i><span class="visually-hidden">Search sessions</span><input type="search" placeholder="Search prospect" disabled></label>
+          <button class="sc-filter-button" type="button" disabled><i class="bi bi-funnel" aria-hidden="true"></i> Filter</button>
+        </div>
+      </div>
+      @if (dashboard()?.recentSessions?.length) {
+        <div class="sc-table-wrap">
+          <table class="sc-session-table">
+            <thead><tr><th>Prospect</th><th>Branch</th><th>Counsellor</th><th>Status</th><th>Started</th><th><span class="visually-hidden">Action</span></th></tr></thead>
+            <tbody>
+              @for (item of dashboard()?.recentSessions; track item.id) {
+                <tr>
+                  <td><strong>{{ item.prospect?.name || 'Not identified yet' }}</strong><small>Session #{{ item.id }}</small></td>
+                  <td>{{ item.branch.name }}</td>
+                  <td>{{ item.counsellor.name }}</td>
+                  <td><span class="sc-status-pill">{{ item.status.replaceAll('_', ' ') }}</span></td>
+                  <td>{{ item.startedAt }}</td>
+                  <td>
+                    @if (item.canResume) {
+                      <button class="sc-table-action" type="button" [disabled]="resumingId() === item.id" (click)="resume(item.id)">
+                        {{ resumingId() === item.id ? 'Opening…' : 'Continue' }}
+                      </button>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="sc-empty-table">
+          <span><i class="bi bi-chat-left-text" aria-hidden="true"></i></span>
+          <h3>No counselling sessions yet</h3>
+          <p>Start a real counselling session and it will appear here for safe resume.</p>
+          <a class="sc-button sc-button-primary" routerLink="/start">Start Counselling</a>
+        </div>
+      }
+    </section>
+  }
+</section>

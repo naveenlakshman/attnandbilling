@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Reports & Analytics - {{ company.company_short_name }}{% endblock %}
 
@@ -157,7 +157,7 @@
       <div style="font-size:16px; font-weight:800;">📋 Daily Report</div>
       <div style="font-size:13px; opacity:0.88; margin-top:3px;">Today's leads, followups, invoices, receipts &amp; attendance in one view</div>
     </div>
-    <a href="{{ url_for('reports.daily_report') }}" class="btn" style="background:#fff; color:#4f46e5; font-weight:700; font-size:13px; padding:9px 20px;">View Daily Report →</a>
+    <a href="{{ url_for('attendance.daily_report') }}" class="btn" style="background:#fff; color:#4f46e5; font-weight:700; font-size:13px; padding:9px 20px;">View Daily Report →</a>
   </div>
 
   <div class="export-info">

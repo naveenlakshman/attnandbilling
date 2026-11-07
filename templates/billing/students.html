@@ -133,7 +133,7 @@
     background: #fff;
   }
   .search-hint {
-    color: #9ca3af;
+    color: #6b7280;
     font-size: 11px;
     margin-top: 3px;
   }
@@ -587,11 +587,11 @@
 </div>
 
 <div class="search-filter-section">
-  <form method="get">
+  <form method="get" action="{{ url_for('billing.students') }}">
     <div class="search-filter-form">
       <div class="form-group-inline search-group">
         <label for="search">Search</label>
-        <input type="text" id="search" name="search" placeholder="Name, phone, email, reg no" value="{{ search_query }}">
+        <input type="search" id="search" name="search" placeholder="Name, phone, email, reg no" value="{{ search_query }}" aria-describedby="student-search-hint">
       </div>
 
       <div class="form-group-inline branch-group">
@@ -636,9 +636,11 @@
       </div>
 
       <div class="button-group">
+        <button type="submit" class="btn btn-primary">Search</button>
         <a href="{{ url_for('billing.students') }}" class="btn filter-reset-btn">Reset</a>
       </div>
     </div>
+    <p id="student-search-hint" class="search-hint">Enter your search, then press Enter or click Search.</p>
 
     {% if search_query or branch_filter or status_filter or batch_filter %}
       <div class="filters-applied">
@@ -690,7 +692,7 @@
     {% for s in students %}
     <div class="student-card">
       {% if s.photo_filename %}
-        <img src="/static/images/student_photos/{{ s.photo_filename }}" alt="" class="student-card-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <img src="{{ storage_url(s.photo_filename) }}" alt="" class="student-card-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
         <div class="student-card-avatar" style="display:none;">{{ (s.full_name or '?')[0] | upper }}</div>
       {% else %}
         <div class="student-card-avatar">{{ (s.full_name or '?')[0] | upper }}</div>
@@ -800,7 +802,7 @@
           <td data-sort-key="name" data-sort-value="{{ s.full_name or '' }}">
             <div class="table-cell-stack">
               {% if s.photo_filename %}
-                <img src="/static/images/student_photos/{{ s.photo_filename }}"
+                <img src="{{ storage_url(s.photo_filename) }}"
                      alt=""
                      class="table-avatar-photo"
                      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
@@ -1041,15 +1043,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', function() { form.submit(); });
   });
-  // Search text: debounce 500ms
-  const searchInput = document.getElementById('search');
-  if (searchInput) {
-    let timer;
-    searchInput.addEventListener('input', function() {
-      clearTimeout(timer);
-      timer = setTimeout(function() { form.submit(); }, 500);
-    });
-  }
+  // Text search is submitted explicitly with Search or Enter, never while typing.
 })();
 </script>
 

@@ -1,11 +1,12 @@
 import random
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import flash, redirect, render_template, request, session, url_for
 
 from db import get_conn, log_activity
 from modules.core.utils import lms_content_manager_required
+from services.tenant_context import get_current_institute_id
 from . import exams_bp
 
 
@@ -13,6 +14,7 @@ VALID_CORRECT_OPTIONS = {"A", "B", "C", "D"}
 
 
 def _get_programs(cur):
+    current_inst = get_current_institute_id(default=1)
     return cur.execute(
         """
             SELECT
@@ -21,13 +23,15 @@ def _get_programs(cur):
                 c.course_name
             FROM lms_programs lp
             LEFT JOIN courses c ON c.id = lp.course_id
-            WHERE COALESCE(lp.is_deleted, 0) = 0
+            WHERE COALESCE(lp.is_deleted, 0) = 0 AND lp.institute_id = ?
             ORDER BY c.course_name COLLATE NOCASE, lp.program_name COLLATE NOCASE
-        """
+        """,
+        (current_inst,)
     ).fetchall()
 
 
 def _get_chapters(cur):
+    current_inst = get_current_institute_id(default=1)
     return cur.execute(
         """
             SELECT
@@ -37,13 +41,17 @@ def _get_chapters(cur):
                 GROUP_CONCAT(DISTINCT pc.program_id) AS program_ids
             FROM lms_master_chapters mc
             LEFT JOIN lms_program_chapters pc ON pc.master_chapter_id = mc.id
+            LEFT JOIN lms_programs lp ON pc.program_id = lp.id
+            WHERE (mc.institute_id = ? OR mc.is_shared = 1 OR lp.institute_id = ?)
             GROUP BY mc.id
             ORDER BY mc.title COLLATE NOCASE
-        """
+        """,
+        (current_inst, current_inst)
     ).fetchall()
 
 
 def _get_questions(cur):
+    current_inst = get_current_institute_id(default=1)
     return cur.execute(
         """
             SELECT
@@ -64,9 +72,12 @@ def _get_questions(cur):
             LEFT JOIN lms_master_chapters mc ON mc.id = qb.chapter_id
             LEFT JOIN lms_master_topics mt ON mt.id = qb.master_topic_id
             LEFT JOIN lms_program_chapters pc ON pc.master_chapter_id = mc.id
+            LEFT JOIN lms_programs lp ON pc.program_id = lp.id
+            WHERE (qb.institute_id = ? OR mc.institute_id = ? OR mc.is_shared = 1 OR lp.institute_id = ?)
             GROUP BY qb.id
             ORDER BY qb.id DESC
-        """
+        """,
+        (current_inst, current_inst, current_inst)
     ).fetchall()
 
 
@@ -109,6 +120,17 @@ def _student_required_redirect():
     if "student_id" not in session:
         flash("Please login first.", "warning")
         return redirect(url_for("students.login"))
+    if not session.get("demo_mode"):
+        from modules.notifications.service import student_fee_access_status
+        institute_id = int(get_current_institute_id(default=1))
+        access = student_fee_access_status(int(session["student_id"]), institute_id)
+        if access.get("locked"):
+            flash(
+                "Exams are temporarily unavailable because a fee installment is overdue. "
+                "Access will resume after payment is recorded.",
+                "danger",
+            )
+            return redirect(url_for("students.dashboard"))
     return None
 
 
@@ -404,6 +426,7 @@ def _latest_final_exam_application(cur, student_id, program_id):
 
 
 def _get_final_exam_application(cur, application_id):
+    current_inst = get_current_institute_id(default=1)
     return cur.execute(
         """
             SELECT
@@ -419,9 +442,9 @@ def _get_final_exam_application(cur, application_id):
             JOIN students s ON s.id = app.student_id
             LEFT JOIN lms_programs lp ON lp.id = app.course_id
             LEFT JOIN courses c ON c.id = lp.course_id
-            WHERE app.id = ?
+            WHERE app.id = ? AND s.institute_id = ?
         """,
-        (application_id,),
+        (application_id, current_inst),
     ).fetchone()
 
 
@@ -458,7 +481,10 @@ def _is_final_exam_unlocked(application):
     if not application or application["status"] != "APPROVED":
         return False
     try:
-        return date.fromisoformat(application["requested_exam_date"]) <= date.today()
+        exam_date = date.fromisoformat(application["requested_exam_date"])
+        today = date.today()
+        # Exam is unlocked on requested_exam_date and valid for 1 grace day
+        return exam_date <= today <= (exam_date + timedelta(days=1))
     except (TypeError, ValueError):
         return False
 
@@ -1243,6 +1269,7 @@ def final_exam_apply():
 @exams_bp.route("/lms_admin/final-exam/applications", methods=["GET"])
 @lms_content_manager_required
 def final_exam_applications():
+    current_inst = get_current_institute_id(default=1)
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -1273,6 +1300,7 @@ def final_exam_applications():
                 LEFT JOIN certificates cert ON cert.student_id = app.student_id 
                                            AND cert.course_id = c.id 
                                            AND cert.status = 'Active'
+                WHERE s.institute_id = ?
                 ORDER BY
                     CASE app.status
                         WHEN 'PENDING' THEN 0
@@ -1280,7 +1308,8 @@ def final_exam_applications():
                         ELSE 2
                     END,
                     app.applied_on DESC
-            """
+            """,
+            (current_inst,)
         ).fetchall()
     finally:
         conn.close()
@@ -1359,6 +1388,83 @@ def reject_final_exam_application(application_id):
         )
         conn.commit()
         flash("Final exam application rejected.", "warning")
+    finally:
+        conn.close()
+
+    return redirect(url_for("exams.final_exam_applications"))
+
+
+@exams_bp.route("/lms_admin/final-exam/applications/<int:application_id>/reschedule", methods=["POST"])
+@lms_content_manager_required
+def reschedule_final_exam_application(application_id):
+    new_date = request.form.get("requested_exam_date", "").strip()
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        application = _get_final_exam_application(cur, application_id)
+        if not application:
+            flash("Final exam application not found.", "warning")
+            return redirect(url_for("exams.final_exam_applications"))
+
+        if not new_date:
+            flash("Please provide a valid exam date for rescheduling.", "warning")
+            return redirect(url_for("exams.final_exam_applications"))
+
+        cur.execute(
+            """
+                UPDATE lms_final_exam_applications
+                SET requested_exam_date = ?, status = 'APPROVED'
+                WHERE id = ?
+            """,
+            (new_date, application_id),
+        )
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=session.get("branch_id"),
+            action_type="reschedule",
+            module_name="lms_final_exam_applications",
+            record_id=application_id,
+            description=f"Rescheduled final exam for {application['verified_name']} to {new_date}",
+            conn=conn,
+        )
+        conn.commit()
+        flash(f"Final exam rescheduled to {new_date} and approved.", "success")
+    finally:
+        conn.close()
+
+    return redirect(url_for("exams.final_exam_applications"))
+
+
+@exams_bp.route("/lms_admin/final-exam/applications/<int:application_id>/expire", methods=["POST"])
+@lms_content_manager_required
+def expire_final_exam_application(application_id):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        application = _get_final_exam_application(cur, application_id)
+        if not application:
+            flash("Final exam application not found.", "warning")
+            return redirect(url_for("exams.final_exam_applications"))
+
+        cur.execute(
+            """
+                UPDATE lms_final_exam_applications
+                SET status = 'EXPIRED'
+                WHERE id = ?
+            """,
+            (application_id,),
+        )
+        log_activity(
+            user_id=session.get("user_id"),
+            branch_id=session.get("branch_id"),
+            action_type="expire",
+            module_name="lms_final_exam_applications",
+            record_id=application_id,
+            description=f"Marked final exam application as expired for {application['verified_name']}",
+            conn=conn,
+        )
+        conn.commit()
+        flash("Final exam application marked as expired and locked.", "info")
     finally:
         conn.close()
 

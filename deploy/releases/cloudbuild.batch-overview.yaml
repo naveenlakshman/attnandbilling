@@ -1,0 +1,13 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:batch-overview
+steps:
+  - id: build-batch-overview
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, deploy/releases/Dockerfile.batch-overview, --tag, '${_IMAGE}', .]
+  - id: compile-batch-overview
+    name: gcr.io/cloud-builders/docker
+    args: [run, --rm, '${_IMAGE}', python, -m, py_compile, services/batch_schedule.py, modules/core/routes.py, modules/lms_admin/routes.py]
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s

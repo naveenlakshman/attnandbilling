@@ -132,6 +132,16 @@
   .ai-copy-btn:hover { background: #7c3aed; color: #fff; }
   .ai-spinner { display: none; color: #7c3aed; font-size: 13px; margin-top: 6px; }
   .ai-spinner.show { display: block; }
+  .sc-insight-card { background:#fff; border:1px solid #e5e7eb; border-left:4px solid #4a5bdb; border-radius:12px; box-shadow:0 1px 5px rgba(0,0,0,.07); margin-bottom:12px; overflow:hidden; }
+  .sc-insight-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; background:#f7f8ff; border-bottom:1px solid #e8eaf6; }
+  .sc-insight-head strong { color:#3344aa; font-size:14px; }
+  .sc-insight-status { padding:4px 8px; border-radius:999px; background:#e8eaf6; color:#3344aa; font-size:10px; font-weight:700; }
+  .sc-insight-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; padding:6px 14px; }
+  .sc-insight-item { padding:9px 8px; border-bottom:1px solid #f3f4f6; }
+  .sc-insight-item span { display:block; color:#9ca3af; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+  .sc-insight-item strong { display:block; margin-top:3px; color:#1f2937; font-size:12px; }
+  .sc-insight-actions { display:flex; justify-content:flex-end; padding:10px 14px; }
+  @media(max-width:767px){.sc-insight-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 </style>
 {% endblock %}
 
@@ -204,6 +214,26 @@
     {% endif %}
   </div>
 </div>
+
+{% if smart_counselling_insight %}
+<section class="sc-insight-card" aria-label="Smart Counselling Insights">
+  <div class="sc-insight-head"><strong>✦ Smart Counselling Insights</strong><span class="sc-insight-status">{{ smart_counselling_insight.status | replace('_',' ') | title }}</span></div>
+  <div class="sc-insight-grid">
+    <div class="sc-insight-item"><span>Last Counselling</span><strong>{{ smart_counselling_insight.lastCounsellingDate or '—' }}</strong></div>
+    <div class="sc-insight-item"><span>Counsellor</span><strong>{{ smart_counselling_insight.counsellor or '—' }}</strong></div>
+    <div class="sc-insight-item"><span>Verification</span><strong>{{ smart_counselling_insight.verificationStatus | replace('_',' ') | title }}</strong></div>
+    <div class="sc-insight-item"><span>Qualification</span><strong>{{ smart_counselling_insight.qualification or '—' }}</strong></div>
+    <div class="sc-insight-item"><span>Primary Goal</span><strong>{{ (smart_counselling_insight.primaryGoal or '—') | replace('_',' ') | title }}</strong></div>
+    <div class="sc-insight-item"><span>Sessions</span><strong>{{ smart_counselling_insight.sessionCount }}</strong></div>
+    <div class="sc-insight-item"><span>Top Recommendation</span><strong>{% if smart_counselling_insight.topRecommendation %}{{ smart_counselling_insight.topRecommendation.courseName }} — {{ smart_counselling_insight.topRecommendation.score }}%{% else %}—{% endif %}</strong></div>
+    <div class="sc-insight-item"><span>Primary Interested Course</span><strong>{% if smart_counselling_insight.primaryInterest %}{{ smart_counselling_insight.primaryInterest.courseName }} · {{ smart_counselling_insight.primaryInterest.interestLevel | replace('_',' ') | title }}{% else %}—{% endif %}</strong></div>
+    <div class="sc-insight-item"><span>Latest Outcome</span><strong>{{ (smart_counselling_insight.outcome or 'Pending') | replace('_',' ') | title }}</strong></div>
+    <div class="sc-insight-item"><span>Next Action</span><strong>{{ (smart_counselling_insight.nextAction or '—') | replace('_',' ') | title }}</strong></div>
+    <div class="sc-insight-item"><span>Next Follow-up</span><strong>{{ smart_counselling_insight.nextFollowupDate or '—' }}</strong></div>
+  </div>
+  <div class="sc-insight-actions"><a class="btn btn-sm btn-outline-primary" href="{{ smart_counselling_insight.historyUrl }}">View Counselling History</a></div>
+</section>
+{% endif %}
 
 <!-- Action Bar -->
 <div class="action-bar">

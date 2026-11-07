@@ -72,7 +72,7 @@
           <div class="profile-avatar-shell">
             <div class="profile-avatar" id="profilePhotoDisplay">
               {% if student.photo_filename %}
-              <img src="/static/images/student_photos/{{ student.photo_filename }}"
+              <img src="{{ storage_url(student.photo_filename) }}"
                    alt="{{ student.full_name }}"
                    id="profilePhotoImg"
                    class="profile-avatar-image"
@@ -106,6 +106,14 @@
                     </div>
                     <span style="font-size: 12px; font-weight: 700; color: {% if profile_score == 100 %}#10b981{% else %}#2563eb{% endif %};">{{ profile_score }}%</span>
                   </div>
+                  <div style="margin-top: 7px; font-size: 12px; font-weight: 600; color: {% if profile_completion.missing_count == 0 %}#059669{% else %}#dc2626{% endif %};"
+                       {% if profile_completion.missing_labels %}title="Missing: {{ profile_completion.missing_labels|join(', ') }}"{% endif %}>
+                    {% if profile_completion.missing_count == 0 %}
+                      ✓ Profile complete
+                    {% else %}
+                      {{ profile_completion.missing_count }} {{ 'item' if profile_completion.missing_count == 1 else 'items' }} missing to reach 100%
+                    {% endif %}
+                  </div>
                 </div>
               </div>
 
@@ -130,7 +138,7 @@
                 <span class="profile-priority-label">Current Batch</span>
                 <div class="profile-priority-value">
                   {% if current_batch %}
-                  <a class="profile-inline-link profile-link-inherit" href="{{ url_for('attendance.view_batch', batch_id=current_batch.batch_id) }}">{{ current_batch.batch_name }}</a>
+                  <a class="profile-inline-link profile-link-inherit" href="{{ url_for('attendance.view_batch', batch_id=current_batch.batch_id) }}" target="_blank" rel="noopener noreferrer">{{ current_batch.batch_name }} ↗</a>
                   {% else %}
                   -
                   {% endif %}
@@ -278,6 +286,50 @@
         <div class="empty-state">No LMS programs are mapped for this student yet.</div>
         {% endif %}
       </section>
+
+      {% if session.get('role') == 'admin' and available_lms_programs %}
+      <section class="profile-section">
+        <div class="profile-section-header">
+          <div>
+            <div class="profile-section-title">Grant LMS Program Access</div>
+            <div class="profile-section-subtitle">
+              Select additional programs for this student. This grants LMS access without changing paid invoice totals.
+            </div>
+          </div>
+          <div class="profile-section-badge">{{ available_lms_programs | length }} available</div>
+        </div>
+
+        <form method="post" action="{{ url_for('billing.student_grant_program_access', student_id=student.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+            <button type="button" class="profile-inline-link" style="border:0; background:transparent; cursor:pointer;"
+                    onclick="document.querySelectorAll('.lms-program-grant-checkbox').forEach(function(box){ box.checked = true; });">
+              Select all available
+            </button>
+            <button type="button" class="profile-inline-link" style="border:0; background:transparent; cursor:pointer;"
+                    onclick="document.querySelectorAll('.lms-program-grant-checkbox').forEach(function(box){ box.checked = false; });">
+              Clear selection
+            </button>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:10px; max-height:360px; overflow:auto; padding:4px;">
+            {% for program in available_lms_programs %}
+            <label style="display:flex; gap:10px; align-items:flex-start; padding:12px; border:1px solid #dbe3ef; border-radius:10px; cursor:pointer; background:#fff;">
+              <input class="lms-program-grant-checkbox" type="checkbox" name="program_ids[]" value="{{ program.id }}" style="margin-top:4px;">
+              <span>
+                <strong>{{ program.course_name }}</strong>
+                {% if program.program_name != program.course_name %}<br><small>{{ program.program_name }}</small>{% endif %}
+                {% if program.was_suspended %}<br><small style="color:#b45309;">Previously suspended — selecting will restore access</small>{% endif %}
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary" style="margin-top:16px;"
+                  onclick="return confirm('Grant the selected LMS programs to this student?');">
+            Grant selected programs
+          </button>
+        </form>
+      </section>
+      {% endif %}
 
       <section class="profile-section profile-course-panel">
         <div class="profile-section-header">
@@ -442,6 +494,49 @@
       <section class="profile-section">
         <div class="profile-section-header">
           <div>
+            <div class="profile-section-title">Verification Documents</div>
+            <div class="profile-section-subtitle">Documents uploaded by the student for admission and profile verification.</div>
+          </div>
+          <div class="profile-section-badge">{{ uploaded_docs | length }} documents</div>
+        </div>
+
+        <div class="profile-table-wrapper">
+          <table class="profile-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Document Type</th>
+                <th>Uploaded</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for document in uploaded_docs %}
+              <tr>
+                <td>{{ (document.category or 'document') | replace('_', ' ') | title }}</td>
+                <td>{{ document.document_type or '-' }}</td>
+                <td>{{ format_datetime(document.uploaded_at) }}</td>
+                <td>
+                  <div class="profile-table-actions">
+                    <a href="{{ url_for('students.profile_document', document_id=document.id) }}"
+                       target="_blank" rel="noopener">View</a>
+                    <a href="{{ url_for('students.profile_document', document_id=document.id, download=1) }}">Download</a>
+                  </div>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="4"><div class="empty-state">No verification documents uploaded.</div></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="profile-section">
+        <div class="profile-section-header">
+          <div>
             <div class="profile-section-title">Enrollment Signatures</div>
             <div class="profile-section-subtitle">Student and guardian signatures retained with existing capture flow.</div>
           </div>
@@ -451,7 +546,7 @@
             <div class="sig-box-label">Student Signature</div>
             {% if student.student_signature_filename %}
               <img class="sig-preview-img" id="sigImg_student"
-                   src="/static/images/student_signatures/{{ student.student_signature_filename }}"
+                   src="{{ storage_url(student.student_signature_filename) }}"
                    alt="Student Signature">
               <div class="sig-date-info" id="sigDate_student">Signed: {{ format_date(student.student_signature_date) }}</div>
             {% else %}
@@ -470,7 +565,7 @@
             <div class="sig-box-label">Parent / Guardian Signature</div>
             {% if student.parent_signature_filename %}
               <img class="sig-preview-img" id="sigImg_parent"
-                   src="/static/images/student_signatures/{{ student.parent_signature_filename }}"
+                   src="{{ storage_url(student.parent_signature_filename) }}"
                    alt="Parent Signature">
               <div class="sig-date-info" id="sigDate_parent">Signed: {{ format_date(student.parent_signature_date) }}</div>
             {% else %}
@@ -710,7 +805,7 @@
           {% for batch in student_batches %}
           <article class="profile-batch-card">
             <div>
-              <a class="profile-batch-name" href="{{ url_for('attendance.view_batch', batch_id=batch.batch_id) }}">{{ batch.batch_name }}</a>
+              <a class="profile-batch-name" href="{{ url_for('attendance.view_batch', batch_id=batch.batch_id) }}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">{{ batch.batch_name }} <span style="font-size: 0.85em; opacity: 0.7;">↗</span></a>
               <div class="profile-batch-meta">
                 {% if batch.start_time %}{{ batch.start_time }}{% if batch.end_time %} - {{ batch.end_time }}{% endif %}{% else %}Schedule not available{% endif %}
               </div>
@@ -1263,7 +1358,7 @@
             handleProfileImageError(photoImage);
             photoImage.onerror = null;
           };
-          photoImage.src = '/static/images/student_photos/' + data.photo_filename + '?t=' + Date.now();
+          photoImage.src = data.photo_url + (data.photo_url.includes('?') ? '&' : '?') + 't=' + Date.now();
         }
 
         if (trigger) {

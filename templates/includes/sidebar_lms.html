@@ -46,7 +46,7 @@
         Final Exam Applications
       </a>
 
-      {% if session.get('role') == 'admin' %}
+      {% if session.get('role') == 'admin' and is_platform_admin %}
       <a class="nav-link {{ 'active' if request.endpoint in ['lms_admin.phase6_rollout_view'] else '' }}"
          href="{{ url_for('lms_admin.phase6_rollout_view') }}">
         Legacy Migration

@@ -1,8 +1,8 @@
 -- Add performance indexes for test_attn_billing
 -- Safe migration script containing only approved indexes
 
--- 1. Users Table (for fast login lookup)
-CREATE UNIQUE INDEX idx_users_username ON users(username);
+-- 1. Users Table (tenant-scoped login identity)
+CREATE UNIQUE INDEX uq_users_institute_username ON users(institute_id, username);
 
 -- 2. Students Table (for branch filtering and status lookups)
 CREATE INDEX idx_students_branch_status ON students(branch_id, status);

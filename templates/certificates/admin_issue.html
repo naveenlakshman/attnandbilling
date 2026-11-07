@@ -11,15 +11,16 @@
       <h5 class="fw-bold mb-3">Eligibility Search</h5>
       <form method="GET" class="row g-3">
         <div class="col-12">
-          <label class="form-label small fw-semibold">Select Student</label>
+          <label class="form-label small fw-semibold" for="studentSelect">Select Student</label>
           <select name="student_id" class="form-select" id="studentSelect" required>
             <option value="">-- Select Student --</option>
             {% for s in students %}
               <option value="{{ s.id }}" {% if selected_student_id == s.id %}selected{% endif %}>
-                {{ s.full_name }} ({{ s.student_code }})
+                {{ s.full_name }} ({{ s.student_code }}){% if s.status == 'completed' %} - Completed{% endif %}
               </option>
             {% endfor %}
           </select>
+          <div class="form-text">Type a student's name or registration number to search.</div>
         </div>
         <div class="col-12">
           <label class="form-label small fw-semibold">Select Invoiced Course</label>
@@ -187,13 +188,37 @@
 document.addEventListener('DOMContentLoaded', function() {
   const studentSelect = document.getElementById('studentSelect');
   if (studentSelect) {
-    studentSelect.addEventListener('change', function() {
-      const studentId = this.value;
-      if (studentId) {
-        window.location.href = `?student_id=${studentId}`;
-      } else {
-        window.location.href = `?`;
-      }
+    if (window.TomSelect) {
+      new TomSelect(studentSelect, {
+        create: false,
+        placeholder: 'Search by student name or registration number',
+        searchField: ['text'],
+        onChange: function(studentId) {
+          if (studentId) {
+            window.location.href = `?student_id=${studentId}`;
+          } else {
+            window.location.href = `?`;
+          }
+        }
+      });
+    } else {
+      studentSelect.addEventListener('change', function() {
+        const studentId = this.value;
+        if (studentId) {
+          window.location.href = `?student_id=${studentId}`;
+        } else {
+          window.location.href = `?`;
+        }
+      });
+    }
+  }
+
+  const courseSelect = document.getElementById('courseSelect');
+  if (courseSelect && window.TomSelect) {
+    new TomSelect(courseSelect, {
+      create: false,
+      placeholder: 'Search invoiced course',
+      searchField: ['text']
     });
   }
 });

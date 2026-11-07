@@ -1,0 +1,5 @@
+{% macro batch_end(summary) -%}
+<span class="badge batch-end-summary {{ summary.badge_class if summary else 'bg-light text-secondary border' }}"{% if summary and summary.date %} data-end-date="{{ summary.date }}" data-days-remaining="{{ summary.days_remaining }}"{% endif %}>
+  {% if summary and summary.date %}End date: {{ summary.date_label }} · {{ summary.remaining_label }}{% else %}End date not set{% endif %}
+</span>
+{%- endmacro %}

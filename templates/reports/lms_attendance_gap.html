@@ -250,7 +250,7 @@
                   <span class="fw-bold small" style="font-size: 11px; color: #475569;">{{ row.progress_pct }}%</span>
                 </div>
               </td>
-              <td class="text-muted" style="font-size: 12px;">{{ row.last_activity }}</td>
+              <td class="text-muted" style="font-size: 12px;">{{ row.last_activity | format_ist_datetime('%d %b %Y, %I:%M %p') if row.last_activity else '-' }}</td>
               <td class="text-end">
                 <div class="d-flex gap-1 justify-content-end">
                   <a href="{{ url_for('lms_admin.view_student_progress', student_id=row.student_id) }}?program_id={{ row.program_id }}" 

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ company.company_name }} - Setup{% endblock %}
+{% block page_title %}{{ company.company_short_name }} Dashboard{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="mb-4">
+    <h1 class="mb-2">Welcome, {{ session.get('full_name') or session.get('username') }}</h1>
+    <p class="text-muted mb-0">{{ company.company_name }} is isolated and ready for its initial administration setup.</p>
+  </div>
+  <div class="alert alert-info border-0 shadow-sm">
+    <strong>Phase 2 setup mode:</strong>
+    branches and staff accounts are available. Students, leads, attendance, finance,
+    reports, and LMS remain locked until their data is tenant-isolated.
+  </div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm h-100 p-4">
+        <div class="text-muted">Active branches</div>
+        <div class="display-5 fw-bold my-2">{{ branch_count }}</div>
+        <a class="btn btn-outline-primary align-self-start" href="{{ url_for('core.branches') }}">Manage branches</a>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm h-100 p-4">
+        <div class="text-muted">Active staff users</div>
+        <div class="display-5 fw-bold my-2">{{ user_count }}</div>
+        <a class="btn btn-outline-primary align-self-start" href="{{ url_for('core.users') }}">Manage users</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

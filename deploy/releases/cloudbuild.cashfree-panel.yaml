@@ -1,0 +1,11 @@
+steps:
+  - id: check-sharing-script
+    name: node:24-bookworm-slim
+    args: [node, --check, static/js/cashfree_invoice.js]
+  - id: build-payment-panel
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, deploy/releases/Dockerfile.cashfree-panel, --tag, '${_IMAGE}', .]
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s

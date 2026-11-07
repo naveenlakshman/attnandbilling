@@ -1,0 +1,19 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:certificate-search
+steps:
+  - id: build-certificate-search
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, deploy/releases/Dockerfile.certificate-search, --tag, '${_IMAGE}', .]
+  - id: compile-templates
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - '${_IMAGE}'
+      - python
+      - -c
+      - "from jinja2 import Environment,FileSystemLoader; env=Environment(loader=FileSystemLoader('templates')); [env.get_template(p) for p in ['base.html','certificates/admin_issue.html']]; print('certificate_templates=OK')"
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s

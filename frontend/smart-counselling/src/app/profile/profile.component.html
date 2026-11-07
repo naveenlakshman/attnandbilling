@@ -1,0 +1,45 @@
+<section>
+  <sc-page-header eyebrow="Prospect profile" title="Tell us about the prospect" description="Capture the minimum profile before the guided assessment.">
+    <a class="sc-button sc-button-ghost" [routerLink]="['/session', sessionId, 'verify']">Back</a>
+  </sc-page-header>
+  <sc-counselling-stepper [current]="2" />
+  @if (loading()) { <div class="sc-state-card"><span class="sc-spinner"></span>Loading profile…</div> }
+  @else {
+    @if (error()) { <div class="sc-inline-alert" role="alert">{{ error() }}</div> }
+    @if (locked()) { <div class="sc-inline-alert" role="alert">This converted student profile is read-only in Smart Counselling.</div> }
+    <div class="sc-guided-grid">
+      <section class="sc-card sc-form-section">
+        <div class="sc-section-title"><span>1</span><div><h2>Basic Information</h2><p>Use the prospect's real details.</p></div></div>
+        <div class="sc-form-grid">
+          <label class="sc-field"><span>Name *</span><input [formControl]="name" autocomplete="name"></label>
+          <label class="sc-field"><span>Age *</span><input type="number" min="12" max="100" [formControl]="age"></label>
+          <label class="sc-field"><span>Email</span><input type="email" [formControl]="email" autocomplete="email"></label>
+          <label class="sc-field"><span>Gender</span><select [formControl]="gender"><option value="">Optional</option>@for (item of questionnaire()?.profile?.['gender']; track item.code) { <option [value]="item.code">{{ item.label }}</option> }</select></label>
+          <label class="sc-check-row"><input type="checkbox" [formControl]="whatsappSameAsMobile"><span>WhatsApp is the same as the counselling mobile</span></label>
+          @if (!whatsappSameAsMobile.value) { <label class="sc-field"><span>WhatsApp number</span><input inputmode="numeric" maxlength="10" [formControl]="whatsapp"></label> }
+        </div>
+      </section>
+      <section class="sc-card sc-form-section">
+        <div class="sc-section-title"><span>2</span><div><h2>Education</h2><p>Structured values keep future recommendations explainable.</p></div></div>
+        <div class="sc-form-grid">
+          <label class="sc-field"><span>Education status *</span><select [formControl]="educationStatus"><option value="">Choose</option>@for (item of questionnaire()?.profile?.['educationStatus']; track item.code) { <option [value]="item.code">{{ item.label }}</option> }</select></label>
+          <label class="sc-field"><span>Qualification *</span><select [formControl]="qualification"><option value="">Choose</option>@for (item of questionnaire()?.profile?.['qualification']; track item.code) { <option [value]="item.code">{{ item.label }}</option> }</select></label>
+          @if (qualification.value === 'OTHER') { <label class="sc-field"><span>Qualification details *</span><input [formControl]="qualificationOther"></label> }
+          @if (requiresStream()) { <label class="sc-field"><span>Stream *</span><select [formControl]="stream"><option value="">Choose</option>@for (item of questionnaire()?.profile?.['stream']; track item.code) { <option [value]="item.code">{{ item.label }}</option> }</select></label> }
+          @if (requiresCurrentYear()) { <label class="sc-field"><span>Current year / class *</span><input [formControl]="currentYear" placeholder="e.g. 2nd Year"></label> }
+          <label class="sc-field sc-field-wide"><span>Institution</span><input [formControl]="institution"></label>
+        </div>
+      </section>
+      <section class="sc-card sc-form-section">
+        <div class="sc-section-title"><span>3</span><div><h2>Current Situation</h2><p>Choose the option that best describes the prospect today.</p></div></div>
+        <div class="sc-choice-grid" role="radiogroup" aria-label="Current situation">
+          @for (item of questionnaire()?.profile?.['currentSituation']; track item.code) {
+            <button type="button" class="sc-choice-card" [class.is-selected]="currentSituation.value === item.code" (click)="currentSituation.setValue(item.code)" [attr.aria-pressed]="currentSituation.value === item.code">{{ item.label }}</button>
+          }
+        </div>
+      </section>
+      @if (existingLead()) { <label class="sc-confirm-card"><input type="checkbox" [formControl]="confirmChanges"><span><strong>Confirm CRM changes</strong><small>Only fields changed on this screen will be updated. Existing history is preserved.</small></span></label> }
+      <button class="sc-button sc-button-primary sc-button-block" type="button" [disabled]="saving() || locked()" (click)="save()">{{ saving() ? 'Saving…' : 'Save Profile & Continue' }}</button>
+    </div>
+  }
+</section>

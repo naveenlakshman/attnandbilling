@@ -1,0 +1,682 @@
+{% extends "base.html" %}
+
+{% block title %}🎓 Classroom Teaching Mode - {{ batch.batch_name }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/classroom-teach.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid teach-container py-3" 
+     id="classroomTeachApp" 
+     data-program-id="{{ selected_program.id if selected_program else 0 }}" 
+     data-batch-id="{{ batch.id }}" 
+     data-total-topics="{{ total_topics }}" 
+     data-taught-count="{{ taught_count }}"
+     data-initial-topic-id="{{ initial_topic_id or 0 }}"
+     data-initial-topic-is-master="{{ '1' if initial_topic_is_master is sameas true else ('0' if initial_topic_is_master is sameas false else '') }}">
+     
+  <div class="card teach-card-wrapper shadow-sm border-0">
+    
+    <!-- TOP HEADER NAVBAR CARD -->
+    <div class="card-header teach-header-card">
+      <div class="row align-items-center g-3">
+        <div class="col-md-6">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h4 class="mb-0 fw-bold text-white">{{ batch.batch_name }}</h4>
+            <button type="button" class="btn btn-sm btn-outline-info text-white border-light rounded-pill px-3 py-1 fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#studentProgressModal">
+              👥 Check Student Progress
+            </button>
+            <button type="button" class="btn btn-sm btn-success text-white rounded-pill px-3 py-1 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#markAttendanceModal">
+              📝 Mark Attendance
+            </button>
+          </div>
+          <div class="small teach-meta-text mt-1">
+            <span>📍 {{ batch.branch_name or 'Main Branch' }}</span> &bull;
+            <span>⏰ {{ batch.start_time or '' }} - {{ batch.end_time or '' }}</span> &bull;
+            <span>👨‍🏫 Trainer: {{ batch.trainer_name or 'Unassigned' }}</span>
+          </div>
+        </div>
+
+        <div class="col-md-6 d-flex align-items-center justify-content-md-end gap-3 flex-wrap">
+          <!-- Program Switcher Dropdown -->
+          {% if programs|length > 1 %}
+          <select class="form-select form-select-sm teach-program-select" id="programSwitcherSelect">
+            {% for p in programs %}
+              <option value="{{ p.id }}" {% if selected_program and selected_program.id == p.id %}selected{% endif %}>
+                {{ p.program_name }}
+              </option>
+            {% endfor %}
+          </select>
+          {% endif %}
+
+          <!-- Batch Taught Progress Indicator -->
+          <div class="text-end">
+            <div class="small fw-bold teach-progress-label">
+              Progress: <span id="batch-taught-count">{{ taught_count }}</span>/{{ total_topics }} Topics (<span id="batch-taught-pct">{{ taught_pct }}</span>%)
+            </div>
+            <div class="progress teach-progress-track mt-1">
+              <div id="batch-progress-bar" class="progress-bar teach-progress-bar" role="progressbar" style="width: {{ taught_pct }}%;"></div>
+            </div>
+          </div>
+
+          <!-- Presenter Controls -->
+          <button id="toggle-sidebar-btn" type="button" class="btn btn-sm btn-outline-light d-flex align-items-center gap-1" title="Show/Hide Topics List">
+            <span>🗂️</span> <span id="toggle-sidebar-text">Topics</span>
+          </button>
+          <button id="projector-toggle-btn" type="button" class="btn btn-sm btn-primary teach-btn-projector d-flex align-items-center gap-1">
+            <span>📺</span> <span>Projector Mode</span>
+          </button>
+          <a href="{{ url_for('lms_admin.classroom_teaching_dashboard') }}" class="btn btn-sm btn-outline-light">
+            ✕ Exit
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN BODY GRID: STAGE + SIDEBAR -->
+    <div class="card-body p-3 bg-light">
+      <div class="row g-3">
+        
+        <!-- LEFT PRESENTATION STAGE COLUMN -->
+        <div class="col-lg-8 col-xl-9" id="stage-content-col">
+          
+          <div class="card shadow-sm border-0 mb-3">
+            <div class="card-body p-4">
+              <!-- TABS NAV: Video | Lesson | Assignment -->
+              <ul class="nav nav-tabs teach-nav-tabs mb-3" id="contentTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active" id="tabWatch" type="button">🎬 Video</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="tabRead" type="button">📖 Lesson</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="tabAssignment" type="button">📝 Assignment</button>
+                </li>
+              </ul>
+
+              <!-- TAB PANES (display:block/none — no Bootstrap fade) -->
+              <div id="contentTabsContent">
+
+                <!-- WATCH VIDEO PANE -->
+                <div id="paneWatch" role="tabpanel" style="display:block;">
+                  <div id="video-container-box" class="ratio ratio-16x9 rounded overflow-hidden shadow-sm mb-2 d-none">
+                    <iframe id="video-iframe" src="" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+                  </div>
+                  <div id="no-video-msg" class="text-center py-5 text-muted d-none">
+                    <div class="fs-1">🎦</div>
+                    <p class="mt-2 fw-medium">No video tutorial configured for this topic.</p>
+                  </div>
+                </div>
+
+                <!-- LESSON PANE -->
+                <div id="paneRead" role="tabpanel" style="display:none;">
+                  <div id="rich-content-box" class="rich-text-content"></div>
+                  <div id="no-read-msg" class="text-center py-5 text-muted d-none">
+                    <div class="fs-1">📖</div>
+                    <p class="mt-2 fw-medium">No lesson content configured for this topic.</p>
+                  </div>
+                </div>
+
+                <!-- ASSIGNMENT PANE -->
+                <div id="paneAssignment" role="tabpanel" style="display:none;">
+                  <div id="assignment-list" class="d-flex flex-column gap-3"></div>
+                  <div id="no-assignment-msg" class="text-center py-5 text-muted d-none">
+                    <div class="fs-1">📝</div>
+                    <p class="mt-2 fw-medium">No assignment configured for this topic.</p>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ACTION NAVIGATION FOOTER CARD -->
+          <div class="card shadow-sm border-0 p-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <button id="mark-taught-btn" type="button" class="btn btn-success fw-bold px-4 py-2">
+                <span id="mark-taught-text">Mark Taught for Batch ✓</span>
+              </button>
+
+              <div class="btn-group" role="group">
+                <button id="prev-topic-btn" type="button" class="btn btn-outline-secondary">‹ Previous Topic</button>
+                <button id="next-topic-btn" type="button" class="btn btn-primary">Next Topic ›</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- RIGHT SYLLABUS SIDEBAR COLUMN -->
+        <div class="col-lg-4 col-xl-3" id="syllabus-sidebar-col">
+          <div class="teach-syllabus-wrap">
+
+            <!-- Sidebar Header -->
+            <div class="teach-syllabus-header">
+              <div class="d-flex align-items-center justify-content-between">
+                <h6 class="fw-bold mb-0 text-dark">📚 Course Syllabus</h6>
+                <span class="badge bg-primary rounded-pill">{{ total_topics }} Topics</span>
+              </div>
+            </div>
+
+            <!-- Collapsible Chapter List -->
+            <div class="syllabus-scroll-body">
+              {% if chapters %}
+                {% for ch in chapters %}
+                  <div class="teach-chapter-item">
+                    <div class="teach-chapter-header">
+                      <span>{{ ch.chapter_order }}. {{ ch.chapter_title }}</span>
+                      <span class="teach-chevron">▼</span>
+                    </div>
+                    <div class="teach-chapter-topics">
+                      {% for t in ch.topics %}
+                        <div class="syllabus-topic-item {% if t.is_taught %}done{% endif %}"
+                             id="topic-item-{{ t.id }}"
+                             data-topic-id="{{ t.id }}"
+                             data-is-master="{{ '1' if t.is_master else '0' }}"
+                             data-chapter-title="{{ ch.chapter_title }}"
+                             data-title="{{ t.topic_title }}"
+                             data-video-url="{{ t.video_url or '' }}"
+                             data-content="{{ t.content_body or '' }}"
+                             data-is-taught="{{ '1' if t.is_taught else '0' }}">
+                          <span class="syllabus-check-icon">{% if t.is_taught %}✓{% endif %}</span>
+                          <span>{{ t.topic_order }}. {{ t.topic_title }}</span>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="p-4 text-center text-muted">
+                  <div class="fs-2">📭</div>
+                  <p class="mt-2 mb-0">No syllabus topics found for this program.</p>
+                </div>
+              {% endif %}
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- STUDENT PROGRESS MONITOR MODAL -->
+<div class="modal fade" id="studentProgressModal" tabindex="-1" aria-labelledby="studentProgressModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title fw-bold" id="studentProgressModalLabel">
+          👥 Batch Student Progress Monitor — {{ batch.batch_name }}
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body bg-light p-4">
+        {% if students_progress %}
+          <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+            {% for s in students_progress %}
+              <div class="col">
+                <div class="card h-100 border-0 shadow-sm rounded-3 overflow-hidden">
+                  <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div>
+                      <!-- Card Header: Student Identity -->
+                      <div class="d-flex align-items-center justify-content-between mb-2">
+                        <div>
+                          <h6 class="fw-bold text-dark mb-0 fs-6">{{ s.full_name }}</h6>
+                          <div class="text-muted small">{{ s.phone }} &bull; {{ s.student_code }}</div>
+                        </div>
+                        <div class="avatar-circle bg-primary-subtle text-primary fw-bold rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 42px; height: 42px; font-size: 14px;">
+                          {% if s.photo_filename %}
+                            <img src="{{ storage_url(s.photo_filename) }}" alt="" class="rounded-circle" style="width: 42px; height: 42px; object-fit: cover;">
+                          {% else %}
+                            {{ s.initials }}
+                          {% endif %}
+                        </div>
+                      </div>
+
+                      <div class="mb-3">
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1">{{ s.student_status | capitalize }}</span>
+                      </div>
+
+                      <!-- LMS TOPICS PROGRESS BOX -->
+                      <div class="p-2 bg-white rounded border mb-2 shadow-2xs">
+                        <div class="d-flex align-items-center justify-content-between small fw-semibold mb-1">
+                          <span class="text-secondary">📚 Topics Completed</span>
+                          <span class="text-primary fw-bold">{{ s.topic_pct }}%</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                          <div class="progress-bar bg-primary" role="progressbar" style="width: {{ s.topic_pct }}%;"></div>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between text-muted mt-1" style="font-size: 11px;">
+                          <span>{{ s.completed_topics }}/{{ s.total_topics }} topics</span>
+                          <span>{{ s.progress_label }}</span>
+                        </div>
+                        <div class="text-muted mt-2 pt-2 border-top" style="font-size: 11px;">
+                          <strong>Last topic completion:</strong>
+                          {% if s.last_topic_completed_at %}
+                            {{ s.last_topic_completed_at | format_ist_datetime('%d-%b-%Y %I:%M %p') }} IST
+                          {% else %}
+                            Not completed yet
+                          {% endif %}
+                        </div>
+                      </div>
+
+                      <!-- LMS ASSIGNMENTS PROGRESS BOX -->
+                      <div class="p-2 bg-white rounded border shadow-2xs">
+                        <div class="d-flex align-items-center justify-content-between small fw-semibold mb-1">
+                          <span class="text-secondary">📋 Assignments Completed</span>
+                          <span class="text-success fw-bold">{{ s.assg_pct }}%</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                          <div class="progress-bar bg-success" role="progressbar" style="width: {{ s.assg_pct }}%;"></div>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between text-muted mt-1" style="font-size: 11px;">
+                          <span>{{ s.completed_assignments }}/{{ s.total_assignments }} assignments</span>
+                          <span>{{ 'Completed' if s.assg_pct >= 100 else ('In Progress' if s.assg_pct > 0 else 'Not Started') }}</span>
+                        </div>
+                        <div class="text-muted mt-2 pt-2 border-top" style="font-size: 11px;">
+                          <strong>Last assignment completion:</strong>
+                          {% if s.last_assignment_completed_at %}
+                            {{ s.last_assignment_completed_at | format_ist_datetime('%d-%b-%Y %I:%M %p') }} IST
+                          {% else %}
+                            Not completed yet
+                          {% endif %}
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-center py-5 text-muted">
+            <div class="fs-1">👥</div>
+            <p class="mt-2 fw-medium">No active students enrolled in this batch.</p>
+          </div>
+        {% endif %}
+      </div>
+      <div class="modal-footer bg-white border-top-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BATCH ATTENDANCE MARKING MODAL -->
+<div class="modal fade" id="markAttendanceModal" tabindex="-1" aria-labelledby="markAttendanceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+
+      <!-- HEADER (outside form so Bootstrap scrollable works correctly) -->
+      <div class="modal-header bg-dark text-white">
+        <div>
+          <h5 class="modal-title fw-bold" id="markAttendanceModalLabel">📝 Mark Attendance — {{ batch.batch_name }}</h5>
+          <small class="text-white-50">Branch: {{ batch.branch_name or 'Main Branch' }} | Trainer: {{ batch.trainer_name or 'Unassigned' }}</small>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <form id="markAttendanceForm" method="post" action="{{ url_for('lms_admin.save_batch_attendance_from_teach', batch_id=batch.id) }}"
+            style="display:flex; flex-direction:column; overflow:hidden; flex:1 1 auto;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="time_warn_reason" id="teachTimeWarnReasonHidden">
+
+        <div class="modal-body p-3 bg-light">
+
+          <!-- DATE SELECTION & QUICK PRESETS -->
+          <div class="card border-0 shadow-sm p-3 mb-3 bg-white rounded-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+              <div class="d-flex align-items-center gap-2">
+                <label class="form-label fw-bold text-dark mb-0">Attendance Date:</label>
+                <input type="date" name="attendance_date" id="attDateInput"
+                       class="form-control form-control-sm fw-bold bg-light"
+                       value="{{ today_date }}" readonly style="width:170px; pointer-events:none;" tabindex="-1">
+                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">🔒 Today Only</span>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <span class="small text-muted fw-semibold">Quick Set All:</span>
+                <button type="button" class="btn btn-sm btn-outline-success px-3 fw-bold" onclick="setAllAttendance('present')">🟢 All Present</button>
+                <button type="button" class="btn btn-sm btn-outline-danger px-3 fw-bold"  onclick="setAllAttendance('absent')">🔴 All Absent</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- DYNAMIC DATE BANNER -->
+          <div id="dateAttStatusBanner" class="alert alert-primary py-2 px-3 mb-3 small d-none"></div>
+
+          <!-- LEGEND -->
+          {% if history_dates %}
+          <div class="att-hist-legend mb-3">
+            <span><span class="att-hist-legend-dot att-hist-present"></span> Present</span>
+            <span><span class="att-hist-legend-dot att-hist-absent"></span> Absent</span>
+            <span><span class="att-hist-legend-dot att-hist-late"></span> Late</span>
+            <span><span class="att-hist-legend-dot att-hist-leave"></span> Leave</span>
+            <span><span class="att-hist-legend-dot att-hist-none"></span> No record</span>
+          </div>
+          {% endif %}
+
+          <!-- STUDENT ROWS -->
+          {% if students_progress %}
+          <div class="d-flex flex-column gap-2">
+            {% for s in students_progress %}
+            {% set dues = payment_dues.get(s.student_id, {}) %}
+            {% set _saved = s.today_status %}
+            {% if _saved %}
+              {% set cur_status = _saved %}
+            {% elif approved_leave_student_ids is defined and s.student_id in approved_leave_student_ids %}
+              {% set cur_status = 'leave' %}
+            {% else %}
+              {% set cur_status = 'not_marked' %}
+            {% endif %}
+
+            <div class="card border-0 shadow-sm p-3 bg-white rounded-3 att-student-card
+                        {% if dues.get('past_due', 0) > 0 %}row-overdue{% elif dues.get('upcoming_amount', 0) > 0 %}row-upcoming{% endif %}"
+                 data-student-id="{{ s.student_id }}">
+              <div class="row align-items-center g-2">
+
+                <!-- PHOTO + NAME + BADGES -->
+                <div class="col-md-4">
+                  <div class="d-flex align-items-start gap-3">
+                    {% if s.photo_filename %}
+                      <img src="{{ url_for('static', filename='images/student_photos/' + s.photo_filename) }}"
+                           class="rounded-circle object-fit-cover flex-shrink-0"
+                           style="width:44px;height:44px;border:2px solid #e2e8f0;" alt="{{ s.full_name }}">
+                    {% else %}
+                      <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold flex-shrink-0"
+                           style="width:44px;height:44px;font-size:15px;">{{ s.initials }}</div>
+                    {% endif %}
+                    <div>
+                      <div class="fw-bold text-dark fs-6 mb-0">{{ s.full_name }}</div>
+                      <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                        <small class="text-muted">{{ s.student_code }}</small>
+                        <small class="text-muted">·</small>
+                        <small class="text-muted">{{ s.phone }}</small>
+                        {% if s.phone %}
+                        <a href="tel:{{ s.phone | replace(' ','') | replace('-','') }}"
+                           title="Call" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#e8f5e9;color:#2e7d32;text-decoration:none;font-size:12px;">📞</a>
+                        <a href="https://wa.me/91{{ s.phone | replace(' ','') | replace('-','') | replace('+','') }}"
+                           target="_blank" title="WhatsApp"
+                           style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#e8f5e9;color:#25D366;text-decoration:none;">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        </a>
+                        {% endif %}
+                      </div>
+                      <!-- FEE BADGES -->
+                      {% if dues.get('past_due', 0) > 0 %}
+                        {% set pd = dues.past_days %}
+                        {% if pd == 1 %}{% set pd_label = "1 day overdue" %}
+                        {% elif pd and pd > 1 %}{% set pd_label = pd ~ " days overdue" %}
+                        {% else %}{% set pd_label = dues.get('upcoming_date', '') %}{% endif %}
+                        <div><span class="att-due-badge att-due-badge-overdue">⚠ Past Due: ₹{{ "{:,.0f}".format(dues.past_due) }} · {{ pd_label }}</span></div>
+                      {% endif %}
+                      {% if dues.get('upcoming_amount', 0) > 0 %}
+                        {% set ud = dues.upcoming_days %}
+                        {% if ud == 0 %}{% set ud_label = "Due today" %}
+                        {% elif ud == 1 %}{% set ud_label = "Due tomorrow" %}
+                        {% elif ud and ud > 1 %}{% set ud_label = ud ~ " days left · " ~ dues.upcoming_date %}
+                        {% else %}{% set ud_label = dues.get('upcoming_date', '') %}{% endif %}
+                        <div><span class="att-due-badge att-due-badge-upcoming">💰 ₹{{ "{:,.0f}".format(dues.upcoming_amount) }} · {{ ud_label }}</span></div>
+                      {% endif %}
+                      {% if not _saved and approved_leave_student_ids is defined and s.student_id in approved_leave_student_ids %}
+                        <div><span class="att-due-badge" style="background:#d1e7dd;color:#0f5132;border:1px solid #a3cfbb;">📋 Approved Leave</span></div>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- LAST 7 DAYS HISTORY -->
+                <div class="col-md-3">
+                  {% set hist = history_7days.get(s.student_id, {}) %}
+                  {% if history_dates %}
+                  <div class="att-hist-wrap">
+                    <div class="att-hist-cells">
+                      {% for d in history_dates %}
+                      {% set hs = hist.get(d) %}
+                      <span class="att-hist-cell att-hist-{{ hs or 'none' }}"
+                            title="{{ d }}: {{ hs | capitalize if hs else 'No record' }}"></span>
+                      {% endfor %}
+                    </div>
+                    <div class="att-hist-labels">
+                      {% for d in history_dates %}
+                      <span class="att-hist-label">{{ d[5:] }}</span>
+                      {% endfor %}
+                    </div>
+                  </div>
+                  {% else %}
+                  <small class="text-muted">—</small>
+                  {% endif %}
+                </div>
+
+                <!-- STATUS SELECT -->
+                <div class="col-md-3">
+                  <select class="att-status-select {{ cur_status }}"
+                          name="status_{{ s.student_id }}"
+                          id="att_status_{{ s.student_id }}"
+                          onchange="onAttStatusChange(this)">
+                    <option value="not_marked" {% if cur_status == 'not_marked' %}selected{% endif %}>⬜ Not Marked</option>
+                    <option value="present"    {% if cur_status == 'present'    %}selected{% endif %}>✓ Present</option>
+                    <option value="absent"     {% if cur_status == 'absent'     %}selected{% endif %}>✗ Absent</option>
+                    <option value="late"       {% if cur_status == 'late'       %}selected{% endif %}>⏱️ Late</option>
+                    <option value="leave"      {% if cur_status == 'leave'      %}selected{% endif %}>📋 Leave</option>
+                  </select>
+                </div>
+
+                <!-- REMARKS -->
+                <div class="col-md-2">
+                  <input type="text" name="remarks_{{ s.student_id }}"
+                         class="form-control form-control-sm"
+                         placeholder="Remarks..." value="{{ s.today_remarks }}">
+                </div>
+
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="text-center py-5 text-muted">
+            <div class="fs-1">👥</div>
+            <p class="mt-2 fw-medium">No active students found in this batch.</p>
+          </div>
+          {% endif %}
+
+        </div><!-- /modal-body -->
+
+        <div class="modal-footer bg-white border-top">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success fw-bold px-4">Save Attendance ✓</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- OUT OF SCHEDULE ATTENDANCE SCRUTINY WARNING MODAL -->
+<div class="modal fade" id="teachTimeWarnModal" tabindex="-1" aria-labelledby="teachTimeWarnModalLabel" aria-hidden="true" style="z-index: 1060;">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-warning shadow">
+      <div class="modal-header bg-warning bg-opacity-10 border-warning">
+        <h5 class="modal-title text-warning-emphasis fw-bold" id="teachTimeWarnModalLabel">
+          ⚠️ Out-of-Schedule Scrutiny Required
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="teachTimeWarnMsg" class="mb-3 p-3 bg-warning-subtle rounded border border-warning-subtle text-dark"></div>
+        <label for="teachTimeWarnReasonInput" class="form-label fw-bold text-dark">
+          Reason for marking out-of-schedule attendance <span class="text-danger">*</span>
+        </label>
+        <textarea id="teachTimeWarnReasonInput" class="form-control" rows="3"
+          placeholder="e.g. Backdated entry for absent student, makeup class, system maintenance during batch hours..."
+          maxlength="500" required></textarea>
+        <div id="teachTimeWarnReasonError" class="text-danger small mt-1" style="display:none;">
+          A scrutiny reason is required for out-of-schedule or backdated attendance.
+        </div>
+      </div>
+      <div class="modal-footer border-warning">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning fw-bold px-4" id="teachTimeWarnOkBtn">Submit with Scrutiny Reason ✓</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const allAttData = {{ all_attendance_json | safe }};
+window.classroomAssignmentsByTopic = {{ assignments_by_topic | tojson }};
+
+function updateAttendanceForSelectedDate(selectedDate) {
+  const banner = document.getElementById('dateAttStatusBanner');
+  const recordsForDate = (allAttData && allAttData[selectedDate]) ? allAttData[selectedDate] : null;
+
+  if (recordsForDate && Object.keys(recordsForDate).length > 0) {
+    if (banner) {
+      banner.className = 'alert alert-primary py-2 px-3 mb-3 small d-flex align-items-center gap-2';
+      banner.innerHTML = '<span>ℹ️</span> <span><strong>Existing Attendance Found:</strong> Showing saved records for <strong>' + selectedDate + '</strong>. You can modify and save updates below.</span>';
+      banner.classList.remove('d-none');
+    }
+  } else {
+    if (banner) {
+      banner.className = 'alert alert-warning py-2 px-3 mb-3 small d-flex align-items-center gap-2';
+      banner.innerHTML = '<span>✨</span> <span><strong>No Saved Entry:</strong> No attendance recorded for today (<strong>' + selectedDate + '</strong>) yet.</span>';
+      banner.classList.remove('d-none');
+    }
+  }
+}
+
+function setAllAttendance(status) {
+  document.querySelectorAll('.att-status-select').forEach(function(sel) {
+    sel.value = status;
+    sel.className = 'att-status-select ' + status;
+  });
+}
+
+function onAttStatusChange(sel) {
+  sel.className = 'att-status-select ' + sel.value;
+}
+
+(function() {
+  const batchStart = "{{ batch.start_time or '' }}";
+  const batchEnd   = "{{ batch.end_time or '' }}";
+  const todayDate  = "{{ today_date }}";
+  let pendingAttForm = null;
+
+  function getCurrentHHMM() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    return h + ':' + m;
+  }
+
+  function checkScrutinyWarning(selectedDate) {
+    if (selectedDate !== todayDate) {
+      return selectedDate < todayDate ? 'backdated' : 'future_dated';
+    }
+    if (batchStart && batchEnd) {
+      const nowHHMM = getCurrentHHMM();
+      if (nowHHMM < batchStart) return 'before_start';
+      if (nowHHMM > batchEnd)   return 'after_end';
+    }
+    return null;
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    {% if show_student_progress %}
+    const studentProgressModal = document.getElementById('studentProgressModal');
+    if (studentProgressModal && typeof bootstrap !== 'undefined') {
+      bootstrap.Modal.getOrCreateInstance(studentProgressModal).show();
+    }
+    {% endif %}
+
+    const dateInput = document.getElementById('attDateInput');
+    if (dateInput) {
+      dateInput.addEventListener('change', function() {
+        updateAttendanceForSelectedDate(this.value);
+      });
+      // Trigger initial view update
+      updateAttendanceForSelectedDate(dateInput.value);
+    }
+
+    const attForm = document.getElementById('markAttendanceForm');
+    if (!attForm) return;
+
+    attForm.addEventListener('submit', function(e) {
+      const dateInp = attForm.querySelector('input[name="attendance_date"]');
+      const selectedDate = dateInp ? dateInp.value : todayDate;
+      const warningType = checkScrutinyWarning(selectedDate);
+
+      if (!warningType) return; // In-schedule — submit normally
+
+      // If scrutiny reason already filled, submit
+      const hiddenReason = document.getElementById('teachTimeWarnReasonHidden');
+      if (hiddenReason && hiddenReason.value.trim() !== '') return;
+
+      e.preventDefault();
+      pendingAttForm = attForm;
+
+      const msgEl = document.getElementById('teachTimeWarnMsg');
+      let typeLabel = '';
+      if (warningType === 'backdated') {
+        typeLabel = 'marking <strong>Backdated Attendance</strong> for <strong>' + selectedDate + '</strong>';
+      } else if (warningType === 'future_dated') {
+        typeLabel = 'marking <strong>Future-dated Attendance</strong> for <strong>' + selectedDate + '</strong>';
+      } else if (warningType === 'before_start') {
+        typeLabel = 'marking attendance <strong>before batch start time (' + batchStart + ')</strong>';
+      } else if (warningType === 'after_end') {
+        typeLabel = 'marking attendance <strong>after batch end time (' + batchEnd + ')</strong>';
+      }
+
+      if (msgEl) {
+        msgEl.innerHTML =
+          '<strong>Scrutiny Flag:</strong> You are ' + typeLabel + '.<br>' +
+          '<small class="text-muted">This out-of-schedule entry will be logged under admin scrutiny records.</small>';
+      }
+
+      const modalEl = document.getElementById('teachTimeWarnModal');
+      if (modalEl && typeof bootstrap !== 'undefined') {
+        new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false }).show();
+      }
+    });
+
+    const okBtn = document.getElementById('teachTimeWarnOkBtn');
+    if (okBtn) {
+      okBtn.addEventListener('click', function() {
+        const textarea = document.getElementById('teachTimeWarnReasonInput');
+        const reason = textarea ? textarea.value.trim() : '';
+        const errEl = document.getElementById('teachTimeWarnReasonError');
+        if (!reason) {
+          if (errEl) errEl.style.display = 'block';
+          if (textarea) textarea.focus();
+          return;
+        }
+        if (errEl) errEl.style.display = 'none';
+
+        const hiddenReason = document.getElementById('teachTimeWarnReasonHidden');
+        if (hiddenReason) hiddenReason.value = reason;
+
+        const modalEl = document.getElementById('teachTimeWarnModal');
+        if (modalEl && typeof bootstrap !== 'undefined') {
+          const bsModal = bootstrap.Modal.getInstance(modalEl);
+          if (bsModal) bsModal.hide();
+        }
+
+        if (pendingAttForm) {
+          pendingAttForm.submit();
+          pendingAttForm = null;
+        }
+      });
+    }
+  });
+})();
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/classroom_teach_mode.js') }}"></script>
+{% endblock %}

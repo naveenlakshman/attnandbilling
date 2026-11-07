@@ -94,6 +94,29 @@ class Config:
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     RATELIMIT_DEFAULT = os.environ.get("RATELIMIT_DEFAULT", "")
 
+    # Multi-institute foundation. Observe mode resolves and records tenant
+    # context while retaining current single-institute compatibility.
+    TENANT_RESOLUTION_MODE = os.environ.get("TENANT_RESOLUTION_MODE", "observe").strip().lower()
+    TENANT_STRICT_EXEMPT_ENDPOINTS = {"healthz", "static"}
+    DOMAIN_VERIFICATION_PREFIX = os.environ.get(
+        "DOMAIN_VERIFICATION_PREFIX", "_globaliterp-verification"
+    ).strip().lower()
+    PLATFORM_SUPPORT_SESSION_MINUTES = max(
+        15, min(int(os.environ.get("PLATFORM_SUPPORT_SESSION_MINUTES", "60")), 240)
+    )
+    PLATFORM_CONTROL_HOSTS = {
+        host.strip().lower()
+        for host in os.environ.get("PLATFORM_CONTROL_HOSTS", "").replace("|", ",").split(",")
+        if host.strip()
+    }
+    PLATFORM_DISPLAY_NAME = os.environ.get(
+        "PLATFORM_DISPLAY_NAME", "Platform Administration"
+    ).strip()
+    PLATFORM_TAGLINE = os.environ.get(
+        "PLATFORM_TAGLINE", "Secure control plane"
+    ).strip()
+    PLATFORM_INGRESS_IPV4 = os.environ.get("PLATFORM_INGRESS_IPV4", "").strip()
+
     # App debug mode
     DEBUG_MODE = _env_bool("DEBUG_MODE", default=False)
 
@@ -110,7 +133,9 @@ class Config:
         "CONTENT_SECURITY_POLICY",
         "default-src 'self'; base-uri 'self'; object-src 'none'; "
         "frame-ancestors 'self'; form-action 'self'; "
-        "frame-src 'self' https://view.officeapps.live.com https://*.officeapps.live.com; "
+        "frame-src 'self' https://sdk.cashfree.com https://sandbox.cashfree.com "
+        "https://*.cashfree.com https://view.officeapps.live.com https://*.officeapps.live.com "
+        "https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com; "
         "img-src 'self' data: blob: https:; media-src 'self' blob: https:; "
         "font-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; "
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; "
@@ -128,6 +153,18 @@ class Config:
     # Google AI (Gemini)
     GOOGLE_AI_API_KEY = os.environ.get("GOOGLE_AI_API_KEY")
 
+    # Cashfree credentials stay on the server. One merchant account is
+    # explicitly bound to one institute; never share it across tenant ledgers.
+    CASHFREE_APP_ID = os.environ.get("CASHFREE_APP_ID", "")
+    CASHFREE_SECRET_KEY = os.environ.get("CASHFREE_SECRET_KEY", "")
+    CASHFREE_MODE = os.environ.get("CASHFREE_MODE", "sandbox").strip().lower()
+    CASHFREE_API_URL = os.environ.get("CASHFREE_API_URL", "https://sandbox.cashfree.com/pg")
+    CASHFREE_INSTITUTE_ID = int(os.environ.get("CASHFREE_INSTITUTE_ID", "1"))
+    CASHFREE_NOTIFY_URL = os.environ.get("CASHFREE_NOTIFY_URL", "")
+    CASHFREE_PAYMENT_LINKS_ENABLED = _env_bool("CASHFREE_PAYMENT_LINKS_ENABLED", default=False)
+    CASHFREE_PAYMENT_LINK_BASE_URL = os.environ.get("CASHFREE_PAYMENT_LINK_BASE_URL", "").strip()
+    CASHFREE_PAYMENT_LINK_DAYS = max(1, min(int(os.environ.get("CASHFREE_PAYMENT_LINK_DAYS", "30")), 90))
+
     # Google Maps (Geocoding / Pincode lookup)
     GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")
 
@@ -137,6 +174,27 @@ class Config:
     # SMS Gateway (api.sms-gate.app cloud relay)
     SMS_GATEWAY_USER = os.environ.get("SMS_GATEWAY_USER", "")
     SMS_GATEWAY_PASSWORD = os.environ.get("SMS_GATEWAY_PASSWORD", "")
+
+    # Smart Counselling OTP. Real delivery is opt-in outside production so
+    # development and automated tests cannot accidentally send SMS messages.
+    SMART_COUNSELLING_OTP_TTL_SECONDS = max(60, int(os.environ.get("SMART_COUNSELLING_OTP_TTL_SECONDS", "300")))
+    SMART_COUNSELLING_OTP_MAX_ATTEMPTS = max(1, int(os.environ.get("SMART_COUNSELLING_OTP_MAX_ATTEMPTS", "5")))
+    SMART_COUNSELLING_OTP_RESEND_COOLDOWN_SECONDS = max(10, int(os.environ.get("SMART_COUNSELLING_OTP_RESEND_COOLDOWN_SECONDS", "45")))
+    SMART_COUNSELLING_OTP_MOBILE_HOURLY_LIMIT = max(1, int(os.environ.get("SMART_COUNSELLING_OTP_MOBILE_HOURLY_LIMIT", "5")))
+    SMART_COUNSELLING_OTP_USER_HOURLY_LIMIT = max(1, int(os.environ.get("SMART_COUNSELLING_OTP_USER_HOURLY_LIMIT", "30")))
+    SMART_COUNSELLING_OTP_SESSION_HOURLY_LIMIT = max(1, int(os.environ.get("SMART_COUNSELLING_OTP_SESSION_HOURLY_LIMIT", "8")))
+    SMART_COUNSELLING_OTP_SEND_IP_LIMIT = os.environ.get("SMART_COUNSELLING_OTP_SEND_IP_LIMIT", "10 per minute")
+    SMART_COUNSELLING_OTP_VERIFY_IP_LIMIT = os.environ.get("SMART_COUNSELLING_OTP_VERIFY_IP_LIMIT", "30 per minute")
+    SMART_COUNSELLING_OTP_DELIVERY_MODE = os.environ.get(
+        "SMART_COUNSELLING_OTP_DELIVERY_MODE",
+        "gateway" if APP_ENV == "production" else "disabled",
+    ).strip().lower()
+    # Use a dedicated HMAC key instead of coupling OTP hashes to Flask session
+    # signing. Development/tests retain a compatibility fallback; production
+    # validation below requires an explicit, separate secret.
+    SMART_COUNSELLING_OTP_SECRET = os.environ.get(
+        "SMART_COUNSELLING_OTP_SECRET", SECRET_KEY
+    )
 
     # LMS File Uploads
     UPLOAD_FOLDER = UPLOAD_DIR
@@ -170,6 +228,17 @@ class Config:
             errors.append("SESSION_COOKIE_SECURE must be true")
         if cls.RATELIMIT_STORAGE_URI == "memory://":
             errors.append("RATELIMIT_STORAGE_URI must use shared storage in production")
+        if (
+            len(cls.SMART_COUNSELLING_OTP_SECRET) < 32
+            or cls.SMART_COUNSELLING_OTP_SECRET == cls.SECRET_KEY
+        ):
+            errors.append(
+                "SMART_COUNSELLING_OTP_SECRET must be a separate random value of at least 32 characters"
+            )
+        if cls.SMART_COUNSELLING_OTP_DELIVERY_MODE != "gateway":
+            errors.append("SMART_COUNSELLING_OTP_DELIVERY_MODE must be gateway in production")
+        elif not cls.SMS_GATEWAY_USER or not cls.SMS_GATEWAY_PASSWORD:
+            errors.append("SMS gateway credentials are required for production OTP delivery")
         if cls.DB_TYPE != "mysql":
             errors.append("DB_TYPE must be mysql")
         if cls.STORAGE_PROVIDER != "gcs":

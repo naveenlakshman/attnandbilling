@@ -654,7 +654,7 @@
     <button type="button" class="btn-add" data-bs-toggle="modal" data-bs-target="#attachChapterModal">
       Attach Existing
     </button>
-    <a href="{{ url_for('lms_admin.master_chapter_new') }}" class="btn-add">
+    <a href="{{ url_for('lms_admin.master_chapter_new', source_program_id=data.program.id) }}" class="btn-add">
       New Master
     </a>
     {% endif %}

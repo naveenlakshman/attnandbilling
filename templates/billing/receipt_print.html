@@ -116,9 +116,9 @@
 
 <!-- Header -->
 <div class="receipt-header">
-  {% if company.logo_filename %}
-    <img src="{{ url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
-         alt="{{ company.company_name }}" style="max-height:55px; margin-bottom:4px;">
+  {% if company.logo_path or company.logo_filename %}
+    <img src="{{ storage_url(company.logo_path) if company.logo_path else url_for('static', filename='images/company_logo/' + company.logo_filename) }}"
+         alt="{{ company.company_name }}" crossorigin="anonymous" style="max-height:55px; margin-bottom:4px;">
     <br>
   {% endif %}
   <h1>{{ company.company_name }}</h1>
@@ -217,17 +217,27 @@
 <script>
   window.addEventListener('load', function() {
     {% if pdf_mode %}
+    const status = document.createElement('div');
+    status.setAttribute('role', 'status');
+    status.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;padding:10px 16px;border-radius:6px;background:#e8f2ff;color:#123;box-shadow:0 2px 8px rgba(0,0,0,.18);font:14px sans-serif';
+    status.textContent = 'Preparing your receipt PDF…';
+    document.body.appendChild(status);
     const receiptNo = '{{ receipt.receipt_no }}'.replace(/\//g, '-');
     const opt = {
       margin: 0,
       filename: 'Receipt-' + receiptNo + '.pdf',
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: true, scrollX: 0, scrollY: 0 },
+      html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: false, scrollX: 0, scrollY: 0 },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     const target = document.querySelector('.print-container');
     html2pdf().set(opt).from(target).save().then(function() {
-      window.close();
+      status.textContent = 'Receipt PDF downloaded. You can close this tab.';
+      status.style.background = '#d9f7e5';
+    }).catch(function(error) {
+      console.error('Receipt PDF download failed:', error);
+      status.textContent = 'PDF download failed. Please keep this tab open and try again.';
+      status.style.background = '#ffe0e0';
     });
     {% else %}
     window.print();

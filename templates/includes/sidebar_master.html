@@ -1,22 +1,53 @@
 {% set ep = request.endpoint or '' %}
 {% set is_admin = session.get('role') == 'admin' %}
+{% set is_platform_owner = session.get('platform_role') == 'platform_owner' %}
 
 {# Reorganized Active States checking #}
 {% set admissions_active = ep.startswith('leads.') and ep != 'leads.reports' %}
-{% set students_active = ep.startswith('attendance.') or ep.startswith('billing.students') or ep.startswith('billing.student_') or ep == 'billing.institute_day_overview' %}
+{% set attendance_report_endpoints = ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
+{% set students_active = (ep.startswith('attendance.') and ep not in attendance_report_endpoints) or ep.startswith('billing.students') or ep.startswith('billing.student_') or ep == 'billing.institute_day_overview' %}
 {% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') or ep.startswith('certificates.') %}
-{% set finance_active = (ep.startswith('billing.') and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
-{% set reports_active = ep.startswith('reports.') or ep == 'leads.reports' or ep in ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
-{% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.')) %}
+{% set finance_active = (ep.startswith('billing.') and ep != 'billing.reminder_dashboard' and not ep.startswith('billing.students') and not ep.startswith('billing.student_') and not ep.startswith('billing.courses') and not ep.startswith('billing.course_')) or ep.startswith('baddebt.') %}
+{% set reports_active = (ep.startswith('reports.') and ep != 'reports.import_page') or ep == 'leads.reports' or ep in attendance_report_endpoints %}
+{% set admin_active = ((ep.startswith('core.') and ep != 'core.dashboard') or ep.startswith('assets.') or ep.startswith('import_export.') or ep == 'billing.reminder_dashboard' or ep == 'reports.import_page') %}
+{% set smart_counselling_active = ep.startswith('smart_counselling.') %}
 
 <div class="erp-master-nav accordion accordion-flush" id="erpSidebarAccordion">
-  
+
+  {% if is_platform_owner %}
+  <!-- Keep platform-wide controls permanently visible and separate from tenant modules. -->
+  <div class="erp-subsection">Platform Owner</div>
+  <a class="nav-link erp-primary-link {{ 'active' if ep in ['platform_admin.institutes', 'platform_admin.institute_detail', 'platform_admin.institute_edit', 'platform_admin.institute_subscription'] else '' }}"
+     href="{{ url_for('platform_admin.institutes') }}">
+    <span class="erp-nav-mark"><i class="bi bi-buildings-fill"></i></span>
+    <span class="nav-text">Manage Institutes</span>
+  </a>
+  <a class="nav-link erp-primary-link {{ 'active' if ep in ['platform_admin.onboarding_new', 'platform_admin.onboarding_step'] else '' }}"
+     href="{{ url_for('platform_admin.onboarding_new') }}">
+    <span class="erp-nav-mark"><i class="bi bi-building-add"></i></span>
+    <span class="nav-text">Add New Institute</span>
+  </a>
+  {% if session.get('support_session_id') %}
+  <hr class="sidebar-divider">
+  <div class="erp-subsection">Support: {{ session.get('support_institute_name') }}</div>
+  {% endif %}
+  {% endif %}
+
+  {% if not is_platform_owner or session.get('support_session_id') %}
   <!-- Dashboard Section -->
   <a class="nav-link erp-primary-link {{ 'active' if ep == 'core.dashboard' else '' }}"
      href="{{ url_for('core.dashboard') }}">
     <span class="erp-nav-mark"><i class="bi bi-speedometer2"></i></span>
     <span class="nav-text">Dashboard</span>
   </a>
+
+  {% if smart_counselling_enabled %}
+  <a class="nav-link erp-primary-link {{ 'active' if smart_counselling_active else '' }}"
+     href="{{ url_for('smart_counselling.host') }}">
+    <span class="erp-nav-mark"><i class="bi bi-chat-square-heart-fill"></i></span>
+    <span class="nav-text">Smart Counselling</span>
+  </a>
+  {% endif %}
 
   <!-- Leads Section -->
   <div class="erp-module" data-module="Leads">
@@ -78,6 +109,10 @@
           Leave Requests
           <span class="badge rounded-pill bg-danger ms-auto sidebar-badge" id="badge-attendance-leaves" style="display: none;">0</span>
         </a>
+        <a class="nav-link {{ 'active' if ep == 'lms_admin.profile_update_requests' else '' }}" href="{{ url_for('lms_admin.profile_update_requests') }}">
+          Profile Update Requests
+          <span class="badge rounded-pill bg-danger ms-auto sidebar-badge" id="badge-profile-updates" style="display: none;">0</span>
+        </a>
         <div class="erp-subsection">Batches</div>
         <a class="nav-link {{ 'active' if ep in ['attendance.list_batches', 'attendance.view_batch', 'attendance.edit_batch', 'attendance.assign_students'] else '' }}" href="{{ url_for('attendance.list_batches') }}">Manage Batches</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.create_batch' else '' }}" href="{{ url_for('attendance.create_batch') }}">Create Batch</a>
@@ -107,6 +142,7 @@
          data-bs-parent="#erpSidebarAccordion">
       <div class="erp-module-menu">
         <a class="nav-link {{ 'active' if ep == 'lms_admin.dashboard' else '' }}" href="{{ url_for('lms_admin.dashboard') }}">LMS Dashboard</a>
+        <a class="nav-link {{ 'active' if ep in ['lms_admin.classroom_teaching_dashboard', 'lms_admin.classroom_teach_mode'] else '' }}" href="{{ url_for('lms_admin.classroom_teaching_dashboard') }}">🎓 Classroom Teaching Mode</a>
         <a class="nav-link {{ 'active' if ep in ['billing.courses', 'billing.course_new', 'billing.course_edit'] else '' }}" href="{{ url_for('billing.courses') }}">Courses</a>
         <a class="nav-link {{ 'active' if ep in ['lms_admin.list_programs', 'lms_admin.program_new', 'lms_admin.program_edit', 'lms_admin.program_view', 'lms_admin.list_chapters', 'lms_admin.list_program_chapter_topics', 'lms_admin.list_program_resources', 'lms_admin.add_program_resource', 'lms_admin.edit_program_resource'] else '' }}" href="{{ url_for('lms_admin.list_programs') }}">Programs</a>
         <a class="nav-link {{ 'active' if ep in ['lms_admin.list_master_chapters', 'lms_admin.master_chapter_new', 'lms_admin.master_chapter_edit', 'lms_admin.list_master_topics', 'lms_admin.master_topic_new', 'lms_admin.master_topic_edit', 'lms_admin.list_master_topic_contents', 'lms_admin.master_content_new'] else '' }}" href="{{ url_for('lms_admin.list_master_chapters') }}">Master Library</a>
@@ -122,7 +158,7 @@
           Certificates
         </a>
         <a class="nav-link {{ 'active' if ep == 'lms_admin.progress_dashboard' else '' }}" href="{{ url_for('lms_admin.progress_dashboard') }}">Student Progress</a>
-        {% if is_admin %}
+        {% if is_admin and is_platform_admin %}
           <div class="erp-subsection">System Configuration</div>
           <a class="nav-link {{ 'active' if ep == 'lms_admin.phase6_rollout_view' else '' }}" href="{{ url_for('lms_admin.phase6_rollout_view') }}">Legacy Migration</a>
           <a class="nav-link {{ 'active' if ep in ['lms_admin.list_course_mappings', 'lms_admin.manage_course_mapping'] else '' }}" href="{{ url_for('lms_admin.list_course_mappings') }}">Course Mapping</a>
@@ -189,22 +225,24 @@
          class="accordion-collapse collapse {{ 'show' if reports_active else '' }}"
          data-bs-parent="#erpSidebarAccordion">
       <div class="erp-module-menu">
-        <a class="nav-link {{ 'active' if ep == 'reports.daily_report' else '' }}" href="{{ url_for('reports.daily_report') }}">Daily Report</a>
-        <a class="nav-link {{ 'active' if ep == 'leads.reports' else '' }}" href="{{ url_for('leads.reports') }}">Lead Report</a>
-        <a class="nav-link {{ 'active' if ep == 'reports.dashboard' else '' }}" href="{{ url_for('reports.dashboard') }}">Analytics</a>
+        {% if is_admin %}
+          <a class="nav-link {{ 'active' if ep == 'leads.reports' else '' }}" href="{{ url_for('leads.reports') }}">Lead Report</a>
+          <a class="nav-link {{ 'active' if ep == 'reports.dashboard' else '' }}" href="{{ url_for('reports.dashboard') }}">Analytics</a>
+        {% endif %}
         <a class="nav-link {{ 'active' if ep == 'attendance.daily_report' else '' }}" href="{{ url_for('attendance.daily_report') }}">Attendance Daily Report</a>
-        <a class="nav-link {{ 'active' if ep == 'reports.attendance_monthly_report' else '' }}" href="{{ url_for('reports.attendance_monthly_report') }}">Attendance Monthly Summary</a>
+        <a class="nav-link {{ 'active' if ep == 'attendance.monthly_summary' else '' }}" href="{{ url_for('attendance.monthly_summary') }}">Attendance Monthly Summary</a>
+        <a class="nav-link {{ 'active' if ep in ['reports.attendance_monthly_report', 'reports.attendance_unmarked_details'] else '' }}" href="{{ url_for('reports.attendance_monthly_report') }}">Attendance Monthly Report</a>
         <a class="nav-link {{ 'active' if ep == 'attendance.defaulters' else '' }}" href="{{ url_for('attendance.defaulters') }}">Defaulters</a>
         <a class="nav-link {{ 'active' if ep == 'reports.lms_attendance_gap' else '' }}" href="{{ url_for('reports.lms_attendance_gap') }}">LMS vs Attendance Defaulters</a>
         {% if is_admin %}
           <a class="nav-link {{ 'active' if ep == 'reports.attendance_calendar_settings' else '' }}" href="{{ url_for('reports.attendance_calendar_settings') }}">Attendance Calendar Settings</a>
-          <a class="nav-link {{ 'active' if ep == 'reports.import_page' else '' }}" href="{{ url_for('reports.import_page') }}">Import Data</a>
         {% endif %}
       </div>
     </div>
   </div>
 
   <!-- Administration Section -->
+  {% if is_admin %}
   <div class="erp-module" data-module="admin">
     <button class="erp-module-toggle {{ 'active' if admin_active else '' }}"
             type="button"
@@ -225,16 +263,28 @@
         {% if is_admin %}
           <a class="nav-link {{ 'active' if ep in ['core.users', 'core.user_new', 'core.user_edit'] else '' }}" href="{{ url_for('core.users') }}">Users</a>
           <a class="nav-link {{ 'active' if ep in ['core.branches', 'core.branch_new', 'core.branch_edit'] else '' }}" href="{{ url_for('core.branches') }}">Branches</a>
+           <a class="nav-link {{ 'active' if ep and ep.startswith('notifications.') else '' }}" href="{{ url_for('notifications.admin_list') }}">Notifications</a>
+          <a class="nav-link {{ 'active' if ep == 'billing.reminder_dashboard' else '' }}" href="{{ url_for('billing.reminder_dashboard') }}">
+            Fee Reminders
+            <span class="badge rounded-pill bg-warning text-dark ms-auto sidebar-badge" id="badge-fee-reminders" style="display: none;">0</span>
+          </a>
         {% endif %}
-        <a class="nav-link {{ 'active' if ep == 'core.company_profile' else '' }}" href="{{ url_for('core.company_profile') }}">Company Profile</a>
+        {% if session.get('institute_id', 1)|int == 1 %}
+          <a class="nav-link {{ 'active' if ep == 'core.company_profile' else '' }}" href="{{ url_for('core.company_profile') }}">Company Profile</a>
+        {% else %}
+          <a class="nav-link {{ 'active' if ep == 'core.tenant_branding' else '' }}" href="{{ url_for('core.tenant_branding') }}">Branding</a>
+        {% endif %}
         {% if is_admin %}
           <a class="nav-link {{ 'active' if ep and ep.startswith('assets.') else '' }}" href="{{ url_for('assets.list_assets') }}">Assets</a>
+          <a class="nav-link {{ 'active' if ep == 'reports.import_page' else '' }}" href="{{ url_for('reports.import_page') }}">CSV Data Import</a>
           <a class="nav-link {{ 'active' if ep and ep.startswith('import_export.') else '' }}" href="{{ url_for('import_export.import_export_dashboard') }}">Export Data</a>
         {% endif %}
       </div>
     </div>
   </div>
+  {% endif %}
 
+  {% endif %}
   <hr class="sidebar-divider">
   <a class="nav-link text-danger-nav" href="{{ url_for('core.logout') }}">
     <span class="erp-nav-mark text-danger-icon"><i class="bi bi-box-arrow-left"></i></span>

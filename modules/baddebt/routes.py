@@ -1,10 +1,120 @@
 from flask import Blueprint, render_template, request, session, redirect, url_for, flash, jsonify
 from datetime import datetime
-import time
 from db import get_conn, log_activity
+from config import Config
 from modules.core.utils import login_required, admin_required
+from services.tenant_context import get_current_institute_id
+from services.document_numbers import allocate_document_number, derive_writeoff_prefix
 
 baddebt_bp = Blueprint("baddebt", __name__)
+
+
+def _begin_write_transaction(cur):
+    if getattr(Config, "DB_TYPE", "sqlite") == "mysql":
+        cur.execute("START TRANSACTION")
+    else:
+        cur.execute("BEGIN IMMEDIATE")
+
+
+def _for_update_clause():
+    return " FOR UPDATE" if getattr(Config, "DB_TYPE", "sqlite") == "mysql" else ""
+
+
+def _allocate_installment_coverage(amounts_due, receipt_total, writeoff_total):
+    """Allocate receipts first, then write-offs, across installments in order."""
+    remaining_receipts = float(receipt_total or 0)
+    remaining_writeoffs = float(writeoff_total or 0)
+    allocations = []
+
+    for raw_amount_due in amounts_due:
+        amount_due = float(raw_amount_due or 0)
+        receipt_applied = min(max(remaining_receipts, 0), amount_due)
+        remaining_receipts -= receipt_applied
+        uncovered = amount_due - receipt_applied
+        writeoff_applied = min(max(remaining_writeoffs, 0), uncovered)
+        remaining_writeoffs -= writeoff_applied
+        allocations.append((receipt_applied, writeoff_applied))
+
+    return allocations
+
+
+def _sync_invoice_installments(cur, invoice_id, institute_id, now):
+    """Rebuild installment coverage from tenant-owned receipts and write-offs."""
+    cur.execute("""
+        SELECT i.id,
+               COALESCE((
+                   SELECT SUM(r.amount_received)
+                   FROM receipts r
+                   WHERE r.invoice_id = i.id
+                     AND r.institute_id = i.institute_id
+               ), 0) AS receipt_total,
+               COALESCE((
+                   SELECT SUM(bw.amount_written_off)
+                   FROM bad_debt_writeoffs bw
+                   WHERE bw.invoice_id = i.id
+                     AND bw.institute_id = i.institute_id
+               ), 0) AS writeoff_total
+        FROM invoices i
+        WHERE i.id = ? AND i.institute_id = ?
+    """, (invoice_id, institute_id))
+    invoice = cur.fetchone()
+    if not invoice:
+        return
+
+    receipt_total = float(invoice["receipt_total"] or 0)
+    writeoff_total = float(invoice["writeoff_total"] or 0)
+    cur.execute("""
+        SELECT ip.id, ip.amount_due
+        FROM installment_plans ip
+        JOIN invoices i ON i.id = ip.invoice_id
+        WHERE ip.invoice_id = ? AND i.institute_id = ?
+        ORDER BY ip.installment_no ASC, ip.id ASC
+    """, (invoice_id, institute_id))
+
+    installments = cur.fetchall()
+    allocations = _allocate_installment_coverage(
+        [installment["amount_due"] for installment in installments],
+        receipt_total,
+        writeoff_total,
+    )
+
+    for installment, allocation in zip(installments, allocations):
+        amount_due = float(installment["amount_due"] or 0)
+        receipt_applied, writeoff_applied = allocation
+        covered = round(receipt_applied + writeoff_applied, 2)
+
+        if covered >= round(amount_due, 2):
+            status = "paid"
+        elif covered > 0:
+            status = "partially_paid"
+        else:
+            status = "pending"
+
+        if writeoff_applied > 0 and receipt_applied > 0:
+            remarks = (
+                f"Receipt payment {receipt_applied:.2f}; "
+                f"written off {writeoff_applied:.2f}"
+            )
+        elif writeoff_applied > 0:
+            remarks = f"Written off {writeoff_applied:.2f}"
+        elif receipt_applied >= amount_due and amount_due > 0:
+            remarks = "Fully paid"
+        elif receipt_applied > 0:
+            remarks = f"Partial payment of {receipt_applied:.2f}"
+        else:
+            remarks = None
+
+        cur.execute("""
+            UPDATE installment_plans
+            SET amount_paid = ?, status = ?, remarks = ?, updated_at = ?
+            WHERE id = ?
+              AND EXISTS (
+                  SELECT 1
+                  FROM invoices i
+                  WHERE i.id = installment_plans.invoice_id
+                    AND i.institute_id = ?
+              )
+        """, (covered, status, remarks, now, installment["id"], institute_id))
 
 
 
@@ -15,11 +125,13 @@ def dashboard():
     """Display all bad debt write-offs"""
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     # Get all write-offs with related invoice and student details
     cur.execute("""
         SELECT
             bw.id,
+            bw.reference_no,
             bw.invoice_id,
             bw.amount_written_off,
             bw.paid_amount,
@@ -39,8 +151,11 @@ def dashboard():
         JOIN invoices i ON bw.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
         LEFT JOIN users u ON bw.authorized_by = u.id
+        WHERE bw.institute_id = ?
+          AND i.institute_id = ?
+          AND s.institute_id = ?
         ORDER BY bw.writeoff_date DESC
-    """)
+    """, (current_inst, current_inst, current_inst))
     write_offs = cur.fetchall()
 
     # Calculate totals
@@ -62,6 +177,7 @@ def dashboard():
 @admin_required
 def create():
     """Create a new bad debt write-off"""
+    current_inst = get_current_institute_id(default=1)
     if request.method == "POST":
         invoice_id = request.form.get("invoice_id", "").strip()
         amount_written_off = request.form.get("amount_written_off", "").strip()
@@ -97,11 +213,15 @@ def create():
                 i.branch_id,
                 s.student_code,
                 s.status AS student_status,
-                (SELECT IFNULL(SUM(amount_received), 0) FROM receipts WHERE invoice_id = i.id) AS paid_amount
+                (SELECT IFNULL(SUM(amount_received), 0)
+                 FROM receipts
+                 WHERE invoice_id = i.id AND institute_id = ?) AS paid_amount
             FROM invoices i
             JOIN students s ON i.student_id = s.id
             WHERE i.id = ?
-        """, (invoice_id,))
+              AND i.institute_id = ?
+              AND s.institute_id = ?
+        """, (current_inst, invoice_id, current_inst, current_inst))
         invoice = cur.fetchone()
 
         if not invoice:
@@ -124,7 +244,6 @@ def create():
 
         try:
             conn = get_conn()
-            conn.isolation_level = None  # Autocommit mode
             cur = conn.cursor()
 
             try:
@@ -133,11 +252,78 @@ def create():
                 branch_id = invoice["branch_id"]
 
                 # Start explicit transaction
-                cur.execute("BEGIN IMMEDIATE")
+                _begin_write_transaction(cur)
+
+                # Re-read and lock the tenant-owned invoice inside the write
+                # transaction so concurrent receipts/write-offs cannot make
+                # the previously calculated balance stale.
+                cur.execute("""
+                    SELECT
+                        i.id,
+                        i.invoice_no,
+                        i.total_amount,
+                        i.student_id,
+                        i.branch_id,
+                        s.student_code,
+                        s.status AS student_status,
+                        (SELECT IFNULL(SUM(r.amount_received), 0)
+                         FROM receipts r
+                         WHERE r.invoice_id = i.id
+                           AND r.institute_id = ?) AS paid_amount,
+                        (SELECT IFNULL(SUM(bw.amount_written_off), 0)
+                         FROM bad_debt_writeoffs bw
+                         WHERE bw.invoice_id = i.id
+                           AND bw.institute_id = ?) AS written_off_amount
+                    FROM invoices i
+                    JOIN students s ON s.id = i.student_id
+                    WHERE i.id = ?
+                      AND i.institute_id = ?
+                      AND s.institute_id = ?
+                """ + _for_update_clause(), (
+                    current_inst,
+                    current_inst,
+                    invoice_id,
+                    current_inst,
+                    current_inst,
+                ))
+                invoice = cur.fetchone()
+                if not invoice:
+                    raise ValueError("Invoice not found for this institute.")
+
+                branch_id = invoice["branch_id"]
+                paid_amount = float(invoice["paid_amount"] or 0)
+                written_off_amount = float(invoice["written_off_amount"] or 0)
+                total_amount = float(invoice["total_amount"] or 0)
+                balance = total_amount - paid_amount - written_off_amount
+                if amount_written_off > balance:
+                    raise ValueError(
+                        f"Write-off amount (₹{amount_written_off:.2f}) cannot "
+                        f"exceed balance (₹{balance:.2f})."
+                    )
+
+                cur.execute("""
+                    SELECT invoice_prefix
+                    FROM institute_settings
+                    WHERE institute_id = ?
+                """, (current_inst,))
+                institute_settings = cur.fetchone()
+                invoice_prefix = (
+                    institute_settings["invoice_prefix"]
+                    if institute_settings and institute_settings["invoice_prefix"]
+                    else "INV"
+                )
+                writeoff_reference = allocate_document_number(
+                    cur,
+                    current_inst,
+                    "writeoff",
+                    derive_writeoff_prefix(invoice_prefix),
+                )
 
                 # Insert write-off record
                 cur.execute("""
                     INSERT INTO bad_debt_writeoffs (
+                        institute_id,
+                        reference_no,
                         invoice_id,
                         amount_written_off,
                         paid_amount,
@@ -149,8 +335,10 @@ def create():
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
+                    current_inst,
+                    writeoff_reference,
                     invoice_id,
                     amount_written_off,
                     paid_amount,
@@ -167,8 +355,10 @@ def create():
 
                 # Get expense category
                 cur.execute("""
-                    SELECT id FROM expense_categories WHERE category_name = 'Uncollectible Receivables'
-                """)
+                    SELECT id FROM expense_categories
+                    WHERE category_name = 'Uncollectible Receivables'
+                      AND institute_id = ?
+                """, (current_inst,))
                 category = cur.fetchone()
 
                 if category:
@@ -180,6 +370,7 @@ def create():
 
                     cur.execute("""
                         INSERT INTO expenses (
+                            institute_id,
                             expense_date,
                             branch_id,
                             category_id,
@@ -192,15 +383,16 @@ def create():
                             created_at,
                             updated_at
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
+                        current_inst,
                         datetime.now().date().isoformat(),
                         branch_id,
                         category_id,
                         f"Bad Debt Write-off - {invoice['invoice_no']}",
                         amount_written_off,
                         "cash",
-                        f"WO-{write_off_id}",
+                        writeoff_reference,
                         expense_description,
                         user_id,
                         now,
@@ -216,20 +408,15 @@ def create():
                 cur.execute("""
                     UPDATE invoices
                     SET status = ?, updated_at = ?
-                    WHERE id = ?
-                """, (new_status, now, invoice_id))
+                    WHERE id = ? AND institute_id = ?
+                """, (new_status, now, invoice_id, current_inst))
 
-                # Mark all unpaid installment_plans for this invoice as written_off
-                # so they no longer appear in receivables
-                cur.execute("""
-                    UPDATE installment_plans
-                    SET status = 'paid', amount_paid = amount_due,
-                        remarks = 'Written off', updated_at = ?
-                    WHERE invoice_id = ? AND status != 'paid'
-                """, (now, invoice_id))
+                # Recalculate installment coverage from receipts plus all active
+                # write-offs. This preserves any balance after a partial write-off.
+                _sync_invoice_installments(cur, invoice_id, current_inst, now)
 
                 # Commit transaction
-                cur.execute("COMMIT")
+                conn.commit()
                 conn.close()
 
                 # Log activity after transaction is committed
@@ -246,7 +433,7 @@ def create():
                 return redirect(url_for("baddebt.dashboard"))
 
             except Exception as e:
-                cur.execute("ROLLBACK")
+                conn.rollback()
                 conn.close()
                 raise
 
@@ -257,7 +444,6 @@ def create():
     # GET request - show form
     conn = get_conn()
     cur = conn.cursor()
-
     # Get pre-selected invoice if passed from invoice view
     pre_selected_invoice = None
     invoice_id_param = request.args.get("invoice_id", "").strip()
@@ -275,8 +461,11 @@ def create():
                     i.branch_id
                 FROM invoices i
                 JOIN students s ON i.student_id = s.id
-                WHERE i.id = ? AND i.status IN ('unpaid', 'partially_paid')
-            """, (invoice_id_param,))
+                WHERE i.id = ?
+                  AND i.status IN ('unpaid', 'partially_paid')
+                  AND i.institute_id = ?
+                  AND s.institute_id = ?
+            """, (invoice_id_param, current_inst, current_inst))
             pre_selected_invoice = cur.fetchone()
         except:
             pass
@@ -295,8 +484,10 @@ def create():
         FROM invoices i
         JOIN students s ON i.student_id = s.id
         WHERE i.status IN ('unpaid', 'partially_paid')
+          AND i.institute_id = ?
+          AND s.institute_id = ?
         ORDER BY i.invoice_no DESC
-    """)
+    """, (current_inst, current_inst))
     invoices = cur.fetchall()
 
     conn.close()
@@ -311,10 +502,12 @@ def view(writeoff_id):
     """View details of a bad debt write-off"""
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT
             bw.id,
+            bw.reference_no,
             bw.invoice_id,
             bw.amount_written_off,
             bw.paid_amount,
@@ -340,7 +533,10 @@ def view(writeoff_id):
         LEFT JOIN users u ON bw.authorized_by = u.id
         LEFT JOIN branches b ON i.branch_id = b.id
         WHERE bw.id = ?
-    """, (writeoff_id,))
+          AND bw.institute_id = ?
+          AND i.institute_id = ?
+          AND s.institute_id = ?
+    """, (writeoff_id, current_inst, current_inst, current_inst))
     write_off = cur.fetchone()
 
     if not write_off:
@@ -357,8 +553,8 @@ def view(writeoff_id):
             reference_no,
             notes
         FROM expenses
-        WHERE reference_no = ?
-    """, (f"WO-{writeoff_id}",))
+        WHERE reference_no = ? AND institute_id = ?
+    """, (write_off["reference_no"], current_inst))
     expense = cur.fetchone()
 
     conn.close()
@@ -377,6 +573,7 @@ def get_invoice_details(invoice_id):
     """API endpoint to get invoice details for form"""
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     cur.execute("""
         SELECT
@@ -386,11 +583,15 @@ def get_invoice_details(invoice_id):
             s.full_name AS student_name,
             s.student_code,
             s.status AS student_status,
-            (SELECT IFNULL(SUM(amount_received), 0) FROM receipts WHERE invoice_id = i.id) AS paid_amount
+            (SELECT IFNULL(SUM(amount_received), 0)
+             FROM receipts
+             WHERE invoice_id = i.id AND institute_id = ?) AS paid_amount
         FROM invoices i
         JOIN students s ON i.student_id = s.id
         WHERE i.id = ?
-    """, (invoice_id,))
+          AND i.institute_id = ?
+          AND s.institute_id = ?
+    """, (current_inst, invoice_id, current_inst, current_inst))
     invoice = cur.fetchone()
 
     conn.close()
@@ -418,12 +619,15 @@ def get_invoice_details(invoice_id):
 def delete(writeoff_id):
     """Delete a bad debt write-off"""
     conn = get_conn()
-    conn.isolation_level = None  # Autocommit mode
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
+    _begin_write_transaction(cur)
 
     cur.execute("""
-        SELECT invoice_id, amount_written_off FROM bad_debt_writeoffs WHERE id = ?
-    """, (writeoff_id,))
+        SELECT invoice_id, amount_written_off, reference_no
+        FROM bad_debt_writeoffs
+        WHERE id = ? AND institute_id = ?
+    """ + _for_update_clause(), (writeoff_id, current_inst))
     write_off = cur.fetchone()
 
     if not write_off:
@@ -435,21 +639,24 @@ def delete(writeoff_id):
         now = datetime.now().isoformat(timespec="seconds")
         user_id = session.get("user_id")
 
-        # Start explicit transaction
-        cur.execute("BEGIN IMMEDIATE")
-
         # Delete from bad_debt_writeoffs
-        cur.execute("DELETE FROM bad_debt_writeoffs WHERE id = ?", (writeoff_id,))
+        cur.execute(
+            "DELETE FROM bad_debt_writeoffs WHERE id = ? AND institute_id = ?",
+            (writeoff_id, current_inst),
+        )
 
         # Delete related expense
-        cur.execute("DELETE FROM expenses WHERE reference_no = ?", (f"WO-{writeoff_id}",))
+        cur.execute(
+            "DELETE FROM expenses WHERE reference_no = ? AND institute_id = ?",
+            (write_off["reference_no"], current_inst),
+        )
 
         # Update invoice status back to original
         invoice_id = write_off["invoice_id"]
         cur.execute("""
             SELECT total_amount, (SELECT IFNULL(SUM(amount_received), 0) FROM receipts WHERE invoice_id = ?) AS paid_amount
-            FROM invoices WHERE id = ?
-        """, (invoice_id, invoice_id))
+            FROM invoices WHERE id = ? AND institute_id = ?
+        """, (invoice_id, invoice_id, current_inst))
         invoice = cur.fetchone()
 
         if invoice:
@@ -464,11 +671,15 @@ def delete(writeoff_id):
                 new_status = "unpaid"
 
             cur.execute("""
-                UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?
-            """, (new_status, now, invoice_id))
+                UPDATE invoices SET status = ?, updated_at = ?
+                WHERE id = ? AND institute_id = ?
+            """, (new_status, now, invoice_id, current_inst))
 
-        # Commit transaction
-        cur.execute("COMMIT")
+            # The deleted write-off no longer covers the invoice. Reallocate the
+            # remaining receipts/write-offs so the restored balance is receivable.
+            _sync_invoice_installments(cur, invoice_id, current_inst, now)
+
+        conn.commit()
         conn.close()
 
         # Log activity after transaction is committed
@@ -486,7 +697,7 @@ def delete(writeoff_id):
 
     except Exception as e:
         try:
-            cur.execute("ROLLBACK")
+            conn.rollback()
         except:
             pass
         conn.close()

@@ -1,0 +1,46 @@
+# .gcloudignore - Explicit Cloud Build Source Exclusions
+.gcloudignore
+.git
+.gitignore
+
+# Environment & Credentials
+.env
+.env.*
+gcp-key.json
+*.key
+*.pem
+
+# Database Dumps & Large Binaries
+*.sql
+!migrations/*.sql
+backup_test_attn_billing.sql
+scratch/*.sql
+database.db
+instance/
+cloud-sql-proxy.exe
+*.tar.gz
+*.zip
+
+# Virtual Environments & Caches
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+scratch/*
+!scratch/test_*.py
+frontend/smart-counselling/node_modules/
+frontend/smart-counselling/.angular/
+static/smart-counselling/
+.pnpm-store/
+
+# Production LMS assets are served from GCS, not from the container image.
+static/lms/
+
+# Local editor metadata and private/generated student data
+.agents/
+.codex/
+.vscode/
+*.db
+uploads/
+static/images/student_photos/
+static/certificates/

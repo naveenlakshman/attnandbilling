@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% from 'includes/batch_end_summary.html' import batch_end %}
+
+{% block title %}🎓 Classroom Teaching Mode{% endblock %}
+
+{% block extra_css %}
+<style>
+  .classroom-batch-card { transition: box-shadow .2s ease, transform .2s ease; }
+  .classroom-batch-card.running-now {
+    border-left-color: #16a34a !important;
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, .18), 0 8px 22px rgba(22, 163, 74, .13) !important;
+  }
+  .live-badge-classroom {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: #dcfce7;
+    color: #15803d;
+    font-size: .7rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .classroom-status-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: .7rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .class-completed-badge { background: #dbeafe; color: #1d4ed8; }
+  .attendance-marked-badge { background: #fef3c7; color: #92400e; }
+  .attendance-pending-badge { background: #dc3545; color: #fff; }
+  .classroom-batch-list-row { display: none; }
+  .classroom-view-list { --bs-gutter-y: .65rem; }
+  .classroom-view-list > .batch-card-col { width: 100%; }
+  .classroom-view-list .classroom-batch-card { display: none; }
+  .classroom-view-list .classroom-batch-list-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #f8f9ff;
+    border: 1px solid #dce3ff;
+    border-radius: 12px;
+  }
+  .classroom-view-list [data-is-live="1"] .classroom-batch-list-row {
+    border-color: #86d2a0;
+    background: #f3fbf5;
+  }
+  .classroom-list-identity { flex: 1 1 280px; min-width: 0; }
+  .classroom-list-title { font-size: .95rem; }
+  .classroom-list-meta { font-size: .78rem; }
+  .classroom-list-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .classroom-list-actions .btn, .classroom-list-actions .badge { font-size: .75rem; white-space: nowrap; }
+  .classroom-list-progress { width: 90px; height: 7px; accent-color: #198754; }
+  @media (max-width: 767px) {
+    .classroom-list-actions { width: 100%; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <!-- Page Title Header -->
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="fw-bold mb-1" style="color: #1e293b;">🎓 Classroom Teaching Mode</h2>
+      <p class="text-muted mb-0">Select an active batch to launch the interactive presenter view for classroom lectures.</p>
+    </div>
+  </div>
+
+
+  <!-- BATCH SELECTION HEADER WITH SEARCH BOX -->
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+    <h4 class="fw-bold text-dark mb-0">Select Assigned Batch to Start Teaching</h4>
+    <div class="d-flex align-items-center justify-content-end flex-wrap gap-3">
+      <div class="btn-group btn-group-sm" role="group" aria-label="Batch view">
+        <button type="button" class="btn btn-outline-primary" data-classroom-view="cards" aria-controls="batchCardsContainer" aria-pressed="{{ 'false' if request.args.get('view') == 'list' else 'true' }}">Cards</button>
+        <button type="button" class="btn btn-outline-primary" data-classroom-view="list" aria-controls="batchCardsContainer" aria-pressed="{{ 'true' if request.args.get('view') == 'list' else 'false' }}">List</button>
+      </div>
+      {% if is_admin %}
+      <form method="GET" action="{{ url_for('lms_admin.classroom_teaching_dashboard') }}">
+        <input type="hidden" name="view" id="classroomViewField" value="{{ 'list' if request.args.get('view') == 'list' else 'cards' }}">
+        <label class="visually-hidden" for="trainerFilter">Filter by staff</label>
+        <select id="trainerFilter" name="trainer_id" class="form-select form-select-sm" style="min-width:220px" onchange="this.form.submit()">
+          <option value="">All Staff</option>
+          {% for trainer in trainers %}
+          <option value="{{ trainer.id }}"{% if selected_trainer_id == trainer.id %} selected{% endif %}>{{ trainer.full_name }}</option>
+          {% endfor %}
+        </select>
+      </form>
+      {% endif %}
+      <div>
+        <label class="visually-hidden" for="attendanceStatusFilter">Attendance status</label>
+        <select id="attendanceStatusFilter" class="form-select form-select-sm" style="min-width:170px">
+          <option value="all">All Attendance</option>
+          <option value="completed">Attendance Completed</option>
+          <option value="pending">Attendance Pending</option>
+        </select>
+      </div>
+      <div>
+        <label class="visually-hidden" for="classStatusFilter">Class status</label>
+        <select id="classStatusFilter" class="form-select form-select-sm" style="min-width:155px">
+          <option value="all">All Classes</option>
+          <option value="completed">Class Completed</option>
+          <option value="pending">Class Pending</option>
+        </select>
+      </div>
+      <div class="position-relative" style="min-width: 280px;">
+        <input type="text" id="batchSearchInput" class="form-control form-control-sm ps-5 rounded-pill border-secondary-subtle shadow-2xs" placeholder="🔍 Search batch, course, trainer, branch...">
+      </div>
+      <span class="badge bg-primary px-3 py-2 fs-6" id="activeBatchCountBadge">{{ batches|length }} Active Batches</span>
+      <span class="badge bg-info text-dark px-3 py-2 fs-6" id="activeStudentCountBadge">{{ total_students }} Total Students</span>
+    </div>
+  </div>
+
+  <!-- BATCH CARDS GRID -->
+  {% if batches %}
+    <div class="row g-4{% if request.args.get('view') == 'list' %} classroom-view-list{% endif %}" id="batchCardsContainer">
+      {% for b in batches %}
+        <div class="col-md-6 col-lg-4 batch-card-col"
+             data-batch-id="{{ b.id }}"
+             data-start="{{ b.start_time or '' }}"
+             data-end="{{ b.end_time or '' }}"
+             data-student-count="{{ b.student_count or 0 }}"
+             data-attendance-status="{{ 'completed' if b.attendance_marked_today else 'pending' }}"
+             data-class-status="{{ 'completed' if b.class_completed_today else 'pending' }}"
+             data-search-text="{{ b.batch_name | lower }} {{ (b.course_name or '') | lower }} {{ (b.branch_name or '') | lower }} {{ (b.trainer_name or '') | lower }}">
+          <div class="classroom-batch-list-row">
+            <div class="classroom-list-identity">
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <strong class="classroom-list-title">{{ b.batch_name }}</strong>
+                <span class="live-badge-classroom d-none">● LIVE</span>
+              </div>
+              <div class="text-muted classroom-list-meta">{{ b.course_name or 'Course Not Mapped' }} · {{ b.branch_name or 'Main Branch' }} · {{ b.trainer_name or 'Unassigned' }}</div>
+              <div class="mt-1">{{ batch_end(b.end_summary) }}</div>
+              <div class="d-flex align-items-center gap-2 classroom-list-meta mt-1">
+                {% if b.total_cnt %}
+                <progress class="classroom-list-progress" value="{{ b.taught_pct }}" max="100" aria-label="Syllabus completed for {{ b.batch_name }}">{{ b.taught_pct }}%</progress>
+                <span>{{ b.taught_cnt }}/{{ b.total_cnt }} topics ({{ b.taught_pct }}%)</span>
+                {% else %}
+                <span class="text-muted">No syllabus configured</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="classroom-list-actions">
+              <span class="badge bg-white text-secondary border font-monospace">{{ b.start_time | format_time if b.start_time else '—' }} – {{ b.end_time | format_time if b.end_time else '—' }}</span>
+              {% if not b.student_count %}
+              <span class="classroom-status-badge bg-secondary text-white">Attendance N/A</span>
+              {% elif b.attendance_marked_today %}
+              <span class="classroom-status-badge attendance-marked-badge">Attendance Marked</span>
+              {% else %}
+              <span class="classroom-status-badge attendance-pending-badge">Attendance Pending</span>
+              {% endif %}
+              <span class="classroom-status-badge {{ 'class-completed-badge' if b.class_completed_today else 'bg-light text-secondary border' }}">{{ 'Class Completed' if b.class_completed_today else 'Class Pending' }}</span>
+              <a class="badge bg-primary text-decoration-none" href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=b.id, program_id=b.launch_program_id, show_students=1) if b.launch_program_id else url_for('lms_admin.classroom_teach_mode', batch_id=b.id, show_students=1) }}" target="_blank" rel="noopener" aria-label="Check students for {{ b.batch_name }}">{{ b.student_count }} student{{ 's' if b.student_count != 1 else '' }}</a>
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('attendance.view_batch', batch_id=b.id) }}" aria-label="View {{ b.batch_name }}">View</a>
+              <a class="btn btn-sm btn-primary fw-semibold" href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=b.id, program_id=b.launch_program_id) if b.launch_program_id else url_for('lms_admin.classroom_teach_mode', batch_id=b.id) }}" aria-label="Teach {{ b.batch_name }}">Teach Batch</a>
+            </div>
+          </div>
+          <div class="card h-100 border-0 shadow-sm classroom-batch-card" style="border-radius: 14px; overflow: hidden; border-left: 5px solid #4f46e5 !important;">
+            <div class="card-body p-4 d-flex flex-column justify-content-between">
+              <div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <h5 class="fw-bold text-dark mb-0">{{ b.batch_name }}</h5>
+                  <div class="d-flex align-items-center justify-content-end gap-2 flex-wrap">
+                    <span class="live-badge-classroom d-none">● LIVE</span>
+                    {% if b.class_completed_today %}
+                    <span class="classroom-status-badge class-completed-badge">Class Completed</span>
+                    {% endif %}
+                    {% if b.attendance_marked_today %}
+                    <span class="classroom-status-badge attendance-marked-badge">Attendance Marked</span>
+                    {% endif %}
+                    <span class="badge bg-light text-dark border">{{ b.student_count }} Students</span>
+                  </div>
+                </div>
+                <div class="text-muted small mb-3">
+                  <div><strong>Course:</strong> {{ b.course_name or 'Course Not Mapped' }}</div>
+                  <div><strong>Branch:</strong> {{ b.branch_name or 'Main Branch' }}</div>
+                  <div><strong>Time:</strong> 🕐 {{ b.start_time or '' }} - {{ b.end_time or '' }}</div>
+                  <div><strong>Trainer:</strong> {{ b.trainer_name or 'Unassigned' }}</div>
+                  <div class="mt-2">{{ batch_end(b.end_summary) }}</div>
+                </div>
+
+                <!-- TOPIC PROGRESS & NEXT TOPIC INFO -->
+                <div class="p-3 bg-light rounded-3 mb-3 border">
+                  <div class="d-flex align-items-center justify-content-between small fw-semibold mb-1">
+                    <span class="text-secondary">📚 Topics Completed:</span>
+                    <span class="text-primary fw-bold">{{ b.taught_cnt }}/{{ b.total_cnt }} ({{ b.taught_pct }}%)</span>
+                  </div>
+                  <div class="progress mb-2" style="height: 6px;">
+                    <div class="progress-bar bg-success" role="progressbar" style="width: {{ b.taught_pct }}%;"></div>
+                  </div>
+                  <div class="small text-truncate" title="{{ b.next_topic }}">
+                    <strong class="text-dark">Next Topic:</strong>
+                    <span class="text-primary fw-medium">{{ b.next_topic }}</span>
+                  </div>
+                  {% if b.earlier_pending_summary %}
+                  <div class="small mt-2 text-warning-emphasis" title="{{ b.earlier_pending_summary }}">
+                    <strong>⚠ Earlier Topics Pending:</strong>
+                    <span>{{ b.earlier_pending_summary }}</span>
+                  </div>
+                  {% endif %}
+                  {% if b.today_completed_topics %}
+                  <div class="small mt-2 pt-2 border-top" title="{{ b.today_completed_topics | join(', ') }}">
+                    <strong class="text-success">Completed Today:</strong>
+                    <span class="text-dark">{{ b.today_completed_topics | join(', ') }}</span>
+                  </div>
+                  {% elif b.last_taught_topic and b.last_taught_at %}
+                  <div class="small mt-2 pt-2 border-top" title="{{ b.last_taught_topic }}">
+                    <strong class="text-secondary">Last Topic Taught:</strong>
+                    <span class="text-dark">{{ b.last_taught_topic }}</span>
+                    <div class="text-muted mt-1">{{ b.last_taught_at | format_ist_datetime('%d-%b-%Y %I:%M %p') }} IST</div>
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="pt-2 border-top d-flex gap-2 flex-wrap">
+                <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=b.id, program_id=b.launch_program_id) if b.launch_program_id else url_for('lms_admin.classroom_teach_mode', batch_id=b.id) }}" class="btn btn-primary w-100 fw-bold py-2 d-flex align-items-center justify-content-center gap-2" style="background: #4f46e5; border-color: #4f46e5; border-radius: 8px;">
+                  <span>🎓 Launch Teaching Mode</span>
+                </a>
+                <a href="{{ url_for('lms_admin.classroom_teach_mode', batch_id=b.id, program_id=b.launch_program_id, show_students=1) if b.launch_program_id else url_for('lms_admin.classroom_teach_mode', batch_id=b.id, show_students=1) }}" target="_blank" rel="noopener" class="btn btn-outline-primary w-100 fw-semibold py-2 d-flex align-items-center justify-content-center gap-2" style="border-radius: 8px;">
+                  <span>👥 Check Students</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    <p id="batchNoMatches" class="alert alert-info mt-3 d-none" role="status">No batches match your search or filters.</p>
+  {% else %}
+    <div class="alert alert-info p-4 text-center" style="border-radius: 12px;">
+      <h5>No active batches found for classroom teaching.</h5>
+      <p class="mb-0">Please create or assign a batch to start classroom lectures.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/classroom_teaching_dashboard.js', v='1') }}" defer></script>
+{% endblock %}
