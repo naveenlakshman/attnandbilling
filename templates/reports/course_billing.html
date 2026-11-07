@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% set receipt_report = kind == 'receipts' %}
+{% set report_title = 'Course-wise Receipts' if receipt_report else 'Course-wise Invoices' %}
+{% block title %}{{ report_title }}{% endblock %}
+{% block page_title %}{{ report_title }}{% endblock %}
+{% block extra_css %}
+<style>
+  .cr-page { max-width:1400px; margin:0 auto; }
+  .cr-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:16px; margin-bottom:20px; }
+  .cr-header h2 { margin:0 0 5px; font-size:26px; font-weight:750; }
+  .cr-muted { color:#64748b; font-size:13px; }
+  .cr-card { background:white; border:1px solid #e0e6ef; border-radius:12px; padding:20px; margin-bottom:20px; }
+  .cr-filters { display:flex; flex-wrap:wrap; align-items:end; gap:14px; }
+  .cr-field { flex:1 1 160px; min-width:140px; }
+  .cr-field label { display:block; font-size:12px; color:#475569; font-weight:650; margin-bottom:6px; }
+  .cr-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; }
+  .cr-metric strong { display:block; margin-top:5px; font-size:25px; color:#1d4ed8; font-variant-numeric:tabular-nums; }
+  .cr-table-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+  .cr-table-header h3 { margin:0; font-size:18px; }
+  .cr-page th { color:#52647c; font-size:12px; white-space:nowrap; }
+  .cr-page td { vertical-align:middle; font-size:13px; }
+  .cr-money { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .cr-page tfoot { background:#f5f8fd; font-weight:700; }
+  .cr-note { padding:14px 16px; background:#eff6ff; border:1px solid #dbeafe; border-radius:9px; color:#345276; font-size:13px; line-height:1.65; margin-bottom:20px; }
+  .cr-pagination { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:16px; }
+  @media(max-width:600px) { .cr-card { padding:15px; } .cr-header h2 { font-size:22px; } .cr-metric strong { font-size:22px; } }
+</style>
+{% endblock %}
+{% block content %}
+<div class="cr-page">
+  <div class="cr-header">
+    <div><h2>{{ report_title }}</h2><div class="cr-muted">{{ 'Payments received, allocated to the courses on each invoice.' if receipt_report else 'Net invoiced value by course, after discounts.' }}</div></div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('reports.dashboard') }}">Back to Reports</a>
+  </div>
+  <nav class="nav nav-pills gap-2 mb-3" aria-label="Course billing reports">
+    <a class="nav-link{% if not receipt_report %} active{% endif %}" {% if not receipt_report %}aria-current="page"{% endif %} href="{{ report_link(kind='invoices') }}">Invoices</a>
+    <a class="nav-link{% if receipt_report %} active{% endif %}" {% if receipt_report %}aria-current="page"{% endif %} href="{{ report_link(kind='receipts') }}">Receipts</a>
+  </nav>
+  <div class="cr-card">
+    <form method="get" class="cr-filters" action="{{ url_for('reports.course_billing', kind=kind) }}">
+      <div class="cr-field"><label for="cr-course">Course</label><select class="form-select" name="course_id" id="cr-course">
+        <option value="">All courses</option>
+        {% for course in courses %}<option value="{{ course.id }}" {% if filters.course_id == course.id|string %}selected{% endif %}>{{ course.course_name }}</option>{% endfor %}
+        <option value="unassigned" {% if filters.course_id == 'unassigned' %}selected{% endif %}>Unassigned / legacy items</option>
+      </select></div>
+      <div class="cr-field"><label for="cr-branch">Branch</label><select class="form-select" name="branch_id" id="cr-branch">
+        <option value="">All branches</option>
+        {% for branch in branches %}<option value="{{ branch.id }}" {% if filters.branch_id == branch.id|string %}selected{% endif %}>{{ branch.branch_name }}</option>{% endfor %}
+      </select></div>
+      <div class="cr-field"><label for="cr-start">{{ 'Receipt' if receipt_report else 'Invoice' }} date from</label><input class="form-control" type="date" name="start_date" id="cr-start" value="{{ filters.start_date }}"></div>
+      <div class="cr-field"><label for="cr-end">To (inclusive)</label><input class="form-control" type="date" name="end_date" id="cr-end" value="{{ filters.end_date }}"></div>
+      {% if not receipt_report %}<label class="cr-muted mb-2"><input type="checkbox" name="include_cancelled" value="1" {% if include_cancelled %}checked{% endif %}> Include cancelled invoices</label>{% endif %}
+      <button class="btn btn-primary" type="submit">Apply filters</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('reports.course_billing', kind=kind) }}">Reset</a>
+    </form>
+  </div>
+  <div class="cr-metrics">
+    <div class="cr-card cr-metric"><span class="cr-muted">{{ 'Course share received' if receipt_report else 'Net invoiced' }}</span><strong>₹ {{ '{:,.2f}'.format(report.totals.amount) }}</strong></div>
+    <div class="cr-card cr-metric"><span class="cr-muted">{{ 'Receipts represented' if receipt_report else 'Invoices represented' }}</span><strong>{{ report.totals.transaction_count }}</strong></div>
+    {% if receipt_report %}<div class="cr-card cr-metric"><span class="cr-muted">Invoices represented</span><strong>{{ report.totals.invoice_count }}</strong></div>{% endif %}
+    <div class="cr-card cr-metric"><span class="cr-muted">Students</span><strong>{{ report.totals.student_count }}</strong></div>
+    <div class="cr-card cr-metric"><span class="cr-muted">Courses with activity</span><strong>{{ report.totals.course_count }}</strong></div>
+  </div>
+  <div class="cr-note">
+    {% if receipt_report %}Each receipt is split in proportion to the courses' net invoice-item values after discounts. Date filters use the <strong>receipt date</strong>, even when the invoice was issued earlier. All recorded receipts are included, including payments on subsequently cancelled invoices.
+    {% else %}Amounts use the invoice total and each course's share of the net invoice-item values after discounts. Date filters use the <strong>invoice date</strong>. {% if not include_cancelled %}Cancelled invoices are excluded.{% endif %}{% endif %}
+    Rounding is balanced to the paise, so shares add up to each transaction. Missing course mappings or amounts without a positive item value appear as <strong>Unassigned / legacy items</strong>.
+    Multi-course transactions appear under more than one course; overall counts show unique transactions and students. Reports reflect the invoice items currently recorded.
+  </div>
+  <section class="cr-card" aria-labelledby="cr-summary-title">
+    <div class="cr-table-header"><h3 id="cr-summary-title">Course summary</h3><a class="btn btn-outline-success btn-sm" href="{{ report_link(download='summary') }}">Download summary CSV</a></div>
+    <div class="table-responsive"><table class="table table-hover mb-0">
+      <thead><tr><th scope="col">Course</th><th scope="col">Invoices</th>{% if receipt_report %}<th scope="col">Receipts</th>{% endif %}<th scope="col">Students</th><th scope="col" class="cr-money">{{ 'Received (INR)' if receipt_report else 'Net invoiced (INR)' }}</th></tr></thead>
+      <tbody>{% for row in report.summary %}<tr><td><a href="{{ report_link(course_id=row.course_key) }}">{{ row.course_name }}</a></td><td>{{ row.invoice_count }}</td>{% if receipt_report %}<td>{{ row.transaction_count }}</td>{% endif %}<td>{{ row.student_count }}</td><td class="cr-money">₹ {{ '{:,.2f}'.format(row.amount) }}</td></tr>
+      {% else %}<tr><td colspan="{{ 5 if receipt_report else 4 }}" class="text-center text-muted py-4">No {{ kind }} match these filters.</td></tr>{% endfor %}</tbody>
+      <tfoot><tr><td>Total (unique counts)</td><td>{{ report.totals.invoice_count }}</td>{% if receipt_report %}<td>{{ report.totals.transaction_count }}</td>{% endif %}<td>{{ report.totals.student_count }}</td><td class="cr-money">₹ {{ '{:,.2f}'.format(report.totals.amount) }}</td></tr></tfoot>
+    </table></div>
+  </section>
+  <section class="cr-card" aria-labelledby="cr-details-title">
+    <div class="cr-table-header"><div><h3 id="cr-details-title">{{ 'Receipt' if receipt_report else 'Invoice' }} details</h3><span class="cr-muted">{{ detail_start }}–{{ detail_end }} of {{ report.details|length }} course allocations. CSV includes every matching row.</span></div><a class="btn btn-outline-success btn-sm" href="{{ report_link(download='details') }}">Download details CSV</a></div>
+    <div class="table-responsive"><table class="table table-hover mb-0">
+      <thead><tr><th scope="col">{{ 'Receipt' if receipt_report else 'Invoice' }}</th><th scope="col">Date</th>{% if receipt_report %}<th scope="col">Invoice</th>{% endif %}<th scope="col">Student</th><th scope="col">Branch</th><th scope="col">Course</th><th scope="col">{{ 'Mode' if receipt_report else 'Status' }}</th><th scope="col" class="cr-money">Course share (INR)</th></tr></thead>
+      <tbody>{% for row in detail_rows %}<tr>
+        <td>{% if receipt_report %}<a href="{{ url_for('billing.receipt_view', receipt_id=row.transaction_id) }}">{{ row.transaction_no }}</a>{% else %}<a href="{{ url_for('billing.invoice_view', invoice_id=row.invoice_id) }}">{{ row.transaction_no }}</a>{% endif %}</td>
+        <td class="text-nowrap">{{ row.transaction_date[:10] }}</td>
+        {% if receipt_report %}<td><a href="{{ url_for('billing.invoice_view', invoice_id=row.invoice_id) }}">{{ row.invoice_no }}</a></td>{% endif %}
+        <td>{{ row.full_name }}<br><small class="cr-muted">{{ row.student_code }}</small></td><td>{{ row.branch_name }}</td><td>{{ row.course_name }}</td><td>{{ (row.payment_mode if receipt_report else row.status) or '—' }}</td><td class="cr-money">₹ {{ '{:,.2f}'.format(row.amount) }}</td>
+      </tr>{% else %}<tr><td colspan="{{ 8 if receipt_report else 7 }}" class="text-center text-muted py-4">No transactions to display.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if pages > 1 %}<nav class="cr-pagination" aria-label="Transaction pages"><span class="cr-muted">Page {{ page }} of {{ pages }}</span><div>{% if page > 1 %}<a class="btn btn-outline-secondary btn-sm" href="{{ report_link(page=page-1) }}">Previous</a>{% endif %} {% if page < pages %}<a class="btn btn-outline-secondary btn-sm" href="{{ report_link(page=page+1) }}">Next</a>{% endif %}</div></nav>{% endif %}
+  </section>
+</div>
+{% endblock %}

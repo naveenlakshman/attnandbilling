@@ -305,6 +305,26 @@
       </div>
     </div>
 
+    <div class="report-card">
+      <div class="report-card-icon"><i class="bi bi-journal-text" aria-hidden="true"></i></div>
+      <div class="report-card-title">Course-wise Invoices</div>
+      <div class="report-card-description">Net invoiced amounts by course, with branch and date filters, student details and CSV downloads.</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.course_billing', kind='invoices') }}" class="btn btn-primary">View report</a>
+        <a href="{{ url_for('reports.course_billing', kind='invoices', download='summary') }}" class="btn btn-outline-success">Export CSV</a>
+      </div>
+    </div>
+
+    <div class="report-card">
+      <div class="report-card-icon"><i class="bi bi-receipt" aria-hidden="true"></i></div>
+      <div class="report-card-title">Course-wise Receipts</div>
+      <div class="report-card-description">Payments allocated proportionally to invoiced courses, with receipt details and CSV downloads.</div>
+      <div class="report-card-action">
+        <a href="{{ url_for('reports.course_billing', kind='receipts') }}" class="btn btn-primary">View report</a>
+        <a href="{{ url_for('reports.course_billing', kind='receipts', download='summary') }}" class="btn btn-outline-success">Export CSV</a>
+      </div>
+    </div>
+
     <!-- Expenses -->
     <div class="report-card">
       <div class="report-card-icon">💰</div>

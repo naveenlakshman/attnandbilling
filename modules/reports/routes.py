@@ -11,8 +11,10 @@ from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta, timezone
 from services.tenant_context import get_current_institute_id
 from services.subscriptions import lock_and_check_limit
+from modules.reports.course_billing import register_course_billing_reports
 
 reports_bp = Blueprint("reports", __name__)
+register_course_billing_reports(reports_bp)
 
 
 def parse_date(date_str):
@@ -1510,7 +1512,27 @@ def export_csv(table_name):
     try:
         current_inst = get_current_institute_id(default=1)
         tbl = allowed_tables[table_name]
-        if tbl in ("branches", "expenses", "invoices", "leads", "receipts", "students", "installment_plans", "activity_logs", "expense_categories"):
+        if tbl == "expenses":
+            cur.execute("""
+                SELECT e.*, b.branch_name, ec.category_name, i.name AS institute_name
+                FROM expenses e
+                LEFT JOIN branches b ON b.id = e.branch_id AND b.institute_id = e.institute_id
+                LEFT JOIN expense_categories ec ON ec.id = e.category_id AND ec.institute_id = e.institute_id
+                LEFT JOIN institutes i ON i.id = e.institute_id
+                WHERE e.institute_id = ?
+                ORDER BY e.expense_date, e.id
+            """, (current_inst,))
+        elif tbl == "receipts":
+            cur.execute("""
+                SELECT r.*, COALESCE(NULLIF(u.full_name, ''), u.username) AS created_by_name,
+                       i.name AS institute_name
+                FROM receipts r
+                LEFT JOIN users u ON u.id = r.created_by AND u.institute_id = r.institute_id
+                LEFT JOIN institutes i ON i.id = r.institute_id
+                WHERE r.institute_id = ?
+                ORDER BY r.id
+            """, (current_inst,))
+        elif tbl in ("branches", "invoices", "leads", "students", "installment_plans", "activity_logs", "expense_categories"):
             cur.execute(f"SELECT * FROM {tbl} WHERE institute_id = ?", (current_inst,))
         elif tbl == "invoice_items":
             cur.execute("SELECT ii.* FROM invoice_items ii JOIN invoices inv ON inv.id = ii.invoice_id WHERE inv.institute_id = ?", (current_inst,))
@@ -1521,13 +1543,17 @@ def export_csv(table_name):
         else:
             cur.execute(f"SELECT * FROM {tbl}")
         rows = cur.fetchall()
+        columns = [description[0] for description in cur.description]
+        if tbl in {"expenses", "receipts"}:
+            names = ({"branch_id": "branch_name", "category_id": "category_name", "institute_id": "institute_name"}
+                     if tbl == "expenses" else {"created_by": "created_by_name", "institute_id": "institute_name"})
+            columns = list(dict.fromkeys(names.get(column, column) for column in columns))
         conn.close()
         
         if not rows:
             flash(f"No data in {table_name}.", "warning")
             return redirect(url_for("reports.dashboard"))
         
-        columns = [description[0] for description in cur.description]
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(columns)
@@ -1549,6 +1575,10 @@ def export_csv(table_name):
                         value = dt.strftime("%d-%m-%Y")
                     except (ValueError, AttributeError):
                         pass
+                if tbl in {"expenses", "receipts"} and isinstance(value, str) and (
+                    value.lstrip().startswith(('=', '+', '-', '@')) or value.startswith(('\t', '\r', '\n'))
+                ):
+                    value = "'" + value
                 row_data.append(value if value is not None else "")
             writer.writerow(row_data)
         
@@ -1557,7 +1587,7 @@ def export_csv(table_name):
         
         # Create response
         response_file = io.BytesIO()
-        response_file.write(csv_data.encode())
+        response_file.write(csv_data.encode("utf-8-sig" if tbl in {"expenses", "receipts"} else "utf-8"))
         response_file.seek(0)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

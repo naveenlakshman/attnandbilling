@@ -1,0 +1,14 @@
+steps:
+  - id: build-course-reports
+    name: gcr.io/cloud-builders/docker
+    args: [build, --file, deploy/releases/Dockerfile.course-reports, --tag, '${_IMAGE}', .]
+  - id: compile-report-code
+    name: gcr.io/cloud-builders/docker
+    args: [run, --rm, '${_IMAGE}', python, -m, py_compile, modules/reports/routes.py, modules/reports/course_billing.py, services/course_billing_reports.py]
+  - id: compile-report-templates
+    name: gcr.io/cloud-builders/docker
+    args: [run, --rm, '${_IMAGE}', python, -c, "from jinja2 import Environment,FileSystemLoader; env=Environment(loader=FileSystemLoader('templates')); [env.get_template(p) for p in ['reports/dashboard.html','reports/course_billing.html']]; print('Report templates compiled.')"]
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s
