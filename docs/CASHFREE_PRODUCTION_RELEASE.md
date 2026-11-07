@@ -93,6 +93,31 @@ sandbox payment processing.
 No live payment, real student message, schema write, candidate deployment, or
 traffic promotion should be performed until the release prerequisites are satisfied.
 
+## 7 November 2026 deployment verification
+
+- Serving revision: `global-it-erp-production-cashfree-live-539297b`.
+- Immutable image: `sha256:ab5e19ea10cbf77db2e00c432195b3dfbe28951a8a467677da2d729e047134f1`.
+- Payment, link, migration/concurrency and message coverage: 90 Python tests and
+  22 JavaScript tests passed, including the disposable MySQL integration test.
+- Candidate, direct Cloud Run and public-domain checks passed for live checkout,
+  current installment/full-balance choices, authentication, invalid-amount and
+  sandbox-order rejection, webhook signature authentication and public health.
+- The load balancer's `erp-cloudrun-backend` had static CSP and referrer headers
+  that overrode application policies. Those two overrides were removed; other
+  backend settings and headers were preserved. Cloud Run now supplies the
+  route-specific CSP and payment-link `no-referrer` policy. Billing CDN cache
+  invalidation completed before the final public checks passed.
+- `automatic-fee-reminders` now uses the same live image and pinned Cashfree
+  secrets, `global_it_erp_production`, and the production Cloud SQL socket/mount.
+  The existing daily 09:00 Asia/Kolkata schedule and other runtime settings remain.
+- Execution `automatic-fee-reminders-lgwcd` used execution-only argument overrides
+  for a read-only dry run, with the send function disabled. It verified one live
+  payment link, reported zero failures, and sent zero messages. The job's normal
+  command remains `python scripts/run_fee_reminders.py`.
+- Verification created no live orders, charged no payments and changed no existing
+  fee-ledger records. The earlier web revision and pre-release job image remain
+  available; preserve payment mappings and reconcile in-flight orders if reverting.
+
 References: [Cloud Run secrets](https://docs.cloud.google.com/run/docs/configuring/services/secrets),
 [Secret Manager versions](https://docs.cloud.google.com/secret-manager/docs/add-secret-version),
 [Cashfree go-live requirements](https://www.cashfree.com/docs/payments/online/go-live/checklist).
