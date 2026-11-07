@@ -1,0 +1,8 @@
+ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:56846453e0c9222377441a4f443674cd206dd20534b82bccaf7b68efb86b9636
+FROM ${BASE_IMAGE}
+COPY --chown=appuser:appuser config.py db.py /app/
+COPY --chown=appuser:appuser modules/billing/routes.py modules/billing/cashfree_routes.py modules/billing/auto_reminders.py /app/modules/billing/
+COPY --chown=appuser:appuser services/cashfree.py services/cashfree_payments.py services/payment_links.py /app/services/
+COPY --chown=appuser:appuser templates/billing/invoice_view.html templates/billing/_cashfree_checkout.html templates/billing/student_payment.html templates/billing/receivables.html /app/templates/billing/
+COPY --chown=appuser:appuser static/js/cashfree_checkout.js /app/static/js/cashfree_checkout.js
+COPY --chown=appuser:appuser scripts/run_fee_reminders.py /app/scripts/run_fee_reminders.py

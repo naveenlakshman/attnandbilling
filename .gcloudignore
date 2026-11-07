@@ -6,11 +6,6 @@
 # Environment & Credentials
 .env
 .env.*
-!.env.example
-!.env.docker.example
-!.env.mysql.example
-!.env.cloudsql.example
-!.env.production.example
 gcp-key.json
 *.key
 *.pem
@@ -40,3 +35,12 @@ static/smart-counselling/
 
 # Production LMS assets are served from GCS, not from the container image.
 static/lms/
+
+# Local editor metadata and private/generated student data
+.agents/
+.codex/
+.vscode/
+*.db
+uploads/
+static/images/student_photos/
+static/certificates/

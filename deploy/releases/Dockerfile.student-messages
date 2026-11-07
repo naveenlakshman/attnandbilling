@@ -1,0 +1,13 @@
+ARG WEB_BASE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:c018b77c499fbea16250e409e71455456b7ec52e1107734a2f0311fed1413cc3
+ARG JOB_BASE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/attn-billing-testing@sha256:b8654a68b25289f72ce5209d2eaaf55f0ad1c36a29d9eb43516189c9ecc981c6
+FROM ${WEB_BASE} AS web
+COPY --chown=appuser:appuser services/student_messages.py /app/services/student_messages.py
+COPY --chown=appuser:appuser modules/billing/routes.py modules/billing/auto_reminders.py /app/modules/billing/
+COPY --chown=appuser:appuser modules/notifications/routes.py modules/notifications/service.py /app/modules/notifications/
+COPY --chown=appuser:appuser templates/billing/receivables.html /app/templates/billing/receivables.html
+COPY --chown=appuser:appuser templates/attendance/mark_attendance.html /app/templates/attendance/mark_attendance.html
+COPY --chown=appuser:appuser templates/notifications/fee_reminder_admin.html /app/templates/notifications/fee_reminder_admin.html
+FROM ${JOB_BASE} AS fee-reminders
+COPY --chown=appuser:appuser services/student_messages.py /app/services/student_messages.py
+COPY --chown=appuser:appuser ops/patch_reminder_full_name.py /tmp/patch_reminder_full_name.py
+RUN python /tmp/patch_reminder_full_name.py
