@@ -1,3 +1,4 @@
+from services import finance_ledger as ledger
 from flask import Blueprint, abort, current_app, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta, timezone
@@ -177,18 +178,24 @@ def dashboard():
     cur.execute("""
         SELECT COALESCE(SUM(r.amount_received), 0) AS total
         FROM receipts r
-        JOIN invoices i ON r.invoice_id = i.id
+        JOIN invoices i ON r.invoice_id = i.id AND r.institute_id = i.institute_id
         JOIN students s ON i.student_id = s.id
         WHERE s.institute_id = ? AND strftime('%Y-%m', r.receipt_date) = ?
     """, [institute_id, current_month])
     revenue_this_month = float(cur.fetchone()["total"] or 0)
+    if ledger.available(conn):
+        import calendar
+        cash_end=today[:7]+'-'+str(calendar.monthrange(int(today[:4]),int(today[5:7]))[1])
+        revenue_this_month=sum(int(r['amount']) for r in ledger.cash_movements(conn,institute_id,current_month+'-01',cash_end))/100
+
 
     # ── Expenses this month ─────────────────────────────────────
-    cur.execute("""
+    cur.execute(f"""
         SELECT COALESCE(SUM(e.amount), 0) AS total
         FROM expenses e
         JOIN branches br ON e.branch_id = br.id
         WHERE br.institute_id = ? AND strftime('%Y-%m', e.expense_date) = ?
+          AND {ledger.noncash_expense_sql('e') if ledger.available(conn) else '1=1'}
     """, [institute_id, current_month])
     expenses_this_month = float(cur.fetchone()["total"] or 0)
 
@@ -244,53 +251,56 @@ def dashboard():
     today_new_leads = cur.fetchone()["cnt"]
 
     # ── Past due installments ───────────────────────────────────
-    cur.execute("""
+    cur.execute(f"""
         SELECT
             ip.id, ip.due_date, ip.amount_due, ip.amount_paid, ip.remarks,
             i.invoice_no, i.id AS invoice_id,
             s.full_name AS student_name, s.student_code, s.phone AS student_phone,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            {ledger.installment_balance_sql(conn)} AS balance_due
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE s.institute_id = ? AND ip.status != 'paid'
+        WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) < ?
-          AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
         ORDER BY parse_date(ip.due_date) ASC
     """, [institute_id, today])
     past_dues = cur.fetchall()
     total_past_due = sum(float(r["balance_due"] or 0) for r in past_dues)
 
     # ── Today's due installments ────────────────────────────────
-    cur.execute("""
+    cur.execute(f"""
         SELECT
             ip.id, ip.due_date, ip.amount_due, ip.amount_paid, ip.remarks,
             i.invoice_no, i.id AS invoice_id,
             s.full_name AS student_name, s.student_code, s.phone AS student_phone,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            {ledger.installment_balance_sql(conn)} AS balance_due
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE s.institute_id = ? AND ip.status != 'paid'
+        WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) = ?
-          AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
         ORDER BY s.full_name ASC
     """, [institute_id, today])
     todays_dues = cur.fetchall()
     total_today_due = sum(float(r["balance_due"] or 0) for r in todays_dues)
 
     # ── Due in next 7 days ──────────────────────────────────────
-    cur.execute("""
+    cur.execute(f"""
         SELECT
-            COALESCE(SUM(ip.amount_due - ip.amount_paid), 0) AS total,
+            COALESCE(SUM{ledger.installment_balance_sql(conn)}, 0) AS total,
             COUNT(*) AS cnt
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE s.institute_id = ? AND ip.status != 'paid'
+        WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) > ?
           AND parse_date(ip.due_date) <= ?
-          AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
     """, [institute_id, today, seven_days_later])
     row = cur.fetchone()
     total_next7_due = float(row["total"] or 0)
@@ -560,13 +570,14 @@ def _staff_dashboard(institute_id):
             ip.id, ip.due_date, ip.amount_due, ip.amount_paid, ip.remarks,
             i.invoice_no, i.id AS invoice_id,
             s.full_name AS student_name, s.student_code, s.phone AS student_phone,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            {ledger.installment_balance_sql(conn)} AS balance_due
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE s.institute_id = ? AND ip.status != 'paid'
+        WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) < ?
-          AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
           {branch_clause}
         ORDER BY parse_date(ip.due_date) ASC
         LIMIT 50
@@ -580,13 +591,14 @@ def _staff_dashboard(institute_id):
             ip.id, ip.due_date, ip.amount_due, ip.amount_paid, ip.remarks,
             i.invoice_no, i.id AS invoice_id,
             s.full_name AS student_name, s.student_code, s.phone AS student_phone,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            {ledger.installment_balance_sql(conn)} AS balance_due
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        WHERE s.institute_id = ? AND ip.status != 'paid'
+        WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) = ?
-          AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
           {branch_clause}
         ORDER BY s.full_name ASC
     """, [institute_id, today] + branch_param)
@@ -696,25 +708,27 @@ def sidebar_badges():
 
         # 2. Billing Badge: count of past due / today due installments
         if role == "admin" or can_view_all:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT COUNT(DISTINCT ip.id) AS cnt
                 FROM installment_plans ip
                 JOIN invoices i ON ip.invoice_id = i.id
                 JOIN students s ON i.student_id = s.id
-                WHERE s.institute_id = ? AND ip.status != 'paid'
+                WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
                   AND parse_date(ip.due_date) <= ?
-                  AND i.status NOT IN ('write_off', 'partially_written_off')
+                  AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
             """, [institute_id, today])
             billing_count = cur.fetchone()["cnt"]
         else:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT COUNT(DISTINCT ip.id) AS cnt
                 FROM installment_plans ip
                 JOIN invoices i ON ip.invoice_id = i.id
                 JOIN students s ON i.student_id = s.id
-                WHERE s.institute_id = ? AND ip.status != 'paid'
+                WHERE s.institute_id = ? AND {ledger.installment_balance_sql(conn)} > 0.005
                   AND parse_date(ip.due_date) <= ?
-                  AND i.status NOT IN ('write_off', 'partially_written_off')
+                  AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
                   AND i.branch_id = ?
             """, [institute_id, today, branch_id])
             billing_count = cur.fetchone()["cnt"]
@@ -750,14 +764,15 @@ def sidebar_badges():
         # 6. Fee reminders currently eligible for automatic sending but not sent.
         reminder_window_end = (datetime.now().date() + timedelta(days=3)).isoformat()
         cur.execute(
-            """SELECT COUNT(DISTINCT ip.id) AS cnt
+            f"""SELECT COUNT(DISTINCT ip.id) AS cnt
                FROM installment_plans ip
                JOIN invoices i ON i.id = ip.invoice_id
-               JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
+               JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id AND s.institute_id = i.institute_id
                WHERE i.institute_id = ?
-                 AND ip.status != 'paid'
-                 AND (ip.amount_due - ip.amount_paid) > 0
-                 AND i.status NOT IN ('paid', 'cancelled', 'write_off', 'partially_written_off')
+                 AND {ledger.installment_balance_sql(conn)} > 0.005
+                 AND {ledger.installment_balance_sql(conn)} > 0
+                 AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
                  AND parse_date(ip.due_date) <= ?
                  AND NOT EXISTS (
                      SELECT 1 FROM reminder_logs rl

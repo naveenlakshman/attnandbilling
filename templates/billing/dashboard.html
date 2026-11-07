@@ -371,6 +371,7 @@
 {% endblock %}
 
 {% block content %}
+<p class="alert alert-info">Current stored invoice view; cancelled invoices excluded. Collections include advances, refunds and reversals and use collection branch; historical locations stay unresolved. For original admission and collection branches, dated corrections, refunds and historical cutoffs, use <a href="/accuracy/reports/sales">Accuracy reports</a>. Existing tax treatment is unchanged.</p>
 <h2 class="dashboard-page-title mb-4">Dashboard</h2>
 
 <div class="card dashboard-filter-card p-4 mb-4">
@@ -378,7 +379,7 @@
     <div class="col-md-4">
       <label class="form-label">Branch</label>
       <select name="branch_id" class="form-select">
-        <option value="">All Branches</option>
+        <option value="">All Branches</option><option value="unresolved" {% if branch_id=="unresolved" %}selected{% endif %}>Unresolved branch</option>
         {% for b in branches %}
         <option value="{{ b.id }}" {% if branch_id == (b.id|string) %}selected{% endif %}>
           {{ b.branch_name }}
@@ -419,14 +420,14 @@
 
   <div class="col-6 col-md-3">
     <div class="card stat-card p-4">
-      <h3>Total Sales</h3>
+      <h3>Invoice sales after discounts</h3>
       <p>₹ {{ "%.2f"|format(total_sales or 0) }}</p>
     </div>
   </div>
 
   <div class="col-6 col-md-3">
     <div class="card stat-card p-4">
-      <h3>Total Receipts</h3>
+      <h3>Net collections by collection branch</h3>
       <p>₹ {{ "%.2f"|format(total_receipts or 0) }}</p>
     </div>
   </div>
@@ -533,12 +534,12 @@
 
     <div class="dashboard-chart-right">
       <div class="dashboard-total-block">
-        <h4>Total Sales</h4>
+        <h4>Invoice sales after discounts</h4>
         <p class="dashboard-total-value sales-text">₹ {{ "%.2f"|format(total_sales or 0) }}</p>
       </div>
 
       <div class="dashboard-total-block">
-        <h4>Total Receipts</h4>
+        <h4>Net collections by collection branch</h4>
         <p class="dashboard-total-value receipt-text">₹ {{ "%.2f"|format(total_receipts or 0) }}</p>
       </div>
 
@@ -548,7 +549,7 @@
       </div>
 
       <div class="dashboard-total-block">
-        <h4>Net Position</h4>
+        <h4>Net collections less cash expenses</h4>
         <p class="dashboard-total-value {% if net_position >= 0 %}net-positive{% else %}net-negative{% endif %}">
           ₹ {{ "%.2f"|format(net_position or 0) }}
         </p>

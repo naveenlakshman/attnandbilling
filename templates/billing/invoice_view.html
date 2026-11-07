@@ -469,6 +469,7 @@
       <div class="fin-row"><span>Written Off</span><span class="amount amount-red">₹ {{ "%.2f"|format(total_written_off or 0) }}</span></div>
       {% endif %}
       <div class="fin-row balance"><span>Balance Amount</span><span class="amount">₹ {{ "%.2f"|format(balance_amount or 0) }}</span></div>
+      {% if credit_amount %}<div class="fin-row"><span>Credit (separate from dues)</span><span class="amount amount-green">₹ {{ "%.2f"|format(credit_amount) }}</span></div>{% endif %}
     </div>
 </div>
 
@@ -506,6 +507,7 @@
       <th>Due Date</th>
       <th>Amount Due</th>
       <th>Amount Paid</th>
+      <th>Collectible dues</th>
       <th>Status</th>
       <th>Remarks</th>
       {% if session.get("role") == "admin" %}
@@ -519,6 +521,7 @@
       <td>{{ ins.due_date }}</td>
       <td>₹ {{ "%.2f"|format(ins.amount_due or 0) }}</td>
       <td>₹ {{ "%.2f"|format(ins.amount_paid or 0) }}</td>
+      <td>₹ {{ "%.2f"|format(ins.balance_due if ins.balance_due is defined else [0,ins.amount_due-ins.amount_paid]|max) }}</td>
       <td>{{ ins.status }}</td>
       <td>{{ ins.remarks }}</td>
       {% if session.get("role") == "admin" %}
@@ -574,6 +577,10 @@
     </div>
 
     <form method="post" id="editInstallmentForm">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Correction reason<input class="form-control" name="reason" required></label>
+<label>Effective date (defaults to today)<input class="form-control" type="date" name="effective_date"></label>
+
       <div class="modal-body">
         <div class="form-group">
           <label>Installment Number</label>

@@ -22,12 +22,12 @@ def test_invoice_receipt_and_manual_reminder_senders_use_authoritative_full_name
     conn.executescript('''
         CREATE TABLE students (id INTEGER,institute_id INTEGER,full_name TEXT,phone TEXT);
         CREATE TABLE invoices (id INTEGER,institute_id INTEGER,student_id INTEGER,branch_id INTEGER,invoice_no TEXT,total_amount REAL,sms_token TEXT,sms_sent_at TEXT);
-        CREATE TABLE receipts (id INTEGER,invoice_id INTEGER,receipt_no TEXT,amount_received REAL,sms_token TEXT,sms_sent_at TEXT);
+        CREATE TABLE receipts (id INTEGER,institute_id INTEGER,invoice_id INTEGER,receipt_no TEXT,amount_received REAL,sms_token TEXT,sms_sent_at TEXT);
         CREATE TABLE installment_plans (id INTEGER,invoice_id INTEGER);
         CREATE TABLE reminder_logs (id INTEGER PRIMARY KEY,institute_id INTEGER,student_id INTEGER,invoice_id INTEGER,installment_id INTEGER,phone_number TEXT,reminder_type TEXT,message_text TEXT,status TEXT,sent_via TEXT,sent_by INTEGER,sent_at TEXT);
         INSERT INTO students VALUES (1,7,'Sujan H C','9999999999'),(2,8,'Foreign Student','8888888888');
         INSERT INTO invoices VALUES (1,7,1,7,'INV-7',1000,'invoice-token',NULL),(2,8,2,8,'INV-8',2000,'foreign-token',NULL);
-        INSERT INTO receipts VALUES (1,1,'REC-7',250,'receipt-token',NULL),(2,2,'REC-8',500,'foreign-token',NULL);
+        INSERT INTO receipts VALUES (1,7,1,'REC-7',250,'receipt-token',NULL),(2,8,2,'REC-8',500,'foreign-token',NULL);
         INSERT INTO installment_plans VALUES (1,1),(2,2);
     ''')
     class Connection:

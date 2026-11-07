@@ -144,6 +144,12 @@
           <input type="text" value="₹ {{ "%.2f"|format(balance_amount or 0) }}" disabled class="form-control highlight-balance">
         </div>
 
+        {% if accuracy_ready %}
+        <input type="hidden" name="request_key" value="{{ request_key }}">
+        <div class="form-group"><label>Collection branch</label><select class="form-control" name="collection_branch_id" required><option value="">Choose collection location</option>{% for b in collection_branches %}<option value="{{ b.id }}" {% if session.get('branch_id')==b.id %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}</select></div>
+        <div class="form-group"><label>Payment channel</label><select class="form-control" name="payment_channel"><option value="branch">Branch</option><option value="bank">Bank</option><option value="online">Online</option></select></div>
+        <div class="form-group"><label>Payment reference (required for noncash)</label><input class="form-control" name="payment_reference" maxlength="150"></div>
+        {% endif %}
         <div class="form-group">
           <label for="receipt_date">Receipt Date <span style="color: red;">*</span></label>
           <input type="date" id="receipt_date" name="receipt_date" class="form-control" required>

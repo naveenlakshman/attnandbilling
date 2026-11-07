@@ -1,3 +1,4 @@
+from services import finance_ledger as ledger
 from flask import Blueprint, render_template, request, session, redirect, url_for, flash, Response, jsonify, current_app
 from datetime import date, datetime, timedelta
 import calendar
@@ -777,7 +778,7 @@ def menu():
     today = datetime.now().date().isoformat()
 
     # Past dues
-    past_dues_query = """
+    past_dues_query = f"""
         SELECT
             ip.id,
             ip.due_date,
@@ -790,22 +791,23 @@ def menu():
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            {ledger.installment_balance_sql(conn)} AS balance_due
         FROM installment_plans ip
         JOIN invoices i
             ON ip.invoice_id = i.id
         JOIN students s
             ON i.student_id = s.id
-        WHERE ip.status != 'paid'
+        WHERE i.institute_id = ? AND s.institute_id = i.institute_id
+          AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) < ?
         ORDER BY parse_date(ip.due_date) ASC
     """
 
-    cur.execute(past_dues_query, [today])
+    cur.execute(past_dues_query, [get_current_institute_id(default=1), today])
     past_dues = cur.fetchall()
 
     # Today's dues
-    todays_dues_query = """
+    todays_dues_query = f"""
         SELECT
             ip.id,
             ip.due_date,
@@ -818,18 +820,19 @@ def menu():
             s.full_name AS student_name,
             s.student_code,
             s.phone AS student_phone,
-            (ip.amount_due - ip.amount_paid) AS balance_due
+            {ledger.installment_balance_sql(conn)} AS balance_due
         FROM installment_plans ip
         JOIN invoices i
             ON ip.invoice_id = i.id
         JOIN students s
             ON i.student_id = s.id
-        WHERE ip.status != 'paid'
+        WHERE i.institute_id = ? AND s.institute_id = i.institute_id
+          AND {ledger.installment_balance_sql(conn)} > 0.005
           AND parse_date(ip.due_date) = ?
         ORDER BY s.full_name ASC
     """
 
-    cur.execute(todays_dues_query, [today])
+    cur.execute(todays_dues_query, [get_current_institute_id(default=1), today])
     todays_dues = cur.fetchall()
 
     total_past_due = sum(float(row["balance_due"] or 0) for row in past_dues)
@@ -841,8 +844,8 @@ def menu():
         SELECT 
             COUNT(*) AS total_writeoffs,
             IFNULL(SUM(amount_written_off), 0) AS total_written_off
-        FROM bad_debt_writeoffs
-    """)
+        FROM bad_debt_writeoffs WHERE institute_id = ?
+    """, (get_current_institute_id(default=1),))
     bad_debt_stats = cur.fetchone()
 
     conn.close()
@@ -925,6 +928,9 @@ def dashboard():
         ORDER BY branch_name
     """, (current_inst,))
     branches = cur.fetchall()
+    if branch_id not in {'','unresolved',*(str(b['id']) for b in branches)}:
+        conn.close();return jsonify(error='Branch not found in this institute'),400
+
 
     student_query = "SELECT COUNT(*) AS total_students FROM students s WHERE substr(s.created_at, 1, 10) BETWEEN ? AND ? AND s.institute_id = ?"
     student_params = [start_date, end_date, current_inst]
@@ -932,51 +938,52 @@ def dashboard():
     invoice_count_query = """
         SELECT COUNT(*) AS total_invoices
         FROM invoices i
-        JOIN students s ON s.id = i.student_id
-        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ?
+        JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
+        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ? AND i.status <> 'cancelled'
     """
     invoice_count_params = [start_date, end_date, current_inst]
 
     sales_query = """
         SELECT IFNULL(SUM(i.total_amount), 0) AS total_sales
         FROM invoices i
-        JOIN students s ON s.id = i.student_id
-        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ?
+        JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
+        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ? AND i.status <> 'cancelled'
     """
     sales_params = [start_date, end_date, current_inst]
 
     receipt_query = """
         SELECT IFNULL(SUM(r.amount_received), 0) AS total_receipts
         FROM receipts r
-        JOIN invoices i ON r.invoice_id = i.id
-        JOIN students s ON s.id = i.student_id
+        JOIN invoices i ON r.invoice_id = i.id AND r.institute_id = i.institute_id
+        JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
         WHERE parse_date(r.receipt_date) BETWEEN ? AND ? AND s.institute_id = ?
     """
     receipt_params = [start_date, end_date, current_inst]
 
-    expense_query = """
+    expense_query = f"""
         SELECT IFNULL(SUM(e.amount), 0) AS total_expenses
         FROM expenses e
         JOIN branches b ON b.id = e.branch_id
-        WHERE e.expense_date BETWEEN ? AND ? AND b.institute_id = ?
+        WHERE e.expense_date BETWEEN ? AND ? AND b.institute_id = ? AND e.institute_id=b.institute_id
+          AND {ledger.noncash_expense_sql('e') if ledger.available(conn) else '1=1'}
     """
     expense_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        student_query += " AND s.branch_id = ?"
-        student_params.append(branch_id)
+        student_query += (" AND s.branch_id IS NULL" if branch_id=="unresolved" else " AND s.branch_id = ?")
+        if branch_id!="unresolved": student_params.append(branch_id)
 
-        invoice_count_query += " AND i.branch_id = ?"
-        invoice_count_params.append(branch_id)
+        invoice_count_query += (" AND i.branch_id IS NULL" if branch_id=="unresolved" else " AND i.branch_id = ?")
+        if branch_id!="unresolved": invoice_count_params.append(branch_id)
 
-        sales_query += " AND (i.branch_id = ? OR i.branch_id IS NULL)"
-        sales_params.append(branch_id)
+        sales_query += (" AND i.branch_id IS NULL" if branch_id=="unresolved" else " AND i.branch_id = ?")
+        if branch_id!="unresolved": sales_params.append(branch_id)
 
-        receipt_query += " AND (i.branch_id = ? OR i.branch_id IS NULL)"
-        receipt_params.append(branch_id)
+        receipt_query += (" AND i.branch_id IS NULL" if branch_id=="unresolved" else " AND i.branch_id = ?")
+        if branch_id!="unresolved": receipt_params.append(branch_id)
 
-        expense_query += " AND e.branch_id = ?"
-        expense_params.append(branch_id)
+        expense_query += (" AND e.branch_id IS NULL" if branch_id=="unresolved" else " AND e.branch_id = ?")
+        if branch_id!="unresolved": expense_params.append(branch_id)
 
     cur.execute(student_query, student_params)
     total_students = int(cur.fetchone()["total_students"] or 0)
@@ -989,6 +996,13 @@ def dashboard():
 
     cur.execute(receipt_query, receipt_params)
     total_receipts = float(cur.fetchone()["total_receipts"] or 0)
+    accurate_cash = None
+    if ledger.available(conn):
+        accurate_cash = ledger.cash_movements(conn,current_inst,start_date,end_date)
+        if branch_id:
+            accurate_cash=[r for r in accurate_cash if (r['branch_id'] is None if branch_id=='unresolved' else str(r['branch_id'])==branch_id)]
+        total_receipts=sum(int(r['amount']) for r in accurate_cash)/100
+
 
     cur.execute(expense_query, expense_params)
     total_expenses = float(cur.fetchone()["total_expenses"] or 0)
@@ -1001,24 +1015,24 @@ def dashboard():
     bucket_31_45 = 0.0
     bucket_above_45 = 0.0
 
-    aging_query = """
+    aging_query = f"""
         SELECT
             ip.id,
             ip.due_date,
             ip.amount_due,
-            ip.amount_paid,
+            (ip.amount_due - {ledger.installment_balance_sql(conn)}) AS amount_paid,
             ip.status,
             i.branch_id
         FROM installment_plans ip
         JOIN invoices i ON ip.invoice_id = i.id
-        JOIN students s ON s.id = i.student_id
-        WHERE ip.status IN ('pending', 'partially_paid', 'overdue') AND s.institute_id = ?
+        JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
+        WHERE {ledger.installment_balance_sql(conn)} > 0.005 AND s.institute_id = ?
     """
     aging_params = [current_inst]
 
     if branch_id:
-        aging_query += " AND (i.branch_id = ? OR i.branch_id IS NULL)"
-        aging_params.append(branch_id)
+        aging_query += (" AND i.branch_id IS NULL" if branch_id=="unresolved" else " AND i.branch_id = ?")
+        if branch_id!="unresolved": aging_params.append(branch_id)
 
     cur.execute(aging_query, aging_params)
     aging_rows = cur.fetchall()
@@ -1094,14 +1108,14 @@ def dashboard():
             i.invoice_date,
             i.total_amount
         FROM invoices i
-        JOIN students s ON s.id = i.student_id
-        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ?
+        JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
+        WHERE parse_date(i.invoice_date) BETWEEN ? AND ? AND s.institute_id = ? AND i.status <> 'cancelled'
     """
     monthly_sales_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        monthly_sales_query += " AND i.branch_id = ?"
-        monthly_sales_params.append(branch_id)
+        monthly_sales_query += (" AND i.branch_id IS NULL" if branch_id=="unresolved" else " AND i.branch_id = ?")
+        if branch_id!="unresolved": monthly_sales_params.append(branch_id)
 
     cur.execute(monthly_sales_query, monthly_sales_params)
     for row in cur.fetchall():
@@ -1130,15 +1144,15 @@ def dashboard():
             SUBSTR(parse_date(r.receipt_date), 1, 7) AS ym,
             IFNULL(SUM(r.amount_received), 0) AS total_amount
         FROM receipts r
-        JOIN invoices i ON r.invoice_id = i.id
-        JOIN students s ON s.id = i.student_id
+        JOIN invoices i ON r.invoice_id = i.id AND r.institute_id = i.institute_id
+        JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
         WHERE parse_date(r.receipt_date) BETWEEN ? AND ? AND s.institute_id = ?
     """
     monthly_receipts_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        monthly_receipts_query += " AND i.branch_id = ?"
-        monthly_receipts_params.append(branch_id)
+        monthly_receipts_query += (" AND i.branch_id IS NULL" if branch_id=="unresolved" else " AND i.branch_id = ?")
+        if branch_id!="unresolved": monthly_receipts_params.append(branch_id)
 
     monthly_receipts_query += " GROUP BY SUBSTR(parse_date(r.receipt_date), 1, 7)"
 
@@ -1148,19 +1162,20 @@ def dashboard():
         if ym in receipts_map:
             receipts_map[ym] = float(row["total_amount"] or 0)
 
-    monthly_expenses_query = """
+    monthly_expenses_query = f"""
         SELECT
             substr(e.expense_date, 1, 7) AS ym,
             IFNULL(SUM(e.amount), 0) AS total_amount
         FROM expenses e
         JOIN branches b ON b.id = e.branch_id
-        WHERE e.expense_date BETWEEN ? AND ? AND b.institute_id = ?
+        WHERE e.expense_date BETWEEN ? AND ? AND b.institute_id = ? AND e.institute_id=b.institute_id
+          AND {ledger.noncash_expense_sql('e') if ledger.available(conn) else '1=1'}
     """
     monthly_expenses_params = [start_date, end_date, current_inst]
 
     if branch_id:
-        monthly_expenses_query += " AND e.branch_id = ?"
-        monthly_expenses_params.append(branch_id)
+        monthly_expenses_query += (" AND e.branch_id IS NULL" if branch_id=="unresolved" else " AND e.branch_id = ?")
+        if branch_id!="unresolved": monthly_expenses_params.append(branch_id)
 
     monthly_expenses_query += " GROUP BY substr(expense_date, 1, 7)"
 
@@ -1170,6 +1185,11 @@ def dashboard():
         if ym in expenses_map:
             expenses_map[ym] = float(row["total_amount"] or 0)
 
+    if accurate_cash is not None:
+        receipts_map={k:0.0 for k in month_keys}
+        for movement in accurate_cash:
+            ym=str(movement['day'])[:7]
+            if ym in receipts_map:receipts_map[ym]+=int(movement['amount'])/100
     sales_data = [round(sales_map[key], 2) for key in month_keys]
     receipts_data = [round(receipts_map[key], 2) for key in month_keys]
     expenses_data = [round(expenses_map[key], 2) for key in month_keys]
@@ -1264,6 +1284,7 @@ def student_enrollment_agreement(student_id, invoice_id):
     payment_info = cur.fetchone()
     total_paid = float(payment_info["total_paid"] or 0)
     balance = float(invoice["total_amount"] or 0) - total_paid
+    if ledger.available(conn):balance=ledger.totals(conn,get_current_institute_id(default=1),invoice_id)['outstanding']/100
 
     conn.close()
 
@@ -3126,11 +3147,13 @@ def student_edit(student_id):
         full_name = request.form.get("full_name", "").strip()
         phone = request.form.get("phone", "").strip()
 
+        if not conn.execute('SELECT id FROM branches WHERE id=? AND institute_id=?',(branch_id,get_current_institute_id(default=1))).fetchone():
+            conn.close();return jsonify(error='Branch not found in this institute'),400
         # Validate phone number
         import re as _re
         _phone_digits = _re.sub(r'[\s\-\+]', '', phone)
         if not _phone_digits.isdigit() or len(_phone_digits) != 10:
-            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (get_current_institute_id(default=1),))
             branches = cur.fetchall()
             conn.close()
             return render_template(
@@ -3197,7 +3220,7 @@ def student_edit(student_id):
             has_photo=bool(photo_data or existing_photo_filename),
         )
         if missing_required:
-            cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+            cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (get_current_institute_id(default=1),))
             branches = cur.fetchall()
             conn.close()
             return render_template(
@@ -3215,7 +3238,7 @@ def student_edit(student_id):
             try:
                 datetime.strptime(date_of_birth, "%Y-%m-%d")
             except ValueError:
-                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (get_current_institute_id(default=1),))
                 branches = cur.fetchall()
                 conn.close()
                 return render_template(
@@ -3247,7 +3270,7 @@ def student_edit(student_id):
             )
             dup = cur.fetchone()
             if dup:
-                cur.execute("SELECT * FROM branches WHERE is_active = 1 ORDER BY branch_name")
+                cur.execute("SELECT * FROM branches WHERE is_active = 1 AND institute_id = ? ORDER BY branch_name", (get_current_institute_id(default=1),))
                 branches = cur.fetchall()
                 conn.close()
                 return render_template(
@@ -3370,9 +3393,9 @@ def student_edit(student_id):
     cur.execute("""
         SELECT *
         FROM branches
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY branch_name
-    """)
+    """, (get_current_institute_id(default=1),))
     branches = cur.fetchall()
 
     conn.close()
@@ -3559,6 +3582,10 @@ def student_add_to_batch(student_id):
     """Enroll student in a batch."""
     conn = get_conn()
     cur = conn.cursor()
+    if ledger.available(conn) and conn.execute('SELECT id FROM course_admissions WHERE student_id=? AND institute_id=?',(student_id,get_current_institute_id(default=1))).fetchone():
+        conn.close()
+        return jsonify(error='Use the admission module assignment workflow to preserve training history.',url='/accuracy/'),409
+
     cur.execute("SELECT id, full_name, student_code FROM students WHERE id = ?", (student_id,))
     student = cur.fetchone()
     if not student:
@@ -4758,65 +4785,54 @@ def invoices():
     month_year_filter = f"{current_year}-{current_month:02d}"
 
     # TODAY STATS
-    cur.execute("""
+    cur.execute(f"""
         SELECT 
             COUNT(*) as total_invoices,
             SUM(invoices.total_amount) as total_amount,
             SUM(CASE WHEN invoices.status = 'paid' THEN 1 ELSE 0 END) as paid_count,
             SUM(CASE WHEN invoices.status = 'partially_paid' THEN 1 ELSE 0 END) as partially_paid_count,
             SUM(CASE WHEN invoices.status = 'unpaid' THEN 1 ELSE 0 END) as unpaid_count,
-            SUM(invoices.total_amount - IFNULL((
-                SELECT SUM(receipts.amount_received) 
-                FROM receipts 
-                WHERE receipts.invoice_id = invoices.id
-            ), 0)) as outstanding_amount
+            SUM({ledger.outstanding_sql(conn,'invoices')}) as outstanding_amount
         FROM invoices
         JOIN students s ON invoices.student_id = s.id
         WHERE substr(invoices.invoice_date, 1, 10) = ?
-          AND s.institute_id = ?
+          AND s.institute_id = ? AND invoices.institute_id=s.institute_id AND invoices.status<>'cancelled'
     """, (today, current_inst))
     today_stats = cur.fetchone()
 
     # MONTH STATS
-    cur.execute("""
+    cur.execute(f"""
         SELECT 
             COUNT(*) as total_invoices,
             SUM(invoices.total_amount) as total_amount,
             SUM(CASE WHEN invoices.status = 'paid' THEN 1 ELSE 0 END) as paid_count,
             SUM(CASE WHEN invoices.status = 'partially_paid' THEN 1 ELSE 0 END) as partially_paid_count,
             SUM(CASE WHEN invoices.status = 'unpaid' THEN 1 ELSE 0 END) as unpaid_count,
-            SUM(invoices.total_amount - IFNULL((
-                SELECT SUM(receipts.amount_received) 
-                FROM receipts 
-                WHERE receipts.invoice_id = invoices.id
-            ), 0)) as outstanding_amount
+            SUM({ledger.outstanding_sql(conn,'invoices')}) as outstanding_amount
         FROM invoices
         JOIN students s ON invoices.student_id = s.id
         WHERE substr(invoices.invoice_date, 1, 7) = ?
-          AND s.institute_id = ?
+          AND s.institute_id = ? AND invoices.institute_id=s.institute_id AND invoices.status<>'cancelled'
     """, (f"{current_year}-{current_month:02d}", current_inst))
     month_stats = cur.fetchone()
 
     # OVERALL STATS
-    cur.execute("""
+    cur.execute(f"""
         SELECT 
             COUNT(*) as total_all_invoices,
             SUM(invoices.total_amount) as total_all_amount,
             SUM(CASE WHEN invoices.status = 'paid' THEN 1 ELSE 0 END) as all_paid_count,
             SUM(CASE WHEN invoices.status = 'partially_paid' THEN 1 ELSE 0 END) as all_partially_paid_count,
             SUM(CASE WHEN invoices.status = 'unpaid' THEN 1 ELSE 0 END) as all_unpaid_count,
-            SUM(invoices.total_amount - IFNULL((
-                SELECT SUM(receipts.amount_received) 
-                FROM receipts 
-                WHERE receipts.invoice_id = invoices.id
-            ), 0)) as all_outstanding_amount
+            SUM({ledger.outstanding_sql(conn,'invoices')}) as all_outstanding_amount,
+            SUM({ledger.credit_sql(conn,'invoices')}) as all_credit_amount
         FROM invoices
         JOIN students s ON invoices.student_id = s.id
-        WHERE s.institute_id = ?
+        WHERE s.institute_id = ? AND invoices.institute_id=s.institute_id AND invoices.status<>'cancelled'
     """, (current_inst,))
     overall_stats = cur.fetchone()
 
-    query = """
+    query = f"""
     SELECT
         invoices.id,
         invoices.invoice_no,
@@ -4827,14 +4843,16 @@ def invoices():
         students.student_code,
         students.full_name,
         branches.branch_name,
-        IFNULL(SUM(receipts.amount_received), 0) AS paid_amount
+        IFNULL(SUM(receipts.amount_received), 0) {"+ COALESCE((SELECT SUM(a.cash_delta)/100.0 FROM finance_adjustments a WHERE a.invoice_id=invoices.id AND a.institute_id=invoices.institute_id),0)" if ledger.available(conn) else ""} AS paid_amount,
+        {ledger.outstanding_sql(conn,'invoices')} AS outstanding_amount,
+        {ledger.credit_sql(conn,'invoices')} AS credit_amount
     FROM invoices
     JOIN students
-        ON invoices.student_id = students.id
+        ON invoices.student_id = students.id AND invoices.institute_id=students.institute_id
     LEFT JOIN branches
-        ON invoices.branch_id = branches.id
+        ON invoices.branch_id = branches.id AND branches.institute_id=invoices.institute_id
     LEFT JOIN receipts
-        ON receipts.invoice_id = invoices.id
+        ON receipts.invoice_id = invoices.id AND receipts.institute_id=invoices.institute_id
     WHERE students.institute_id = ?
     """
 
@@ -4898,7 +4916,7 @@ def invoice_view(invoice_id):
             branches.branch_name,
             branches.address AS branch_address
         FROM invoices
-        JOIN students ON invoices.student_id = students.id
+        JOIN students ON invoices.student_id = students.id AND invoices.institute_id = students.institute_id
         LEFT JOIN branches ON invoices.branch_id = branches.id
         WHERE invoices.id = ? AND students.institute_id = ?
     """, (invoice_id, get_current_institute_id(default=1)))
@@ -5001,6 +5019,17 @@ def invoice_view(invoice_id):
     else:
         balance_amount = invoice_total - total_paid - total_written_off
 
+    credit_amount=max(0.0,-balance_amount)
+    if ledger.available(conn):
+        accurate=ledger.totals(conn,get_current_institute_id(default=1),invoice_id)
+        balance_amount=accurate['outstanding']/100
+        credit_amount=accurate['credit']/100
+        total_paid=accurate['cash']/100
+        total_written_off=accurate['written_off']/100
+        effective_status='cancelled' if invoice['status']=='cancelled' else 'paid' if not accurate['outstanding'] else 'partially_written_off' if accurate['written_off'] else 'partially_paid' if accurate['cash'] else 'unpaid'
+        balances=conn.execute('SELECT ip.id,'+ledger.installment_balance_sql(conn)+' balance_due FROM installment_plans ip JOIN invoices i ON i.id=ip.invoice_id WHERE i.id=? AND i.institute_id=?',(invoice_id,get_current_institute_id(default=1))).fetchall()
+        due_by_id={r['id']:r['balance_due'] for r in balances}
+        installments=[dict(r,balance_due=due_by_id[r['id']]) for r in installments]
     student_payment_url = payment_links.build_link(conn, get_current_institute_id(default=1), invoice_id)
     conn.close()
 
@@ -5012,6 +5041,7 @@ def invoice_view(invoice_id):
         payments=payments,
         total_paid=total_paid,
         balance_amount=balance_amount,
+        credit_amount=credit_amount,
         total_written_off=total_written_off,
         effective_status=effective_status,
         student_payment_url=student_payment_url,
@@ -5049,7 +5079,7 @@ def invoice_print(invoice_id):
             branches.branch_name,
             branches.address AS branch_address
         FROM invoices
-        JOIN students ON invoices.student_id = students.id
+        JOIN students ON invoices.student_id = students.id AND invoices.institute_id = students.institute_id
         LEFT JOIN branches ON invoices.branch_id = branches.id
         WHERE invoices.id = ? AND students.institute_id = ?
     """, (invoice_id, get_current_institute_id(default=1)))
@@ -5120,6 +5150,10 @@ def invoice_print(invoice_id):
     total_paid = float(paid_result["total_paid"] or 0) if paid_result else 0.0
 
     balance_amount = float(invoice["total_amount"] or 0) - total_paid
+    credit_amount=max(0,-balance_amount)
+    if ledger.available(conn):
+        t=ledger.totals(conn,get_current_institute_id(default=1),invoice_id)
+        balance_amount=t['outstanding']/100;credit_amount=t['credit']/100;total_paid=t['cash']/100
     net_total = float(invoice["total_amount"] or 0)
 
     # Get prepared by user info
@@ -5141,6 +5175,7 @@ def invoice_print(invoice_id):
         receipts=payments,
         total_paid=total_paid,
         balance_amount=balance_amount,
+        credit_amount=credit_amount,
         net_total=net_total,
         prepared_by=prepared_by,
         pdf_mode=pdf_mode
@@ -5153,6 +5188,15 @@ def installment_edit(installment_id):
     conn = None
     try:
         conn = get_conn()
+        if ledger.available(conn):
+            ledger.begin(conn)
+            invoice_id=ledger.correct_installment(conn,get_current_institute_id(default=1),session['user_id'],installment_id,
+                request.form.get('due_date',''),request.form.get('amount_due',''),request.form.get('remarks',''),
+                request.form.get('reason',''),request.form.get('effective_date') or ledger.now()[:10])
+            conn.commit()
+            flash('Installment date corrected with history.','success')
+            return redirect(url_for('billing.receivables') if request.form.get('redirect_to')=='receivables' else url_for('billing.invoice_view',invoice_id=invoice_id))
+
         cur = conn.cursor()
 
         # Get current installment details
@@ -5240,7 +5284,7 @@ def _provision_program_access_for_course(cur, student_id, course_id):
     cur.execute("""
         SELECT DISTINCT lp.id
         FROM lms_programs lp
-        WHERE lp.is_active = 1 AND lp.is_deleted = 0
+        WHERE lp.is_active = 1 AND lp.is_deleted = 0 AND lp.institute_id = ?
           AND (
               lp.course_id = ?
               OR EXISTS (
@@ -5248,7 +5292,7 @@ def _provision_program_access_for_course(cur, student_id, course_id):
                   WHERE cpm.program_id = lp.id AND cpm.course_id = ?
               )
           )
-    """, (course_id, course_id))
+    """, (get_current_institute_id(default=1), course_id, course_id))
     programs = cur.fetchall()
     
     now_date = datetime.now().strftime("%Y-%m-%d")
@@ -5273,7 +5317,10 @@ def _provision_program_access_for_course(cur, student_id, course_id):
 def _resolve_invoice_item_course_id(cur, raw_course_id, description, institute_id):
     course_id_raw = (raw_course_id or "").strip()
     if course_id_raw:
-        return int(course_id_raw)
+        selected=cur.execute('SELECT id FROM courses WHERE id=? AND institute_id=? AND is_active=1',(int(course_id_raw),institute_id)).fetchone()
+        if not selected:
+            raise ValueError('Choose a course in this institute.')
+        return int(selected['id'])
 
     description = (description or "").strip()
     if not description:
@@ -5346,6 +5393,11 @@ def invoice_new():
                 return redirect(url_for("billing.invoice_new"))
 
             branch_id = student["branch_id"]
+            if ledger.available(conn):
+                branch_id=request.form.get('invoice_branch_id',type=int)
+                if not branch_id or not conn.execute('SELECT id FROM branches WHERE id=? AND institute_id=?',(branch_id,current_inst)).fetchone():
+                    raise ValueError('Choose the invoice booking branch explicitly. New admissions preserve this origin independently of training location.')
+
 
             if not branch_id:
                 cur.execute(
@@ -5378,6 +5430,7 @@ def invoice_new():
             discount_amount = 0.0
             total_amount = 0.0
 
+            selected_admissions = request.form.getlist('item_admission_id[]')
             for i in range(len(item_course_ids)):
                 course_id_raw = (item_course_ids[i] or "").strip()
                 description = (item_descriptions[i] or "").strip() if i < len(item_descriptions) else ""
@@ -5422,6 +5475,7 @@ def invoice_new():
                 total_amount += line_total
 
                 invoice_items_to_save.append({
+                    "admission_id": selected_admissions[i] if i<len(selected_admissions) else "",
                     "course_id": course_id,
                     "description": description,
                     "quantity": qty,
@@ -5613,6 +5667,26 @@ def invoice_new():
                 flash("Invalid installment type selected.", "danger")
                 return redirect(url_for("billing.invoice_new"))
 
+            if ledger.available(conn):
+                from services import admissions
+                posted_items = cur.execute('SELECT id,course_id FROM invoice_items WHERE invoice_id=? ORDER BY id',(invoice_id,)).fetchall()
+                submitted = request.form.getlist('item_admission_id[]')
+                created = {}
+                new_purchase = request.form.get('admission_mode') == 'new'
+                for idx, posted in enumerate(posted_items):
+                    if not posted['course_id']:
+                        raise ValueError('Select a course before linking an admission.')
+                    if new_purchase:
+                        if posted['course_id'] not in created:
+                            created[posted['course_id']] = admissions.admission(conn,current_inst,session['user_id'],int(student_id),posted['course_id'],invoice_date,branch_id)
+                        aid = created[posted['course_id']]
+                    else:
+                        aid = invoice_items_to_save[idx]['admission_id'].strip()
+                        if not aid:
+                            raise ValueError('Choose new admissions or provide an existing admission ID for every course item.')
+                    admissions.link_item(conn,current_inst,session['user_id'],posted['id'],aid,invoice_date,'Admission selected on invoice')
+                ledger.snapshot_invoice(conn,current_inst,invoice_id)
+
             # Provision program access based on courses in the invoice
             for item in invoice_items_to_save:
                 if item.get("course_id"):
@@ -5659,8 +5733,10 @@ def invoice_new():
                 flash("Invoice created successfully.", "success")
             return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
 
-        except ValueError:
-            flash("Please enter valid numeric values in invoice rows.", "danger")
+        except ValueError as exc:
+            if conn:
+                conn.rollback()
+            flash(str(exc), "danger")
             return redirect(url_for("billing.invoice_new"))
 
         except Exception as e:
@@ -5689,10 +5765,11 @@ def invoice_new():
     cur.execute("""
         SELECT *
         FROM courses
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY course_name ASC
-    """)
+    """, (current_inst,))
     courses = cur.fetchall()
+    admission_branches=[dict(r) for r in conn.execute('SELECT id,branch_name FROM branches WHERE institute_id=? ORDER BY branch_name',(current_inst,)).fetchall()]
 
     conn.close()
     today = datetime.today().strftime("%Y-%m-%d")
@@ -5720,6 +5797,7 @@ def invoice_new():
         "billing/invoice_form_modern.html",
         students=students_dict,
         courses=courses_dict,
+        admission_branches=admission_branches,
         today=today,
         mode="create",
         prefill_student_id=prefill_student_id,
@@ -5731,6 +5809,16 @@ def invoice_new():
 @admin_required
 def invoice_edit(invoice_id):
     conn = get_conn()
+    if ledger.available(conn):
+        current_inst = get_current_institute_id(default=1)
+        ident = invoice_id
+        table = "invoices"
+        row = conn.execute(f'SELECT * FROM {table} WHERE id=? AND institute_id=?',(ident,current_inst)).fetchone()
+        conn.close()
+        if not row:
+            return jsonify(error='Record not found'),404
+        flash('Posted values are preserved. Use a dated correction or reversal with a reason.','info')
+        return redirect('/accuracy/?invoice_id='+str(invoice_id))
     cur = conn.cursor()
 
     # Fetch the invoice
@@ -5794,7 +5882,7 @@ def invoice_edit(invoice_id):
             notes = request.form.get("notes", "").strip()
 
             # Validate student exists
-            cur.execute("SELECT id FROM students WHERE id = ?", (student_id_form,))
+            cur.execute("SELECT id FROM students WHERE id = ? AND institute_id = ?", (student_id_form,get_current_institute_id(default=1)))
             if not cur.fetchone():
                 conn.close()
                 flash("Selected student does not exist.", "danger")
@@ -6307,6 +6395,25 @@ def receipt_new():
     conn = get_conn()
     cur = conn.cursor()
 
+    if request.method == "POST" and ledger.available(conn):
+        from services import collections
+        try:
+            ledger.begin(conn)
+            invoice_data = ledger.lock_invoice(conn,current_inst,invoice_id)
+            branch = request.form.get('collection_branch_id',type=int)
+            if session.get('role')!='admin' and not session.get('can_view_all_branches') and branch!=session.get('branch_id'):
+                raise ValueError('Choose your authorized collection branch.')
+            collections.payment(conn,current_inst,session['user_id'],invoice_data['student_id'],request.form['amount_received'],
+                request.form['receipt_date'],branch,request.form.get('payment_channel','branch'),request.form['payment_mode'],
+                request.form.get('payment_reference'),request.form.get('request_key'),invoice_id=invoice_id)
+            conn.commit()
+            return redirect(url_for('billing.invoice_view',invoice_id=invoice_id))
+        except (ValueError,KeyError) as exc:
+            conn.rollback();flash(str(exc),'danger')
+            return redirect(url_for('billing.receipt_new',invoice_id=invoice_id))
+        finally:
+            conn.close()
+
     if request.method == "POST":
         try:
             now = datetime.now().isoformat(timespec="seconds")
@@ -6487,7 +6594,7 @@ def receipt_new():
                 cur2.execute("""
                     SELECT students.full_name, students.phone
                     FROM invoices
-                    JOIN students ON invoices.student_id = students.id
+                    JOIN students ON invoices.student_id = students.id AND invoices.institute_id = students.institute_id
                     WHERE invoices.id = ?
                 """, (invoice_id,))
                 student = cur2.fetchone()
@@ -6552,7 +6659,7 @@ def receipt_new():
     cur.execute("""
         SELECT invoices.*, students.full_name, students.phone, students.email
         FROM invoices
-        JOIN students ON invoices.student_id = students.id
+        JOIN students ON invoices.student_id = students.id AND invoices.institute_id = students.institute_id
         WHERE invoices.id = ? AND invoices.institute_id = ? AND students.institute_id = ?
     """, (invoice_id, current_inst, current_inst))
     invoice = cur.fetchone()
@@ -6563,7 +6670,7 @@ def receipt_new():
         return redirect(url_for("billing.invoices"))
 
     # Prevent payments on cancelled or written-off invoices
-    if invoice["status"] in ["cancelled", "write_off", "partially_written_off"]:
+    if invoice["status"] in (["cancelled"] if ledger.available(conn) else ["cancelled", "write_off", "partially_written_off"]):
         conn.close()
         flash("Cannot record payments for cancelled or written-off invoices.", "danger")
         return redirect(url_for("billing.invoice_view", invoice_id=invoice_id))
@@ -6585,11 +6692,17 @@ def receipt_new():
     balance_amount = max(0.0, round(float(invoice["total_amount"] or 0) - total_paid - total_written_off_new, 2))
     student_payment_url = payment_links.build_link(conn, current_inst, invoice_id)
 
+    accuracy_ready = ledger.available(conn)
+    collection_branches = [dict(r) for r in conn.execute('SELECT id,branch_name FROM branches WHERE institute_id=?',(current_inst,)).fetchall()] if accuracy_ready else []
+    if accuracy_ready:
+        t = ledger.totals(conn,current_inst,invoice_id)
+        balance_amount = t['outstanding']/100
     conn.close()
 
     return render_template(
         "billing/receipt_new.html",
         invoice=invoice,
+        accuracy_ready=accuracy_ready, collection_branches=collection_branches, request_key=uuid.uuid4().hex,
         total_paid=total_paid,
         balance_amount=balance_amount,
         effective_status="partially_written_off" if total_written_off_new > 0 else invoice["status"],
@@ -6606,6 +6719,16 @@ def receipt_new():
 @admin_required
 def receipt_edit(receipt_id):
     conn = get_conn()
+    if ledger.available(conn):
+        current_inst = get_current_institute_id(default=1)
+        ident = receipt_id
+        table = "receipts"
+        row = conn.execute(f'SELECT * FROM {table} WHERE id=? AND institute_id=?',(ident,current_inst)).fetchone()
+        conn.close()
+        if not row:
+            return jsonify(error='Record not found'),404
+        flash('Posted values are preserved. Use a dated correction or reversal with a reason.','info')
+        return redirect('/accuracy/?invoice_id='+str(row["invoice_id"]))
     cur = conn.cursor()
 
     # Fetch the receipt
@@ -6855,8 +6978,8 @@ def receipt_print(receipt_id):
             students.email,
             users.full_name AS created_by_name
         FROM receipts
-        JOIN invoices ON receipts.invoice_id = invoices.id
-        JOIN students ON invoices.student_id = students.id
+        JOIN invoices ON receipts.invoice_id = invoices.id AND receipts.institute_id = invoices.institute_id
+        JOIN students ON invoices.student_id = students.id AND invoices.institute_id = students.institute_id
         LEFT JOIN users ON receipts.created_by = users.id
         WHERE receipts.id = ?
           AND students.institute_id = ?
@@ -6908,6 +7031,7 @@ def _load_invoice_print_context(invoice_id, prepared_by_user_id=None):
         cur.execute("""
             SELECT
                 invoices.id,
+                invoices.institute_id,
                 invoices.invoice_no,
                 invoices.invoice_date,
                 invoices.subtotal,
@@ -6925,7 +7049,7 @@ def _load_invoice_print_context(invoice_id, prepared_by_user_id=None):
                 branches.branch_name,
                 branches.address AS branch_address
             FROM invoices
-            JOIN students ON invoices.student_id = students.id
+            JOIN students ON invoices.student_id = students.id AND invoices.institute_id = students.institute_id
             LEFT JOIN branches ON invoices.branch_id = branches.id
             WHERE invoices.id = ?
         """, (invoice_id,))
@@ -6989,6 +7113,10 @@ def _load_invoice_print_context(invoice_id, prepared_by_user_id=None):
         total_paid = float(paid_result["total_paid"] or 0) if paid_result else 0.0
 
         balance_amount = float(invoice["total_amount"] or 0) - total_paid
+        credit_amount=max(0,-balance_amount)
+        if ledger.available(conn):
+            t=ledger.totals(conn,invoice['institute_id'],invoice_id)
+            balance_amount=t['outstanding']/100;credit_amount=t['credit']/100;total_paid=t['cash']/100
         net_total = float(invoice["total_amount"] or 0)
 
         prepared_by = "Administrator"
@@ -7005,6 +7133,7 @@ def _load_invoice_print_context(invoice_id, prepared_by_user_id=None):
             "receipts": payments,
             "total_paid": total_paid,
             "balance_amount": balance_amount,
+            "credit_amount": credit_amount,
             "net_total": net_total,
             "prepared_by": prepared_by,
         }
@@ -7039,8 +7168,8 @@ def receipt_public_download(token):
             students.email,
             users.full_name AS created_by_name
         FROM receipts
-        JOIN invoices ON receipts.invoice_id = invoices.id
-        JOIN students ON invoices.student_id = students.id
+        JOIN invoices ON receipts.invoice_id = invoices.id AND receipts.institute_id = invoices.institute_id
+        JOIN students ON invoices.student_id = students.id AND invoices.institute_id = students.institute_id
         LEFT JOIN users ON receipts.created_by = users.id
         WHERE receipts.id = ?
     """, (receipt_id,))
@@ -7087,7 +7216,7 @@ def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
                 students.full_name,
                 students.phone
             FROM invoices
-            JOIN students ON invoices.student_id = students.id AND students.institute_id = invoices.institute_id
+            JOIN students ON invoices.student_id = students.id AND invoices.institute_id = students.institute_id AND students.institute_id = invoices.institute_id
             WHERE invoices.id = ? AND invoices.institute_id = ?
         """, (invoice_id, current_inst))
         invoice = cur.fetchone()
@@ -7168,8 +7297,8 @@ def receipt_send_sms(receipt_id):
             students.full_name,
             students.phone
         FROM receipts
-        JOIN invoices ON receipts.invoice_id = invoices.id
-        JOIN students ON invoices.student_id = students.id AND students.institute_id = invoices.institute_id
+        JOIN invoices ON receipts.invoice_id = invoices.id AND receipts.institute_id = invoices.institute_id
+        JOIN students ON invoices.student_id = students.id AND invoices.institute_id = students.institute_id AND students.institute_id = invoices.institute_id
         WHERE receipts.id = ? AND invoices.institute_id = ?
     """, (receipt_id, get_current_institute_id(default=1)))
     receipt = cur.fetchone()
@@ -7281,7 +7410,7 @@ def receivables():
         trainer_filter_param = [trainer_id]
 
     # Past dues
-    past_dues_query = """
+    past_dues_query = f"""
         SELECT
             ip.id,
             ip.due_date,
@@ -7298,7 +7427,7 @@ def receivables():
             s.phone AS student_phone,
             s.photo_filename,
             b.branch_name,
-            (ip.amount_due - ip.amount_paid) AS balance_due,
+            {ledger.installment_balance_sql(conn)} AS balance_due,
             (SELECT GROUP_CONCAT(bt.batch_name, ', ')
              FROM student_batches sb
              JOIN batches bt ON sb.batch_id = bt.id
@@ -7315,10 +7444,11 @@ def receivables():
             ON i.student_id = s.id
         LEFT JOIN branches b
             ON i.branch_id = b.id
-        WHERE ip.status != 'paid'
-          AND (i.institute_id = ? OR s.institute_id = ?)
+        WHERE {ledger.installment_balance_sql(conn)} > 0.005
+          AND (i.institute_id = ? AND s.institute_id = ?)
           AND parse_date(ip.due_date) < ?
-          AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
           AND (
             (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
@@ -7340,7 +7470,7 @@ def receivables():
     past_dues = cur.fetchall()
 
     # Today's dues
-    todays_dues_query = """
+    todays_dues_query = f"""
         SELECT
             ip.id,
             ip.due_date,
@@ -7357,7 +7487,7 @@ def receivables():
             s.phone AS student_phone,
             s.photo_filename,
             b.branch_name,
-            (ip.amount_due - ip.amount_paid) AS balance_due,
+            {ledger.installment_balance_sql(conn)} AS balance_due,
             (SELECT GROUP_CONCAT(bt.batch_name, ', ')
              FROM student_batches sb
              JOIN batches bt ON sb.batch_id = bt.id
@@ -7374,10 +7504,11 @@ def receivables():
             ON i.student_id = s.id
         LEFT JOIN branches b
             ON i.branch_id = b.id
-        WHERE ip.status != 'paid'
-          AND (i.institute_id = ? OR s.institute_id = ?)
+        WHERE {ledger.installment_balance_sql(conn)} > 0.005
+          AND (i.institute_id = ? AND s.institute_id = ?)
           AND parse_date(ip.due_date) = ?
-          AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
           AND (
             (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
@@ -7399,7 +7530,7 @@ def receivables():
     todays_dues = cur.fetchall()
 
     # Upcoming dues
-    upcoming_dues_query = """
+    upcoming_dues_query = f"""
         SELECT
             ip.id,
             ip.due_date,
@@ -7416,7 +7547,7 @@ def receivables():
             s.phone AS student_phone,
             s.photo_filename,
             b.branch_name,
-            (ip.amount_due - ip.amount_paid) AS balance_due,
+            {ledger.installment_balance_sql(conn)} AS balance_due,
             (SELECT GROUP_CONCAT(bt.batch_name, ', ')
              FROM student_batches sb
              JOIN batches bt ON sb.batch_id = bt.id
@@ -7433,10 +7564,11 @@ def receivables():
             ON i.student_id = s.id
         LEFT JOIN branches b
             ON i.branch_id = b.id
-        WHERE ip.status != 'paid'
-          AND (i.institute_id = ? OR s.institute_id = ?)
+        WHERE {ledger.installment_balance_sql(conn)} > 0.005
+          AND (i.institute_id = ? AND s.institute_id = ?)
           AND parse_date(ip.due_date) > ?
-          AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
           AND (
             (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
@@ -7473,21 +7605,22 @@ def receivables():
     month_starts = [_add_months(current_month_start, offset) for offset in range(3)]
     receivables_window_end = _add_months(current_month_start, 3)
 
-    monthly_expected_query = """
+    monthly_expected_query = f"""
         SELECT
             substr(parse_date(ip.due_date), 1, 7) AS month_key,
-            SUM(ip.amount_due - ip.amount_paid) AS total_due,
+            SUM{ledger.installment_balance_sql(conn)} AS total_due,
             COUNT(*) AS item_count
         FROM installment_plans ip
         JOIN invoices i
             ON ip.invoice_id = i.id
         JOIN students s
             ON i.student_id = s.id
-        WHERE ip.status != 'paid'
-          AND (i.institute_id = ? OR s.institute_id = ?)
+        WHERE {ledger.installment_balance_sql(conn)} > 0.005
+          AND (i.institute_id = ? AND s.institute_id = ?)
           AND parse_date(ip.due_date) >= ?
           AND parse_date(ip.due_date) < ?
-          AND i.status NOT IN ('write_off', 'partially_written_off')
+          AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
           AND (
             (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)
@@ -7652,7 +7785,7 @@ def reminder_log():
         SELECT ip.id AS installment_id, i.id AS invoice_id, s.id AS student_id
         FROM installment_plans ip
         JOIN invoices i ON i.id = ip.invoice_id
-        JOIN students s ON s.id = i.student_id
+        JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
         WHERE ip.id = ?
           AND i.id = ?
           AND s.id = ?
@@ -7822,13 +7955,13 @@ def reminder_dashboard():
     conn = get_conn()
     cur = conn.cursor()
     try:
-        cur.execute("""
+        cur.execute(f"""
             SELECT
                 ip.id AS installment_id,
                 parse_date(ip.due_date) AS due_date_iso,
                 ip.amount_due,
                 ip.amount_paid,
-                (ip.amount_due - ip.amount_paid) AS balance_due,
+                {ledger.installment_balance_sql(conn)} AS balance_due,
                 i.id AS invoice_id,
                 i.invoice_no,
                 i.branch_id,
@@ -7839,12 +7972,13 @@ def reminder_dashboard():
                 b.branch_name
             FROM installment_plans ip
             JOIN invoices i ON i.id = ip.invoice_id
-            JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
+            JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id AND s.institute_id = i.institute_id
             LEFT JOIN branches b ON b.id = i.branch_id AND b.institute_id = i.institute_id
             WHERE i.institute_id = ?
-              AND ip.status != 'paid'
-              AND (ip.amount_due - ip.amount_paid) > 0
-              AND i.status NOT IN ('paid', 'cancelled', 'write_off', 'partially_written_off')
+              AND {ledger.installment_balance_sql(conn)} > 0.005
+              AND {ledger.installment_balance_sql(conn)} > 0
+              AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(conn)}
               AND parse_date(ip.due_date) <= ?
             ORDER BY parse_date(ip.due_date), s.full_name
         """, (current_inst, (today + timedelta(days=30)).isoformat()))

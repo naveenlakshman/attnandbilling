@@ -254,6 +254,7 @@
       <div class="stat-tile muted c-red"><div class="s-label">Part. Paid</div><div class="s-val">{{ overall_stats.all_partially_paid_count or 0 }}</div></div>
       <div class="stat-tile muted c-purple"><div class="s-label">Unpaid</div><div class="s-val">{{ overall_stats.all_unpaid_count or 0 }}</div></div>
       <div class="stat-tile muted c-teal"><div class="s-label">Outstanding</div><div class="s-val money">&#8377;{{ "%.0f"|format(overall_stats.all_outstanding_amount or 0) }}</div></div>
+      <div class="stat-tile muted c-teal"><div class="s-label">Credit (separate)</div><div class="s-val money">&#8377;{{ "%.0f"|format(overall_stats.all_credit_amount or 0) }}</div></div>
     </div>
   </div>
 </div>
@@ -286,7 +287,7 @@
     </thead>
     <tbody>
       {% for inv in invoices %}
-      {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
+      {% set balance = inv.outstanding_amount %}
       <tr>
         <td class="td-sl" style="text-align:center;color:#999;font-size:12px;">{{ loop.index }}</td>
 
@@ -304,7 +305,7 @@
 
         <td data-label="Paid" style="color:#27ae60;" data-sort-key="paid" data-sort-value="{{ inv.paid_amount or 0 }}">&#8377; {{ "%.2f"|format(inv.paid_amount or 0) }}</td>
 
-        <td data-label="Balance" style="color:#c0392b;" data-sort-key="balance" data-sort-value="{{ balance }}">&#8377; {{ "%.2f"|format(balance) }}</td>
+        <td data-label="Balance" style="color:#c0392b;" data-sort-key="balance" data-sort-value="{{ balance }}">&#8377; {{ "%.2f"|format(balance) }}{% if inv.credit_amount %}<div class="text-success small">Credit: &#8377; {{ "%.2f"|format(inv.credit_amount) }}</div>{% endif %}</td>
 
         <td data-label="Status" data-sort-key="status" data-sort-value="{{ inv.status or '' }}">
           <span class="status-badge

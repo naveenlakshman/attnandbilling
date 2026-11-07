@@ -436,7 +436,8 @@
                     </div>
                     <div class="writeoff-mobile-status">
                       <span class="writeoff-mobile-amount">₹ {{ "%.2f"|format(writeoff.amount_written_off) }}</span>
-                      {% if writeoff.invoice_status == 'write_off' %}
+                      {% if writeoff.reversed %}<span class="badge bg-secondary">Reversed (original retained)</span>
+                  {% elif writeoff.invoice_status == 'write_off' %}
                         <span class="badge bg-danger">Write-off</span>
                       {% elif writeoff.invoice_status == 'partially_written_off' %}
                         <span class="badge bg-warning text-dark">Partial</span>
@@ -457,7 +458,8 @@
                 <td data-label="Paid">₹ {{ "%.2f"|format(writeoff.paid_amount) }}</td>
                 <td data-label="Date">{{ writeoff.writeoff_date | format_datetime }}</td>
                 <td data-label="Status" class="writeoff-mobile-hide">
-                  {% if writeoff.invoice_status == 'write_off' %}
+                  {% if writeoff.reversed %}<span class="badge bg-secondary">Reversed (original retained)</span>
+                  {% elif writeoff.invoice_status == 'write_off' %}
                     <span class="badge bg-danger">Write-off</span>
                   {% elif writeoff.invoice_status == 'partially_written_off' %}
                     <span class="badge bg-warning text-dark">Partial Write-off</span>
@@ -470,12 +472,7 @@
                     <a href="{{ url_for('baddebt.view', writeoff_id=writeoff.id) }}" class="btn btn-sm btn-outline-primary">
                       View
                     </a>
-                    <form method="POST" action="{{ url_for('baddebt.delete', writeoff_id=writeoff.id) }}"
-                          onsubmit="return confirm('Are you sure you want to delete this write-off?');">
-                      <button type="submit" class="btn btn-sm btn-outline-danger">
-                        Delete
-                      </button>
-                    </form>
+                    <a class="btn btn-sm btn-outline-danger" href="/accuracy/">Reverse with reason</a>
                   </div>
                 </td>
               </tr>

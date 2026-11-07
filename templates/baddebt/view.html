@@ -376,13 +376,7 @@
         </a>
       </div>
       <div class="col-6">
-        <form method="POST" action="{{ url_for('baddebt.delete', writeoff_id=write_off.id) }}" 
-              onsubmit="return confirm('Are you sure you want to delete this write-off? This action cannot be undone.');" 
-              class="d-grid">
-          <button type="submit" class="btn btn-danger btn-lg">
-            <i class="bi bi-trash"></i> Delete Write-off
-          </button>
-        </form>
+        <a class="btn btn-sm btn-outline-danger" href="/accuracy/">Reverse with reason</a>
       </div>
     </div>
   </div>

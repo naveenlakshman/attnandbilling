@@ -144,6 +144,7 @@
 {% endblock %}
 
 {% block content %}
+{% if session.get("role")=="admin" %}<p><a class="btn btn-primary" href="/accuracy/">Admissions, collections and financial history</a></p>{% endif %}
 
 <div class="reports-container">
   <div class="reports-header">

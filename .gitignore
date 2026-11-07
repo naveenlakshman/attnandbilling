@@ -274,3 +274,5 @@ scratch/cashfree-production-release/
 /scratch/cashfree-panel-tests-*/
 /scratch/cashfree-merchant-scope-*/
 /scratch/repo-cleanup-tests-*/
+/scratch/accuracy-tests-*/
+/scratch/erp-accuracy-review/

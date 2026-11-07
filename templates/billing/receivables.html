@@ -619,6 +619,10 @@
       <span onclick="closeEditModal()" style="font-size:24px;cursor:pointer;color:#999;line-height:1;">&times;</span>
     </div>
     <form method="post" id="editInstallmentForm">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Correction reason<input class="form-control" name="reason" required></label>
+<label>Effective date (defaults to today)<input class="form-control" type="date" name="effective_date"></label>
+
       <div style="padding:20px;">
         <div class="mb-3">
           <label class="form-label fw-semibold small">Due Date *</label>

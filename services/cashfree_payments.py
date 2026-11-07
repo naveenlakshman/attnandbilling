@@ -10,7 +10,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from flask import current_app
 
 from db import get_conn
-from services import cashfree
+from services import cashfree, finance_ledger as ledger
 from services.document_numbers import allocate_document_number
 
 
@@ -69,6 +69,10 @@ def _invoice(conn, invoice_id, student_id, institute_id):
 
 
 def _totals(conn, invoice_id, institute_id):
+    if ledger.available(conn):
+        t=ledger.totals(conn,institute_id,invoice_id)
+        return t['cash'], t['billed']-t['charge']+t['written_off']
+
     paid = conn.execute("""SELECT COALESCE(SUM(amount_received), 0) AS amount
                            FROM receipts WHERE invoice_id = ? AND institute_id = ?""",
                         (invoice_id, institute_id)).fetchone()["amount"]
@@ -137,7 +141,7 @@ def create_order(actor, data, request_key, return_url, public_link=None):
             invoices = conn.execute("""SELECT i.id FROM invoices i
                 JOIN students s ON s.id = i.student_id AND s.institute_id = i.institute_id
                 WHERE i.student_id = ? AND i.institute_id = ?
-                  AND i.status IN ('unpaid', 'partially_paid')""", (student_id, institute_id)).fetchall()
+                  AND i.status IN ('unpaid', 'partially_paid', 'partially_written_off')""", (student_id, institute_id)).fetchall()
             if len(invoices) != 1:
                 raise cashfree.CashfreeError("Specify invoice_id to select one payable student invoice.", 400)
             invoice_id = invoices[0]["id"]
@@ -167,7 +171,7 @@ def create_order(actor, data, request_key, return_url, public_link=None):
         else:
             paid, written_off = _totals(conn, invoice_id, institute_id)
             balance = _ledger_paise(invoice["total_amount"]) - paid - written_off
-            if invoice["status"] in {"cancelled", "write_off", "partially_written_off"} or written_off:
+            if invoice["status"] == "cancelled" or (not ledger.available(conn) and (invoice["status"] in {"write_off","partially_written_off"} or written_off)):
                 raise cashfree.CashfreeError("This invoice cannot accept online payments.", 409)
             if amount > balance:
                 raise cashfree.CashfreeError("Amount exceeds the current invoice balance.", 409)
@@ -278,8 +282,9 @@ def _post_receipt(order_id, payment):
         payment_id = str(payment["cf_payment_id"])
         sandbox = not order_id.startswith('cf_live_')
         gateway_label = 'Sandbox Cashfree' if sandbox else 'Cashfree'
-        if (invoice["status"] in {"cancelled", "write_off", "partially_written_off"}
-                or written_off or order["amount_paise"] > balance):
+        if (invoice["status"] == "cancelled"
+                or (not ledger.available(conn) and (invoice["status"] in {"write_off","partially_written_off"} or written_off))
+                or order["amount_paise"] > balance):
             conn.execute("""UPDATE cashfree_orders SET status = 'REVIEW', cf_payment_id = ?,
                             updated_at = ? WHERE order_id = ?""", (payment_id, now, order_id))
             _audit(conn, order, invoice, "reconcile", invoice["id"],
@@ -301,6 +306,11 @@ def _post_receipt(order_id, payment):
                     (receipt_no, invoice["id"], order["institute_id"], now[:10], order["amount_paise"] / 100,
                      mode, f"{'SANDBOX ' if sandbox else ''}Cashfree order {order_id}; payment {payment_id}", order["created_by"], now))
         receipt_id = cur.lastrowid
+        if ledger.available(conn):
+            from services.collections import attach_gateway
+            ledger.snapshot_invoice(conn,order['institute_id'],invoice['id'])
+            attach_gateway(conn,order,receipt_id,payment,now)
+
         total_paid = paid + order["amount_paise"]
         status = "paid" if total_paid >= _ledger_paise(invoice["total_amount"]) else "partially_paid"
         conn.execute("UPDATE invoices SET status = ?, updated_at = ? WHERE id = ? AND institute_id = ?",
@@ -316,6 +326,8 @@ def _post_receipt(order_id, payment):
                             WHERE id = ? AND invoice_id = ?""",
                          (allocated / 100, installment_status, now, installment["id"], invoice["id"]))
             remaining -= allocated
+        if ledger.available(conn):
+            ledger.sync_installments(conn,order["institute_id"],invoice["id"])
         conn.execute("""UPDATE cashfree_orders SET status = 'PAID', receipt_id = ?,
                         cf_payment_id = ?, updated_at = ? WHERE order_id = ?""",
                      (receipt_id, payment_id, now, order_id))

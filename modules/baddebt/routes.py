@@ -1,3 +1,4 @@
+from services import finance_ledger as ledger
 from flask import Blueprint, render_template, request, session, redirect, url_for, flash, jsonify
 from datetime import datetime
 from db import get_conn, log_activity
@@ -40,6 +41,9 @@ def _allocate_installment_coverage(amounts_due, receipt_total, writeoff_total):
 
 def _sync_invoice_installments(cur, invoice_id, institute_id, now):
     """Rebuild installment coverage from tenant-owned receipts and write-offs."""
+    if ledger.available(cur.connection):
+        return ledger.sync_installments(cur.connection, institute_id, invoice_id)
+
     cur.execute("""
         SELECT i.id,
                COALESCE((
@@ -159,6 +163,16 @@ def dashboard():
     write_offs = cur.fetchall()
 
     # Calculate totals
+    if ledger.available(conn):
+        net_rows=[]
+        for row in write_offs:
+            row=dict(row)
+            reversed_amount=conn.execute('SELECT COALESCE(SUM(-writeoff_delta),0)/100.0 amount FROM finance_adjustments WHERE institute_id=? AND writeoff_id=?',(current_inst,row['id'])).fetchone()['amount']
+            row['original_written_off']=row['amount_written_off']
+            row['amount_written_off']=float(row['amount_written_off'])-float(reversed_amount)
+            row['reversed']=bool(reversed_amount)
+            net_rows.append(row)
+        write_offs=net_rows
     total_written_off = sum(float(row["amount_written_off"] or 0) for row in write_offs)
     count = len(write_offs)
 
@@ -232,7 +246,7 @@ def create():
         invoice_id = invoice["id"]
         paid_amount = float(invoice["paid_amount"] or 0)
         total_amount = float(invoice["total_amount"] or 0)
-        balance = total_amount - paid_amount
+        balance = ledger.totals(conn,current_inst,invoice_id)['outstanding']/100 if ledger.available(conn) else total_amount-paid_amount
 
         if amount_written_off > balance:
             flash(f"Write-off amount (₹{amount_written_off}) cannot exceed balance (₹{balance})", "error")
@@ -295,6 +309,13 @@ def create():
                 written_off_amount = float(invoice["written_off_amount"] or 0)
                 total_amount = float(invoice["total_amount"] or 0)
                 balance = total_amount - paid_amount - written_off_amount
+                if ledger.available(conn):
+                    current = ledger.totals(conn,current_inst,invoice_id)
+                    if current['invoice']['status']=='cancelled':
+                        raise ValueError('Cannot write off a cancelled invoice.')
+                    balance = current['outstanding']/100
+                    ledger.snapshot_invoice(conn,current_inst,invoice_id)
+
                 if amount_written_off > balance:
                     raise ValueError(
                         f"Write-off amount (₹{amount_written_off:.2f}) cannot "
@@ -353,52 +374,6 @@ def create():
 
                 write_off_id = cur.lastrowid
 
-                # Get expense category
-                cur.execute("""
-                    SELECT id FROM expense_categories
-                    WHERE category_name = 'Uncollectible Receivables'
-                      AND institute_id = ?
-                """, (current_inst,))
-                category = cur.fetchone()
-
-                if category:
-                    category_id = category["id"]
-                    expense_description = (
-                        f"Bad Debt Write-off - Invoice {invoice['invoice_no']} - "
-                        f"Student: {invoice['student_code']} - Reason: {reason}"
-                    )
-
-                    cur.execute("""
-                        INSERT INTO expenses (
-                            institute_id,
-                            expense_date,
-                            branch_id,
-                            category_id,
-                            title,
-                            amount,
-                            payment_mode,
-                            reference_no,
-                            notes,
-                            created_by,
-                            created_at,
-                            updated_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        current_inst,
-                        datetime.now().date().isoformat(),
-                        branch_id,
-                        category_id,
-                        f"Bad Debt Write-off - {invoice['invoice_no']}",
-                        amount_written_off,
-                        "cash",
-                        writeoff_reference,
-                        expense_description,
-                        user_id,
-                        now,
-                        now
-                    ))
-
                 # Update invoice status
                 if round(balance - amount_written_off, 2) <= 0:
                     new_status = "write_off"
@@ -444,51 +419,18 @@ def create():
     # GET request - show form
     conn = get_conn()
     cur = conn.cursor()
-    # Get pre-selected invoice if passed from invoice view
-    pre_selected_invoice = None
-    invoice_id_param = request.args.get("invoice_id", "").strip()
-    if invoice_id_param:
-        try:
-            cur.execute("""
-                SELECT
-                    i.id,
-                    i.invoice_no,
-                    i.total_amount,
-                    s.full_name AS student_name,
-                    s.student_code,
-                    s.status AS student_status,
-                    (SELECT IFNULL(SUM(amount_received), 0) FROM receipts WHERE invoice_id = i.id) AS paid_amount,
-                    i.branch_id
-                FROM invoices i
-                JOIN students s ON i.student_id = s.id
-                WHERE i.id = ?
-                  AND i.status IN ('unpaid', 'partially_paid')
-                  AND i.institute_id = ?
-                  AND s.institute_id = ?
-            """, (invoice_id_param, current_inst, current_inst))
-            pre_selected_invoice = cur.fetchone()
-        except:
-            pass
-
-    # Get invoices with pending balance
-    cur.execute("""
-        SELECT
-            i.id,
-            i.invoice_no,
-            i.total_amount,
-            s.full_name AS student_name,
-            s.student_code,
-            s.status AS student_status,
-            (SELECT IFNULL(SUM(amount_received), 0) FROM receipts WHERE invoice_id = i.id) AS paid_amount,
-            i.branch_id
-        FROM invoices i
-        JOIN students s ON i.student_id = s.id
-        WHERE i.status IN ('unpaid', 'partially_paid')
-          AND i.institute_id = ?
-          AND s.institute_id = ?
-        ORDER BY i.invoice_no DESC
-    """, (current_inst, current_inst))
-    invoices = cur.fetchall()
+    # The form and API use the same collectible balance as posting.
+    cur.execute(f"""
+        SELECT i.id,i.invoice_no,i.total_amount,i.branch_id,s.full_name student_name,
+            s.student_code,s.status student_status,
+            COALESCE((SELECT SUM(r.amount_received) FROM receipts r WHERE r.invoice_id=i.id AND r.institute_id=i.institute_id),0) paid_amount,
+            {ledger.outstanding_sql(conn)} balance_amount
+        FROM invoices i JOIN students s ON s.id=i.student_id AND s.institute_id=i.institute_id
+        WHERE i.institute_id=? AND {ledger.collectible_sql(conn)} ORDER BY i.invoice_no DESC
+    """,(current_inst,))
+    invoices=cur.fetchall()
+    selected=request.args.get('invoice_id',type=int)
+    pre_selected_invoice=next((r for r in invoices if r['id']==selected),None)
 
     conn.close()
 
@@ -594,13 +536,14 @@ def get_invoice_details(invoice_id):
     """, (current_inst, invoice_id, current_inst, current_inst))
     invoice = cur.fetchone()
 
+    accurate=ledger.totals(conn,current_inst,invoice_id) if invoice and ledger.available(conn) else None
     conn.close()
 
     if not invoice:
         return jsonify({"error": "Invoice not found"}), 404
 
     paid_amount = float(invoice["paid_amount"] or 0)
-    balance = float(invoice["total_amount"] or 0) - paid_amount
+    balance = accurate['outstanding']/100 if accurate else max(0,float(invoice['total_amount'] or 0)-paid_amount)
 
     return jsonify({
         "invoice_no": invoice["invoice_no"],
@@ -621,85 +564,22 @@ def delete(writeoff_id):
     conn = get_conn()
     cur = conn.cursor()
     current_inst = get_current_institute_id(default=1)
-    _begin_write_transaction(cur)
-
-    cur.execute("""
-        SELECT invoice_id, amount_written_off, reference_no
-        FROM bad_debt_writeoffs
-        WHERE id = ? AND institute_id = ?
-    """ + _for_update_clause(), (writeoff_id, current_inst))
-    write_off = cur.fetchone()
-
-    if not write_off:
-        flash("Write-off record not found", "error")
-        conn.close()
-        return redirect(url_for("baddebt.dashboard"))
-
-    try:
-        now = datetime.now().isoformat(timespec="seconds")
-        user_id = session.get("user_id")
-
-        # Delete from bad_debt_writeoffs
-        cur.execute(
-            "DELETE FROM bad_debt_writeoffs WHERE id = ? AND institute_id = ?",
-            (writeoff_id, current_inst),
-        )
-
-        # Delete related expense
-        cur.execute(
-            "DELETE FROM expenses WHERE reference_no = ? AND institute_id = ?",
-            (write_off["reference_no"], current_inst),
-        )
-
-        # Update invoice status back to original
-        invoice_id = write_off["invoice_id"]
-        cur.execute("""
-            SELECT total_amount, (SELECT IFNULL(SUM(amount_received), 0) FROM receipts WHERE invoice_id = ?) AS paid_amount
-            FROM invoices WHERE id = ? AND institute_id = ?
-        """, (invoice_id, invoice_id, current_inst))
-        invoice = cur.fetchone()
-
-        if invoice:
-            paid_amount = float(invoice["paid_amount"] or 0)
-            total_amount = float(invoice["total_amount"] or 0)
-
-            if paid_amount >= total_amount:
-                new_status = "paid"
-            elif paid_amount > 0:
-                new_status = "partially_paid"
-            else:
-                new_status = "unpaid"
-
-            cur.execute("""
-                UPDATE invoices SET status = ?, updated_at = ?
-                WHERE id = ? AND institute_id = ?
-            """, (new_status, now, invoice_id, current_inst))
-
-            # The deleted write-off no longer covers the invoice. Reallocate the
-            # remaining receipts/write-offs so the restored balance is receivable.
-            _sync_invoice_installments(cur, invoice_id, current_inst, now)
-
-        conn.commit()
-        conn.close()
-
-        # Log activity after transaction is committed
-        log_activity(
-            user_id,
-            None,
-            "delete",
-            "Bad Debt Write-off",
-            writeoff_id,
-            f"Deleted write-off of ₹{write_off['amount_written_off']}"
-        )
-
-        flash("Bad debt write-off deleted successfully", "success")
-        return redirect(url_for("baddebt.dashboard"))
-
-    except Exception as e:
+    if ledger.available(conn):
         try:
-            conn.rollback()
-        except:
-            pass
-        conn.close()
-        flash(f"Error deleting write-off: {str(e)}", "error")
-        return redirect(url_for("baddebt.dashboard"))
+            ledger.begin(conn)
+            row = conn.execute('SELECT * FROM bad_debt_writeoffs WHERE id=? AND institute_id=?', (writeoff_id,current_inst)).fetchone()
+            if not row:
+                raise ValueError('Write-off not found')
+            ledger.adjust(conn,current_inst,session['user_id'],row['invoice_id'],'writeoff_reversal',row['amount_written_off'],
+                request.form.get('effective_date') or ledger.now()[:10], request.form.get('reason','').strip(),
+                writeoff_id=writeoff_id,request_key=request.form.get('request_key') or f'writeoff-reversal-{writeoff_id}')
+            conn.commit()
+            flash('Write-off reversed; original record retained.', 'success')
+        except ValueError as exc:
+            conn.rollback(); flash(str(exc),'danger')
+        finally:
+            conn.close()
+        return redirect(url_for('baddebt.dashboard'))
+    conn.close()
+    flash('Apply the accuracy migration before reversing write-offs. Original records have been retained.','warning')
+    return redirect(url_for('baddebt.dashboard'))

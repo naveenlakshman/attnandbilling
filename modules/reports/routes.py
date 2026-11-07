@@ -1,3 +1,4 @@
+from services import finance_ledger as ledger
 import io
 import csv
 import calendar
@@ -76,7 +77,7 @@ def dashboard():
     
     for table_name, display_name in tables:
         try:
-            if table_name in ("branches", "expenses", "invoices", "leads", "receipts", "students", "installment_plans", "activity_logs", "expense_categories"):
+            if table_name in ("branches", "expenses", "invoices", "leads", "receipts", "students", "activity_logs", "expense_categories"):
                 cur.execute(f"SELECT COUNT(*) as count FROM {table_name} WHERE institute_id = ?", (current_inst,))
             elif table_name == "invoice_items":
                 cur.execute("SELECT COUNT(*) as count FROM invoice_items ii JOIN invoices inv ON inv.id = ii.invoice_id WHERE inv.institute_id = ?", (current_inst,))
@@ -101,155 +102,6 @@ def dashboard():
     conn.close()
     return render_template("reports/dashboard.html", stats=stats)
 
-    # ── 2a. Overdue Followups (past due, not yet done today) ─────
-    cur.execute("""
-        SELECT l.id, l.name, l.phone, l.stage, l.status, l.next_followup_date,
-               u.full_name AS owner_name
-        FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
-        WHERE l.next_followup_date < ? AND l.is_deleted = 0
-          AND l.next_followup_date IS NOT NULL AND l.next_followup_date != ''
-          AND l.status NOT IN ('converted', 'lost', 'not_interested')
-        ORDER BY l.next_followup_date ASC, l.name
-    """, (report_date,))
-    followups_overdue = cur.fetchall()
-
-    # ── 2b. Today's Followups done (actually logged today) ────────
-    cur.execute("""
-        SELECT f.id, f.method, f.outcome, f.note, f.created_at,
-               l.id AS lead_id, l.name AS lead_name, l.phone AS lead_phone,
-               u.full_name AS done_by
-        FROM followups f
-        JOIN leads l ON f.lead_id = l.id
-        LEFT JOIN users u ON f.user_id = u.id
-        WHERE substr(f.created_at, 1, 10) = ? AND l.is_deleted = 0
-        ORDER BY f.created_at DESC
-    """, (report_date,))
-    followups_done = cur.fetchall()
-
-    # ── 3. Today's Invoices ───────────────────────────────────────
-    invoice_query = """
-        SELECT i.id, i.invoice_no, i.invoice_date, i.total_amount, i.status,
-               IFNULL((SELECT SUM(r2.amount_received) FROM receipts r2 WHERE r2.invoice_id = i.id), 0) AS paid_amount,
-               (i.total_amount - IFNULL((SELECT SUM(r2.amount_received) FROM receipts r2 WHERE r2.invoice_id = i.id), 0)) AS balance_amount,
-               s.full_name AS student_name, s.student_code, s.id AS student_id,
-               br.branch_name
-        FROM invoices i
-        JOIN students s ON i.student_id = s.id
-        LEFT JOIN branches br ON i.branch_id = br.id
-        WHERE parse_date(i.invoice_date) = ?
-    """
-    invoice_params = [report_date]
-    if selected_branch_id:
-        invoice_query += " AND i.branch_id = ?"
-        invoice_params.append(selected_branch_id)
-    invoice_query += " ORDER BY i.created_at DESC"
-    cur.execute(invoice_query, invoice_params)
-    invoices = cur.fetchall()
-
-    # ── 4. Today's Receipts ───────────────────────────────────────
-    receipt_query = """
-        SELECT r.id, r.receipt_no, r.receipt_date, r.amount_received, r.payment_mode,
-               s.full_name AS student_name, s.student_code, i.invoice_no,
-               br.branch_name
-        FROM receipts r
-        JOIN invoices i ON r.invoice_id = i.id
-        JOIN students s ON i.student_id = s.id
-        LEFT JOIN branches br ON i.branch_id = br.id
-        WHERE parse_date(r.receipt_date) = ?
-    """
-    receipt_params = [report_date]
-    if selected_branch_id:
-        receipt_query += " AND i.branch_id = ?"
-        receipt_params.append(selected_branch_id)
-    receipt_query += " ORDER BY r.created_at DESC"
-    cur.execute(receipt_query, receipt_params)
-    receipts = cur.fetchall()
-
-    # ── 5. Today's Attendance ─────────────────────────────────────
-    att_summary = {"present": 0, "absent": 0, "late": 0, "leave": 0, "total": 0}
-    att_records = []
-    if selected_branch_id:
-        cur.execute("""
-            SELECT ar.status, COUNT(*) AS cnt
-            FROM attendance_records ar
-            WHERE ar.attendance_date = ? AND ar.branch_id = ?
-            GROUP BY ar.status
-        """, (report_date, selected_branch_id))
-        for row in cur.fetchall():
-            s = row["status"]
-            if s in att_summary:
-                att_summary[s] = row["cnt"]
-            att_summary["total"] += row["cnt"]
-
-        cur.execute("""
-            SELECT ar.status, s.full_name AS student_name, s.student_code,
-                   b.batch_name, br2.branch_name
-            FROM attendance_records ar
-            JOIN students s ON ar.student_id = s.id
-            JOIN batches b ON ar.batch_id = b.id
-            LEFT JOIN branches br2 ON ar.branch_id = br2.id
-            WHERE ar.attendance_date = ? AND ar.branch_id = ?
-            ORDER BY b.batch_name, s.full_name
-        """, (report_date, selected_branch_id))
-        att_records = cur.fetchall()
-    else:
-        cur.execute("""
-            SELECT ar.status, COUNT(*) AS cnt
-            FROM attendance_records ar
-            WHERE ar.attendance_date = ?
-            GROUP BY ar.status
-        """, (report_date,))
-        for row in cur.fetchall():
-            s = row["status"]
-            if s in att_summary:
-                att_summary[s] = row["cnt"]
-            att_summary["total"] += row["cnt"]
-
-        cur.execute("""
-            SELECT ar.status, s.full_name AS student_name, s.student_code,
-                   b.batch_name, br2.branch_name
-            FROM attendance_records ar
-            JOIN students s ON ar.student_id = s.id
-            JOIN batches b ON ar.batch_id = b.id
-            LEFT JOIN branches br2 ON ar.branch_id = br2.id
-            WHERE ar.attendance_date = ?
-            ORDER BY br2.branch_name, b.batch_name, s.full_name
-        """, (report_date,))
-        att_records = cur.fetchall()
-
-    conn.close()
-
-    # Summary totals
-    totals = {
-        "new_leads": len(new_leads),
-        "followups": len(followups_due),
-        "followups_done": len(followups_done),
-        "invoices": len(invoices),
-        "invoice_amount": sum(r["total_amount"] or 0 for r in invoices),
-        "receipts": len(receipts),
-        "receipt_amount": sum(r["amount_received"] or 0 for r in receipts),
-        "attendance": att_summary["total"],
-    }
-
-    return render_template(
-        "reports/daily.html",
-        report_date=report_date,
-        branches=branches,
-        selected_branch_id=selected_branch_id,
-        can_view_all=can_view_all,
-        new_leads=new_leads,
-        followups_due=followups_due,
-        followups_overdue=followups_overdue,
-        followups_done=followups_done,
-        invoices=invoices,
-        receipts=receipts,
-        att_summary=att_summary,
-        att_records=att_records,
-        totals=totals,
-    )
-
-
 @reports_bp.route("/daily/download")
 @login_required
 def daily_report_download():
@@ -265,6 +117,7 @@ def daily_report_download():
 
     conn = get_conn()
     cur = conn.cursor()
+    current_inst = get_current_institute_id(default=1)
 
     can_view_all = session.get("can_view_all_branches", False) or session.get("role") == "admin"
     user_branch_id = session.get("branch_id")
@@ -276,6 +129,11 @@ def daily_report_download():
             selected_branch_id = int(branch_param) if branch_param.isdigit() else None
     else:
         selected_branch_id = user_branch_id
+
+    allowed = {r['id'] for r in cur.execute('SELECT id FROM branches WHERE institute_id=?',(current_inst,)).fetchall()}
+    if selected_branch_id is not None and selected_branch_id not in allowed:
+        conn.close()
+        return jsonify(error='Branch not found in this institute'), 403
 
     # ── Branch name for filename ──────────────────────────────────
     branch_label = ""
@@ -290,10 +148,10 @@ def daily_report_download():
         SELECT l.id, l.name, l.phone, l.lead_source, l.stage, l.status, l.created_at,
                u.full_name AS owner_name
         FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
-        WHERE substr(l.created_at, 1, 10) = ? AND l.is_deleted = 0
+        LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
+        WHERE substr(l.created_at, 1, 10) = ? AND l.is_deleted = 0 AND l.institute_id = ?
         ORDER BY l.created_at DESC
-    """, (report_date,))
+    """, (report_date, current_inst))
     new_leads = cur.fetchall()
 
     # ── Followups (due) ───────────────────────────────────────────
@@ -301,11 +159,11 @@ def daily_report_download():
         SELECT l.id, l.name, l.phone, l.stage, l.status, l.next_followup_date,
                u.full_name AS owner_name
         FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
-        WHERE l.next_followup_date = ? AND l.is_deleted = 0
+        LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
+        WHERE l.next_followup_date = ? AND l.is_deleted = 0 AND l.institute_id = ?
           AND l.status NOT IN ('converted', 'lost', 'not_interested')
         ORDER BY l.name
-    """, (report_date,))
+    """, (report_date, current_inst))
     followups_due = cur.fetchall()
 
     # ── Followups done today ──────────────────────────────────────
@@ -315,25 +173,25 @@ def daily_report_download():
                u.full_name AS done_by
         FROM followups f
         JOIN leads l ON f.lead_id = l.id
-        LEFT JOIN users u ON f.user_id = u.id
-        WHERE substr(f.created_at, 1, 10) = ? AND l.is_deleted = 0
+        LEFT JOIN users u ON f.user_id = u.id AND u.institute_id = l.institute_id
+        WHERE substr(f.created_at, 1, 10) = ? AND l.is_deleted = 0 AND l.institute_id = ?
         ORDER BY f.created_at DESC
-    """, (report_date,))
+    """, (report_date, current_inst))
     followups_done = cur.fetchall()
 
     # ── Invoices ──────────────────────────────────────────────────
-    invoice_query = """
+    invoice_query = f"""
         SELECT i.invoice_no, i.invoice_date, s.full_name AS student_name, s.student_code,
                i.total_amount,
-               IFNULL((SELECT SUM(r2.amount_received) FROM receipts r2 WHERE r2.invoice_id = i.id), 0) AS paid_amount,
-               (i.total_amount - IFNULL((SELECT SUM(r2.amount_received) FROM receipts r2 WHERE r2.invoice_id = i.id), 0)) AS balance_amount,
+               IFNULL((SELECT SUM(r2.amount_received) FROM receipts r2 WHERE r2.invoice_id = i.id AND r2.institute_id=i.institute_id), 0) AS paid_amount,
+               {ledger.outstanding_sql(conn)} AS balance_amount, {ledger.credit_sql(conn)} AS credit_amount,
                i.status, br.branch_name
         FROM invoices i
         JOIN students s ON i.student_id = s.id
-        LEFT JOIN branches br ON i.branch_id = br.id
-        WHERE parse_date(i.invoice_date) = ?
+        LEFT JOIN branches br ON i.branch_id = br.id AND br.institute_id=i.institute_id
+        WHERE parse_date(i.invoice_date) = ? AND i.institute_id = ? AND s.institute_id = i.institute_id AND i.status <> 'cancelled'
     """
-    invoice_params = [report_date]
+    invoice_params = [report_date, current_inst]
     if selected_branch_id:
         invoice_query += " AND i.branch_id = ?"
         invoice_params.append(selected_branch_id)
@@ -342,19 +200,26 @@ def daily_report_download():
     invoices = cur.fetchall()
 
     # ── Receipts ──────────────────────────────────────────────────
-    receipt_query = """
+    receipt_location_joins='LEFT JOIN branches br ON 1=0'
+    receipt_branch_filter=' AND 1=0'
+    if ledger.available(conn):
+        receipt_location_joins='''LEFT JOIN receipt_details rd ON rd.receipt_id=r.id AND rd.institute_id=r.institute_id
+            LEFT JOIN collection_payments cp ON cp.id=rd.payment_id AND cp.institute_id=r.institute_id
+            LEFT JOIN branches br ON br.id=cp.collection_branch_id AND br.institute_id=r.institute_id'''
+        receipt_branch_filter=' AND cp.collection_branch_id = ?'
+    receipt_query = f"""
         SELECT r.receipt_no, r.receipt_date, s.full_name AS student_name, s.student_code,
                i.invoice_no, r.amount_received, r.payment_mode, br.branch_name
         FROM receipts r
         JOIN invoices i ON r.invoice_id = i.id
         JOIN students s ON i.student_id = s.id
-        LEFT JOIN branches br ON i.branch_id = br.id
-        WHERE parse_date(r.receipt_date) = ?
+        {receipt_location_joins}
+        WHERE parse_date(r.receipt_date) = ? AND r.institute_id = ? AND i.institute_id = r.institute_id AND s.institute_id = i.institute_id
     """
-    receipt_params = [report_date]
+    receipt_params = [report_date, current_inst]
     if selected_branch_id:
-        receipt_query += " AND i.branch_id = ?"
-        receipt_params.append(selected_branch_id)
+        receipt_query += receipt_branch_filter
+        if ledger.available(conn):receipt_params.append(selected_branch_id)
     receipt_query += " ORDER BY r.created_at DESC"
     cur.execute(receipt_query, receipt_params)
     receipts = cur.fetchall()
@@ -369,9 +234,9 @@ def daily_report_download():
             JOIN students s ON ar.student_id = s.id
             JOIN batches b ON ar.batch_id = b.id
             LEFT JOIN branches br2 ON ar.branch_id = br2.id
-            WHERE ar.attendance_date = ? AND ar.branch_id = ?
+            WHERE ar.attendance_date = ? AND s.institute_id = ? AND ar.branch_id = ?
             ORDER BY b.batch_name, s.full_name
-        """, (report_date, selected_branch_id))
+        """, (report_date, current_inst, selected_branch_id))
         att_records = cur.fetchall()
     else:
         cur.execute("""
@@ -381,9 +246,9 @@ def daily_report_download():
             JOIN students s ON ar.student_id = s.id
             JOIN batches b ON ar.batch_id = b.id
             LEFT JOIN branches br2 ON ar.branch_id = br2.id
-            WHERE ar.attendance_date = ?
+            WHERE ar.attendance_date = ? AND s.institute_id = ?
             ORDER BY br2.branch_name, b.batch_name, s.full_name
-        """, (report_date,))
+        """, (report_date, current_inst))
         att_records = cur.fetchall()
 
     conn.close()
@@ -435,25 +300,26 @@ def daily_report_download():
 
     # Section 3: Invoices
     writer.writerow(["INVOICES"])
-    writer.writerow(["#", "Invoice No.", "Date", "Student", "Reg. No", "Total", "Paid", "Balance", "Status", "Branch"])
-    inv_total = inv_paid = inv_balance = 0
+    writer.writerow(["#", "Invoice No.", "Date", "Student", "Reg. No", "Total", "Paid", "Balance", "Credit (separate)", "Status", "Branch"])
+    inv_total = inv_paid = inv_balance = inv_credit = 0
     for i, inv in enumerate(invoices, 1):
         writer.writerow([i, inv["invoice_no"], inv["invoice_date"], inv["student_name"],
                          inv["student_code"], inv["total_amount"] or 0,
-                         inv["paid_amount"] or 0, inv["balance_amount"] or 0,
+                         inv["paid_amount"] or 0, inv["balance_amount"] or 0, inv["credit_amount"] or 0,
                          inv["status"] or "", inv["branch_name"] or ""])
         inv_total += inv["total_amount"] or 0
         inv_paid += inv["paid_amount"] or 0
         inv_balance += inv["balance_amount"] or 0
+        inv_credit += inv["credit_amount"] or 0
     if not invoices:
         writer.writerow(["No invoices today"])
     else:
-        writer.writerow(["", "", "", "", "TOTAL", inv_total, inv_paid, inv_balance, "", ""])
+        writer.writerow(["", "", "", "", "TOTAL", inv_total, inv_paid, inv_balance, inv_credit, "", ""])
     writer.writerow([])
 
     # Section 4: Receipts
-    writer.writerow(["RECEIPTS"])
-    writer.writerow(["#", "Receipt No.", "Date", "Student", "Reg. No", "Invoice No.", "Amount", "Mode", "Branch"])
+    writer.writerow(["RECEIPT ALLOCATIONS (original values; advances/refunds in accuracy collections)"])
+    writer.writerow(["#", "Receipt No.", "Date", "Student", "Reg. No", "Invoice No.", "Amount", "Mode", "Collection branch (blank = unknown)"])
     rec_total = 0
     for i, r in enumerate(receipts, 1):
         writer.writerow([i, r["receipt_no"], r["receipt_date"], r["student_name"],
@@ -1522,6 +1388,18 @@ def export_csv(table_name):
                 WHERE e.institute_id = ?
                 ORDER BY e.expense_date, e.id
             """, (current_inst,))
+        elif tbl == "receipts" and ledger.available(conn):
+            cur.execute("""
+                SELECT r.*,COALESCE(NULLIF(u.full_name,''),u.username) AS created_by_name,i.name AS institute_name,
+                       p.collection_branch_id,COALESCE(p.payment_channel,'unresolved') AS payment_channel,
+                       p.payment_date,p.payment_reference,COALESCE(p.date_source,'legacy_unresolved') AS date_source
+                FROM receipts r
+                LEFT JOIN receipt_details d ON d.receipt_id=r.id AND d.institute_id=r.institute_id
+                LEFT JOIN collection_payments p ON p.id=d.payment_id AND p.institute_id=r.institute_id
+                LEFT JOIN users u ON u.id=r.created_by AND u.institute_id=r.institute_id
+                LEFT JOIN institutes i ON i.id=r.institute_id
+                WHERE r.institute_id=? ORDER BY r.id
+            """,(current_inst,))
         elif tbl == "receipts":
             cur.execute("""
                 SELECT r.*, COALESCE(NULLIF(u.full_name, ''), u.username) AS created_by_name,
@@ -1549,8 +1427,10 @@ def export_csv(table_name):
                 WHERE inv.institute_id = ?
                 ORDER BY inv.id
             """, (current_inst, current_inst))
-        elif tbl in ("branches", "leads", "students", "installment_plans", "activity_logs", "expense_categories"):
+        elif tbl in ("branches", "leads", "students", "activity_logs", "expense_categories"):
             cur.execute(f"SELECT * FROM {tbl} WHERE institute_id = ?", (current_inst,))
+        elif tbl == "installment_plans":
+            cur.execute("SELECT ip.* FROM installment_plans ip JOIN invoices i ON i.id=ip.invoice_id WHERE i.institute_id=?", (current_inst,))
         elif tbl == "invoice_items":
             cur.execute("SELECT ii.* FROM invoice_items ii JOIN invoices inv ON inv.id = ii.invoice_id WHERE inv.institute_id = ?", (current_inst,))
         elif tbl == "followups":
@@ -1558,9 +1438,15 @@ def export_csv(table_name):
         elif tbl == "users":
             cur.execute("SELECT * FROM users WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?) OR id = ?", (current_inst, session.get("user_id")))
         else:
-            cur.execute(f"SELECT * FROM {tbl}")
+            cur.execute(f"SELECT * FROM {tbl} WHERE institute_id = ?", (current_inst,))
         rows = cur.fetchall()
         columns = [description[0] for description in cur.description]
+        if tbl=='invoices' and ledger.available(conn):
+            rows=[dict(r) for r in rows]
+            columns+=['outstanding_amount','credit_amount','net_receipts','net_writeoffs']
+            for r in rows:
+                t=ledger.totals(conn,current_inst,r['id'])
+                r.update(outstanding_amount=t['outstanding']/100,credit_amount=t['credit']/100,net_receipts=t['cash']/100,net_writeoffs=t['written_off']/100)
         if tbl in {"expenses", "receipts", "invoices"}:
             names = ({"branch_id": "branch_name", "category_id": "category_name", "institute_id": "institute_name"}
                      if tbl == "expenses" else {"created_by": "created_by_name", "institute_id": "institute_name"})
@@ -1659,10 +1545,10 @@ def export_leads_detailed():
                 leads.created_at,
                 leads.updated_at
             FROM leads
-            LEFT JOIN users ON leads.assigned_to_id = users.id
-            WHERE leads.is_deleted = 0
+            LEFT JOIN users ON leads.assigned_to_id = users.id AND users.institute_id = leads.institute_id
+            WHERE leads.is_deleted = 0 AND leads.institute_id = ?
             ORDER BY leads.created_at DESC
-        """)
+        """, (get_current_institute_id(default=1),))
         
         rows = cur.fetchall()
         conn.close()
@@ -1761,9 +1647,10 @@ def export_students_detailed():
                 students.joined_date,
                 students.created_at
             FROM students
-            LEFT JOIN branches ON students.branch_id = branches.id
+            LEFT JOIN branches ON students.branch_id = branches.id AND branches.institute_id = students.institute_id
+            WHERE students.institute_id = ?
             ORDER BY students.created_at DESC
-        """)
+        """, (get_current_institute_id(default=1),))
         
         rows = cur.fetchall()
         conn.close()
@@ -1903,10 +1790,10 @@ def download_sample(table_name):
             ]
         },
         "receipts": {
-            "headers": ["receipt_number", "invoice_id", "receipt_date", "amount_received", "payment_mode", "notes"],
+            "headers": ["receipt_number", "invoice_id", "receipt_date", "amount_received", "payment_mode", "notes", "collection_branch_id", "payment_channel", "payment_reference"],
             "rows": [
-                ["GIT/RCP/001", "1", "21-03-2026", "5000", "cash", "Full payment"],
-                ["GIT/RCP/002", "2", "20-03-2026", "2000", "bank_transfer", "First installment"],
+                ["GIT/RCP/001", "1", "21-03-2026", "5000", "cash", "Confirmed branch collection", "1", "branch", ""],
+                ["GIT/RCP/002", "2", "20-03-2026", "2000", "bank_transfer", "Historical metadata unknown", "", "unresolved", ""],
             ]
         },
         "installments": {
@@ -2468,7 +2355,12 @@ def upload_csv():
                         if not parsed_invoice_date:
                             errors.append(f"Row {idx}: invalid invoice_date format (use DD-MM-YYYY or YYYY-MM-DD)")
                             continue
-                        invoice_date = parsed_invoice_date
+                        try:
+                            from datetime import date as _date
+                            invoice_date = _date.fromisoformat(parsed_invoice_date).isoformat()
+                        except ValueError:
+                            errors.append(f'Row {idx}: invalid invoice date')
+                            continue
                         
                         # Validate numbers
                         try:
@@ -2480,6 +2372,11 @@ def upload_csv():
                             errors.append(f"Row {idx}: invalid number format - {str(e)}")
                             continue
                         
+                        from services.finance_ledger import paise
+                        if min(subtotal, discount_amount, total_amount) < 0 or discount_amount > subtotal or paise(subtotal)-paise(discount_amount) != paise(total_amount):
+                            errors.append(f"Row {idx}: subtotal minus discount_amount must equal total_amount")
+                            continue
+
                         # Convert IDs and validate tenant scoping
                         try:
                             student_id = int(student_id)
@@ -2505,6 +2402,9 @@ def upload_csv():
                             errors.append(f"Row {idx}: branch_id {branch_id} does not exist in this institute")
                             continue
                         
+                        if not conn.execute('SELECT id FROM users WHERE id=? AND institute_id=?',(created_by,current_inst)).fetchone():
+                            errors.append(f'Row {idx}: invoice creator must belong to this institute')
+                            continue
                         # Insert invoice with institute_id
                         cur.execute("""
                             INSERT INTO invoices (
@@ -2519,6 +2419,10 @@ def upload_csv():
                             installment_type, notes, status, created_by, branch_id,
                             datetime.now().isoformat(timespec="seconds")
                         ))
+                        if ledger.available(conn):
+                            ledger.audit(conn,current_inst,session['user_id'],'invoice_import',cur.lastrowid,None,
+                                {'invoice_creator_field':created_by,'imported_by':session['user_id'],'admission_creator':'unverified','source':'CSV'},
+                                'CSV invoice import; admission identity requires review',invoice_date)
                         _auto_enable_portal(student_id)
                         rows_imported += 1
                     except Exception as e:
@@ -2526,67 +2430,25 @@ def upload_csv():
                         continue
                 
                 elif table_name == "receipts":
-                    receipt_invoice_id = int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0
-                    receipt_amount = float(row.get("amount_received", 0)) if row.get("amount_received") else 0
-                    
-                    if receipt_invoice_id <= 0 or not conn.execute(
-                        "SELECT id FROM invoices WHERE id = ? AND institute_id = ?",
-                        (receipt_invoice_id, current_inst),
-                    ).fetchone():
-                        errors.append(f"Row {idx}: invoice_id {receipt_invoice_id} does not exist in this institute")
-                        continue
-
-                    cur.execute("""
-                        INSERT INTO receipts (
-                            institute_id, receipt_no, invoice_id, receipt_date, amount_received, payment_mode, notes, created_by, created_at
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        current_inst,
-                        row.get("receipt_number", "").strip(),
-                        receipt_invoice_id,
-                        parse_date(row.get("receipt_date", "")) or None,
-                        receipt_amount,
-                        row.get("payment_mode", "cash").strip() or "cash",
-                        row.get("notes", "").strip() or None,
-                        session.get("user_id"),
-                        datetime.now().isoformat(timespec="seconds")
-                    ))
-                    
-                    # Update invoice status based on total receipts
-                    cur.execute("""
-                        SELECT total_amount FROM invoices WHERE id = ? AND institute_id = ?
-                    """, (receipt_invoice_id, current_inst))
-                    invoice_row = cur.fetchone()
-                    
-                    if invoice_row:
-                        invoice_total = float(invoice_row["total_amount"] or 0)
-                        
-                        cur.execute("""
-                            SELECT IFNULL(SUM(amount_received), 0) AS total_received
-                            FROM receipts
-                            WHERE invoice_id = ? AND institute_id = ?
-                        """, (receipt_invoice_id, current_inst))
-                        total_received = float(cur.fetchone()["total_received"] or 0)
-                        
-                        # Determine new status
-                        if total_received >= invoice_total:
-                            new_status = "paid"
-                        elif total_received > 0:
-                            new_status = "partially_paid"
-                        else:
-                            new_status = "unpaid"
-                        
-                        cur.execute("""
-                            UPDATE invoices
-                            SET status = ?, updated_at = ?
-                            WHERE id = ? AND institute_id = ?
-                        """, (new_status, datetime.now().isoformat(timespec="seconds"), receipt_invoice_id, current_inst))
-                    
+                    from services.collections import import_receipt
+                    if not ledger.available(conn):
+                        raise ValueError('Apply the ERP accuracy migration before importing receipts.')
+                    conn.execute('SAVEPOINT receipt_csv_row')
+                    try:
+                        import_receipt(conn,current_inst,session['user_id'],row)
+                        conn.execute('RELEASE SAVEPOINT receipt_csv_row')
+                    except Exception:
+                        conn.execute('ROLLBACK TO SAVEPOINT receipt_csv_row')
+                        conn.execute('RELEASE SAVEPOINT receipt_csv_row')
+                        raise
                     rows_imported += 1
-                
+
                 elif table_name == "installments" or table_name == "installment_plans":
                     inv_id = int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0
+                    if ledger.available(conn) and conn.execute('SELECT 1 FROM invoice_postings WHERE invoice_id=? AND institute_id=?',(inv_id,current_inst)).fetchone():
+                        errors.append(f'Row {idx}: posted invoice history is immutable; use a dated correction')
+                        continue
+
                     if inv_id <= 0 or not conn.execute(
                         "SELECT id FROM invoices WHERE id = ? AND institute_id = ?",
                         (inv_id, current_inst),
@@ -2737,6 +2599,10 @@ def upload_csv():
                 
                 elif table_name == "invoice_items":
                     inv_id = int(row.get("invoice_id", 0)) if row.get("invoice_id") else 0
+                    if ledger.available(conn) and conn.execute('SELECT 1 FROM invoice_postings WHERE invoice_id=? AND institute_id=?',(inv_id,current_inst)).fetchone():
+                        errors.append(f'Row {idx}: posted invoice history is immutable; use a dated correction')
+                        continue
+
                     if inv_id <= 0 or not conn.execute(
                         "SELECT id FROM invoices WHERE id = ? AND institute_id = ?",
                         (inv_id, current_inst),

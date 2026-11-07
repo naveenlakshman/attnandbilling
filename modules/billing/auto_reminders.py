@@ -1,3 +1,4 @@
+from services import finance_ledger as ledger
 from datetime import date, datetime, timedelta
 
 from db import get_company_profile, get_conn, log_activity
@@ -78,14 +79,14 @@ def _load_due_installments(cur, run_date):
     start_date = (run_date - timedelta(days=7)).isoformat()
     end_date = (run_date + timedelta(days=3)).isoformat()
 
-    cur.execute("""
+    cur.execute(f"""
         SELECT
             ip.id AS installment_id,
             ip.due_date,
             parse_date(ip.due_date) AS due_date_iso,
             ip.amount_due,
             ip.amount_paid,
-            (ip.amount_due - ip.amount_paid) AS balance_due,
+            {ledger.installment_balance_sql(cur.connection)} AS balance_due,
             i.id AS invoice_id,
             i.institute_id,
             i.invoice_no,
@@ -99,11 +100,12 @@ def _load_due_installments(cur, run_date):
             ON ip.invoice_id = i.id
         JOIN students s
             ON i.student_id = s.id AND s.institute_id = i.institute_id
-        WHERE ip.status != 'paid'
-          AND (ip.amount_due - ip.amount_paid) > 0
+        WHERE {ledger.installment_balance_sql(cur.connection)} > 0.005
+          AND {ledger.installment_balance_sql(cur.connection)} > 0
           AND parse_date(ip.due_date) >= ?
           AND parse_date(ip.due_date) <= ?
-          AND i.status NOT IN ('paid', 'cancelled', 'write_off', 'partially_written_off')
+          AND i.status <> 'cancelled'
+          AND {ledger.collectible_sql(cur.connection)}
           AND (
             (SELECT COALESCE(SUM(r.amount_received), 0) FROM receipts r WHERE r.invoice_id = i.id)
             + (SELECT COALESCE(SUM(bw.amount_written_off), 0) FROM bad_debt_writeoffs bw WHERE bw.invoice_id = i.id)

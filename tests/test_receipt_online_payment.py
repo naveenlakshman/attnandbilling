@@ -2,6 +2,7 @@
 
 from html.parser import HTMLParser
 from types import SimpleNamespace
+from urllib.parse import urlsplit, unquote
 
 import pytest
 from flask import Flask
@@ -52,11 +53,14 @@ class Forms(HTMLParser):
     def __init__(self, html):
         super().__init__()
         self.forms = {}
+        self.links = []
         self.current = None
         self.feed(html)
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
+        if tag == 'a' and values.get('href'):
+            self.links.append(values['href'])
         if tag == 'form':
             assert self.current is None, 'Payment forms must not be nested'
             self.current = values['id']
@@ -72,7 +76,8 @@ class Forms(HTMLParser):
 def test_receivables_destination_offers_online_and_manual_collection(collection):
     page = collection.client.get('/billing/receipt/new?invoice_id=101')
     assert page.status_code == 200
-    forms = Forms(page.text).forms
+    parsed = Forms(page.text)
+    forms = parsed.forms
     online = forms['cashfree-payment-form']
     manual = forms['manual-receipt-form']
     assert online['attributes']['data-invoice-id'] == '101'
@@ -85,7 +90,17 @@ def test_receivables_destination_offers_online_and_manual_collection(collection)
     assert manual['inputs']['csrf_token']['value']
     assert manual['attributes']['action'] == '/billing/receipt/new?invoice_id=101'
     assert 'sdk.cashfree.com/js/v3/cashfree.js' in page.text
-    assert collection.ledger.payment_url in page.text
+    # The timestamped signature can change between fixture setup and rendering.
+    # Verify the rendered link's host and actual signed invoice binding.
+    from services import payment_links
+    rendered=next(link for link in parsed.links if '/billing/pay/' in link)
+    assert urlsplit(rendered).netloc=='tenant.example'
+    with collection.app.app_context():
+        conn=collection.ledger.connect()
+        try:
+            invoice=payment_links.resolve(conn,unquote(urlsplit(rendered).path.rsplit('/',1)[1]),1)
+            assert invoice['id']==101 and invoice['student_id']==100
+        finally:conn.close()
     assert not read(collection.ledger, 'SELECT * FROM receipts')
     assert not collection.ledger.calls
 

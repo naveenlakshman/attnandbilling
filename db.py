@@ -304,7 +304,9 @@ class MySQLConnectionWrapper:
         self._conn = conn
 
     def cursor(self):
-        return MySQLCursorWrapper(self._conn.cursor(MySQLRowCursor))
+        wrapper = MySQLCursorWrapper(self._conn.cursor(MySQLRowCursor))
+        wrapper.connection = self
+        return wrapper
 
     def execute(self, query, args=None):
         cursor = self.cursor()
@@ -797,6 +799,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS courses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
             course_name TEXT NOT NULL UNIQUE,
             duration TEXT,
             fee REAL NOT NULL DEFAULT 0,
@@ -969,6 +972,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS invoices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
             invoice_no TEXT NOT NULL UNIQUE,
             student_id INTEGER NOT NULL,
             invoice_date TEXT NOT NULL,
@@ -1032,6 +1036,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS receipts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
             receipt_no TEXT NOT NULL UNIQUE,
             invoice_id INTEGER NOT NULL,
             receipt_date TEXT NOT NULL,
@@ -1052,6 +1057,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS bad_debt_writeoffs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
             reference_no TEXT,
             invoice_id INTEGER NOT NULL,
             amount_written_off REAL NOT NULL,
@@ -1082,6 +1088,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institute_id INTEGER NOT NULL,
             expense_date TEXT NOT NULL,
             branch_id INTEGER NOT NULL,
             category_id INTEGER NOT NULL,
@@ -2803,6 +2810,15 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_lms_batch_topic_progress_batch_topic
         ON lms_batch_topic_progress(batch_id, program_id, master_topic_id)
     """)
+
+    # New installs require explicit ownership. Old SQLite rows stay unresolved;
+    # do not manufacture ownership or branch history during startup.
+    for accuracy_table in ('courses','invoices','receipts','bad_debt_writeoffs','expenses'):
+        add_column_if_not_exists(cur, accuracy_table, 'institute_id', 'INTEGER')
+    add_column_if_not_exists(cur, 'bad_debt_writeoffs', 'reference_no', 'TEXT')
+
+    from services.erp_schema import init_sqlite_schema as init_accuracy_schema
+    init_accuracy_schema(conn)
 
     # ---------- SMART COUNSELLING PHASE 2 ----------
     from modules.smart_counselling.schema import ensure_smart_counselling_schema

@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% block title %}Admissions and financial history{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+<h2>Admissions and financial history</h2>
+<p>Admission origin, training location and collection location are separate. Existing unlinked records remain unresolved until reviewed.</p>
+<p><a class="btn btn-outline-primary" href="{{ url_for('accuracy.report',kind='admissions') }}">Accuracy reports</a>
+<a class="btn btn-outline-secondary" href="{{ url_for('accuracy.recovery') }}">Read-only recovery preview</a></p>
+{% macro choose(name,label,rows,text='id',optional=false) %}
+<label class="d-block mb-2">{{ label }}<select class="form-select" name="{{ name }}" {% if not optional %}required{% endif %}>
+<option value="">{{ 'None / unresolved' if optional else 'Choose…' }}</option>
+{% for r in rows %}<option value="{{ r.id }}" {% if r.admission_id is defined %}data-admission="{{ r.admission_id }}"{% endif %} {% if name=='invoice_id' and selected_invoice==r.id|string %}selected{% endif %}>{{ r[text] }} · {{ r.id }}</option>{% endfor %}</select></label>
+{% endmacro %}
+{% macro start(operation) %}<form method="post" action="{{ url_for('accuracy.action') }}" class="card card-body mb-3">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="operation" value="{{ operation }}">
+<input type="hidden" name="request_key" value="{{ key }}-{{ operation }}">{% endmacro %}
+{% macro payout() %}{{ choose('payout_branch_id','Actual refund payout branch',data.branches,'branch_name',true) }}
+<label>Refund channel<select class="form-select" name="payout_channel"><option value="unresolved">Unresolved</option><option value="branch">Branch</option><option value="bank">Bank</option><option value="online">Online</option></select></label>
+<label>Payout reference (required for bank/online)<input class="form-control" name="payout_reference" maxlength="150"></label>{% endmacro %}
+{% macro reason() %}<label>Effective date<input class="form-control" type="date" name="effective_date" value="{{ today }}" required></label>
+<label>Reason<textarea class="form-control" name="reason" required></textarea></label>{% endmacro %}
+<form method="get" class="card card-body mb-3">{{ choose('invoice_id','Inspect invoice balance',data.invoices,'invoice_no') }}<button class="btn btn-outline-primary">Show balance and select invoice</button></form>
+{% if balance %}<p class="alert alert-info">Original invoice: ₹{{ '%.2f'|format(balance.billed/100) }}. Current charge: ₹{{ '%.2f'|format(balance.charge/100) }}. Net receipts: ₹{{ '%.2f'|format(balance.cash/100) }}. Net write-offs: ₹{{ '%.2f'|format(balance.written_off/100) }}. Outstanding: ₹{{ '%.2f'|format(balance.outstanding/100) }}. Refundable credit: ₹{{ '%.2f'|format(balance.credit/100) }}.</p>{% endif %}
+<details class="mb-3"><summary>Admission register</summary><div class="table-responsive"><table class="table"><thead><tr><th>Admission ID</th><th>Student ID</th><th>Course / version</th><th>Admission date</th><th>Origin branch</th><th>Original creator</th><th>Source</th><th>Status</th></tr></thead><tbody>{% for a in data.course_admissions %}<tr><td>{{ a.id }}</td><td>{{ a.student_id }}</td><td>{{ a.course_id }} / {{ a.course_version }}</td><td>{{ a.admission_date }}</td><td>{{ a.origin_branch_id or 'Unresolved' }}</td><td>{{ a.original_creator_id or 'Unresolved' }}</td><td>{{ a.source }}</td><td>{{ a.status }}</td></tr>{% endfor %}</tbody></table></div></details>
+<div class="row"><div class="col-lg-6">
+{{ start('admission') }}<h3>Create a course admission</h3>
+{{ choose('student_id','Student',data.students,'full_name') }}{{ choose('course_id','Purchased course',data.courses,'course_name') }}
+{{ choose('branch_id','Original admission branch',data.branches,'branch_name',true) }}
+<label>Admission date<input class="form-control" type="date" name="admission_date" value="{{ today }}" required></label>
+<label>Course version<input class="form-control" name="version" value="current" required></label>
+<label>Modules (comma separated)<input class="form-control" name="modules" placeholder="Basics, Tally"></label>
+<label>Source<select class="form-select" name="source"><option value="staff">New admission entered by me</option><option value="import">Import</option><option value="recovered">Reviewed recovery</option></select></label>
+{{ choose('original_creator_id','Confirmed original creator for imports (leave unknown if unconfirmed)',data.users,'full_name',true) }}
+<label>Import/recovery evidence reference<input class="form-control" name="source_reference"></label>
+<button class="btn btn-primary mt-2">Create admission</button></form>
+{{ start('assignment') }}<h3>Assign or transfer training</h3>
+{{ choose('admission_id','Admission',data.course_admissions,'display_label') }}{{ choose('module_id','Module',data.admission_modules,'module_name') }}
+{{ choose('batch_id','Training batch',data.batches,'batch_name') }}
+{{ choose('previous','Previous assignment to close for this transfer',data.training_assignments,'id',true) }}
+<label>Start date<input class="form-control" type="date" name="start_date" value="{{ today }}" required></label>
+<label>End date (optional)<input class="form-control" type="date" name="end_date"></label>
+<label>Reason<input class="form-control" name="reason" required></label><button class="btn btn-primary mt-2">Save training assignment</button></form>
+{{ start('close_assignment') }}<h3>Complete a training assignment</h3>{{ choose('assignment_id','Assignment',data.training_assignments) }}
+<label>End date<input class="form-control" type="date" name="end_date" required></label><label>Reason<input class="form-control" name="reason" required></label><button class="btn btn-primary mt-2">Close assignment and retain history</button></form>
+{{ start('link_item') }}<h3>Link an invoice item</h3>
+<p>Use the same admission for subsequent invoices. A bundled DFA admission contains Basics and Tally modules.</p>
+{{ choose('item_id','Invoice item',data['items'],'description') }}{{ choose('admission_id','Admission',data.course_admissions) }}{{ reason() }}
+<button class="btn btn-primary mt-2">Link item</button></form>
+</div><div class="col-lg-6">
+{{ start('payment') }}<h3>Record payment or advance</h3>
+{{ choose('student_id','Student',data.students,'full_name') }}{{ choose('invoice_id','Invoice (leave blank for unallocated advance)',data.invoices,'invoice_no',true) }}
+<label>Amount (INR)<input class="form-control" type="number" name="amount" step="0.01" min="0.01" required></label>
+<label>Payment date<input class="form-control" type="date" name="payment_date" value="{{ today }}" required></label>
+{{ choose('branch_id','Collection branch (required for branch collections)',data.branches,'branch_name',true) }}
+<label>Channel<select class="form-select" name="channel"><option value="branch">Branch</option><option value="online">Online</option><option value="bank">Bank</option></select></label>
+<label>Method<select class="form-select" name="method"><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank_transfer">Bank transfer</option><option value="card">Card</option></select></label>
+<label>Payment reference (required for noncash)<input class="form-control" name="reference"></label>
+<button class="btn btn-primary mt-2">Record payment</button></form>
+{{ start('allocate') }}<h3>Allocate an advance</h3>
+{{ choose('payment_id','Existing source payment',data.collection_payments) }}{{ choose('invoice_id','Invoice',data.invoices,'invoice_no') }}
+<label>Allocation effective date (defaults to today)<input class="form-control" type="date" name="allocation_date"></label>
+<label>Amount (INR)<input class="form-control" type="number" name="amount" step="0.01" min="0.01" required></label><button class="btn btn-primary mt-2">Allocate payment</button></form>
+{{ start('return_advance') }}<h3>Refund an unallocated advance</h3>{{ choose('payment_id','Source payment',data.collection_payments) }}
+<label>Amount (INR)<input class="form-control" type="number" name="amount" step="0.01" min="0.01" required></label>{{ reason() }}{{ payout() }}<button class="btn btn-primary mt-2">Record advance refund</button></form>
+{{ start('adjustment') }}<h3>Post a financial correction</h3>
+<p>Original invoices and receipts remain intact. A refund requires a credit from a fee reduction or cancellation. A receipt reversal corrects an erroneous receipt and can reopen fees.</p>
+{{ choose('invoice_id','Invoice',data.invoices,'invoice_no') }}
+<label>Type<select class="form-select" name="kind"><option value="fee_reduction">Fee reduction</option><option value="cancellation">Cancel remaining invoice charge</option><option value="writeoff_reversal">Reverse complete write-off</option><option value="refund">Refund credit</option><option value="receipt_reversal">Reverse erroneous receipt</option><option value="adjustment_reversal">Reverse fee reduction or cancellation</option></select></label>
+<label>Amount (INR)<input class="form-control" type="number" name="amount" step="0.01" min="0.01" required></label>
+{{ choose('receipt_id','Receipt (refund or receipt reversal)',data.receipts,'receipt_no',true) }}
+{{ choose('writeoff_id','Write-off to reverse',data.writeoffs,'reference_no',true) }}
+{{ choose('reverse_of','Fee adjustment/cancellation to reverse',data.finance_adjustments,'id',true) }}{{ reason() }}
+{{ payout() }}<button class="btn btn-primary mt-2">Post correction</button></form>
+{{ start('correct_admission') }}<h3>Correct admission origin</h3>
+{{ choose('admission_id','Admission',data.course_admissions) }}{{ choose('origin_branch_id','Corrected original branch',data.branches,'branch_name',true) }}
+<label>Corrected admission date (optional)<input class="form-control" type="date" name="admission_date"></label>
+<label>Status<select class="form-select" name="status"><option value="">Unchanged</option>{% for status in ['active','completed','cancelled','dropped'] %}<option>{{ status }}</option>{% endfor %}</select></label>{{ reason() }}
+<button class="btn btn-primary mt-2">Save correction with history</button></form>
+</div></div>
+<h3>Recent audit history</h3><div class="table-responsive"><table class="table"><thead><tr><th>Recorded at</th><th>Entity</th><th>Actor</th><th>Effective date</th><th>Reason</th><th>Before → after</th></tr></thead><tbody>
+{% for r in data.audit %}<tr><td>{{ r.recorded_at }}</td><td>{{ r.entity_type }} {{ r.entity_id }}</td><td>{{ r.actor_id }}</td><td>{{ r.effective_date }}</td><td>{{ r.reason }}</td><td><details><summary>View values</summary><pre>{{ r.before_json }}</pre><pre>{{ r.after_json }}</pre></details></td></tr>{% endfor %}
+</tbody></table></div></div>
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  const assignment=document.querySelector('input[name="operation"][value="assignment"]').form;
+  const admission=assignment.querySelector('[name="admission_id"]');
+  const module=assignment.querySelector('[name="module_id"]');
+  const options=Array.from(module.options).map(option=>option.cloneNode(true));
+  function refreshModules(){
+    module.replaceChildren(...options.filter(option=>!option.value||option.dataset.admission===admission.value).map(option=>option.cloneNode(true)));
+  }
+  admission.addEventListener('change',refreshModules);refreshModules();
+  const intake=document.querySelector('input[name="operation"][value="admission"]').form;
+  function requireOrigin(){intake.querySelector('[name="branch_id"]').required=intake.querySelector('[name="source"]').value==='staff';}
+  intake.querySelector('[name="source"]').addEventListener('change',requireOrigin);requireOrigin();
+});
+</script>
+{% endblock %}

@@ -1,3 +1,4 @@
+from services import finance_ledger as ledger
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, session, flash, send_file
 from datetime import datetime, timedelta, timezone
 from io import BytesIO, StringIO
@@ -756,6 +757,10 @@ def move_student(batch_id):
         if not src:
             return redirect(url_for('attendance.view_batch', batch_id=batch_id))
 
+        if ledger.available(conn) and conn.execute('SELECT id FROM course_admissions WHERE student_id=? AND institute_id=?',(src['student_id'],get_current_institute_id(default=1))).fetchone():
+            flash('Use the admission module transfer workflow to preserve assignment dates.','warning')
+            return redirect('/accuracy/')
+
         # Validate target batch: must be active, same branch, not ended
         today_str = datetime.now().strftime("%Y-%m-%d")
         cur.execute("""
@@ -786,9 +791,9 @@ def move_student(batch_id):
         if existing:
             # Reactivate if previously dropped/completed
             cur.execute("""
-                UPDATE student_batches SET status = 'active', joined_on = ?, updated_at = ?
+                UPDATE student_batches SET status = 'active', updated_at = ?
                 WHERE id = ?
-            """, (now[:10], now, existing['id']))
+            """, (now, existing['id']))
         else:
             cur.execute("""
                 INSERT INTO student_batches (student_id, batch_id, joined_on, status, created_at, updated_at)
@@ -1117,6 +1122,15 @@ def assign_students(batch_id):
         if request.method == 'POST':
             action = request.form.get('action')
             
+            if ledger.available(conn) and action in {'add','remove','update-status'}:
+                linked_student=request.form.get('student_id')
+                if action!='add':
+                    linked=cur.execute('SELECT student_id FROM student_batches WHERE id=? AND batch_id=?',(request.form.get('student_batch_id'),batch_id)).fetchone()
+                    linked_student=linked['student_id'] if linked else None
+                if linked_student and conn.execute('SELECT id FROM course_admissions WHERE student_id=? AND institute_id=?',(linked_student,current_inst)).fetchone():
+                    flash('Use dated admission module assignments to change this student training roster.','warning')
+                    return redirect('/accuracy/')
+
             if action == 'add':
                 student_id = request.form.get('student_id')
                 uses_own_laptop = 1 if request.form.get('uses_own_laptop') else 0

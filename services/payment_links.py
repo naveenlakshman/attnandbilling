@@ -9,7 +9,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from config import Config
 from db import get_conn
-from services import cashfree, cashfree_payments as payments
+from services import cashfree, cashfree_payments as payments, finance_ledger as ledger
 
 
 def config():
@@ -40,10 +40,10 @@ def _invoice(conn, invoice_id, institute_id):
 def amounts(conn, invoice):
     paid, written_off = payments._totals(conn, invoice['id'], invoice['institute_id'])
     balance = max(0, payments._ledger_paise(invoice['total_amount']) - paid - written_off)
-    payable = invoice['status'] not in {'cancelled', 'write_off', 'partially_written_off'} and not written_off
+    payable = invoice['status'] != 'cancelled' and (ledger.available(conn) or (invoice['status'] not in {'write_off','partially_written_off'} and not written_off))
     # Receipts are allocated in installment order in this ERP. Derive the next
     # unpaid installment from actual receipts, rather than trusting cached amounts.
-    remaining_paid = paid
+    remaining_paid = paid + written_off
     installment = None
     for row in conn.execute('''SELECT id, installment_no, due_date, amount_due FROM installment_plans
                               WHERE invoice_id=? ORDER BY installment_no,id''', (invoice['id'],)).fetchall():

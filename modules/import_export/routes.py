@@ -71,8 +71,11 @@ def get_all_tables_data(current_inst=1):
             where_clause = "WHERE lead_id IN (SELECT id FROM leads WHERE institute_id = ?)"
             params = [current_inst]
         elif table_name == "attendance_records":
-            where_clause = "WHERE student_id IN (SELECT id FROM students WHERE institute_id = ?) OR batch_id IN (SELECT id FROM batches WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?))"
+            where_clause = "WHERE student_id IN (SELECT id FROM students WHERE institute_id = ?) AND batch_id IN (SELECT id FROM batches WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?))"
             params = [current_inst, current_inst]
+        elif table_name == "lms_batch_topic_progress":
+            where_clause = "WHERE batch_id IN (SELECT id FROM batches WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?))"
+            params = [current_inst]
         elif table_name in ("lms_program_chapters", "lms_chapters"):
             where_clause = "WHERE program_id IN (SELECT id FROM lms_programs WHERE institute_id = ?)"
             params = [current_inst]
@@ -82,6 +85,10 @@ def get_all_tables_data(current_inst=1):
         elif "branch_id" in columns:
             where_clause = "WHERE branch_id IN (SELECT id FROM branches WHERE institute_id = ?)"
             params = [current_inst]
+        else:
+            # A tenant export must never include global/platform tables or an
+            # unknown relationship merely because it has no institute_id.
+            continue
 
         cursor.execute(f"SELECT * FROM `{table_name}` {where_clause}", params)
         rows = cursor.fetchall()

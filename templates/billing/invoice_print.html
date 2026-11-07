@@ -179,6 +179,7 @@
     <p style="border-top: 1px solid #ddd; padding-top: 4px; margin-top: 4px;"><strong>Net Total:</strong> <span class="text-right" style="float: right;">₹ {{ "%.2f"|format(invoice.total_amount or 0) }}</span></p>
     <p><strong>Paid Amount:</strong> <span class="amount-positive text-right" style="float: right;">₹ {{ "%.2f"|format(total_paid or 0) }}</span></p>
     <p><strong>Balance Amount:</strong> <span class="amount-due text-right" style="float: right;">₹ {{ "%.2f"|format(balance_amount or 0) }}</span></p>
+    {% if credit_amount %}<p><strong>Credit (separate from dues):</strong> ₹ {{ "%.2f"|format(credit_amount) }}</p>{% endif %}
   </div>
 </div>
 

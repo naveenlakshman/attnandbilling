@@ -23,6 +23,7 @@ from modules.website import website_bp
 from modules.platform_admin import platform_admin_bp
 from modules.notifications import notifications_bp
 from modules.smart_counselling import smart_counselling_bp
+from modules.accuracy.routes import accuracy_bp
 from modules.core.utils import login_required
 from services.tenant_context import init_tenant_context
 
@@ -136,6 +137,7 @@ def create_app():
     app.register_blueprint(billing_bp, url_prefix="/billing")
     app.register_blueprint(assets_bp, url_prefix="/assets")
     app.register_blueprint(reports_bp, url_prefix="/reports")
+    app.register_blueprint(accuracy_bp, url_prefix="/accuracy")
     app.register_blueprint(import_export_bp, url_prefix="/import-export")
     app.register_blueprint(baddebt_bp, url_prefix="/baddebt")
     app.register_blueprint(attendance_bp, url_prefix="/attendance")
@@ -239,7 +241,8 @@ def create_app():
         if request.endpoint in secondary_tenant_safe_endpoints:
             return None
         if request.endpoint and (
-            request.endpoint.startswith("leads.")
+            request.endpoint.startswith("accuracy.")
+            or request.endpoint.startswith("leads.")
             or request.endpoint.startswith("students.")
             or request.endpoint.startswith("website.")
             or request.endpoint.startswith("billing.")
@@ -260,6 +263,7 @@ def create_app():
         "leads": "crm",
         "students": "students",
         "billing": "finance",
+        "accuracy": "finance",
         "baddebt": "finance",
         "assets": "finance",
         "attendance": "attendance",

@@ -28,8 +28,10 @@ def test_staff_dashboard_queries_and_renders_own_progress_and_end_dates(tmp_path
         CREATE TABLE attendance_records (id INTEGER,student_id INTEGER,batch_id INTEGER,attendance_date TEXT,status TEXT);
         CREATE TABLE leads (id INTEGER,institute_id INTEGER,assigned_to_id INTEGER,status TEXT,is_deleted INTEGER,name TEXT,phone TEXT,next_followup_date TEXT,lead_score INTEGER,stage TEXT);
         CREATE TABLE students (id INTEGER,institute_id INTEGER,branch_id INTEGER,joined_date TEXT,full_name TEXT,student_code TEXT,phone TEXT);
-        CREATE TABLE invoices (id INTEGER,student_id INTEGER,branch_id INTEGER,invoice_no TEXT,status TEXT);
-        CREATE TABLE installment_plans (id INTEGER,invoice_id INTEGER,due_date TEXT,amount_due REAL,amount_paid REAL,remarks TEXT,status TEXT);
+        CREATE TABLE invoices (id INTEGER,institute_id INTEGER,student_id INTEGER,branch_id INTEGER,invoice_no TEXT,total_amount REAL,status TEXT);
+        CREATE TABLE receipts (id INTEGER,institute_id INTEGER,invoice_id INTEGER,amount_received REAL);
+        CREATE TABLE bad_debt_writeoffs (id INTEGER,institute_id INTEGER,invoice_id INTEGER,amount_written_off REAL);
+        CREATE TABLE installment_plans (id INTEGER,invoice_id INTEGER,installment_no INTEGER,due_date TEXT,amount_due REAL,amount_paid REAL,remarks TEXT,status TEXT);
         CREATE TABLE activity_logs (institute_id INTEGER,user_id INTEGER,action_type TEXT,module_name TEXT,description TEXT,created_at TEXT);
         CREATE TABLE leave_requests (student_id INTEGER,status TEXT);
     ''')

@@ -1,0 +1,16 @@
+{% extends 'base.html' %}{% block title %}ERP accuracy report{% endblock %}
+{% block content %}<div class="container-fluid py-3"><h2>{{ report.kind|replace('-',' ')|title }}</h2>
+<a href="{{ url_for('accuracy.workspace') }}">Admissions and financial history</a>
+<nav class="my-3">{% for kind in kinds %}<a class="btn btn-outline-primary btn-sm mb-1" href="{{ url_for('accuracy.report',kind=kind,start=report.start,end=report.end,cutoff=report.cutoff) }}">{{ kind|replace('-',' ') }}</a> {% endfor %}</nav>
+<form method="get" class="row g-2 mb-3">
+{% for name,value in [('start',report.start),('end',report.end),('cutoff',report.cutoff)] %}<label class="col-md-3">{{ name|title }}<input class="form-control" type="date" name="{{ name }}" value="{{ value }}" required></label>{% endfor %}
+<label class="col-md-3">{{ report.branch_basis|title }}<select class="form-select" name="branch"><option value="">All branches</option><option value="unresolved" {% if request.args.get('branch')=='unresolved' %}selected{% endif %}>Unresolved</option>{% for b in branches %}<option value="{{ b.id }}" {% if request.args.get('branch')==b.id|string %}selected{% endif %}>{{ b.branch_name }}</option>{% endfor %}</select></label>
+<div><button class="btn btn-primary">Apply</button><button class="btn btn-outline-secondary" name="format" value="csv">Download CSV</button></div></form>
+<div class="alert alert-info">{{ report.start }} through {{ report.end }}; calculation cutoff {{ report.cutoff }}. Branch basis: {{ report.branch_basis }}. {{ report.tax_basis }}. {{ report.cancellation_treatment }}. {{ report.cutoff_basis }}
+{% if report.incomplete_month %}<strong>Incomplete month / month to date.</strong>{% endif %}
+{{ report.unresolved_rows }} unresolved rows. Training measures topic events and assigned calendar days, not teaching hours.</div>
+<p>{{ report.row_count }} rows. Totals: {% for key,value in report.totals.items() %}<strong>{{ key|replace('_paise',' (INR)')|replace('_',' ') }}: {{ '%.2f'|format(value/100) if key.endswith('_paise') else value }}</strong> {% endfor %}</p>
+{% if report.undated_payments %}<p class="alert alert-warning">{{ report.undated_payments|length }} payments have unknown dates (INR {{ '%.2f'|format(report.undated_payment_paise/100) }}). {{ report.unknown_date_basis }}</p>{% endif %}
+<div class="table-responsive"><table class="table table-striped"><thead><tr>{% for key in fields %}<th>{{ key|replace('_paise',' (INR)')|replace('_',' ') }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in report.rows %}<tr>{% for key in fields %}<td>{{ '%.2f'|format(row.get(key,0)/100) if key.endswith('_paise') else row.get(key,'') }}</td>{% endfor %}</tr>{% else %}<tr><td>No matching records.</td></tr>{% endfor %}
+</tbody></table></div></div>{% endblock %}

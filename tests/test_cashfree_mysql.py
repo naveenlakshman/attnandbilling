@@ -56,6 +56,11 @@ def mysql_server(tmp_path_factory):
                     if process.poll() is not None or time.monotonic() > deadline:
                         pytest.fail((directory / 'server.log').read_text(errors='replace'))
                     time.sleep(0.25)
+            with admin.cursor() as cursor:
+                cursor.execute('SELECT VERSION()')
+                actual=cursor.fetchone()[0]
+                expected=os.environ.get('ERP_MYSQL_EXPECTED_VERSION')
+                if expected:assert actual==expected,(actual,expected)
             admin.close()
             yield options
         finally:

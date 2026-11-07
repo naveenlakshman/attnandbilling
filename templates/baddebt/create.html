@@ -283,11 +283,12 @@
                 <option value="{{ inv.id }}" 
                         data-total="{{ inv.total_amount }}"
                         data-paid="{{ inv.paid_amount }}"
+                        data-balance="{{ inv.balance_amount }}"
                         data-student="{{ inv.student_name }}"
                         data-code="{{ inv.student_code }}"
                         data-status="{{ inv.student_status }}"
                         {% if pre_selected_invoice and inv.id == pre_selected_invoice.id %}selected{% endif %}>
-                  {{ inv.invoice_no }} - {{ inv.student_name }} (Balance: ₹{{ "%.2f"|format(inv.total_amount - inv.paid_amount) }})
+                  {{ inv.invoice_no }} - {{ inv.student_name }} (Balance: ₹{{ "%.2f"|format(inv.balance_amount) }})
                 </option>
               {% endfor %}
             </select>
@@ -406,7 +407,7 @@
               <strong>What happens:</strong>
               <ul class="mt-2 mb-0">
                 <li>Write-off record will be created</li>
-                <li>Amount will be logged as "Uncollectible Receivables" expense</li>
+                  <li>A noncash write-off is recorded; no cash expense is created</li>
                 <li>Invoice status will be updated to "write_off" or "partially_written_off"</li>
                 <li>Activity will be logged for audit trail</li>
               </ul>
@@ -442,7 +443,7 @@
 
     const total = parseFloat(option.dataset.total) || 0;
     const paid = parseFloat(option.dataset.paid) || 0;
-    const balance = total - paid;
+    const balance = parseFloat(option.dataset.balance) || 0;
     const student = option.dataset.student;
     const code = option.dataset.code;
     const status = option.dataset.status;
@@ -481,7 +482,7 @@
 
     const total = parseFloat(option.dataset.total) || 0;
     const paid = parseFloat(option.dataset.paid) || 0;
-    const balance = total - paid;
+    const balance = parseFloat(option.dataset.balance) || 0;
     const amount = parseFloat(amountInput.value) || 0;
 
     if (amount > balance) {
