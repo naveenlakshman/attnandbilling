@@ -89,10 +89,13 @@ def _authorize_branch(actor, invoice):
 
 
 def get_order(conn, order_id):
-    if not isinstance(order_id, str) or not re.fullmatch(r"cf_[0-9]+_[a-f0-9]{32}", order_id):
+    if not isinstance(order_id, str) or not re.fullmatch(r"cf_(?:live_)?[0-9]+_[a-f0-9]{32}", order_id):
+        raise cashfree.CashfreeError("Order not found.", 404)
+    order_mode = 'production' if order_id.startswith('cf_live_') else 'sandbox'
+    if order_mode != cashfree.mode():
         raise cashfree.CashfreeError("Order not found.", 404)
     row = conn.execute("SELECT * FROM cashfree_orders WHERE order_id = ?", (order_id,)).fetchone()
-    if not row:
+    if not row or row['institute_id'] != current_app.config.get('CASHFREE_INSTITUTE_ID', 1):
         raise cashfree.CashfreeError("Order not found.", 404)
     return dict(row)
 
@@ -125,7 +128,8 @@ def create_order(actor, data, request_key, return_url, public_link=None):
     if not name or len(name) > 100:
         raise cashfree.CashfreeError("Name is required (maximum 100 characters).", 400)
     institute_id = actor["institute_id"]
-    order_id = f"cf_{institute_id}_{uuid.UUID(key).hex}"
+    prefix = 'cf_live' if cashfree.mode() == 'production' else 'cf'
+    order_id = f"{prefix}_{institute_id}_{uuid.UUID(key).hex}"
     conn = get_conn()
     try:
         _lock(conn)
@@ -272,12 +276,14 @@ def _post_receipt(order_id, payment):
         balance = _ledger_paise(invoice["total_amount"]) - paid - written_off
         now = _now()
         payment_id = str(payment["cf_payment_id"])
+        sandbox = not order_id.startswith('cf_live_')
+        gateway_label = 'Sandbox Cashfree' if sandbox else 'Cashfree'
         if (invoice["status"] in {"cancelled", "write_off", "partially_written_off"}
                 or written_off or order["amount_paise"] > balance):
             conn.execute("""UPDATE cashfree_orders SET status = 'REVIEW', cf_payment_id = ?,
                             updated_at = ? WHERE order_id = ?""", (payment_id, now, order_id))
             _audit(conn, order, invoice, "reconcile", invoice["id"],
-                   f"Sandbox Cashfree payment {payment_id} for {order_id} requires reconciliation; invoice changed.")
+                   f"{gateway_label} payment {payment_id} for {order_id} requires reconciliation; invoice changed.")
             conn.commit()
             return {"status": "REVIEW", "paid": False, "receipt_id": None}
         cur = conn.cursor()
@@ -293,7 +299,7 @@ def _post_receipt(order_id, payment):
             payment_mode, notes, created_by, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (receipt_no, invoice["id"], order["institute_id"], now[:10], order["amount_paise"] / 100,
-                     mode, f"SANDBOX Cashfree order {order_id}; payment {payment_id}", order["created_by"], now))
+                     mode, f"{'SANDBOX ' if sandbox else ''}Cashfree order {order_id}; payment {payment_id}", order["created_by"], now))
         receipt_id = cur.lastrowid
         total_paid = paid + order["amount_paise"]
         status = "paid" if total_paid >= _ledger_paise(invoice["total_amount"]) else "partially_paid"
@@ -314,7 +320,7 @@ def _post_receipt(order_id, payment):
                         cf_payment_id = ?, updated_at = ? WHERE order_id = ?""",
                      (receipt_id, payment_id, now, order_id))
         _audit(conn, order, invoice, "create", receipt_id,
-               f"Created sandbox Cashfree receipt {receipt_no}; order {order_id}; payment {payment_id}")
+               f"Created {'sandbox ' if sandbox else ''}Cashfree receipt {receipt_no}; order {order_id}; payment {payment_id}")
         conn.commit()
         return {"status": "PAID", "paid": True, "receipt_id": receipt_id}
     except Exception:

@@ -1,5 +1,18 @@
 ﻿{% extends "base.html" %}
 
+{% macro syllabus_progress(batch) %}
+  {% set progress = batch.syllabus_progress %}
+  {% if progress.total_topics %}
+  <div class="syllabus-progress">
+    <strong>{{ progress.percent }}%</strong>
+    <progress value="{{ progress.percent }}" max="100" aria-label="Syllabus completed for {{ batch.batch_name }}">{{ progress.percent }}%</progress>
+    <span class="text-muted small">{{ progress.completed_topics }} / {{ progress.total_topics }} topics taught</span>
+  </div>
+  {% else %}
+  <span class="text-muted small">No syllabus configured</span>
+  {% endif %}
+{% endmacro %}
+
 {% block title %}Batch Planner - {{ company.company_short_name }}{% endblock %}
 
 {% block extra_css %}
@@ -84,6 +97,14 @@
   th[title] {
     cursor: help;
     text-decoration: underline dotted #6c757d;
+  }
+  .syllabus-progress { min-width: 140px; }
+  .syllabus-progress progress {
+    display: block;
+    width: 100%;
+    height: 8px;
+    margin: 4px 0;
+    accent-color: #198754;
   }
 </style>
 {% endblock %}
@@ -189,6 +210,7 @@
           <tr>
             <th>Batch</th>
             <th>Course</th>
+            <th title="Topics marked as taught in Classroom Teaching, across the batch's linked syllabus">Syllabus Progress</th>
             <th>Time Slot</th>
             <th>Hours</th>
             <th>Total Students</th>
@@ -202,6 +224,7 @@
           <tr>
             <td><a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}">{{ batch.batch_name }}</a></td>
             <td class="text-muted small">{{ batch.course_name or '—' }}</td>
+            <td>{{ syllabus_progress(batch) }}</td>
             <td>
               <span class="time-chip">{{ batch.start_time or '?' }} – {{ batch.end_time or '?' }}</span>
             </td>
@@ -273,6 +296,7 @@
           <tr>
             <th>Batch</th>
             <th>Course</th>
+            <th title="Topics marked as taught in Classroom Teaching, across the batch's linked syllabus">Syllabus Progress</th>
             <th>Time Slot</th>
             <th>Hours</th>
             <th>Starts In</th>
@@ -286,6 +310,7 @@
           <tr>
             <td><a href="{{ url_for('attendance.view_batch', batch_id=batch.id) }}">{{ batch.batch_name }}</a></td>
             <td class="text-muted small">{{ batch.course_name or '—' }}</td>
+            <td>{{ syllabus_progress(batch) }}</td>
             <td><span class="time-chip">{{ batch.start_time or '?' }} – {{ batch.end_time or '?' }}</span></td>
             <td class="text-muted small">{{ batch.duration_str }}</td>
             <td>

@@ -21,13 +21,17 @@
 <main class="payment-page"><section class="payment-card">
   <h1 class="h4">Pay your fees</h1>
   <p class="text-secondary">Invoice {{ invoice.invoice_no }}</p>
+  {% set sandbox_mode = config.get('CASHFREE_MODE', 'sandbox') == 'sandbox' %}
+  {% if sandbox_mode %}
   <div class="alert alert-warning">Sandbox test payment — no real money is collected. Test payments update this ERP's fee ledger.</div>
+  {% endif %}
   {% if verified_payment %}
   <div class="alert alert-success" role="status">Payment of INR {{ '%.2f'|format(verified_payment.amount_received) }} verified. Receipt {{ verified_payment.receipt_no }} has been recorded.</div>
   {% endif %}
   {% if amounts.payable %}
   <p>Current invoice balance: <strong>INR {{ '%.2f'|format(amounts.balance_paise / 100) }}</strong></p>
   <form id="cashfree-payment-form"
+        data-mode="{{ config.get('CASHFREE_MODE', 'sandbox') }}"
         data-create-url="{{ url_for('billing.cashfree_public_create', token=token) }}"
         data-verify-url="{{ url_for('billing.cashfree_public_verify', token=token, order_id='ORDER_ID') }}"
         data-student-id="{{ invoice.student_id }}" data-invoice-id="{{ invoice.id }}">
@@ -54,12 +58,12 @@
     <input id="cashfree-phone" name="phone" type="tel" pattern="(\+91)?[6-9][0-9]{9}" autocomplete="tel" required>
     <label for="cashfree-email">Email *</label>
     <input id="cashfree-email" name="email" type="email" maxlength="254" autocomplete="email" required>
-    <button class="btn btn-primary" id="cashfree-pay" type="submit" disabled>Pay with Cashfree (sandbox)</button>
+    <button class="btn btn-primary" id="cashfree-pay" type="submit" disabled>Pay with Cashfree{% if sandbox_mode %} (sandbox){% endif %}</button>
     <button class="btn btn-outline-secondary" id="cashfree-verify" type="button" hidden>Check payment status</button>
     <p id="cashfree-status" role="status" aria-live="polite"></p>
   </form>
   <script src="https://sdk.cashfree.com/js/v3/cashfree.js" defer></script>
-  <script src="{{ url_for('static', filename='js/cashfree_checkout.js', v='20261029-payment-links') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/cashfree_checkout.js', v='20261031-live-mode') }}" defer></script>
   {% else %}
   <div class="alert alert-info">This invoice has no payable balance or is closed for online payments. Contact your institute if you need help.</div>
   {% endif %}

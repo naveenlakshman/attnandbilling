@@ -185,6 +185,15 @@ def test_order_persists_mapping_before_checkout_and_reuses_idempotency_key(sandb
     assert read(sandbox, 'SELECT * FROM cashfree_orders')[0]['amount_paise'] == 75000
 
 
+def test_webhook_cannot_process_an_order_outside_the_configured_merchant_institute(sandbox):
+    order_id = create(sandbox)
+    execute(sandbox, "UPDATE cashfree_orders SET institute_id=2 WHERE order_id='"+order_id+"'")
+    calls_before = len(sandbox.calls)
+    assert webhook(sandbox, order_id).status_code == 404
+    assert len(sandbox.calls) == calls_before
+    assert not read(sandbox, 'SELECT * FROM receipts')
+
+
 def test_idempotency_key_cannot_be_reused_for_changed_amount(sandbox):
     key = str(uuid.uuid4())
     create(sandbox, key=key)
@@ -473,3 +482,48 @@ def test_http_client_uses_required_headers_timeout_and_does_not_leak_secret(sand
         with pytest.raises(cashfree.CashfreeError) as error:
             original('GET', '/orders/example')
         assert 'fixture-secret' not in str(error.value)
+
+
+def test_production_configuration_requires_live_mode_and_non_test_keys(sandbox):
+    with sandbox.app.app_context():
+        sandbox.app.config['APP_ENV'] = 'production'
+        assert not cashfree.configured()
+        sandbox.app.config.update(CASHFREE_MODE='production', CASHFREE_API_URL='https://api.cashfree.com/pg')
+        assert not cashfree.configured()
+        sandbox.app.config['CASHFREE_APP_ID'] = 'LIVE-fixture'
+        assert cashfree.configured()
+        sandbox.app.config['CASHFREE_API_URL'] = 'https://untrusted.example/pg'
+        assert not cashfree.configured()
+
+
+def test_live_http_client_uses_live_endpoint_and_live_csp(sandbox, monkeypatch):
+    recorded = {}
+    def request(method,url,**kwargs):
+        recorded.update(url=url, **kwargs)
+        return SimpleNamespace(status_code=200,json=lambda:{'order_id':'test'})
+    monkeypatch.setattr(cashfree.requests,'request',request)
+    sandbox.app.config.update(APP_ENV='production',CASHFREE_MODE='production',
+        CASHFREE_API_URL='https://api.cashfree.com/pg',CASHFREE_APP_ID='LIVE-fixture')
+    with sandbox.app.app_context():
+        sandbox.http_api('GET','/orders/test')
+    assert recorded['url'] == 'https://api.cashfree.com/pg/orders/test'
+    policy = sandbox.client.get('/billing/invoice/101').headers['Content-Security-Policy']
+    form = next(part for part in policy.split(';') if part.strip().startswith('form-action'))
+    assert 'https://api.cashfree.com/pg/view/sessions/checkout' in form
+    assert 'sandbox.cashfree.com' not in form
+
+
+def test_live_receipt_has_live_identity_and_cannot_cross_verify_sandbox_order(sandbox):
+    sandbox_order = create(sandbox)
+    sandbox.app.config.update(APP_ENV='production',CASHFREE_MODE='production',
+        CASHFREE_API_URL='https://api.cashfree.com/pg',CASHFREE_APP_ID='LIVE-fixture')
+    assert verify(sandbox,sandbox_order).status_code == 404
+    live = create(sandbox)
+    assert live.startswith('cf_live_1_')
+    sandbox.remote[live]['order_status'] = 'PAID'
+    assert verify(sandbox,live).json['paid']
+    notes = read(sandbox,'SELECT notes FROM receipts')[0]['notes']
+    assert notes.startswith('Cashfree order cf_live_') and 'SANDBOX' not in notes
+    sandbox.app.config.update(APP_ENV='testing',CASHFREE_MODE='sandbox',
+        CASHFREE_API_URL='https://sandbox.cashfree.com/pg',CASHFREE_APP_ID='TEST-fixture')
+    assert verify(sandbox,live).status_code == 404

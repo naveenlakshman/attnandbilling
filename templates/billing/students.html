@@ -133,7 +133,7 @@
     background: #fff;
   }
   .search-hint {
-    color: #9ca3af;
+    color: #6b7280;
     font-size: 11px;
     margin-top: 3px;
   }
@@ -587,11 +587,11 @@
 </div>
 
 <div class="search-filter-section">
-  <form method="get">
+  <form method="get" action="{{ url_for('billing.students') }}">
     <div class="search-filter-form">
       <div class="form-group-inline search-group">
         <label for="search">Search</label>
-        <input type="text" id="search" name="search" placeholder="Name, phone, email, reg no" value="{{ search_query }}">
+        <input type="search" id="search" name="search" placeholder="Name, phone, email, reg no" value="{{ search_query }}" aria-describedby="student-search-hint">
       </div>
 
       <div class="form-group-inline branch-group">
@@ -636,9 +636,11 @@
       </div>
 
       <div class="button-group">
+        <button type="submit" class="btn btn-primary">Search</button>
         <a href="{{ url_for('billing.students') }}" class="btn filter-reset-btn">Reset</a>
       </div>
     </div>
+    <p id="student-search-hint" class="search-hint">Enter your search, then press Enter or click Search.</p>
 
     {% if search_query or branch_filter or status_filter or batch_filter %}
       <div class="filters-applied">
@@ -1041,15 +1043,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', function() { form.submit(); });
   });
-  // Search text: debounce 500ms
-  const searchInput = document.getElementById('search');
-  if (searchInput) {
-    let timer;
-    searchInput.addEventListener('input', function() {
-      clearTimeout(timer);
-      timer = setTimeout(function() { form.submit(); }, 500);
-    });
-  }
+  // Text search is submitted explicitly with Search or Enter, never while typing.
 })();
 </script>
 

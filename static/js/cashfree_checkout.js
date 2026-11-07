@@ -6,6 +6,7 @@
   const pay = document.getElementById('cashfree-pay');
   const check = document.getElementById('cashfree-verify');
   const status = document.getElementById('cashfree-status');
+  const mode = form.dataset.mode || 'sandbox';
   let busy = false;
   let pendingOrder = new URLSearchParams(window.location.search).get('cashfree_order_id');
   let requestKey = null;
@@ -81,7 +82,7 @@
         const result = await verify();
         if (result.paid || result.status === 'REVIEW') return;
         if (result.status === 'ACTIVE' && result.payment_session_id) {
-          const cashfree = window.Cashfree({mode: 'sandbox'});
+          const cashfree = window.Cashfree({mode});
           await cashfree.checkout({paymentSessionId: result.payment_session_id, redirectTarget: '_modal'});
           await verify();
           return;
@@ -102,7 +103,7 @@
         requestKey = newRequestKey();
         requestDetails = requestBody;
       }
-      status.textContent = 'Opening sandbox checkout...';
+      status.textContent = mode === 'sandbox' ? 'Opening sandbox checkout...' : 'Opening secure checkout...';
       const order = await post(form.dataset.createUrl, body, requestKey);
       pendingOrder = order.order_id;
       refresh();
@@ -110,7 +111,7 @@
       const url = new URL(window.location.href);
       url.searchParams.set('cashfree_order_id', pendingOrder);
       window.history.replaceState(null, '', url);
-      const cashfree = window.Cashfree({mode: 'sandbox'});
+      const cashfree = window.Cashfree({mode});
       await cashfree.checkout({paymentSessionId: order.payment_session_id, redirectTarget: '_modal'});
       await verify();
     } catch (error) {

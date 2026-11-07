@@ -8,7 +8,7 @@ const source = fs.readFileSync(path.join(__dirname, '../static/js/cashfree_check
 const orderId = 'cf_1_0123456789abcdef0123456789abcdef';
 
 function setup(responses, {pending = false, valid = true, checkoutResult = {}, cryptoApi,
-                          origin = 'https://tenant.example', studentChoice} = {}) {
+                          origin = 'https://tenant.example', studentChoice, mode = 'sandbox'} = {}) {
   const calls = [], checkouts = [], navigations = [], handlers = {};
   const fields = Object.fromEntries(Object.entries({
     amount:'750.00', phone:'9876543210', email:'student@example.com', name:'Student', csrf_token:'csrf-test'
@@ -20,7 +20,7 @@ function setup(responses, {pending = false, valid = true, checkoutResult = {}, c
     fields.amount.value = fields.payment_option.selectedOptions[0].dataset.amount;
   }
   const form = {
-    dataset:{createUrl:'/billing/cashfree/orders', verifyUrl:'/billing/cashfree/orders/ORDER_ID/verify',
+    dataset:{createUrl:'/billing/cashfree/orders', verifyUrl:'/billing/cashfree/orders/ORDER_ID/verify', mode,
              studentId:'100', invoiceId:'101'},
     elements:fields, checkValidity:() => valid, reportValidity:() => valid,
     addEventListener:(name,handler) => { handlers[name] = handler; }
@@ -39,7 +39,7 @@ function setup(responses, {pending = false, valid = true, checkoutResult = {}, c
       ? {randomUUID:() => '00000000-0000-4000-8000-' + String(++sequence).padStart(12,'0')}
       : cryptoApi,
     Cashfree:options => {
-      assert.equal(options.mode, 'sandbox');
+      assert.equal(options.mode, mode);
       return {checkout:async options => {
         checkouts.push(options);
         if (typeof checkoutResult === 'function') return checkoutResult();
@@ -221,4 +221,11 @@ test('student success reload retains order reference for server-verified confirm
   const destination = new URL(ui.navigations[0]);
   assert.equal(destination.searchParams.get('cashfree_paid_order'), orderId);
   assert.equal(destination.searchParams.has('cashfree_order_id'), false);
+});
+
+test('live page opens the production SDK checkout', async () => {
+  const ui = setup([created(), paid()], {mode:'production'});
+  await ui.submit();
+  assert.equal(ui.checkouts.length, 1);
+  assert.equal(ui.navigations.length, 1);
 });

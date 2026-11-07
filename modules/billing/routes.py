@@ -17,7 +17,8 @@ import hashlib
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
 from services.document_numbers import allocate_document_number
-from services import payment_links
+from services.student_messages import registration_message, invoice_message, receipt_message, personalize_student_message
+from services import cashfree, payment_links
 from services.subscriptions import (
     PlanLimitExceeded,
     SubscriptionAccessDenied,
@@ -3058,11 +3059,7 @@ def student_new():
         # Send welcome SMS with registration number
         try:
             sms_phone = "+91" + phone  # phone is already validated 10-digit
-            sms_message = (
-                f"Welcome to Global IT Education, {full_name}! "
-                f"Your Registration Number is {student_code}. "
-                "Keep this number safe for future reference."
-            )
+            sms_message = registration_message(full_name, student_code)
             send_sms(sms_phone, sms_message)
         except Exception:
             pass  # Never block registration if SMS fails
@@ -5021,6 +5018,7 @@ def invoice_view(invoice_id):
         cashfree_available=(
             get_current_institute_id() == current_app.config.get("CASHFREE_INSTITUTE_ID", 1)
             and session.get("role") in {"admin", "staff"}
+            and cashfree.configured()
         ),
     )
 
@@ -6508,12 +6506,7 @@ def receipt_new():
                         token=token,
                         _external=True
                     )
-                    first_name = student["full_name"].split()[0]
-                    message = (
-                        f"Dear {first_name}, payment of Rs.{amount_received:.0f} received "
-                        f"against {receipt_no}. Download your receipt: {download_url} "
-                        f"- Global IT Education"
-                    )
+                    message = receipt_message(student["full_name"], receipt_no, amount_received, download_url)
                     sms_result = send_sms(phone, message)
                     if sms_result.get("success"):
                         sms_now = datetime.now().isoformat(timespec="seconds")
@@ -6629,7 +6622,7 @@ def receipt_edit(receipt_id):
         flash("Receipt not found.", "danger")
         return redirect(url_for("billing.receipts"))
 
-    if receipt["notes"] and receipt["notes"].startswith("SANDBOX Cashfree order "):
+    if receipt["notes"] and receipt["notes"].startswith(("SANDBOX Cashfree order ", "Cashfree order ")):
         conn.close()
         flash("Verified Cashfree receipts cannot be edited. Reconcile gateway payments separately.", "warning")
         return redirect(url_for("billing.invoice_view", invoice_id=receipt["invoice_id"]))
@@ -7110,13 +7103,9 @@ def _send_invoice_sms_link(invoice_id, user_id=None, branch_id=None):
             _external=True,
         )
 
-        student_name = (invoice["full_name"] or "Student").split()[0]
         amount = float(invoice["total_amount"] or 0)
         invoice_no = invoice["invoice_no"]
-        message = (
-            f"Dear {student_name}, invoice {invoice_no} for Rs.{amount:.0f} is ready. "
-            f"Download your invoice: {download_url} - Global IT Education"
-        )
+        message = invoice_message(invoice["full_name"], invoice_no, amount, download_url)
         message = payment_links.append_to_message(message, payment_links.build_link(conn, current_inst, invoice_id))
 
         result = send_sms(phone, message)
@@ -7172,9 +7161,9 @@ def receipt_send_sms(receipt_id):
             students.phone
         FROM receipts
         JOIN invoices ON receipts.invoice_id = invoices.id
-        JOIN students ON invoices.student_id = students.id
-        WHERE receipts.id = ?
-    """, (receipt_id,))
+        JOIN students ON invoices.student_id = students.id AND students.institute_id = invoices.institute_id
+        WHERE receipts.id = ? AND invoices.institute_id = ?
+    """, (receipt_id, get_current_institute_id(default=1)))
     receipt = cur.fetchone()
 
     if not receipt:
@@ -7206,14 +7195,10 @@ def receipt_send_sms(receipt_id):
     if not phone.startswith("+"):
         phone = "+91" + phone.lstrip("0")
 
-    student_name = receipt["full_name"].split()[0]  # first name only
     amount = receipt["amount_received"]
     receipt_no = receipt["receipt_no"]
 
-    message = (
-        f"Dear {student_name}, payment of Rs.{amount:.0f} received against {receipt_no}. "
-        f"Download your receipt: {download_url} - Global IT Education"
-    )
+    message = receipt_message(receipt["full_name"], receipt_no, amount, download_url)
 
     result = send_sms(phone, message)
 
@@ -7735,6 +7720,7 @@ def reminder_send_sms():
 
     message_text = payment_links.append_to_message(
         message_text, payment_links.build_link(conn, current_inst, reminder['invoice_id']))
+    message_text = personalize_student_message(message_text, reminder["student_name"])
     result = send_sms(phone, message_text)
     now = datetime.now().isoformat(timespec="seconds")
     status = "sent" if result.get("success") else "failed"
@@ -7996,6 +7982,18 @@ def expense_new():
                 flash("Expense amount must be greater than 0.", "danger")
                 return redirect(url_for("billing.expense_new"))
 
+            branch = cur.execute(
+                "SELECT id FROM branches WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (branch_id, current_inst),
+            ).fetchone()
+            category = cur.execute(
+                "SELECT id FROM expense_categories WHERE id = ? AND institute_id = ? AND is_active = 1",
+                (category_id, current_inst),
+            ).fetchone()
+            if not branch or not category:
+                flash("Select an active branch and expense category from your institute.", "danger")
+                return redirect(url_for("billing.expense_new"))
+
             now = datetime.now().isoformat(timespec="seconds")
 
             cur.execute("""
@@ -8065,7 +8063,7 @@ def expense_new():
     cur.execute("""
         SELECT *
         FROM expense_categories
-        WHERE is_active = 1 AND (institute_id = ? OR institute_id = 1)
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY category_name
     """, (current_inst,))
     categories = cur.fetchall()
@@ -8090,8 +8088,9 @@ def expense_categories():
     cur.execute("""
         SELECT *
         FROM expense_categories
+        WHERE institute_id = ?
         ORDER BY category_name ASC
-    """)
+    """, (get_current_institute_id(default=1),))
     categories = cur.fetchall()
 
     conn.close()
@@ -8104,12 +8103,15 @@ def expense_categories():
 @billing_bp.route("/expense-category/new", methods=["GET", "POST"])
 @login_required
 def expense_category_new():
-
+    current_inst = get_current_institute_id(default=1)
     if request.method == "POST":
         category_name = request.form.get("category_name", "").strip()
 
         if not category_name:
             flash("Category name is required.", "danger")
+            return redirect(url_for("billing.expense_category_new"))
+        if len(category_name) > 255:
+            flash("Category name must be 255 characters or fewer.", "danger")
             return redirect(url_for("billing.expense_category_new"))
 
         conn = get_conn()
@@ -8118,8 +8120,8 @@ def expense_category_new():
         # Check duplicate
         cur.execute("""
             SELECT id FROM expense_categories 
-            WHERE category_name = ?
-        """, (category_name,))
+            WHERE category_name = ? AND institute_id = ?
+        """, (category_name, current_inst))
         existing = cur.fetchone()
 
         if existing:
@@ -8132,19 +8134,20 @@ def expense_category_new():
 
             cur.execute("""
                 INSERT INTO expense_categories (
+                    institute_id,
                     category_name,
                     is_active,
                     created_at
                 )
-                VALUES (?, ?, ?)
+                VALUES (?, ?, ?, ?)
             """, (
+                current_inst,
                 category_name,
                 1,
                 now
             ))
 
             category_id = cur.lastrowid
-            conn.commit()
 
             # ✅ ERP logging (as you requested)
             log_activity(
@@ -8153,21 +8156,97 @@ def expense_category_new():
                 action_type="create",
                 module_name="expense_category",
                 record_id=category_id,
-                description=f"Created expense category '{category_name}'"
+                description=f"Created expense category '{category_name}'",
+                conn=conn,
+                institute_id=current_inst,
             )
+            conn.commit()
 
             flash("Expense category created successfully.", "success")
             return redirect(url_for("billing.expense_categories"))
 
         except Exception as e:
             conn.rollback()
-            flash(f"Error: {str(e)}", "danger")
+            if e.args and e.args[0] == 1062:
+                flash("Category name is already in use. Choose another name.", "danger")
+            else:
+                flash(f"Error: {str(e)}", "danger")
             return redirect(url_for("billing.expense_category_new"))
 
         finally:
             conn.close()
 
     return render_template("billing/expense_category_form.html")
+
+@billing_bp.route("/expense-category/<int:category_id>/edit", methods=["GET", "POST"])
+@login_required
+def expense_category_edit(category_id):
+    current_inst = get_current_institute_id(default=1)
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        category = cur.execute(
+            "SELECT * FROM expense_categories WHERE id = ? AND institute_id = ?",
+            (category_id, current_inst),
+        ).fetchone()
+        if not category:
+            return "Expense category not found.", 404
+
+        if request.method == "POST":
+            category_name = request.form.get("category_name", "").strip()
+            is_active = request.form.get("is_active", str(category["is_active"]))
+            error = None
+            if not category_name:
+                error = "Category name is required."
+            elif len(category_name) > 255:
+                error = "Category name must be 255 characters or fewer."
+            elif is_active not in ("0", "1"):
+                error = "Select a valid category status."
+            elif cur.execute(
+                "SELECT id FROM expense_categories WHERE category_name = ? AND institute_id = ? AND id <> ?",
+                (category_name, current_inst, category_id),
+            ).fetchone():
+                error = "Category already exists."
+
+            if error:
+                flash(error, "danger")
+                category = dict(category)
+                category.update(category_name=category_name)
+                if is_active in ("0", "1"):
+                    category["is_active"] = int(is_active)
+                return render_template("billing/expense_category_form.html", category=category)
+
+            try:
+                cur.execute(
+                    "UPDATE expense_categories SET category_name = ?, is_active = ? WHERE id = ? AND institute_id = ?",
+                    (category_name, int(is_active), category_id, current_inst),
+                )
+                log_activity(
+                    user_id=session.get("user_id"),
+                    branch_id=session.get("branch_id"),
+                    action_type="update",
+                    module_name="expense_category",
+                    record_id=category_id,
+                    description=f"Updated expense category '{category['category_name']}' to '{category_name}' ({'active' if is_active == '1' else 'inactive'})",
+                    conn=conn,
+                    institute_id=current_inst,
+                )
+                conn.commit()
+            except Exception as exc:
+                conn.rollback()
+                if exc.args and exc.args[0] == 1062:
+                    flash("Category name is already in use. Choose another name.", "danger")
+                else:
+                    logger.exception("Failed to update expense category %s", category_id)
+                    flash("Unable to update the expense category. Please try again.", "danger")
+                return redirect(url_for("billing.expense_category_edit", category_id=category_id))
+
+            flash("Expense category updated successfully.", "success")
+            return redirect(url_for("billing.expense_categories"))
+
+        return render_template("billing/expense_category_form.html", category=dict(category))
+    finally:
+        conn.close()
 
 @billing_bp.route("/activity-logs", methods=["GET"])
 @login_required

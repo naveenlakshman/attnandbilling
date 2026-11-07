@@ -1,38 +1,139 @@
 {% if cashfree_available and balance_amount > 0 and effective_status not in ['cancelled', 'write_off', 'partially_written_off'] %}
 <style>
-  #cashfree-payment-form { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; max-width:480px; }
-  #cashfree-payment-form input { width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:6px; }
-  #cashfree-payment-form label { margin-top:4px; font-weight:500; }
-  #cashfree-payment-form button[hidden] { display:none; }
+  .cf-payment { margin:18px 0; overflow:hidden; border:1px solid #dce4f0; border-radius:14px; background:#fff; box-shadow:0 3px 14px #1c335509; }
+  .cf-payment * { box-sizing:border-box; }
+  .cf-payment .cf-header { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:20px 24px; border-bottom:1px solid #e9edf4; }
+  .cf-payment .cf-heading { display:flex; align-items:center; gap:12px; min-width:0; }
+  .cf-payment .cf-icon { display:grid; place-items:center; width:42px; height:42px; flex-shrink:0; border-radius:12px; color:#2563eb; background:#edf3ff; }
+  .cf-payment svg { width:18px; height:18px; flex-shrink:0; vertical-align:middle; }
+  .cf-payment .cf-icon svg { width:23px; height:23px; }
+  .cf-payment h3 { margin:0; padding:0; border:0; font-size:18px; font-weight:700; color:#182b49; line-height:1.4; }
+  .cf-payment .cf-subtitle { margin:3px 0 0; color:#64748b; font-size:13px; line-height:1.5; }
+  .cf-payment .cf-balance { flex-shrink:0; text-align:right; }
+  .cf-payment .cf-balance span { display:block; color:#64748b; font-size:12px; margin-bottom:2px; }
+  .cf-payment .cf-balance strong { color:#193f86; font-size:25px; font-weight:750; font-variant-numeric:tabular-nums; line-height:1.25; }
+  .cf-payment .cf-layout { display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.25fr); gap:24px; padding:22px 24px; align-items:start; }
+  .cf-payment .cf-layout.cf-single { grid-template-columns:1fr; }
+  .cf-payment .cf-share { padding:18px; border:1px solid #e3e9f3; border-radius:11px; background:#f8faff; }
+  .cf-payment .cf-eyebrow { display:block; color:#45618c; font-size:10px; font-weight:750; letter-spacing:1.1px; margin-bottom:9px; }
+  .cf-payment h4 { margin:0 0 6px; color:#243958; font-size:15px; font-weight:700; line-height:1.45; }
+  .cf-payment .cf-help { color:#64748b; font-size:12px; line-height:1.6; margin:0 0 12px; }
+  .cf-payment #student-payment-url { display:block; width:100%; min-width:0; height:40px; padding:9px 10px; background:white; border:1px solid #d9e2f0; border-radius:7px; color:#526782; font-size:12px; text-overflow:ellipsis; }
+  .cf-payment .cf-link-actions { display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin-top:11px; }
+  .cf-payment .cf-button { display:inline-flex; justify-content:center; align-items:center; gap:7px; border-radius:7px; padding:9px 12px; min-height:39px; text-decoration:none; font-size:12px; font-weight:650; line-height:1.4; cursor:pointer; transition:background .15s,box-shadow .15s; }
+  .cf-payment .cf-copy { color:#2459bb; background:#eaf1ff; border:1px solid #d5e3ff; }
+  .cf-payment .cf-copy:hover { background:#dce9ff; }
+  .cf-payment .cf-open { color:#475b78; background:#fff; border:1px solid #d7dfeb; }
+  .cf-payment .cf-open:hover { background:#f0f4fa; }
+  .cf-payment .cf-copy-feedback { display:block; min-height:0; color:#13724c; margin-top:8px; font-size:12px; line-height:1.5; }
+  .cf-payment .cf-copy-feedback:empty { display:none; }
+  .cf-payment .cf-details h4 { margin-bottom:13px; }
+  .cf-payment #cashfree-payment-form { display:block; margin:0; width:100%; max-width:none; }
+  .cf-payment .cf-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px 16px; }
+  .cf-payment .cf-field { min-width:0; }
+  .cf-payment .cf-field label { display:block; margin:0 0 6px; color:#40516a; font-size:12px; font-weight:650; }
+  .cf-payment .cf-field label span { color:#526e98; }
+  .cf-payment .cf-field input { display:block; width:100%; height:42px; margin:0; padding:9px 11px; border:1px solid #d4dce8; border-radius:7px; background:#fff; color:#1d304c; font-size:14px; line-height:1.4; }
+  .cf-payment .cf-field input:focus,.cf-payment #student-payment-url:focus { outline:2px solid #a5c4ff; outline-offset:1px; border-color:#598bea; }
+  .cf-payment .cf-field input[name="amount"] { font-weight:700; color:#2154a4; background:#f9fbff; }
+  .cf-payment .cf-checkout-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:18px; }
+  .cf-payment #cashfree-pay { color:#fff; background:#2563eb; border:1px solid #2563eb; padding:11px 18px; min-height:43px; font-size:13px; }
+  .cf-payment #cashfree-pay:hover:not(:disabled) { background:#1d4ed8; }
+  .cf-payment #cashfree-pay:disabled { opacity:.55; cursor:not-allowed; }
+  .cf-payment #cashfree-verify { background:#fff; color:#345680; border:1px solid #cbd7e7; }
+  .cf-payment button[hidden] { display:none!important; }
+  .cf-payment .cf-secure { display:inline-flex; align-items:center; gap:5px; color:#64748b; font-size:11px; white-space:nowrap; }
+  .cf-payment .cf-secure svg { width:13px; height:13px; color:#388068; }
+  .cf-payment #cashfree-status { margin:12px 0 0; padding:10px 12px; color:#40516a; background:#f3f6fb; border-radius:7px; font-size:12px; line-height:1.5; }
+  .cf-payment #cashfree-status:empty { display:none; }
+  .cf-payment .cf-sandbox { margin:0; padding:10px 24px; background:#fff8e7; color:#795700; font-size:12px; border-bottom:1px solid #f2e5bf; }
+  .cf-payment .cf-button:focus-visible { outline:3px solid #93b9ff; outline-offset:2px; }
+  @media print { .cf-payment { display:none!important; } }
+  @media(max-width:700px) {
+    .cf-payment .cf-header { padding:16px; gap:12px; align-items:flex-start; }
+    .cf-payment .cf-icon { width:35px; height:35px; border-radius:9px; }
+    .cf-payment h3 { font-size:16px; }
+    .cf-payment .cf-subtitle { font-size:11px; }
+    .cf-payment .cf-balance strong { font-size:21px; }
+    .cf-payment .cf-layout { grid-template-columns:1fr; padding:16px; gap:20px; }
+    .cf-payment .cf-share { padding:15px; }
+    .cf-payment .cf-sandbox { padding:10px 16px; }
+  }
+  @media(max-width:420px) {
+    .cf-payment .cf-header { flex-wrap:wrap; }
+    .cf-payment .cf-balance { width:100%; display:flex; align-items:center; justify-content:space-between; text-align:left; border-top:1px solid #e9edf4; padding-top:12px; }
+    .cf-payment .cf-balance span { margin:0; }
+    .cf-payment .cf-fields { grid-template-columns:1fr; gap:12px; }
+    .cf-payment .cf-field input { font-size:16px; }
+    .cf-payment #cashfree-pay { flex:1 1 100%; }
+  }
 </style>
-<section class="card" style="margin:16px 0;" aria-label="Cashfree sandbox payment">
-  <h3>Pay online (Cashfree sandbox)</h3>
-  <p>Test payments update this ERP's fee ledger and are labelled SANDBOX on the receipt.</p>
-  {% if student_payment_url %}
-  <label for="student-payment-url">Student payment link</label>
-  <input id="student-payment-url" class="form-control mb-2" type="text" readonly value="{{ student_payment_url }}" onfocus="this.select()">
-  <p><a href="{{ student_payment_url }}" target="_blank" rel="noopener noreferrer">Open student payment page</a> — the student can choose the current installment or full invoice balance.</p>
+{% set sandbox_mode = config.get('CASHFREE_MODE', 'sandbox') == 'sandbox' %}
+<section class="cf-payment" aria-labelledby="cashfree-heading">
+  <header class="cf-header">
+    <div class="cf-heading">
+      <div class="cf-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg></div>
+      <div><h3 id="cashfree-heading">Pay online</h3><p class="cf-subtitle">Secure payments with Cashfree{% if sandbox_mode %} · Sandbox{% endif %}</p></div>
+    </div>
+    <div class="cf-balance"><span>Outstanding balance</span><strong>₹ {{ '{:,.2f}'.format(balance_amount|float) }}</strong></div>
+  </header>
+  {% if sandbox_mode %}
+  <p class="cf-sandbox">Test payments update this ERP's fee ledger and are labelled SANDBOX on the receipt.</p>
   {% endif %}
+  <div class="cf-layout{% if not student_payment_url %} cf-single{% endif %}">
+    {% if student_payment_url %}
+    <aside class="cf-share" aria-label="Share student payment link">
+      <span class="cf-eyebrow">STUDENT PAYMENT LINK</span>
+      <h4>Let the student pay online</h4>
+      <p class="cf-help">Students can choose their next installment or the full outstanding balance.</p>
+      <label for="student-payment-url" class="visually-hidden">Student payment link</label>
+      <input id="student-payment-url" type="text" readonly value="{{ student_payment_url }}" onfocus="this.select()">
+      <div class="cf-link-actions">
+        <button id="cashfree-copy-link" class="cf-button cf-copy" type="button"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg><span id="cashfree-copy-label">Copy link</span></button>
+        <a class="cf-button cf-open" href="{{ student_payment_url }}" target="_blank" rel="noopener noreferrer">Open page<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3h7v7M21 3l-11 11M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/></svg><span class="visually-hidden"> in a new tab</span></a>
+      </div>
+      <span id="cashfree-copy-feedback" class="cf-copy-feedback" role="status" aria-live="polite"></span>
+    </aside>
+    {% endif %}
+    <div class="cf-details">
+      <h4>Collect a payment now</h4>
   <form id="cashfree-payment-form"
+        data-mode="{{ config.get('CASHFREE_MODE', 'sandbox') }}"
         data-create-url="{{ url_for('billing.cashfree_create_order') }}"
         data-verify-url="{{ url_for('billing.cashfree_verify_order', order_id='ORDER_ID') }}"
         data-student-id="{{ invoice.student_id }}" data-invoice-id="{{ invoice.id }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label for="cashfree-amount">Amount (INR) *</label>
+    <div class="cf-fields">
+    <div class="cf-field">
+    <label for="cashfree-amount">Amount (INR) <span>*</span></label>
     <input id="cashfree-amount" name="amount" type="number" min="1" step="0.01"
            max="{{ '%.2f'|format(balance_amount) }}" value="{{ '%.2f'|format(balance_amount) }}" required>
-    <label for="cashfree-name">Name *</label>
+    </div>
+    <div class="cf-field">
+    <label for="cashfree-name">Payer full name <span>*</span></label>
     <input id="cashfree-name" name="name" maxlength="100" value="{{ invoice.full_name or '' }}" required>
-    <label for="cashfree-phone">Mobile number *</label>
+    </div>
+    <div class="cf-field">
+    <label for="cashfree-phone">Mobile number <span>*</span></label>
     <input id="cashfree-phone" name="phone" type="tel" pattern="(\+91)?[6-9][0-9]{9}"
            value="{{ invoice.phone or '' }}" autocomplete="tel" required>
-    <label for="cashfree-email">Email *</label>
+    </div>
+    <div class="cf-field">
+    <label for="cashfree-email">Email <span>*</span></label>
     <input id="cashfree-email" name="email" type="email" maxlength="254" value="{{ invoice.email or '' }}" required>
-    <button class="btn btn-primary" id="cashfree-pay" type="submit" disabled>Pay with Cashfree (sandbox)</button>
-    <button class="btn btn-secondary" id="cashfree-verify" type="button" hidden>Check payment status</button>
+    </div>
+    </div>
+    <div class="cf-checkout-actions">
+    <button class="cf-button" id="cashfree-pay" type="submit" disabled>Pay with Cashfree{% if sandbox_mode %} (sandbox){% endif %}</button>
+    <button class="cf-button" id="cashfree-verify" type="button" hidden>Check payment status</button>
+    <span class="cf-secure"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Secure checkout</span>
+    </div>
     <p id="cashfree-status" role="status" aria-live="polite"></p>
   </form>
+    </div>
+  </div>
 </section>
 <script src="https://sdk.cashfree.com/js/v3/cashfree.js" defer></script>
-<script src="{{ url_for('static', filename='js/cashfree_checkout.js', v='20261029-payment-links') }}" defer></script>
+<script src="{{ url_for('static', filename='js/cashfree_checkout.js', v='20261031-live-mode') }}" defer></script>
+<script src="{{ url_for('static', filename='js/cashfree_invoice.js', v='20261107-compact') }}" defer></script>
 {% endif %}

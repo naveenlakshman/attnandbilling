@@ -30,7 +30,7 @@
     })();
   </script>
   
-  {% if request.endpoint and (request.endpoint.startswith('billing.') or request.endpoint.startswith('baddebt.')) %}
+  {% if request.endpoint and (request.endpoint.startswith('billing.') or request.endpoint.startswith('baddebt.') or request.endpoint == 'certificates.admin_issue') %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.css">
   {% endif %}
   
@@ -171,7 +171,7 @@
 {% endif %}
 
 <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
-{% if request.endpoint and (request.endpoint.startswith('billing.') or request.endpoint.startswith('baddebt.')) %}
+{% if request.endpoint and (request.endpoint.startswith('billing.') or request.endpoint.startswith('baddebt.') or request.endpoint == 'certificates.admin_issue') %}
 <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
 {% endif %}
 

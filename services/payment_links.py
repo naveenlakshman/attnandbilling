@@ -19,6 +19,7 @@ def config():
 def enabled(institute_id):
     values = config()
     return bool(institute_id and values.get('CASHFREE_PAYMENT_LINKS_ENABLED')
+                and cashfree.valid_configuration(values)
                 and int(institute_id) == int(values.get('CASHFREE_INSTITUTE_ID', 1)))
 
 
@@ -92,7 +93,8 @@ def build_link(conn, institute_id, invoice_id):
 def append_to_message(message, payment_url):
     if not payment_url or payment_url in message:
         return message
-    return message.rstrip() + '\nPay online (sandbox): ' + payment_url
+    label = 'Pay online (sandbox)' if config().get('CASHFREE_MODE','sandbox') == 'sandbox' else 'Pay online'
+    return message.rstrip() + '\n' + label + ': ' + payment_url
 
 
 def resolve(conn, token, institute_id):

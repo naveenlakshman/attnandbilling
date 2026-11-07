@@ -1,4 +1,4 @@
-"""Cashfree sandbox HTTP client and raw-body webhook authentication."""
+"""Cashfree HTTP client and raw-body webhook authentication."""
 
 import base64
 import hashlib
@@ -7,6 +7,25 @@ from decimal import Decimal, InvalidOperation
 
 import requests
 from flask import current_app
+
+API_URLS = {'sandbox':'https://sandbox.cashfree.com/pg', 'production':'https://api.cashfree.com/pg'}
+
+
+def mode():
+    return current_app.config.get('CASHFREE_MODE', 'sandbox')
+
+
+def valid_configuration(config):
+    environment = config.get('CASHFREE_MODE', 'sandbox')
+    secret = config.get('CASHFREE_SECRET_KEY', '')
+    app_id = config.get('CASHFREE_APP_ID', '')
+    return bool(
+        environment in API_URLS and app_id and secret
+        and 'xxxxxxxx' not in secret.lower()
+        and config.get('CASHFREE_API_URL', '').rstrip('/') == API_URLS[environment]
+        and (environment != 'production' or not app_id.upper().startswith('TEST'))
+        and (config.get('APP_ENV') != 'production' or environment == 'production')
+    )
 
 
 class CashfreeError(Exception):
@@ -17,7 +36,7 @@ class CashfreeError(Exception):
 
 def checkout_content_security_policy(policy):
     """Permit the SDK's exact form POST destination without broadening other directives."""
-    destination = 'https://sandbox.cashfree.com/pg/view/sessions/checkout'
+    destination = API_URLS.get(mode(), API_URLS['sandbox']) + '/view/sessions/checkout'
     directives = policy.split(';')
     for index, directive in enumerate(directives):
         parts = directive.split()
@@ -44,18 +63,12 @@ def amount_paise(value):
 
 
 def configured():
-    config = current_app.config
-    secret = config.get("CASHFREE_SECRET_KEY", "")
-    return bool(
-        config.get("CASHFREE_APP_ID") and secret
-        and "xxxxxxxx" not in secret.lower()
-        and config.get("CASHFREE_API_URL", "").rstrip("/") == "https://sandbox.cashfree.com/pg"
-    )
+    return valid_configuration(current_app.config)
 
 
 def require_config():
     if not configured():
-        raise CashfreeError("Cashfree sandbox is not configured. Set the complete sandbox credentials.", 503)
+        raise CashfreeError("Cashfree is not configured for this environment. Check the payment mode and credentials.", 503)
 
 
 def api_request(method, path, payload=None, idempotency_key=None):
@@ -72,13 +85,13 @@ def api_request(method, path, payload=None, idempotency_key=None):
         headers["x-idempotency-key"] = idempotency_key
     try:
         response = requests.request(
-            method, "https://sandbox.cashfree.com/pg" + path,
+            method, API_URLS[mode()] + path,
             headers=headers, json=payload, timeout=(5, 20), allow_redirects=False,
         )
         if not 200 <= response.status_code < 300:
             # Provider responses may contain customer data. Do not echo them.
             if response.status_code in (401, 403):
-                raise CashfreeError("Cashfree rejected the sandbox credentials.", 503)
+                raise CashfreeError("Cashfree rejected the configured credentials.", 503)
             raise CashfreeError("Cashfree could not process the request. Retry with the same request key.")
         return response.json()
     except (requests.RequestException, ValueError):

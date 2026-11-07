@@ -23,6 +23,7 @@ from config import Config, DB_PATH
 from modules.core.utils import login_required, admin_required, lms_content_manager_required
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
+from services.batch_schedule import batch_end_summary
 from services.profile_updates import PROFILE_UPDATE_FIELDS, material_profile_changes
 from modules.lms_admin.publishing import get_program_publishing_readiness
 from modules.lms_admin.editorial import (
@@ -10366,7 +10367,7 @@ def classroom_teaching_dashboard():
             params.append(user_id)
             
         sql = f"""
-            SELECT b.id, b.batch_name, b.start_time, b.end_time, b.course_id,
+            SELECT b.id, b.batch_name, b.start_time, b.end_time, b.end_date, b.course_id,
                    br.branch_name, c.course_name, u.full_name as trainer_name,
                    (SELECT COUNT(DISTINCT sb.student_id) FROM student_batches sb WHERE sb.batch_id = b.id AND sb.status = 'active') as student_count,
                    (SELECT COUNT(DISTINCT ar.student_id)
@@ -10557,6 +10558,7 @@ def classroom_teaching_dashboard():
             b_dict['taught_cnt'] = taught_cnt
             b_dict['total_cnt'] = total_cnt
             b_dict['taught_pct'] = pct
+            b_dict['end_summary'] = batch_end_summary(b_dict.get('end_date'), today=ist_now.date())
             b_dict['next_topic'] = next_topic
             b_dict['earlier_pending_summary'] = earlier_pending_summary
             b_dict['launch_program_id'] = launch_program_id

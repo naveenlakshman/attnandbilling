@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 
 from db import get_company_profile, get_conn, log_activity
 from modules.core.sms import normalize_sms_phone, send_sms
+from services.student_messages import student_full_name
 from services import payment_links
 
 
@@ -36,7 +37,7 @@ def _reminder_type(days_until_due):
 
 
 def _build_message(row, reminder_type, company):
-    first_name = (row["student_name"] or "Student").split()[0]
+    full_name = student_full_name(row["student_name"])
     company_name = company.get("company_name") or "Global IT Education"
     contact_number = company.get("phone") or ""
     amount = _money(row["balance_due"])
@@ -46,28 +47,28 @@ def _build_message(row, reminder_type, company):
 
     if reminder_type == "before_3_days":
         return (
-            f"Dear {first_name}, this is a reminder from {company_name}. "
+            f"Dear {full_name}, this is a reminder from {company_name}. "
             f"Your fee installment of {amount} for Invoice {invoice_no} is due on {due_date}. "
             f"Kindly make the payment on or before the due date.{contact_suffix}"
         )
 
     if reminder_type == "before_2_days":
         return (
-            f"Dear {first_name}, gentle reminder from {company_name}: "
+            f"Dear {full_name}, gentle reminder from {company_name}: "
             f"your fee installment of {amount} for Invoice {invoice_no} is due on {due_date}. "
             f"Please arrange payment on time.{contact_suffix}"
         )
 
     if reminder_type == "due_today":
         return (
-            f"Dear {first_name}, reminder from {company_name}: "
+            f"Dear {full_name}, reminder from {company_name}: "
             f"your fee amount of {amount} for Invoice {invoice_no} is due today. "
             f"Kindly make the payment today.{contact_suffix}"
         )
 
     overdue_day = reminder_type.replace("overdue_day_", "")
     return (
-        f"Dear {first_name}, reminder from {company_name}: "
+        f"Dear {full_name}, reminder from {company_name}: "
         f"your pending fee amount of {amount} for Invoice {invoice_no} was due on {due_date}. "
         f"This is overdue by {overdue_day} day(s). Kindly make the payment at the earliest.{contact_suffix}"
     )

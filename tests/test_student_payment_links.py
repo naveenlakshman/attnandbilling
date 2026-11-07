@@ -246,6 +246,23 @@ def test_automatic_reminder_adds_same_link_without_request_context(linked, monke
     monkeypatch.setattr(Config, 'CASHFREE_PAYMENT_LINKS_ENABLED', True)
     monkeypatch.setattr(Config, 'CASHFREE_PAYMENT_LINK_BASE_URL', 'https://tenant.example')
     monkeypatch.setattr(Config, 'SECRET_KEY', linked.app.config['SECRET_KEY'])
+    for key,value in dict(APP_ENV='testing', CASHFREE_MODE='sandbox', CASHFREE_APP_ID='TEST-fixture',
+                          CASHFREE_SECRET_KEY='fixture-secret', CASHFREE_API_URL='https://sandbox.cashfree.com/pg',
+                          CASHFREE_INSTITUTE_ID=1).items():
+        monkeypatch.setattr(Config, key, value)
     result = auto_reminders.send_automatic_fee_reminders()
     assert result['sent'] == 1 and '/billing/pay/' in messages[0]
     assert read(linked, 'SELECT message_text FROM reminder_logs')[0]['message_text'] == messages[0]
+
+
+def test_live_student_page_and_sms_do_not_describe_payments_as_sandbox(linked):
+    linked.app.config.update(APP_ENV='production', CASHFREE_MODE='production',
+        CASHFREE_API_URL='https://api.cashfree.com/pg',CASHFREE_APP_ID='LIVE-fixture')
+    page = linked.public.get(linked.payment_path)
+    assert page.status_code == 200
+    assert 'data-mode="production"' in page.text
+    assert 'Sandbox test payment' not in page.text
+    assert 'Pay with Cashfree (sandbox)' not in page.text
+    with linked.app.app_context():
+        message = links.append_to_message('Your invoice is ready.',linked.payment_url)
+    assert 'Pay online: ' in message and '(sandbox)' not in message

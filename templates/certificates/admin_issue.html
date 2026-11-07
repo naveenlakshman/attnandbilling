@@ -11,7 +11,7 @@
       <h5 class="fw-bold mb-3">Eligibility Search</h5>
       <form method="GET" class="row g-3">
         <div class="col-12">
-          <label class="form-label small fw-semibold">Select Student</label>
+          <label class="form-label small fw-semibold" for="studentSelect">Select Student</label>
           <select name="student_id" class="form-select" id="studentSelect" required>
             <option value="">-- Select Student --</option>
             {% for s in students %}
@@ -20,6 +20,7 @@
               </option>
             {% endfor %}
           </select>
+          <div class="form-text">Type a student's name or registration number to search.</div>
         </div>
         <div class="col-12">
           <label class="form-label small fw-semibold">Select Invoiced Course</label>

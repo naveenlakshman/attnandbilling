@@ -153,10 +153,11 @@ class Config:
     # Google AI (Gemini)
     GOOGLE_AI_API_KEY = os.environ.get("GOOGLE_AI_API_KEY")
 
-    # Cashfree sandbox credentials stay on the server. One merchant account is
+    # Cashfree credentials stay on the server. One merchant account is
     # explicitly bound to one institute; never share it across tenant ledgers.
     CASHFREE_APP_ID = os.environ.get("CASHFREE_APP_ID", "")
     CASHFREE_SECRET_KEY = os.environ.get("CASHFREE_SECRET_KEY", "")
+    CASHFREE_MODE = os.environ.get("CASHFREE_MODE", "sandbox").strip().lower()
     CASHFREE_API_URL = os.environ.get("CASHFREE_API_URL", "https://sandbox.cashfree.com/pg")
     CASHFREE_INSTITUTE_ID = int(os.environ.get("CASHFREE_INSTITUTE_ID", "1"))
     CASHFREE_NOTIFY_URL = os.environ.get("CASHFREE_NOTIFY_URL", "")

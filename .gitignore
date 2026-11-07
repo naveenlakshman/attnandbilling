@@ -1,6 +1,4 @@
 # Environment secrets - never commit
-.env
-.env.*
 !.env.example
 !.env.docker.example
 !.env.mysql.example
@@ -241,7 +239,6 @@ database.db
 docs/planning/*.md
 pythonanywhere_uploads.tar.gz
 pythonanywhere_uploads/static/images/*/*.png
-*.sql
 backup_test_attn_billing.sql
 *.sql
 !migrations/*.sql
@@ -268,3 +265,12 @@ uploads/student_documents/doc_391_qualification_7ccad2d0ccd54a78a7080d51c11217a6
 *env.docker.example
 scratch/test_super_admin_login.py
 scratch/*.py
+scratch/cashfree-production-release/
+
+# Local release evidence, linked worktrees and disposable test databases
+/scratch/cashfree-production-release/
+/scratch/expense-category-hotfix/
+/scratch/cashfree-release-tests-*/
+/scratch/cashfree-panel-tests-*/
+/scratch/cashfree-merchant-scope-*/
+/scratch/repo-cleanup-tests-*/
