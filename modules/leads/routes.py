@@ -232,6 +232,20 @@ def _get_branch_form_access():
     return can_select_branch, session_branch_id
 
 
+def _form_branch_error(branch_id, *, require_active=True):
+    conn = get_conn()
+    try:
+        lead_services.validate_lead_branch(
+            conn, get_current_institute_id(default=1), branch_id,
+            require_active=require_active,
+        )
+    except ValueError as exc:
+        return str(exc)
+    finally:
+        conn.close()
+    return None
+
+
 def compute_lead_score(lead_source, start_timeframe, education_status, career_goal):
     return lead_services.compute_lead_score({
         "lead_source": lead_source,
@@ -316,7 +330,7 @@ def dashboard():
     cur.execute(f"""
         SELECT l.*, u.full_name AS owner_name, u.username AS owner_username
         FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
+        LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
         WHERE l.status = 'active'
           AND l.is_deleted = 0
           AND l.lead_score >= 60
@@ -340,7 +354,7 @@ def dashboard():
     cur.execute(f"""
         SELECT l.*, u.full_name AS owner_name, u.username AS owner_username
         FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
+        LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
         WHERE l.is_deleted = 0
           AND l.status = 'active'
           AND substr(l.created_at, 1, 10) = ?
@@ -643,6 +657,8 @@ def lead_create():
         _date_error = _validate_last_contact_date(last_contact_date, today_ist_str)
         if not _phone_error and _date_error:
             _phone_error = _date_error
+        if not _phone_error:
+            _phone_error = _form_branch_error(branch_id)
         
         if not _phone_error:
             _conn_dup = get_conn()
@@ -659,7 +675,7 @@ def lead_create():
         if _phone_error:
             _conn2 = get_conn()
             _cur2 = _conn2.cursor()
-            _cur2.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+            _cur2.execute("SELECT id, course_name FROM courses WHERE institute_id = ? AND is_active = 1 ORDER BY course_name", (get_current_institute_id(default=1),))
             _active_courses = _cur2.fetchall()
             _conn2.close()
             flash(_phone_error, "danger")
@@ -770,7 +786,7 @@ def lead_create():
 
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+    cur.execute("SELECT id, course_name FROM courses WHERE institute_id = ? AND is_active = 1 ORDER BY course_name", (get_current_institute_id(default=1),))
     active_courses = cur.fetchall()
     conn.close()
 
@@ -821,9 +837,9 @@ def lead_detail(lead_id):
             b.branch_code AS branch_code
         FROM leads l
         LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
-        LEFT JOIN branches b ON l.branch_id = b.id
-        WHERE l.id = ?
-    """, (lead_id,))
+        LEFT JOIN branches b ON l.branch_id = b.id AND b.institute_id = l.institute_id
+        WHERE l.id = ? AND l.institute_id = ?
+    """, (lead_id, get_current_institute_id(default=1)))
     lead = cur.fetchone()
 
     if not lead:
@@ -867,9 +883,9 @@ def lead_detail(lead_id):
             u.full_name AS user_full_name
         FROM followups f
         LEFT JOIN users u ON f.user_id = u.id AND u.institute_id = ?
-        WHERE f.lead_id = ?
+        WHERE f.lead_id = ? AND f.institute_id = ?
         ORDER BY f.created_at DESC
-    """, (get_current_institute_id(default=1), lead_id))
+    """, (get_current_institute_id(default=1), lead_id, get_current_institute_id(default=1)))
     followups = cur.fetchall()
 
     cur.execute("""
@@ -878,13 +894,13 @@ def lead_detail(lead_id):
             u.username AS user_username,
             u.full_name AS user_full_name
         FROM activity_logs al
-        LEFT JOIN users u ON al.user_id = u.id
+        LEFT JOIN users u ON al.user_id = u.id AND u.institute_id = al.institute_id
         WHERE al.module_name = 'leads'
-          AND al.record_id = ?
+          AND al.record_id = ? AND al.institute_id = ?
           AND COALESCE(al.action_type, '') NOT IN ('followup_added', 'followup_completed')
         ORDER BY al.created_at DESC
         LIMIT 100
-    """, (lead_id,))
+    """, (lead_id, get_current_institute_id(default=1)))
     activity_items = cur.fetchall()
 
     timeline_items = []
@@ -914,8 +930,8 @@ def lead_detail(lead_id):
 
     # Linked student (if this lead was converted)
     cur.execute(
-        "SELECT id, student_code, full_name FROM students WHERE lead_id = ?",
-        (lead_id,)
+        "SELECT id, student_code, full_name FROM students WHERE lead_id = ? AND institute_id = ?",
+        (lead_id, get_current_institute_id(default=1))
     )
     linked_student = cur.fetchone()
 
@@ -1010,7 +1026,7 @@ def leads_list():
     query = """
         SELECT l.*, u.full_name AS owner_name, u.username AS owner_username
         FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
+        LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
         WHERE l.is_deleted = 0 AND l.institute_id = ?
     """
     params = [current_inst]
@@ -1243,6 +1259,7 @@ def followup_add(lead_id):
     # Insert follow-up
     cur.execute("""
         INSERT INTO followups (
+            institute_id,
             lead_id,
             user_id,
             method,
@@ -1251,8 +1268,9 @@ def followup_add(lead_id):
             next_followup_date,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
+        lead['institute_id'],
         lead_id,
         session.get("user_id"),
         method,
@@ -1277,14 +1295,15 @@ def followup_add(lead_id):
             next_followup_date = ?,
             stage = ?,
             updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND institute_id = ?
     """, (
         today_str,
         current_followup_count + 1,
         next_dt,
         new_stage,
         now,
-        lead_id
+        lead_id,
+        lead['institute_id']
     ))
 
     conn.commit()
@@ -1390,13 +1409,17 @@ def lead_edit(lead_id):
         _date_error_edit = _validate_last_contact_date(last_contact_date, lead_created_date)
         if not _phone_error_edit and _date_error_edit:
             _phone_error_edit = _date_error_edit
+        if not _phone_error_edit:
+            _phone_error_edit = _form_branch_error(
+                branch_id, require_active=branch_id != _to_int_or_none(lead.get('branch_id')),
+            )
             
         if not _phone_error_edit:
             _conn_dup = get_conn()
             _cur_dup = _conn_dup.cursor()
             _dup_lead = _cur_dup.execute(
-                "SELECT id FROM leads WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND phone = ? AND id != ? AND COALESCE(is_deleted, 0) = 0",
-                (name, phone, lead_id)
+                "SELECT id FROM leads WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND phone = ? AND id != ? AND COALESCE(is_deleted, 0) = 0 AND institute_id = ?",
+                (name, phone, lead_id, get_current_institute_id(default=1))
             ).fetchone()
             _conn_dup.close()
             if _dup_lead:
@@ -1405,7 +1428,7 @@ def lead_edit(lead_id):
         if _phone_error_edit:
             _conn3 = get_conn()
             _cur3 = _conn3.cursor()
-            _cur3.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+            _cur3.execute("SELECT id, course_name FROM courses WHERE institute_id = ? AND is_active = 1 ORDER BY course_name", (get_current_institute_id(default=1),))
             _active_courses_edit = _cur3.fetchall()
             _conn3.close()
             conn.close()
@@ -1460,7 +1483,7 @@ def lead_edit(lead_id):
                 lead_score = ?,
                 status = ?,
                 updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND institute_id = ?
         """, (
             name,
             phone,
@@ -1486,7 +1509,8 @@ def lead_edit(lead_id):
             lead_score,
             status,
             now,
-            lead_id
+            lead_id,
+            lead['institute_id']
         ))
 
         conn.commit()
@@ -1527,7 +1551,7 @@ def lead_edit(lead_id):
         flash("Lead updated.", "success")
         return redirect(url_for("leads.lead_detail", lead_id=lead_id))
 
-    cur.execute("SELECT id, course_name FROM courses WHERE is_active = 1 ORDER BY course_name")
+    cur.execute("SELECT id, course_name FROM courses WHERE institute_id = ? AND is_active = 1 ORDER BY course_name", (get_current_institute_id(default=1),))
     active_courses = cur.fetchall()
     conn.close()
 
@@ -1717,12 +1741,12 @@ def followups_today():
             (
                 SELECT f2.note
                 FROM followups f2
-                WHERE f2.lead_id = l.id
+                WHERE f2.lead_id = l.id AND f2.institute_id = l.institute_id
                 ORDER BY f2.created_at DESC
                 LIMIT 1
             ) AS last_note
         FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
+        LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
         WHERE l.status = 'active'
           AND l.is_deleted = 0
           AND l.next_followup_date IS NOT NULL
@@ -1798,15 +1822,15 @@ def followups_today():
             u.full_name AS owner_name,
             u.username AS owner_username
         FROM followups f
-        JOIN leads l ON l.id = f.lead_id
-        LEFT JOIN users u ON l.assigned_to_id = u.id
+        JOIN leads l ON l.id = f.lead_id AND l.institute_id = f.institute_id
+        LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
         WHERE substr(f.created_at, 1, 10) = ?
           AND l.is_deleted = 0
           AND l.institute_id = ?
           AND NOT EXISTS (
               SELECT 1
               FROM followups f2
-              WHERE f2.lead_id = f.lead_id
+              WHERE f2.lead_id = f.lead_id AND f2.institute_id = f.institute_id
                 AND substr(f2.created_at, 1, 10) = substr(f.created_at, 1, 10)
                 AND (
                     f2.created_at > f.created_at
@@ -1944,6 +1968,7 @@ def followups_quick_complete():
 
     cur.execute("""
         INSERT INTO followups (
+            institute_id,
             lead_id,
             user_id,
             method,
@@ -1952,8 +1977,9 @@ def followups_quick_complete():
             next_followup_date,
             created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
+        lead['institute_id'],
         lead_id,
         session.get("user_id"),
         method,
@@ -1974,14 +2000,15 @@ def followups_quick_complete():
             next_followup_date = ?,
             stage = ?,
             updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND institute_id = ?
     """, (
         today_str,
         current_followup_count + 1,
         next_dt,
         new_stage,
         now,
-        lead_id
+        lead_id,
+        lead['institute_id']
     ))
 
     conn.commit()
@@ -2164,7 +2191,7 @@ def reports():
     cur.execute(f"""
         SELECT COUNT(DISTINCT f.lead_id) AS cnt
         FROM followups f
-        JOIN leads l ON l.id = f.lead_id
+        JOIN leads l ON l.id = f.lead_id AND l.institute_id = f.institute_id
         WHERE {followup_where_sql}
     """, followup_params)
     leads_with_followups = cur.fetchone()["cnt"]
@@ -2290,7 +2317,7 @@ def reports():
             SUM(CASE WHEN l.status = 'converted' THEN 1 ELSE 0 END) AS converted_count,
             SUM(CASE WHEN l.status = 'lost' THEN 1 ELSE 0 END) AS lost_count
         FROM leads l
-        LEFT JOIN branches b ON l.branch_id = b.id
+        LEFT JOIN branches b ON l.branch_id = b.id AND b.institute_id = l.institute_id
         WHERE {where_sql}
         GROUP BY COALESCE(b.branch_name, 'Unassigned')
         ORDER BY total_count DESC
@@ -2462,11 +2489,11 @@ def activity_log():
             l.name AS lead_name,
             l.phone AS lead_phone
         FROM activity_logs al
-        LEFT JOIN users u ON al.user_id = u.id
-        LEFT JOIN leads l ON al.record_id = l.id AND al.module_name = 'leads'
-        WHERE al.module_name = 'leads'
+        LEFT JOIN users u ON al.user_id = u.id AND u.institute_id = al.institute_id
+        LEFT JOIN leads l ON al.record_id = l.id AND l.institute_id = al.institute_id AND al.module_name = 'leads'
+        WHERE al.module_name = 'leads' AND al.institute_id = ?
     """
-    params = []
+    params = [get_current_institute_id(default=1)]
 
     # Staff sees only own activities
     if current_user_role != "admin":
@@ -2485,8 +2512,9 @@ def activity_log():
         cur.execute("""
             SELECT id, full_name, username
             FROM users
+            WHERE institute_id = ?
             ORDER BY full_name
-        """)
+        """, (get_current_institute_id(default=1),))
         all_users = cur.fetchall()
 
     # Date range filter
@@ -2520,9 +2548,9 @@ def activity_log():
     cur.execute("""
         SELECT DISTINCT action_type
         FROM activity_logs
-        WHERE module_name = 'leads' AND action_type IS NOT NULL
+        WHERE module_name = 'leads' AND institute_id = ? AND action_type IS NOT NULL
         ORDER BY action_type
-    """)
+    """, (get_current_institute_id(default=1),))
     all_action_types = [row["action_type"] for row in cur.fetchall()]
 
     conn.close()
@@ -2596,7 +2624,7 @@ def deleted_leads():
             u.full_name AS owner_name,
             u.username AS owner_username
         FROM leads l
-        LEFT JOIN users u ON l.assigned_to_id = u.id
+        LEFT JOIN users u ON l.assigned_to_id = u.id AND u.institute_id = l.institute_id
         WHERE l.is_deleted = 1
     """
     params = []

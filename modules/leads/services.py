@@ -260,3 +260,18 @@ def update_lead_stage(conn, lead_id, new_stage, user_id):
         "status": status,
         "updated_at": now,
     }
+
+
+def validate_lead_branch(conn, institute_id, branch_id, *, require_active=True):
+    """Validate an explicit branch without assigning unknown historical ownership."""
+    if not institute_id:
+        raise ValueError('An explicit institute is required.')
+    if branch_id is None:
+        return None
+    row = conn.execute(
+        'SELECT id, is_active FROM branches WHERE id = ? AND institute_id = ?',
+        (branch_id, institute_id),
+    ).fetchone()
+    if not row or (require_active and not row['is_active']):
+        raise ValueError('Choose a branch available in this institute.')
+    return int(row['id'])
