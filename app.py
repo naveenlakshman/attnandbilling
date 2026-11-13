@@ -23,6 +23,7 @@ from modules.website import website_bp
 from modules.platform_admin import platform_admin_bp
 from modules.notifications import notifications_bp
 from modules.smart_counselling import smart_counselling_bp
+from modules.meta_leads import meta_leads_bp
 from modules.core.utils import login_required
 from services.tenant_context import init_tenant_context
 
@@ -145,6 +146,7 @@ def create_app():
     app.register_blueprint(platform_admin_bp)
     app.register_blueprint(notifications_bp)
     app.register_blueprint(smart_counselling_bp)
+    app.register_blueprint(meta_leads_bp)
     from modules.notifications.database import init_notification_database
     init_notification_database()
     from modules.certificates.routes import certificates_bp
@@ -252,6 +254,7 @@ def create_app():
             or request.endpoint.startswith("assets.")
             or request.endpoint.startswith("import_export.")
             or request.endpoint.startswith("smart_counselling.")
+            or request.endpoint.startswith("meta_leads.")
         ):
             return None
         abort(403)

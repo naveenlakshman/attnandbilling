@@ -52,11 +52,10 @@ def main(argv=None):
         processor = (MetaSyntheticProcessor(settings, token, version)
                      if settings.processing_mode == "synthetic"
                      else MetaLeadRetriever(settings, token, version))
-        mapping = ERPMapping.from_env() if settings.processing_mode == "production" else None
         counts = {"done": 0, "retry": 0, "dead": 0, "blocked": 0, "idle": 0}
         for _ in range(args.max_items):
-            outcome = (_run_production_once(store, settings, processor, mapping)
-                       if mapping else run_once(store, settings, processor))
+            outcome = (_run_production_once(store, settings, processor)
+                       if settings.processing_mode == "production" else run_once(store, settings, processor))
             counts[outcome] += 1
             if outcome == "idle":
                 break
@@ -64,12 +63,20 @@ def main(argv=None):
         return 1 if counts["dead"] or counts["blocked"] else 0
 
 
-def _run_production_once(store, settings, retriever, mapping):
+def _run_production_once(store, settings, retriever):
     item = store.claim()
     if item is None:
         return "idle"
     if not settings.accepts_lead(item["lead_id"]):
         store.fail(item["lead_id"], attempts=item["attempts"], max_attempts=settings.max_attempts,
+                   retry_base=settings.retry_base_seconds, error_code="unknown")
+        return "blocked"
+    try:
+        mapping = ERPMapping.from_item(item)
+    except (TypeError, ValueError):
+        # REVIEW rows are never claimed. A claimed row without an immutable
+        # route snapshot is a safety fault and must not receive defaults.
+        store.fail(item["lead_id"], attempts=item["attempts"], max_attempts=1,
                    retry_base=settings.retry_base_seconds, error_code="unknown")
         return "blocked"
     try:

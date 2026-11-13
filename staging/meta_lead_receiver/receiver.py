@@ -92,6 +92,9 @@ def settings_from_env(environ=None) -> Settings:
                     synthetic_lead_ids=frozenset(lead_ids),
                     storage_backend=env.get("META_STAGING_STORAGE", "sqlite").lower(), enabled=enabled,
                     verify_enabled=verify_enabled,
+                    max_attempts=int(env.get("META_MAX_ATTEMPTS", "5")),
+                    retention_days=int(env.get("META_RETENTION_DAYS", "30")),
+                    retry_base_seconds=int(env.get("META_RETRY_BASE_SECONDS", "5")),
                     processing_mode=env.get("META_PROCESSING_MODE", "synthetic").lower())
 
 
@@ -337,7 +340,9 @@ def parse_events(payload) -> list[dict]:
             value = change.get("value")
             if not isinstance(value, dict):
                 raise ValueError("Invalid lead notification.")
-            events.append({k: value.get(k) for k in ("leadgen_id", "page_id", "form_id", "ad_id", "created_time")})
+            events.append({k: value.get(k) for k in (
+                "leadgen_id", "page_id", "form_id", "ad_id", "campaign_id", "adset_id", "created_time"
+            )})
     return events
 
 
@@ -386,7 +391,10 @@ def create_app(settings: Settings, *, store=None):
         except (sqlite3.Error, StorageError):
             return jsonify(error="storage_unavailable"), 503
         logger.info(json.dumps({"event": "notification_batch", **counts}, sort_keys=True))
-        return jsonify(accepted=counts["accepted"], duplicate=counts["duplicate"], ignored=counts["ignored"]), 200
+        response = {key: counts[key] for key in ("accepted", "duplicate", "ignored")}
+        if "review" in counts:
+            response["review"] = counts["review"]
+        return jsonify(**response), 200
 
     @app.get("/health")
     @app.get("/healthz")

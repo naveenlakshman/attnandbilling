@@ -3,7 +3,7 @@
 {% set is_platform_owner = session.get('platform_role') == 'platform_owner' %}
 
 {# Reorganized Active States checking #}
-{% set admissions_active = ep.startswith('leads.') and ep != 'leads.reports' %}
+{% set admissions_active = (ep.startswith('leads.') and ep != 'leads.reports') or ep.startswith('meta_leads.') %}
 {% set attendance_report_endpoints = ['attendance.daily_report', 'attendance.monthly_summary', 'attendance.defaulters'] %}
 {% set students_active = (ep.startswith('attendance.') and ep not in attendance_report_endpoints) or ep.startswith('billing.students') or ep.startswith('billing.student_') or ep == 'billing.institute_day_overview' %}
 {% set lms_active = ep.startswith('lms_admin.') or ep.startswith('exams.') or ep.startswith('billing.courses') or ep.startswith('billing.course_') or ep.startswith('certificates.') %}
@@ -77,6 +77,7 @@
         </a>
         <a class="nav-link {{ 'active' if ep == 'leads.pipeline' else '' }}" href="{{ url_for('leads.pipeline') }}">Pipeline</a>
         <a class="nav-link {{ 'active' if ep == 'leads.leads_list' and request.args.get('status_filter') == 'converted' else '' }}" href="{{ url_for('leads.leads_list', status_filter='converted') }}">Leads Won</a>
+        {% if is_admin %}<a class="nav-link {{ 'active' if ep == 'meta_leads.mappings' else '' }}" href="{{ url_for('meta_leads.mappings') }}">Meta Lead Routing</a>{% endif %}
       </div>
     </div>
   </div>

@@ -1,3 +1,4 @@
+import json
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -38,12 +39,16 @@ def mysql_store():
     config = MySQLConfig(database=database, user=admin["user"], password=admin["password"],
                          host=admin["host"], port=admin["port"])
     store = MySQLStore(config)
-    migration = Path("staging/meta_lead_receiver/migrations/001_inbox.sql").read_text(encoding="utf8")
+    migrations = [Path(path).read_text(encoding="utf8") for path in (
+        "staging/meta_lead_receiver/migrations/001_inbox.sql",
+        "staging/meta_lead_receiver/migrations/002_configurable_routing.sql",
+    )]
     for _ in range(2):
         with store.connection() as db, db.cursor() as cur:
-            for statement in (part.strip() for part in migration.split(";")):
-                if statement:
-                    cur.execute(statement)
+            for migration in migrations:
+                for statement in (part.strip() for part in migration.split(";")):
+                    if statement:
+                        cur.execute(statement)
             db.commit()
     yield store
     conn = pymysql.connect(**admin)
@@ -153,7 +158,8 @@ def test_connection_failure_is_safe_storage_error(settings):
 
 def _production_result(lead_id, phone="9876543210"):
     return {"lead_id": lead_id, "form_id": FORM, "created_time": "2026-11-18T06:30:00+00:00",
-            "ad_id": "123", "platform": "instagram", "name": "Meta Test Person", "phone": phone,
+            "ad_id": "123", "campaign_id": "456", "adset_id": "789",
+            "platform": "instagram", "name": "Meta Test Person", "phone": phone,
             "field_data": [{"name": "full_name", "values": ["Meta Test Person"]},
                            {"name": "phone_number", "values": [phone]},
                            {"name": "when_would_you_like_to_join?", "values": ["Immediately"]}]}
@@ -161,8 +167,7 @@ def _production_result(lead_id, phone="9876543210"):
 
 def _mapping(batch_id=50):
     return ERPMapping(database="erp_receiver_test", institute_id=1, branch_id=2, course_id=43,
-                      batch_id=batch_id, counsellor_user_id=3, batch_start_date="2026-11-18",
-                      batch_end_date="2027-04-10", batch_start_time="12:00", batch_end_time="14:00")
+                      batch_id=batch_id, counsellor_user_id=3)
 
 
 @pytest.fixture
@@ -182,7 +187,7 @@ def erp_schema(mysql_store):
             id INT PRIMARY KEY,course_id INT,branch_id INT,start_date VARCHAR(32),end_date VARCHAR(32),
             start_time VARCHAR(32),end_time VARCHAR(32),status VARCHAR(32))""")
         cur.execute("""CREATE TABLE erp_receiver_test.users(
-            id INT PRIMARY KEY,institute_id BIGINT,branch_id INT,is_active INT)""")
+            id INT PRIMARY KEY,institute_id BIGINT,branch_id INT,can_view_all_branches INT,is_active INT)""")
         cur.execute("""CREATE TABLE erp_receiver_test.institute_memberships(
             user_id INT,institute_id BIGINT,is_active INT)""")
         cur.execute("""CREATE TABLE erp_receiver_test.leads(
@@ -199,8 +204,13 @@ def erp_schema(mysql_store):
         cur.execute("INSERT INTO erp_receiver_test.branches VALUES(2,1,1)")
         cur.execute("INSERT INTO erp_receiver_test.courses VALUES(43,1,1,'DFA 2026 With AI for Accounting')")
         cur.execute("INSERT INTO erp_receiver_test.batches VALUES(50,43,2,'2026-11-18','2027-04-10','12:00','14:00','active')")
-        cur.execute("INSERT INTO erp_receiver_test.users VALUES(3,1,2,1)")
+        cur.execute("INSERT INTO erp_receiver_test.users VALUES(3,1,1,1,1)")
         cur.execute("INSERT INTO erp_receiver_test.institute_memberships VALUES(3,1,1)")
+    with mysql_store.connection() as inbox, inbox.cursor() as cur:
+        cur.execute("""INSERT INTO routes(institute_id,page_id,form_id,course_id,batch_id,branch_id,
+            counsellor_user_id,is_active,created_by_user_id,updated_by_user_id,created_at,updated_at)
+            VALUES(1,%s,%s,43,50,2,3,1,1,1,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))""", (PAGE, FORM))
+        inbox.commit()
     conn.close()
     yield
     conn = pymysql.connect(**admin)
@@ -225,11 +235,12 @@ def test_production_completion_atomically_creates_enquiry_and_pending_task(mysql
         row = cur.fetchone()
         assert row == {"stage": "New Lead", "last_contact_date": None, "next_followup_date": "2026-11-18",
                        "followup_count": 0, "assigned_to_id": 3, "branch_id": 2, "lead_source": "Instagram"}
-        cur.execute("""SELECT state,erp_lead_id,answers_json,batch_id,ad_id,submitted_at
+        cur.execute("""SELECT state,erp_lead_id,answers_json,batch_id,ad_id,campaign_id,adset_id,submitted_at
                     FROM notifications WHERE lead_id=%s""", (lead_id,))
         inbox = cur.fetchone()
         assert inbox["state"] == "DONE" and inbox["erp_lead_id"] == 1 and inbox["batch_id"] == 50
         assert inbox["ad_id"] == "123"
+        assert inbox["campaign_id"] == "456" and inbox["adset_id"] == "789"
         assert inbox["submitted_at"].isoformat() == "2026-11-18T06:30:00"
         assert "Meta Test Person" in str(inbox["answers_json"])
         cur.execute("SELECT COUNT(*) AS n FROM erp_receiver_test.activity_logs")
@@ -265,3 +276,28 @@ def test_invalid_production_mapping_rolls_back_enquiry(mysql_store, erp_schema):
         assert cur.fetchone()["n"] == 0
         cur.execute("SELECT state,erp_lead_id FROM notifications WHERE lead_id=%s", (lead_id,))
         assert cur.fetchone() == {"state": "PROCESSING", "erp_lead_id": None}
+
+
+def test_unknown_production_mapping_remains_review_and_is_not_claimed(mysql_store):
+    production = Settings("", "secret", "verify", PAGE, FORM, frozenset(), storage_backend="mysql",
+                          enabled=True, processing_mode="production")
+    result = mysql_store.ingest([_event("800000000000099")], production)
+    assert result == {"accepted": 1, "duplicate": 0, "ignored": 0, "review": 1}
+    assert mysql_store.claim() is None
+    with mysql_store.connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT state,route_id,course_id FROM notifications")
+        assert cur.fetchone() == {"state": "REVIEW", "route_id": None, "course_id": None}
+
+
+def test_route_snapshot_is_preserved_when_route_changes(mysql_store, erp_schema):
+    production = Settings("", "secret", "verify", PAGE, FORM, frozenset(), storage_backend="mysql",
+                          enabled=True, processing_mode="production")
+    lead_id = "800000000000098"
+    assert mysql_store.ingest([_event(lead_id)], production)["accepted"] == 1
+    with mysql_store.connection() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE routes SET course_id=99,batch_id=99 WHERE page_id=%s AND form_id=%s", (PAGE, FORM))
+        cur.execute("SELECT course_id,batch_id,mapping_snapshot_json FROM notifications WHERE lead_id=%s", (lead_id,))
+        row = cur.fetchone()
+        assert row["course_id"] == 43 and row["batch_id"] == 50
+        assert json.loads(row["mapping_snapshot_json"])["course_id"] == 43
+        conn.rollback()

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Meta Lead Routing{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <div><h1 class="h3 mb-1">Meta Lead Routing</h1><p class="text-muted mb-0">Explicit Page and Form mappings only. Unmapped notifications remain in review.</p></div>
+  </div>
+  <div class="card mb-4"><div class="card-body">
+    <form method="post" class="row g-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-3"><label class="form-label">Meta Page ID</label><input class="form-control" name="page_id" inputmode="numeric" required></div>
+      <div class="col-md-3"><label class="form-label">Instant Form ID</label><input class="form-control" name="form_id" inputmode="numeric" required></div>
+      <div class="col-md-3"><label class="form-label">Branch</label><select class="form-select" name="branch_id" required><option value="">Select</option>{% for x in branches %}<option value="{{ x.id }}">{{ x.branch_name }}</option>{% endfor %}</select></div>
+      <div class="col-md-3"><label class="form-label">Course</label><select class="form-select" name="course_id" required><option value="">Select</option>{% for x in courses %}<option value="{{ x.id }}">{{ x.course_name }}{% if x.duration_hours %} ({{ x.duration_hours }} hours){% endif %}</option>{% endfor %}</select></div>
+      <div class="col-md-4"><label class="form-label">Batch</label><select class="form-select" name="batch_id" required><option value="">Select</option>{% for x in batches %}<option value="{{ x.id }}">{{ x.batch_name }} · {{ x.start_date }} {{ x.start_time }}–{{ x.end_time }}</option>{% endfor %}</select></div>
+      <div class="col-md-4"><label class="form-label">Counsellor</label><select class="form-select" name="counsellor_user_id" required><option value="">Select</option>{% for x in counsellors %}<option value="{{ x.id }}">{{ x.full_name }}</option>{% endfor %}</select></div>
+      <div class="col-md-2"><label class="form-label">Status</label><select class="form-select" name="is_active"><option value="1">Active</option><option value="0">Inactive</option></select></div>
+      <div class="col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100" type="submit">Save mapping</button></div>
+    </form>
+  </div></div>
+  <div class="card mb-4"><div class="card-header">Configured mappings</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Page / Form</th><th>Branch</th><th>Course</th><th>Batch</th><th>Counsellor</th><th>Status</th></tr></thead><tbody>
+  {% for x in routes %}<tr><td><code>{{ x.page_id }}</code><br><code>{{ x.form_id }}</code></td><td>{{ names.branches.get(x.branch_id, x.branch_id) }}</td><td>{{ names.courses.get(x.course_id, x.course_id) }}</td><td>{{ names.batches.get(x.batch_id, x.batch_id) }}</td><td>{{ names.counsellors.get(x.counsellor_user_id, x.counsellor_user_id) }}</td><td>{{ 'Active' if x.is_active else 'Inactive' }}</td></tr>{% else %}<tr><td colspan="6" class="text-muted">No mappings configured.</td></tr>{% endfor %}
+  </tbody></table></div></div>
+  <div class="card"><div class="card-header">Unmapped notifications awaiting review</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Page ID</th><th>Form ID</th><th>Count</th></tr></thead><tbody>
+  {% for x in reviews %}<tr><td><code>{{ x.page_id }}</code></td><td><code>{{ x.form_id }}</code></td><td>{{ x.pending_review }}</td></tr>{% else %}<tr><td colspan="3" class="text-muted">None.</td></tr>{% endfor %}
+  </tbody></table></div></div>
+</div>
+{% endblock %}

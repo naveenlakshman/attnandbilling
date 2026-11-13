@@ -74,7 +74,7 @@ def test_production_retrieval_accepts_real_id_and_validates_identity(settings):
     session = Session([
         Response(200, {"id": PAGE, "access_token": "page-token"}),
         Response(200, {"id": real_id, "form_id": FORM, "created_time": "2026-11-13T00:00:00+0000",
-                       "platform": "instagram", "ad_id": "123",
+                       "platform": "instagram", "ad_id": "123", "campaign_id": "456", "adset_id": "789",
                        "field_data": [{"name": "full_name", "values": ["Test Person"]},
                                       {"name": "phone_number", "values": ["+91 98765 43210"]},
                                       {"name": "when_would_you_like_to_join?", "values": ["Immediately"]}]}),
@@ -83,6 +83,23 @@ def test_production_retrieval_accepts_real_id_and_validates_identity(settings):
         {"lead_id": real_id, "page_id": PAGE, "form_id": FORM}, require_synthetic=False)
     assert result.name == "Test Person" and result.phone == "9876543210"
     assert result.platform == "instagram" and result.ad_id == "123"
+    assert result.campaign_id == "456" and result.adset_id == "789"
+
+
+def test_production_retrieval_uses_routed_page_and_form_not_defaults(settings):
+    page = "400000000000001"
+    form = "500000000000001"
+    lead = "900000000000099"
+    session = Session([
+        Response(200, {"id": page, "access_token": "routed-page-token"}),
+        Response(200, {"id": lead, "form_id": form, "created_time": "2026-11-13T00:00:00+0000",
+                       "field_data": [{"name": "full_name", "values": ["Routed Person"]},
+                                      {"name": "phone_number", "values": ["9876543210"]}]}),
+    ])
+    result = MetaLeadRetriever(settings, "token", "v27.0", session=session).retrieve(
+        {"lead_id": lead, "page_id": page, "form_id": form}, require_synthetic=False)
+    assert result.form_id == form
+    assert session.calls[0][0].endswith("/" + page)
 
 
 def test_production_retrieval_rejects_missing_phone(settings):

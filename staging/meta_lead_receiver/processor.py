@@ -23,6 +23,8 @@ class RetrievedLead:
     form_id: str
     created_time: str
     ad_id: str | None
+    campaign_id: str | None
+    adset_id: str | None
     platform: str | None
     name: str
     phone: str
@@ -34,6 +36,8 @@ class RetrievedLead:
             "form_id": self.form_id,
             "created_time": self.created_time,
             "ad_id": self.ad_id,
+            "campaign_id": self.campaign_id,
+            "adset_id": self.adset_id,
             "platform": self.platform,
             "name": self.name,
             "phone": self.phone,
@@ -53,7 +57,7 @@ class MetaLeadRetriever:
         self.base = f"https://graph.facebook.com/{graph_version}"
         self.session = session or requests.Session()
         self.timeout = timeout
-        self._page_token = None
+        self._page_tokens = {}
 
     def _get(self, path: str, token: str, **params):
         try:
@@ -70,24 +74,27 @@ class MetaLeadRetriever:
             raise ProcessingError("invalid_response")
         return body
 
-    def _derived_page_token(self):
-        if self._page_token:
-            return self._page_token
-        body = self._get(self.settings.page_id, self.system_user_token, fields="id,access_token")
-        if str(body.get("id")) != self.settings.page_id or not isinstance(body.get("access_token"), str):
+    def _derived_page_token(self, page_id: str):
+        if page_id in self._page_tokens:
+            return self._page_tokens[page_id]
+        body = self._get(page_id, self.system_user_token, fields="id,access_token")
+        if str(body.get("id")) != page_id or not isinstance(body.get("access_token"), str):
             raise ProcessingError("invalid_response")
-        self._page_token = body["access_token"]
-        return self._page_token
+        self._page_tokens[page_id] = body["access_token"]
+        return self._page_tokens[page_id]
 
     def retrieve(self, item: dict, *, require_synthetic: bool) -> RetrievedLead:
         lead_id = item.get("lead_id")
-        if ((require_synthetic and lead_id not in self.settings.synthetic_lead_ids)
-                or item.get("page_id") != self.settings.page_id
-                or item.get("form_id") != self.settings.form_id):
+        page_id = item.get("page_id")
+        form_id = item.get("form_id")
+        if (not isinstance(page_id, str) or not page_id.isdigit()
+                or not isinstance(form_id, str) or not form_id.isdigit()
+                or (require_synthetic and (lead_id not in self.settings.synthetic_lead_ids
+                    or page_id != self.settings.page_id or form_id != self.settings.form_id))):
             raise ProcessingError("invalid_response")
-        body = self._get(lead_id, self._derived_page_token(),
-                         fields="id,form_id,created_time,ad_id,platform,field_data")
-        if str(body.get("id")) != lead_id or str(body.get("form_id")) != self.settings.form_id:
+        body = self._get(lead_id, self._derived_page_token(page_id),
+                         fields="id,form_id,created_time,ad_id,adset_id,campaign_id,platform,field_data")
+        if str(body.get("id")) != lead_id or str(body.get("form_id")) != form_id:
             raise ProcessingError("invalid_response")
         fields = body.get("field_data")
         if not isinstance(fields, list) or not fields or len(fields) > 100:
@@ -121,12 +128,17 @@ class MetaLeadRetriever:
                 or not isinstance(created_time, str)):
             raise ProcessingError("invalid_response")
         ad_id = body.get("ad_id")
+        campaign_id = body.get("campaign_id")
+        adset_id = body.get("adset_id")
         platform = body.get("platform")
         return RetrievedLead(
             lead_id=lead_id,
-            form_id=self.settings.form_id,
+            form_id=form_id,
             created_time=created_time[:64],
             ad_id=str(ad_id) if ad_id is not None and str(ad_id).isdigit() else None,
+            campaign_id=(str(campaign_id) if campaign_id is not None
+                         and str(campaign_id).isdigit() else None),
+            adset_id=(str(adset_id) if adset_id is not None and str(adset_id).isdigit() else None),
             platform=str(platform)[:32] if isinstance(platform, str) else None,
             name=name.strip(),
             phone=phone,

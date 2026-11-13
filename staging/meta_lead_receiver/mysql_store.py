@@ -43,10 +43,6 @@ class ERPMapping:
     course_id: int
     batch_id: int
     counsellor_user_id: int
-    batch_start_date: str
-    batch_end_date: str
-    batch_start_time: str
-    batch_end_time: str
     followup_delay_days: int = 0
 
     def __post_init__(self):
@@ -59,19 +55,15 @@ class ERPMapping:
             raise ValueError("Follow-up delay must be between 0 and 30 days.")
 
     @classmethod
-    def from_env(cls, environ=None):
+    def from_item(cls, item: dict, environ=None):
         env = os.environ if environ is None else environ
         return cls(
             database=env.get("META_ERP_DATABASE", "global_it_erp_production"),
-            institute_id=int(env.get("META_ERP_INSTITUTE_ID", "0")),
-            branch_id=int(env.get("META_ERP_BRANCH_ID", "0")),
-            course_id=int(env.get("META_ERP_COURSE_ID", "0")),
-            batch_id=int(env.get("META_ERP_BATCH_ID", "0")),
-            counsellor_user_id=int(env.get("META_ERP_COUNSELLOR_USER_ID", "0")),
-            batch_start_date=env.get("META_ERP_BATCH_START_DATE", ""),
-            batch_end_date=env.get("META_ERP_BATCH_END_DATE", ""),
-            batch_start_time=env.get("META_ERP_BATCH_START_TIME", ""),
-            batch_end_time=env.get("META_ERP_BATCH_END_TIME", ""),
+            institute_id=int(item.get("institute_id") or 0),
+            branch_id=int(item.get("branch_id") or 0),
+            course_id=int(item.get("course_id") or 0),
+            batch_id=int(item.get("batch_id") or 0),
+            counsellor_user_id=int(item.get("counsellor_user_id") or 0),
             followup_delay_days=int(env.get("META_ERP_FOLLOWUP_DELAY_DAYS", "0")),
         )
 
@@ -153,23 +145,51 @@ class MySQLStore:
                     (_now(), action, json.dumps(counts, sort_keys=True, separators=(",", ":"))))
 
     def ingest(self, events: list[dict], settings: Settings) -> dict[str, int]:
-        counts = {"accepted": 0, "duplicate": 0, "ignored": 0}
+        counts = {"accepted": 0, "duplicate": 0, "ignored": 0, "review": 0}
         now = _now()
         try:
             with self.connection() as conn, conn.cursor() as cur:
                 conn.begin()
                 for event in events:
                     lead_id = event.get("leadgen_id")
-                    if (event.get("page_id") != settings.page_id or event.get("form_id") != settings.form_id
-                            or not settings.accepts_lead(lead_id)):
+                    page_id = event.get("page_id")
+                    form_id = event.get("form_id")
+                    if (not settings.accepts_lead(lead_id)
+                            or not _numeric_or_none(page_id) or not _numeric_or_none(form_id)
+                            or (settings.processing_mode == "synthetic"
+                                and (page_id != settings.page_id or form_id != settings.form_id))):
                         counts["ignored"] += 1
                         continue
+                    route = None
+                    if settings.processing_mode == "production":
+                        cur.execute("""SELECT id,institute_id,branch_id,course_id,batch_id,
+                            counsellor_user_id,updated_at FROM routes
+                            WHERE page_id=%s AND form_id=%s AND is_active=1 ORDER BY id LIMIT 2""",
+                            (page_id, form_id))
+                        matches = cur.fetchall()
+                        route = matches[0] if len(matches) == 1 else None
+                    state = "PENDING" if settings.processing_mode == "synthetic" or route else "REVIEW"
+                    snapshot = None
+                    if route:
+                        snapshot = json.dumps({key: (value.isoformat() if isinstance(value, datetime) else value)
+                            for key, value in route.items()}, sort_keys=True, separators=(",", ":"))
                     cur.execute("""INSERT IGNORE INTO notifications
-                        (lead_id,page_id,form_id,ad_id,submitted_at,state,attempts,available_at,created_at,updated_at)
-                        VALUES(%s,%s,%s,%s,%s,'PENDING',0,%s,%s,%s)""",
-                        (lead_id, settings.page_id, settings.form_id, _numeric_or_none(event.get("ad_id")),
-                         _time_or_none(event.get("created_time")), now, now, now))
-                    counts["accepted" if cur.rowcount == 1 else "duplicate"] += 1
+                        (lead_id,page_id,form_id,route_id,ad_id,campaign_id,adset_id,submitted_at,state,
+                         attempts,available_at,created_at,updated_at,institute_id,branch_id,course_id,
+                         batch_id,counsellor_user_id,mapping_snapshot_json)
+                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,0,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                        (lead_id, page_id, form_id, route["id"] if route else None,
+                         _numeric_or_none(event.get("ad_id")), _numeric_or_none(event.get("campaign_id")),
+                         _numeric_or_none(event.get("adset_id")), _time_or_none(event.get("created_time")),
+                         state, now, now, now, route["institute_id"] if route else None,
+                         route["branch_id"] if route else None, route["course_id"] if route else None,
+                         route["batch_id"] if route else None, route["counsellor_user_id"] if route else None,
+                         snapshot))
+                    if cur.rowcount == 1:
+                        counts["accepted"] += 1
+                        counts["review"] += int(state == "REVIEW")
+                    else:
+                        counts["duplicate"] += 1
                 self._audit(cur, "notification_batch", counts)
                 conn.commit()
                 return counts
@@ -194,7 +214,8 @@ class MySQLStore:
                 lead_id = row["lead_id"]
                 cur.execute("UPDATE notifications SET state='PROCESSING',lease_until=%s,updated_at=%s WHERE lead_id=%s",
                             (now + timedelta(seconds=lease_seconds), now, lead_id))
-                cur.execute("""SELECT lead_id,page_id,form_id,ad_id,submitted_at,attempts
+                cur.execute("""SELECT lead_id,page_id,form_id,ad_id,campaign_id,adset_id,submitted_at,
+                    attempts,route_id,institute_id,branch_id,course_id,batch_id,counsellor_user_id
                     FROM notifications WHERE lead_id=%s""", (lead_id,))
                 item = cur.fetchone()
                 conn.commit()
@@ -279,13 +300,15 @@ class MySQLStore:
                 cur.execute("""UPDATE notifications SET state='DONE',lease_until=NULL,updated_at=%s,
                     completed_at=%s,result_field_names_json=%s,result_answer_count=%s,
                     result_values_sha256=%s,answers_json=%s,phone_normalized=%s,platform=%s,
-                    ad_id=COALESCE(ad_id,%s),submitted_at=COALESCE(submitted_at,%s),
+                    ad_id=COALESCE(ad_id,%s),campaign_id=COALESCE(campaign_id,%s),
+                    adset_id=COALESCE(adset_id,%s),submitted_at=COALESCE(submitted_at,%s),
                     duplicate_lead_ids_json=%s,erp_lead_id=%s,erp_followup_due_date=%s,
                     institute_id=%s,branch_id=%s,course_id=%s,batch_id=%s,counsellor_user_id=%s
                     WHERE lead_id=%s AND state='PROCESSING'""",
                     (now, now, json.dumps(field_names, separators=(",", ":")), len(field_names),
                      values_sha256, values_json, lead["phone"], lead.get("platform"),
-                     lead.get("ad_id"), _time_or_none(lead["created_time"]),
+                     lead.get("ad_id"), lead.get("campaign_id"), lead.get("adset_id"),
+                     _time_or_none(lead["created_time"]),
                      json.dumps(duplicate_ids, separators=(",", ":")), erp_lead_id, followup_date,
                      mapping.institute_id, mapping.branch_id, mapping.course_id, mapping.batch_id,
                      mapping.counsellor_user_id, item["lead_id"]))
@@ -312,13 +335,12 @@ class MySQLStore:
                     (mapping.course_id, mapping.institute_id))
         course = cur.fetchone()
         cur.execute(f"""SELECT id FROM {erp}.batches WHERE id=%s AND course_id=%s AND branch_id=%s
-            AND start_date=%s AND end_date=%s AND start_time=%s AND end_time=%s AND status='active'""",
-                    (mapping.batch_id, mapping.course_id, mapping.branch_id, mapping.batch_start_date,
-                     mapping.batch_end_date, mapping.batch_start_time, mapping.batch_end_time))
+            AND status='active'""", (mapping.batch_id, mapping.course_id, mapping.branch_id))
         batch = cur.fetchone()
         cur.execute(f"""SELECT u.id FROM {erp}.users u
             JOIN {erp}.institute_memberships im ON im.user_id=u.id AND im.institute_id=u.institute_id
-            WHERE u.id=%s AND u.institute_id=%s AND u.branch_id=%s AND u.is_active=1 AND im.is_active=1""",
+            WHERE u.id=%s AND u.institute_id=%s AND (u.branch_id=%s OR u.can_view_all_branches=1)
+              AND u.is_active=1 AND im.is_active=1""",
                     (mapping.counsellor_user_id, mapping.institute_id, mapping.branch_id))
         counsellor = cur.fetchone()
         if not all((institute, branch, course, batch, counsellor)):
