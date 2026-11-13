@@ -49,7 +49,8 @@ CREATE TABLE batches (
     start_date TEXT, end_date TEXT, status TEXT
 );
 CREATE TABLE attendance_records (
-    id INTEGER PRIMARY KEY, batch_id INTEGER, attendance_date TEXT, status TEXT
+    id INTEGER PRIMARY KEY, batch_id INTEGER, student_id INTEGER,
+    attendance_date TEXT, status TEXT
 );
 CREATE TABLE student_batches (
     id INTEGER PRIMARY KEY, batch_id INTEGER, student_id INTEGER, status TEXT
@@ -128,8 +129,8 @@ def seed(path):
         [(1, 1, 1, "active"), (7, 7, 7, "active")],
     )
     conn.executemany(
-        "INSERT INTO attendance_records VALUES (?, ?, ?, ?)",
-        [(1, 1, today, "absent"), (7, 7, today, "present")],
+        "INSERT INTO attendance_records VALUES (?, ?, ?, ?, ?)",
+        [(1, 1, 1, today, "absent"), (7, 7, 7, today, "present")],
     )
     conn.executemany(
         "INSERT INTO users VALUES (?, ?, ?)",
