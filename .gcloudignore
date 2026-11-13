@@ -13,6 +13,7 @@ gcp-key.json
 # Database Dumps & Large Binaries
 *.sql
 !migrations/*.sql
+!staging/meta_lead_receiver/migrations/*.sql
 backup_test_attn_billing.sql
 scratch/*.sql
 database.db

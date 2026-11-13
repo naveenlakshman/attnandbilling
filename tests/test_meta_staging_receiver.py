@@ -17,7 +17,7 @@ LEAD = "900000000000001"
 @pytest.fixture
 def settings(tmp_path):
     return Settings(str(tmp_path / "isolated.db"), SECRET, VERIFY, PAGE, FORM, frozenset({LEAD}),
-                    enabled=True, max_attempts=3, retry_base_seconds=2, retention_days=30)
+                    enabled=True, verify_enabled=True, max_attempts=3, retry_base_seconds=2, retention_days=30)
 
 
 @pytest.fixture
@@ -62,9 +62,23 @@ def test_verification_challenge_and_bad_token(client):
 def test_disabled_switch_blocks_verification_and_intake(tmp_path):
     app = create_app(Settings(str(tmp_path / "off.db"), SECRET, VERIFY, PAGE, FORM, frozenset({LEAD})))
     client = app.test_client()
-    assert client.get("/healthz").status_code == 503
+    health = client.get("/healthz")
+    assert health.status_code == 200
+    assert health.json["ingest_enabled"] is False
+    assert health.json["verify_enabled"] is False
     assert client.get("/webhook/meta?hub.mode=subscribe&hub.verify_token=" + VERIFY + "&hub.challenge=abc").status_code == 503
     assert client.post("/webhook/meta", data=b"{}").status_code == 503
+
+
+def test_verification_can_be_enabled_while_ingestion_stays_disabled(tmp_path):
+    app = create_app(Settings(str(tmp_path / "verify-only.db"), SECRET, VERIFY, PAGE, FORM,
+                              frozenset({LEAD}), verify_enabled=True))
+    client = app.test_client()
+    response = client.get("/webhook/meta?hub.mode=subscribe&hub.verify_token=" + VERIFY +
+                          "&hub.challenge=verify-only")
+    assert (response.status_code, response.text) == (200, "verify-only")
+    assert post(client, body(event())).status_code == 503
+    assert Store(str(tmp_path / "verify-only.db")).health()["queue"] == {}
 
 
 @pytest.mark.parametrize("header", [None, "", "sha256=" + "0" * 64, "SHA256=" + "0" * 64, "sha256=bad"])

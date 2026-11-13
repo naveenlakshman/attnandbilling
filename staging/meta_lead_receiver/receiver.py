@@ -13,6 +13,7 @@ import re
 import sqlite3
 import threading
 import time
+import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -24,6 +25,13 @@ from flask import Flask, jsonify, request
 
 MAX_BODY_BYTES = 64 * 1024
 LEAD_ID_RE = re.compile(r"^[0-9]{1,40}$")
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+FIELD_NAME_RE = re.compile(r"^[a-zA-Z0-9_? -]{1,160}$")
+logger = logging.getLogger("meta_staging_receiver")
+
+
+class StorageError(RuntimeError):
+    """Safe boundary for retryable storage failures."""
 
 
 def utc_now() -> str:
@@ -38,16 +46,18 @@ class Settings:
     page_id: str
     form_id: str
     synthetic_lead_ids: frozenset[str]
+    storage_backend: str = "sqlite"
     enabled: bool = False
+    verify_enabled: bool = False
     max_attempts: int = 5
     retention_days: int = 30
     retry_base_seconds: int = 5
 
     def __post_init__(self):
-        if not self.db_path or self.db_path == ":memory:":
+        if self.storage_backend not in {"sqlite", "mysql"}:
+            raise ValueError("Storage backend must be sqlite or mysql.")
+        if self.storage_backend == "sqlite" and (not self.db_path or self.db_path == ":memory:"):
             raise ValueError("Use a durable local file path; in-memory storage is unsupported.")
-        if not self.app_secret or not self.verify_token:
-            raise ValueError("Webhook secrets must be configured outside source control.")
         if not self.page_id.isdigit() or not self.form_id.isdigit():
             raise ValueError("Explicit numeric Page and Form IDs are required.")
         if any(not LEAD_ID_RE.fullmatch(value) for value in self.synthetic_lead_ids):
@@ -65,12 +75,15 @@ def settings_from_env(environ=None) -> Settings:
     if not isinstance(lead_ids, list) or any(not isinstance(x, str) for x in lead_ids):
         raise ValueError("META_STAGING_SYNTHETIC_LEAD_IDS must be a JSON array of strings.")
     enabled = env.get("META_STAGING_ENABLED", "false").lower() == "true"
+    verify_enabled = env.get("META_STAGING_VERIFY_ENABLED", "false").lower() == "true"
     return Settings(db_path=env.get("META_STAGING_DB_PATH", ""),
                     app_secret=env.get("META_STAGING_APP_SECRET", ""),
                     verify_token=env.get("META_STAGING_VERIFY_TOKEN", ""),
                     page_id=env.get("META_STAGING_PAGE_ID", ""),
                     form_id=env.get("META_STAGING_FORM_ID", ""),
-                    synthetic_lead_ids=frozenset(lead_ids), enabled=enabled)
+                    synthetic_lead_ids=frozenset(lead_ids),
+                    storage_backend=env.get("META_STAGING_STORAGE", "sqlite").lower(), enabled=enabled,
+                    verify_enabled=verify_enabled)
 
 
 class Store:
@@ -113,7 +126,11 @@ class Store:
                     lease_until REAL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    last_error_code TEXT
+                    last_error_code TEXT,
+                    result_field_names_json TEXT,
+                    result_answer_count INTEGER,
+                    result_values_sha256 TEXT,
+                    completed_at TEXT
                 );
                 CREATE INDEX IF NOT EXISTS ix_notifications_ready
                     ON notifications(state, available_at, created_at);
@@ -125,6 +142,15 @@ class Store:
                 );
                 CREATE INDEX IF NOT EXISTS ix_audit_time ON audit(happened_at);
             """)
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(notifications)")}
+            for name, column_type in {
+                "result_field_names_json": "TEXT",
+                "result_answer_count": "INTEGER",
+                "result_values_sha256": "TEXT",
+                "completed_at": "TEXT",
+            }.items():
+                if name not in existing:
+                    conn.execute(f"ALTER TABLE notifications ADD COLUMN {name} {column_type}")
 
     @staticmethod
     def audit(conn, action: str, counts: dict[str, int]):
@@ -187,11 +213,16 @@ class Store:
         finally:
             conn.close()
 
-    def complete(self, lead_id: str):
+    def complete(self, lead_id: str, result: dict | None = None):
+        result = _validated_result(result)
         with self.connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            cur = conn.execute("UPDATE notifications SET state='DONE',lease_until=NULL,updated_at=? WHERE lead_id=? AND state='PROCESSING'",
-                               (utc_now(), lead_id))
+            now = utc_now()
+            cur = conn.execute("""UPDATE notifications SET state='DONE',lease_until=NULL,updated_at=?,completed_at=?,
+                result_field_names_json=?,result_answer_count=?,result_values_sha256=?
+                WHERE lead_id=? AND state='PROCESSING'""",
+                (now, now, json.dumps(result["field_names"], separators=(",", ":")),
+                 result["answer_count"], result["values_sha256"], lead_id))
             if cur.rowcount != 1:
                 conn.rollback()
                 raise RuntimeError("Notification claim was lost.")
@@ -258,6 +289,19 @@ def _safe_error_code(value: str):
     return value if value in {"upstream_timeout", "upstream_unavailable", "rate_limited", "invalid_response", "unknown"} else "unknown"
 
 
+def _validated_result(result: dict | None) -> dict:
+    result = result or {"field_names": [], "answer_count": 0, "values_sha256": None}
+    names = result.get("field_names")
+    count = result.get("answer_count")
+    digest = result.get("values_sha256")
+    if (not isinstance(names, list) or any(not isinstance(name, str) or not FIELD_NAME_RE.fullmatch(name)
+                                           for name in names)
+            or not isinstance(count, int) or count < 0 or count != len(names)
+            or (digest is not None and (not isinstance(digest, str) or not SHA256_RE.fullmatch(digest)))):
+        raise ValueError("Processor result must contain redacted field names, count and SHA-256 only.")
+    return {"field_names": names, "answer_count": count, "values_sha256": digest}
+
+
 def valid_signature(raw: bytes, header: str | None, secret: str) -> bool:
     if not isinstance(header, str) or not re.fullmatch(r"sha256=[0-9a-f]{64}", header):
         return False
@@ -284,8 +328,16 @@ def parse_events(payload) -> list[dict]:
     return events
 
 
-def create_app(settings: Settings, *, store: Store | None = None):
-    db = store or Store(settings.db_path)
+def create_app(settings: Settings, *, store=None):
+    if not settings.app_secret or not settings.verify_token:
+        raise ValueError("Webhook secrets must be configured outside source control.")
+    if store is None:
+        if settings.storage_backend == "mysql":
+            from .mysql_store import mysql_store_from_env
+            store = mysql_store_from_env()
+        else:
+            store = Store(settings.db_path)
+    db = store
     app = Flask("meta_staging_receiver")
     app.config["MAX_CONTENT_LENGTH"] = MAX_BODY_BYTES
     app.extensions["meta_staging_store"] = db
@@ -293,7 +345,7 @@ def create_app(settings: Settings, *, store: Store | None = None):
 
     @app.get("/webhook/meta")
     def verify_webhook():
-        if not settings.enabled:
+        if not settings.verify_enabled:
             return "disabled", 503
         mode = request.args.get("hub.mode", "")
         token = request.args.get("hub.verify_token", "")
@@ -318,37 +370,40 @@ def create_app(settings: Settings, *, store: Store | None = None):
             return jsonify(error="invalid_payload"), 400
         try:
             counts = db.ingest(events, settings)
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             return jsonify(error="storage_unavailable"), 503
+        logger.info(json.dumps({"event": "notification_batch", **counts}, sort_keys=True))
         return jsonify(accepted=counts["accepted"], duplicate=counts["duplicate"], ignored=counts["ignored"]), 200
 
     @app.get("/healthz")
     def health():
-        if not settings.enabled:
-            return jsonify(enabled=False, storage="not_checked"), 503
         try:
-            return jsonify(enabled=True, **db.health()), 200
-        except sqlite3.Error:
-            return jsonify(enabled=True, storage="error"), 503
+            return jsonify(ingest_enabled=settings.enabled,
+                           verify_enabled=settings.verify_enabled, **db.health()), 200
+        except (sqlite3.Error, StorageError):
+            return jsonify(ingest_enabled=settings.enabled,
+                           verify_enabled=settings.verify_enabled, storage="error"), 503
 
     return app
 
 
-def run_once(store: Store, settings: Settings, processor: Callable[[dict], None]):
+def run_once(store, settings: Settings, processor: Callable[[dict], dict | None]):
     """Process at most one approved notification; processor receives IDs only."""
     item = store.claim()
     if item is None:
         return "idle"
+    if item["lead_id"] not in settings.synthetic_lead_ids:
+        store.fail(item["lead_id"], attempts=item["attempts"], max_attempts=settings.max_attempts,
+                   retry_base=settings.retry_base_seconds, error_code="unknown")
+        return "blocked"
     try:
-        if item["lead_id"] not in settings.synthetic_lead_ids:
-            store.fail(item["lead_id"], attempts=item["attempts"], max_attempts=settings.max_attempts,
-                       retry_base=settings.retry_base_seconds, error_code="unknown")
-            return "blocked"
-        processor({k: item[k] for k in ("lead_id", "page_id", "form_id", "ad_id", "submitted_at")})
-        store.complete(item["lead_id"])
-        return "done"
+        result = processor({k: item[k] for k in ("lead_id", "page_id", "form_id", "ad_id", "submitted_at")})
     except Exception as exc:
         code = getattr(exc, "safe_code", "unknown")
         store.fail(item["lead_id"], attempts=item["attempts"], max_attempts=settings.max_attempts,
                    retry_base=settings.retry_base_seconds, error_code=code)
         return "dead" if item["attempts"] + 1 >= settings.max_attempts else "retry"
+    # A completion failure is not converted into a processing failure. If commit
+    # did not occur the lease expires; if it did, the row is already DONE.
+    store.complete(item["lead_id"], result)
+    return "done"
