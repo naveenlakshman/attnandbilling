@@ -10,6 +10,7 @@ import pytest
 
 from staging.meta_lead_receiver.mysql_store import ERPMapping, MySQLConfig, MySQLStore
 from staging.meta_lead_receiver.receiver import Settings, StorageError, run_once
+from services import meta_lead_routes
 
 
 PAGE = "300480973645515"
@@ -287,6 +288,38 @@ def test_unknown_production_mapping_remains_review_and_is_not_claimed(mysql_stor
     with mysql_store.connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT state,route_id,course_id FROM notifications")
         assert cur.fetchone() == {"state": "REVIEW", "route_id": None, "course_id": None}
+
+
+def test_admin_review_summary_is_tenant_isolated(mysql_store, monkeypatch):
+    admin = _admin_config()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    with mysql_store.connection() as conn, conn.cursor() as cur:
+        cur.executemany("""INSERT INTO routes(institute_id,page_id,form_id,course_id,batch_id,
+            branch_id,counsellor_user_id,is_active,created_by_user_id,updated_by_user_id,
+            created_at,updated_at) VALUES(%s,%s,%s,1,1,1,1,1,1,1,%s,%s)""", (
+                (1, "111", "1001", now, now),
+                (2, "222", "2001", now, now),
+                (1, "333", "3001", now, now),
+                (2, "333", "3002", now, now),
+            ))
+        cur.executemany("""INSERT INTO notifications(lead_id,page_id,form_id,state,attempts,
+            available_at,created_at,updated_at,institute_id) VALUES(%s,%s,%s,'REVIEW',0,%s,%s,%s,%s)""", (
+                ("7001", "111", "1099", now, now, now, None),
+                ("7002", "222", "2099", now, now, now, None),
+                ("7003", "111", "1088", now, now, now, 2),
+                ("7004", "333", "3099", now, now, now, None),
+            ))
+        conn.commit()
+    monkeypatch.setenv("META_ROUTING_DB_HOST", admin["host"])
+    monkeypatch.setenv("META_ROUTING_DB_PORT", str(admin["port"]))
+    monkeypatch.setenv("META_ROUTING_DB_USER", admin["user"])
+    monkeypatch.setenv("META_ROUTING_DB_PASSWORD", admin["password"])
+    monkeypatch.setenv("META_ROUTING_DB_NAME", "meta_receiver_test")
+    routes, reviews = meta_lead_routes.list_routes(1)
+    assert {(row["page_id"], row["form_id"]) for row in routes} == {
+        ("111", "1001"), ("333", "3001")}
+    assert [(row["page_id"], row["form_id"], row["pending_review"]) for row in reviews] == [
+        ("111", "1099", 1)]
 
 
 def test_route_snapshot_is_preserved_when_route_changes(mysql_store, erp_schema):

@@ -38,9 +38,20 @@ def list_routes(institute_id: int):
             counsellor_user_id,is_active,created_by_user_id,updated_by_user_id,created_at,updated_at
             FROM routes WHERE institute_id=%s ORDER BY is_active DESC,page_id,form_id""", (institute_id,))
         routes = cur.fetchall()
-        cur.execute("""SELECT page_id,form_id,COUNT(*) AS pending_review
-            FROM notifications WHERE state='REVIEW' GROUP BY page_id,form_id
-            ORDER BY pending_review DESC,page_id,form_id LIMIT 100""")
+        cur.execute("""SELECT n.page_id,n.form_id,COUNT(*) AS pending_review
+            FROM notifications n
+            WHERE n.state='REVIEW' AND (
+                n.institute_id=%s OR (
+                    n.institute_id IS NULL
+                    AND EXISTS (SELECT 1 FROM routes owner
+                        WHERE owner.institute_id=%s AND owner.page_id=n.page_id)
+                    AND NOT EXISTS (SELECT 1 FROM routes other
+                        WHERE other.page_id=n.page_id AND other.institute_id<>%s)
+                )
+            )
+            GROUP BY n.page_id,n.form_id
+            ORDER BY pending_review DESC,n.page_id,n.form_id LIMIT 100""",
+            (institute_id, institute_id, institute_id))
         reviews = cur.fetchall()
     return routes, reviews
 

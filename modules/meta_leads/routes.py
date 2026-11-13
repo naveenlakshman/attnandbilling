@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from flask import flash, redirect, render_template, request, session, url_for
+from flask import abort, flash, redirect, render_template, request, session, url_for
 
 from db import get_conn, log_activity
 from modules.core.utils import admin_required
@@ -38,7 +38,13 @@ def _options(conn, institute_id):
 @meta_leads_bp.route("/mappings", methods=["GET", "POST"])
 @admin_required
 def mappings():
-    institute_id = get_current_institute_id(default=1)
+    tenant_institute_id = get_current_institute_id()
+    session_institute_id = session.get("institute_id")
+    if tenant_institute_id is None or session_institute_id is None:
+        abort(403)
+    if int(session_institute_id) != int(tenant_institute_id):
+        abort(403)
+    institute_id = int(tenant_institute_id)
     conn = get_conn()
     try:
         courses, batches, branches, counsellors = _options(conn, institute_id)

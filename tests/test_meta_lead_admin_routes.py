@@ -7,6 +7,7 @@ from flask import Flask, jsonify, session
 os.environ.setdefault("SECRET_KEY", "meta-routing-isolated-test-only")
 
 from modules.meta_leads import routes
+from services import meta_lead_routes
 
 
 @pytest.fixture
@@ -84,3 +85,54 @@ def test_staff_cannot_open_mapping_screen(app_client):
         state["role"] = "staff"
     response = client.get("/admin/meta-leads/mappings")
     assert response.status_code == 302 and response.headers["Location"].endswith("/dashboard")
+
+
+def test_admin_without_verified_tenant_is_denied(app_client, monkeypatch):
+    client, saved = app_client
+    monkeypatch.setattr(routes, "get_current_institute_id", lambda default=None: None)
+    response = client.post("/admin/meta-leads/mappings", data=mapping_form())
+    assert response.status_code == 403
+    assert saved == []
+
+
+def test_admin_with_cross_tenant_session_is_denied(app_client, monkeypatch):
+    client, saved = app_client
+    monkeypatch.setattr(routes, "get_current_institute_id", lambda default=None: 2)
+    response = client.post("/admin/meta-leads/mappings", data=mapping_form())
+    assert response.status_code == 403
+    assert saved == []
+
+
+def test_review_summary_query_is_tenant_scoped(monkeypatch):
+    calls = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, statement, parameters):
+            calls.append((statement, parameters))
+
+        def fetchall(self):
+            return []
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def cursor(self):
+            return Cursor()
+
+    monkeypatch.setattr(meta_lead_routes, "connect", lambda: Connection())
+    assert meta_lead_routes.list_routes(7) == ([], [])
+    review_sql, review_parameters = calls[1]
+    assert "n.institute_id=%s" in review_sql
+    assert "owner.institute_id=%s" in review_sql
+    assert "other.institute_id<>%s" in review_sql
+    assert review_parameters == (7, 7, 7)
