@@ -39,7 +39,7 @@ the exact batch schedule again inside the enquiry transaction.
 - database: `meta_leads_inbox`
 - receiver: `global-it-meta-leads-receiver`
 - worker job: `global-it-meta-leads-worker`
-- Artifact Registry image: `asia-south1-docker.pkg.dev/global-it-edu-app/meta-leads/receiver`
+- Artifact Registry image: `asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/meta-leads-receiver`
 - service identities: `meta-leads-receiver` and `meta-leads-worker`
 
 Receiver deployment is limited to one instance, concurrency two and one
@@ -87,9 +87,54 @@ checked after rollout because free-tier usage is shared by the project.
 
 The callback is not active merely because it appears here. Its proposed shape is:
 
-`https://<deployed-receiver-host>/webhook/meta`
+`https://global-it-meta-leads-receiver-644631083795.asia-south1.run.app/webhook/meta`
 
 After all gates pass, register it on app `1626775252463463`, subscribe Page
 `300480973645515` to `leadgen`, and verify form `1806095097277660` with synthetic
 lead `1572484097979419`. Existing test records and third-party CRM connections
 must not be removed or changed.
+
+## Actual rollout result — 2026-11-13
+
+The controlled rollout stopped at the production-mapping gate. The isolated
+production resources are installed but disabled:
+
+- runtime source commit: `a61317a8febcd1a03f8571f16a65d95be008ed41`;
+- immutable image digest:
+  `sha256:33d5212da445c137a1fd7bf665d974510c8772920608b46ca7e6b187b3e41a49`;
+- receiver revision: `global-it-meta-leads-receiver-00011-qoj`, 100% traffic,
+  private, `META_STAGING_ENABLED=false`, verification disabled;
+- worker job: `global-it-meta-leads-worker`, one task/parallelism one, disabled,
+  with no Scheduler trigger;
+- restore point: successful on-demand Cloud SQL backup `1794547932326`;
+- database: `meta_leads_inbox`; the migration was applied twice and contains
+  `notifications` and `audit`;
+- pinned secrets: app secret version 1, system-user token version 1, and
+  verify/receiver-password/worker-password version 3.
+
+IAM additions are Cloud SQL Client for the two runtime service accounts,
+secret-level accessor only for each identity's required secrets, and Cloud Run
+Invoker for the release administrator on the private receiver. No `allUsers`
+invoker was added.
+
+Final tests on MySQL 8.0.45: 37 focused tests passed. The repository `tests/`
+suite passed 331 tests with 22 documented skips. The private synthetic check
+rejected an invalid signature (401), accepted one correctly signed allowlisted
+notification, and completed synthetic retrieval with four redacted field names
+and an answer-value hash. No answer values were stored and `erp_lead_id` remains
+null. No ERP enquiry was created.
+
+The first worker execution failed because its four command arguments were
+rendered as one string. The job was disabled, the rendered specification was
+corrected, and execution `global-it-meta-leads-worker-lb7bw` then succeeded.
+The final job configuration was restored to disabled.
+
+Live Meta delivery was not tested: the intended app currently has no webhook
+subscription and the Page has no subscribed apps. The current system-user token
+is valid for app `1626775252463463` and expires at 2027-01-12 01:44:38 UTC
+(07:14:38 Asia/Kolkata). Renewal ownership must be assigned before expiry.
+
+Callback registration, Page subscription, public receiver invocation,
+production ERP table grants, production-mode processing and prospect messaging
+were not enabled. They remain blocked by the missing exact batch, the 180/225
+course-hours discrepancy and the absence of an approved counsellor mapping.
