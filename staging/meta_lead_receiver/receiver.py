@@ -384,6 +384,7 @@ def create_app(settings: Settings, *, store=None):
         logger.info(json.dumps({"event": "notification_batch", **counts}, sort_keys=True))
         return jsonify(accepted=counts["accepted"], duplicate=counts["duplicate"], ignored=counts["ignored"]), 200
 
+    @app.get("/health")
     @app.get("/healthz")
     def health():
         try:

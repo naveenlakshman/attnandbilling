@@ -64,6 +64,7 @@ def test_disabled_switch_blocks_verification_and_intake(tmp_path):
     client = app.test_client()
     health = client.get("/healthz")
     assert health.status_code == 200
+    assert client.get("/health").get_json() == health.get_json()
     assert health.json["ingest_enabled"] is False
     assert health.json["verify_enabled"] is False
     assert client.get("/webhook/meta?hub.mode=subscribe&hub.verify_token=" + VERIFY + "&hub.challenge=abc").status_code == 503
