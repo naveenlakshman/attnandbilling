@@ -60,7 +60,7 @@ def settings():
 
 def _event(lead):
     return {"leadgen_id": lead, "page_id": PAGE, "form_id": FORM,
-            "ad_id": "123", "created_time": "2026-11-13T00:00:00+00:00"}
+            "ad_id": "123", "created_time": 1794528000}
 
 
 def test_migration_repeatable_and_concurrent_duplicate_insert_is_atomic(mysql_store, settings):

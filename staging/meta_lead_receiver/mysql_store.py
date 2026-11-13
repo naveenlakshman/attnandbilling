@@ -408,11 +408,19 @@ def _numeric_or_none(value):
 
 
 def _time_or_none(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and 0 <= value <= 4102444800:
+        return datetime.fromtimestamp(value, timezone.utc).replace(tzinfo=None)
     if not isinstance(value, str) or len(value) > 64:
         return None
     try:
+        if value.isdigit():
+            seconds = int(value)
+            return (datetime.fromtimestamp(seconds, timezone.utc).replace(tzinfo=None)
+                    if 0 <= seconds <= 4102444800 else None)
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=None)
-    except ValueError:
+    except (OSError, OverflowError, ValueError):
         return None
 
 

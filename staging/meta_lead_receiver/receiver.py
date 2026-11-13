@@ -291,6 +291,10 @@ def _optional_id(value):
 
 
 def _optional_time(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and 0 <= value <= 4102444800:
+        return datetime.fromtimestamp(value, timezone.utc).isoformat(timespec="seconds")
     return value[:64] if isinstance(value, str) and len(value) <= 64 else None
 
 
