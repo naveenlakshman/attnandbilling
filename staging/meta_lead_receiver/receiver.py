@@ -52,6 +52,7 @@ class Settings:
     max_attempts: int = 5
     retention_days: int = 30
     retry_base_seconds: int = 5
+    processing_mode: str = "synthetic"
 
     def __post_init__(self):
         if self.storage_backend not in {"sqlite", "mysql"}:
@@ -64,6 +65,13 @@ class Settings:
             raise ValueError("The synthetic allowlist must contain numeric Meta lead IDs only.")
         if self.max_attempts < 1 or self.retention_days < 1 or self.retry_base_seconds < 1:
             raise ValueError("Retry and retention settings must be positive.")
+        if self.processing_mode not in {"synthetic", "production"}:
+            raise ValueError("Processing mode must be synthetic or production.")
+
+    def accepts_lead(self, lead_id: object) -> bool:
+        if not isinstance(lead_id, str) or not LEAD_ID_RE.fullmatch(lead_id):
+            return False
+        return self.processing_mode == "production" or lead_id in self.synthetic_lead_ids
 
 
 def settings_from_env(environ=None) -> Settings:
@@ -83,7 +91,8 @@ def settings_from_env(environ=None) -> Settings:
                     form_id=env.get("META_STAGING_FORM_ID", ""),
                     synthetic_lead_ids=frozenset(lead_ids),
                     storage_backend=env.get("META_STAGING_STORAGE", "sqlite").lower(), enabled=enabled,
-                    verify_enabled=verify_enabled)
+                    verify_enabled=verify_enabled,
+                    processing_mode=env.get("META_PROCESSING_MODE", "synthetic").lower())
 
 
 class Store:
@@ -167,7 +176,7 @@ class Store:
             for event in events:
                 lead_id = event.get("leadgen_id")
                 if (event.get("page_id") != settings.page_id or event.get("form_id") != settings.form_id
-                        or not isinstance(lead_id, str) or lead_id not in settings.synthetic_lead_ids):
+                        or not settings.accepts_lead(lead_id)):
                     counts["ignored"] += 1
                     continue
                 cur = conn.execute("""INSERT OR IGNORE INTO notifications
@@ -392,7 +401,7 @@ def run_once(store, settings: Settings, processor: Callable[[dict], dict | None]
     item = store.claim()
     if item is None:
         return "idle"
-    if item["lead_id"] not in settings.synthetic_lead_ids:
+    if not settings.accepts_lead(item["lead_id"]):
         store.fail(item["lead_id"], attempts=item["attempts"], max_attempts=settings.max_attempts,
                    retry_base=settings.retry_base_seconds, error_code="unknown")
         return "blocked"

@@ -1,9 +1,10 @@
-"""Synthetic-only Meta processor. It returns redacted evidence, never answer values."""
+"""Meta lead retrieval with a synthetic evidence wrapper and production validation."""
 from __future__ import annotations
 
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 
 import requests
 
@@ -16,7 +17,31 @@ class ProcessingError(RuntimeError):
         super().__init__(safe_code)
 
 
-class MetaSyntheticProcessor:
+@dataclass(frozen=True)
+class RetrievedLead:
+    lead_id: str
+    form_id: str
+    created_time: str
+    ad_id: str | None
+    platform: str | None
+    name: str
+    phone: str
+    field_data: tuple[dict, ...]
+
+    def as_production_result(self) -> dict:
+        return {
+            "lead_id": self.lead_id,
+            "form_id": self.form_id,
+            "created_time": self.created_time,
+            "ad_id": self.ad_id,
+            "platform": self.platform,
+            "name": self.name,
+            "phone": self.phone,
+            "field_data": list(self.field_data),
+        }
+
+
+class MetaLeadRetriever:
     def __init__(self, settings: Settings, system_user_token: str, graph_version: str,
                  *, session=None, timeout: int = 20):
         if not system_user_token:
@@ -54,24 +79,82 @@ class MetaSyntheticProcessor:
         self._page_token = body["access_token"]
         return self._page_token
 
-    def __call__(self, item: dict) -> dict:
+    def retrieve(self, item: dict, *, require_synthetic: bool) -> RetrievedLead:
         lead_id = item.get("lead_id")
-        if (lead_id not in self.settings.synthetic_lead_ids
+        if ((require_synthetic and lead_id not in self.settings.synthetic_lead_ids)
                 or item.get("page_id") != self.settings.page_id
                 or item.get("form_id") != self.settings.form_id):
             raise ProcessingError("invalid_response")
         body = self._get(lead_id, self._derived_page_token(),
-                         fields="id,form_id,created_time,field_data")
+                         fields="id,form_id,created_time,ad_id,platform,field_data")
         if str(body.get("id")) != lead_id or str(body.get("form_id")) != self.settings.form_id:
             raise ProcessingError("invalid_response")
         fields = body.get("field_data")
-        if not isinstance(fields, list) or not fields:
+        if not isinstance(fields, list) or not fields or len(fields) > 100:
             raise ProcessingError("invalid_response")
-        names = []
+        cleaned = []
+        answers = {}
         for field in fields:
-            if not isinstance(field, dict) or not isinstance(field.get("name"), str):
+            name = field.get("name") if isinstance(field, dict) else None
+            values = field.get("values") if isinstance(field, dict) else None
+            if (not isinstance(name, str) or not re.fullmatch(r"[a-zA-Z0-9_? -]{1,160}", name)
+                    or not isinstance(values, list) or not values or len(values) > 20
+                    or any(not isinstance(value, str) or len(value) > 4096 for value in values)):
                 raise ProcessingError("invalid_response")
-            names.append(field["name"])
+            normalized_values = [value.strip() for value in values]
+            cleaned.append({"name": name, "values": normalized_values})
+            answers[name] = normalized_values
+        encoded = json.dumps(cleaned, sort_keys=True, separators=(",", ":")).encode()
+        if len(encoded) > 64 * 1024:
+            raise ProcessingError("invalid_response")
+        if require_synthetic:
+            name = (answers.get("full_name") or [""])[0].strip()
+            try:
+                phone = _normalize_phone((answers.get("phone_number") or [""])[0])
+            except ProcessingError:
+                phone = ""
+        else:
+            name = _one(answers, "full_name")
+            phone = _normalize_phone(_one(answers, "phone_number"))
+        created_time = body.get("created_time")
+        if ((not require_synthetic and (not isinstance(name, str) or not 1 <= len(name) <= 255))
+                or not isinstance(created_time, str)):
+            raise ProcessingError("invalid_response")
+        ad_id = body.get("ad_id")
+        platform = body.get("platform")
+        return RetrievedLead(
+            lead_id=lead_id,
+            form_id=self.settings.form_id,
+            created_time=created_time[:64],
+            ad_id=str(ad_id) if ad_id is not None and str(ad_id).isdigit() else None,
+            platform=str(platform)[:32] if isinstance(platform, str) else None,
+            name=name.strip(),
+            phone=phone,
+            field_data=tuple(cleaned),
+        )
+
+
+class MetaSyntheticProcessor(MetaLeadRetriever):
+    def __call__(self, item: dict) -> dict:
+        lead = self.retrieve(item, require_synthetic=True)
+        fields = list(lead.field_data)
+        names = [field["name"] for field in fields]
         digest = hashlib.sha256(json.dumps(fields, sort_keys=True,
                                             separators=(",", ":")).encode()).hexdigest()
         return {"field_names": names, "answer_count": len(names), "values_sha256": digest}
+
+
+def _one(answers: dict[str, list[str]], key: str) -> str:
+    values = answers.get(key)
+    if not values or len(values) != 1 or not values[0].strip():
+        raise ProcessingError("invalid_response")
+    return values[0].strip()
+
+
+def _normalize_phone(value: str) -> str:
+    digits = "".join(character for character in value if character.isdigit())
+    if len(digits) > 10 and digits.startswith("91"):
+        digits = digits[-10:]
+    if len(digits) != 10 or digits[0] not in "6789":
+        raise ProcessingError("invalid_response")
+    return digits

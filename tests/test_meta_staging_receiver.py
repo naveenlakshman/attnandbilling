@@ -120,6 +120,17 @@ def test_batched_events_allowlist_dedup_and_durable_reopen(client, settings):
     assert all(LEAD not in line for line in audit)
 
 
+def test_production_mode_accepts_matching_real_notification_but_not_wrong_form(tmp_path):
+    settings = Settings(str(tmp_path / "production.db"), SECRET, VERIFY, PAGE, FORM,
+                        frozenset({LEAD}), enabled=True, processing_mode="production")
+    client = create_app(settings).test_client()
+    real_id = "900000000000099"
+    response = post(client, body(event(lead=real_id), event(lead="900000000000098", form="2")))
+    assert response.json == {"accepted": 1, "duplicate": 0, "ignored": 1}
+    with Store(settings.db_path).connect() as conn:
+        assert conn.execute("SELECT lead_id FROM notifications").fetchone()[0] == real_id
+
+
 def test_invalid_envelope_is_rejected(client):
     raw = json.dumps({"object": "user", "entry": []}).encode()
     assert post(client, raw).status_code == 400

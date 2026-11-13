@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pymysql
 from pymysql.cursors import DictCursor
@@ -31,6 +33,47 @@ class MySQLConfig:
             raise ValueError("Dedicated staging database credentials are required.")
         if not self.unix_socket and (not self.host or not 1 <= self.port <= 65535):
             raise ValueError("A valid MySQL host and port are required.")
+
+
+@dataclass(frozen=True)
+class ERPMapping:
+    database: str
+    institute_id: int
+    branch_id: int
+    course_id: int
+    batch_id: int
+    counsellor_user_id: int
+    batch_start_date: str
+    batch_end_date: str
+    batch_start_time: str
+    batch_end_time: str
+    followup_delay_days: int = 0
+
+    def __post_init__(self):
+        if not re.fullmatch(r"[A-Za-z0-9_]{1,64}", self.database):
+            raise ValueError("ERP database name is invalid.")
+        if any(value < 1 for value in (self.institute_id, self.branch_id, self.course_id,
+                                       self.batch_id, self.counsellor_user_id)):
+            raise ValueError("Explicit positive ERP mapping IDs are required.")
+        if self.followup_delay_days not in range(0, 31):
+            raise ValueError("Follow-up delay must be between 0 and 30 days.")
+
+    @classmethod
+    def from_env(cls, environ=None):
+        env = os.environ if environ is None else environ
+        return cls(
+            database=env.get("META_ERP_DATABASE", "global_it_erp_production"),
+            institute_id=int(env.get("META_ERP_INSTITUTE_ID", "0")),
+            branch_id=int(env.get("META_ERP_BRANCH_ID", "0")),
+            course_id=int(env.get("META_ERP_COURSE_ID", "0")),
+            batch_id=int(env.get("META_ERP_BATCH_ID", "0")),
+            counsellor_user_id=int(env.get("META_ERP_COUNSELLOR_USER_ID", "0")),
+            batch_start_date=env.get("META_ERP_BATCH_START_DATE", ""),
+            batch_end_date=env.get("META_ERP_BATCH_END_DATE", ""),
+            batch_start_time=env.get("META_ERP_BATCH_START_TIME", ""),
+            batch_end_time=env.get("META_ERP_BATCH_END_TIME", ""),
+            followup_delay_days=int(env.get("META_ERP_FOLLOWUP_DELAY_DAYS", "0")),
+        )
 
 
 def mysql_config_from_env(environ=None) -> MySQLConfig:
@@ -83,6 +126,27 @@ class MySQLStore:
         finally:
             conn.close()
 
+    @contextmanager
+    def worker_lock(self):
+        """Instance-wide advisory lock prevents overlapping worker executions."""
+        try:
+            conn = self.connect()
+            with conn.cursor() as cur:
+                cur.execute("SELECT GET_LOCK('meta_leads_worker_v1',0) AS acquired")
+                row = cur.fetchone()
+                acquired = bool(row and row["acquired"] == 1)
+            try:
+                yield acquired
+            finally:
+                if acquired:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT RELEASE_LOCK('meta_leads_worker_v1')")
+        except pymysql.MySQLError as exc:
+            raise StorageError("Worker lock unavailable.") from exc
+        finally:
+            if 'conn' in locals():
+                conn.close()
+
     @staticmethod
     def _audit(cur, action: str, counts: dict[str, int]):
         cur.execute("INSERT INTO audit(happened_at,action,counts_json) VALUES(%s,%s,%s)",
@@ -97,7 +161,7 @@ class MySQLStore:
                 for event in events:
                     lead_id = event.get("leadgen_id")
                     if (event.get("page_id") != settings.page_id or event.get("form_id") != settings.form_id
-                            or not isinstance(lead_id, str) or lead_id not in settings.synthetic_lead_ids):
+                            or not settings.accepts_lead(lead_id)):
                         counts["ignored"] += 1
                         continue
                     cur.execute("""INSERT IGNORE INTO notifications
@@ -160,6 +224,106 @@ class MySQLStore:
             raise
         except pymysql.MySQLError as exc:
             raise StorageError("MySQL completion failed.") from exc
+
+    def complete_production(self, item: dict, result: dict, mapping: ERPMapping):
+        """Create the ERP enquiry and complete the inbox row in one instance transaction."""
+        lead = _validated_production_result(item, result)
+        now = _now()
+        erp = f"`{mapping.database}`"
+        try:
+            with self.connection() as conn, conn.cursor() as cur:
+                conn.begin()
+                cur.execute("SELECT state,erp_lead_id FROM notifications WHERE lead_id=%s FOR UPDATE",
+                            (item["lead_id"],))
+                notification = cur.fetchone()
+                if not notification or notification["state"] != "PROCESSING":
+                    conn.rollback()
+                    raise RuntimeError("Notification claim was lost.")
+                if notification.get("erp_lead_id"):
+                    conn.rollback()
+                    raise RuntimeError("Notification already has an ERP enquiry.")
+                institute, branch, course, batch, counsellor = self._validate_mapping(cur, erp, mapping)
+                cur.execute(f"""SELECT id FROM {erp}.leads
+                    WHERE institute_id=%s AND COALESCE(is_deleted,0)=0
+                      AND RIGHT(REGEXP_REPLACE(phone,'[^0-9]',''),10)=%s
+                    ORDER BY id LIMIT 20""", (mapping.institute_id, lead["phone"]))
+                duplicate_ids = [int(row["id"]) for row in cur.fetchall()]
+                source = _lead_source(lead.get("platform"))
+                score = 15 if source in {"Facebook", "Instagram"} else 10
+                submitted = _parse_meta_time(lead["created_time"])
+                followup_date = (submitted.astimezone(ZoneInfo(institute["timezone"])).date()
+                                 + timedelta(days=mapping.followup_delay_days)).isoformat()
+                duplicate_note = (" Possible matching phone enquiry IDs: "
+                                  + ", ".join(str(value) for value in duplicate_ids)) if duplicate_ids else ""
+                notes = "Imported from Meta Instant Form; no contact recorded." + duplicate_note
+                cur.execute(f"""INSERT INTO {erp}.leads
+                    (institute_id,name,phone,whatsapp,interested_courses,lead_source,
+                     decision_maker,branch_id,parent_discussion_status,visit_status,
+                     lead_score,stage,last_contact_date,next_followup_date,notes,status,
+                     is_deleted,assigned_to_id,followup_count,created_at,updated_at)
+                    VALUES(%s,%s,%s,NULL,%s,%s,'Self',%s,'Pending','Not Visited',%s,
+                           'New Lead',NULL,%s,%s,'active',0,%s,0,%s,%s)""",
+                    (mapping.institute_id, lead["name"], lead["phone"], course["course_name"], source,
+                     mapping.branch_id, score, followup_date, notes, mapping.counsellor_user_id,
+                     now.isoformat(timespec="seconds"), now.isoformat(timespec="seconds")))
+                erp_lead_id = int(cur.lastrowid)
+                cur.execute(f"""INSERT INTO {erp}.activity_logs
+                    (user_id,branch_id,action_type,module_name,record_id,description,created_at,institute_id)
+                    VALUES(%s,%s,'lead_created','leads',%s,%s,%s,%s)""",
+                    (mapping.counsellor_user_id, mapping.branch_id, erp_lead_id,
+                     f"Meta Instant Form enquiry created - Stage: New Lead, Source: {source}",
+                     now.isoformat(timespec="seconds"), mapping.institute_id))
+                field_names = [field["name"] for field in lead["field_data"]]
+                values_json = json.dumps(lead["field_data"], sort_keys=True, separators=(",", ":"))
+                values_sha256 = __import__("hashlib").sha256(values_json.encode()).hexdigest()
+                cur.execute("""UPDATE notifications SET state='DONE',lease_until=NULL,updated_at=%s,
+                    completed_at=%s,result_field_names_json=%s,result_answer_count=%s,
+                    result_values_sha256=%s,answers_json=%s,phone_normalized=%s,platform=%s,
+                    ad_id=COALESCE(ad_id,%s),submitted_at=COALESCE(submitted_at,%s),
+                    duplicate_lead_ids_json=%s,erp_lead_id=%s,erp_followup_due_date=%s,
+                    institute_id=%s,branch_id=%s,course_id=%s,batch_id=%s,counsellor_user_id=%s
+                    WHERE lead_id=%s AND state='PROCESSING'""",
+                    (now, now, json.dumps(field_names, separators=(",", ":")), len(field_names),
+                     values_sha256, values_json, lead["phone"], lead.get("platform"),
+                     lead.get("ad_id"), _time_or_none(lead["created_time"]),
+                     json.dumps(duplicate_ids, separators=(",", ":")), erp_lead_id, followup_date,
+                     mapping.institute_id, mapping.branch_id, mapping.course_id, mapping.batch_id,
+                     mapping.counsellor_user_id, item["lead_id"]))
+                if cur.rowcount != 1:
+                    conn.rollback()
+                    raise RuntimeError("Notification completion was lost.")
+                self._audit(cur, "worker_production_done", {"count": 1, "phone_match": int(bool(duplicate_ids))})
+                conn.commit()
+                return {"erp_lead_id": erp_lead_id, "phone_match": bool(duplicate_ids)}
+        except (StorageError, RuntimeError):
+            raise
+        except pymysql.MySQLError as exc:
+            raise StorageError("Atomic ERP enquiry creation failed.") from exc
+
+    @staticmethod
+    def _validate_mapping(cur, erp: str, mapping: ERPMapping):
+        cur.execute(f"SELECT id,timezone FROM {erp}.institutes WHERE id=%s AND status='active'",
+                    (mapping.institute_id,))
+        institute = cur.fetchone()
+        cur.execute(f"SELECT id FROM {erp}.branches WHERE id=%s AND institute_id=%s AND is_active=1",
+                    (mapping.branch_id, mapping.institute_id))
+        branch = cur.fetchone()
+        cur.execute(f"SELECT id,course_name FROM {erp}.courses WHERE id=%s AND institute_id=%s AND is_active=1",
+                    (mapping.course_id, mapping.institute_id))
+        course = cur.fetchone()
+        cur.execute(f"""SELECT id FROM {erp}.batches WHERE id=%s AND course_id=%s AND branch_id=%s
+            AND start_date=%s AND end_date=%s AND start_time=%s AND end_time=%s AND status='active'""",
+                    (mapping.batch_id, mapping.course_id, mapping.branch_id, mapping.batch_start_date,
+                     mapping.batch_end_date, mapping.batch_start_time, mapping.batch_end_time))
+        batch = cur.fetchone()
+        cur.execute(f"""SELECT u.id FROM {erp}.users u
+            JOIN {erp}.institute_memberships im ON im.user_id=u.id AND im.institute_id=u.institute_id
+            WHERE u.id=%s AND u.institute_id=%s AND u.branch_id=%s AND u.is_active=1 AND im.is_active=1""",
+                    (mapping.counsellor_user_id, mapping.institute_id, mapping.branch_id))
+        counsellor = cur.fetchone()
+        if not all((institute, branch, course, batch, counsellor)):
+            raise RuntimeError("Configured ERP mapping is no longer valid.")
+        return institute, branch, course, batch, counsellor
 
     def fail(self, lead_id: str, *, attempts: int, max_attempts: int, retry_base: int, error_code: str):
         dead = attempts + 1 >= max_attempts
@@ -250,3 +414,34 @@ def _time_or_none(value):
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc).replace(tzinfo=None)
     except ValueError:
         return None
+
+
+def _validated_production_result(item: dict, result: dict) -> dict:
+    if (not isinstance(result, dict) or result.get("lead_id") != item.get("lead_id")
+            or result.get("form_id") != item.get("form_id")
+            or not isinstance(result.get("name"), str) or not 1 <= len(result["name"].strip()) <= 255
+            or not isinstance(result.get("phone"), str) or not re.fullmatch(r"[6-9][0-9]{9}", result["phone"])
+            or not isinstance(result.get("created_time"), str)
+            or not isinstance(result.get("field_data"), list)):
+        raise ValueError("Retrieved production lead is invalid.")
+    encoded = json.dumps(result["field_data"], sort_keys=True, separators=(",", ":"))
+    if len(encoded.encode()) > 64 * 1024:
+        raise ValueError("Retrieved lead answers exceed the storage limit.")
+    return result
+
+
+def _parse_meta_time(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise ValueError("Meta submission time is invalid.") from exc
+
+
+def _lead_source(platform: str | None) -> str:
+    value = (platform or "").strip().lower()
+    if "instagram" in value or value == "ig":
+        return "Instagram"
+    if "facebook" in value or value == "fb":
+        return "Facebook"
+    return "Meta Instant Form"

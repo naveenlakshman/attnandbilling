@@ -1,4 +1,5 @@
 import json
+from contextlib import contextmanager
 
 from staging.meta_lead_receiver import worker
 
@@ -33,7 +34,11 @@ def test_disabled_worker_exits_without_opening_storage(monkeypatch, tmp_path):
 def test_worker_drains_until_idle_and_reports_no_ids(monkeypatch, tmp_path, caplog):
     _env(monkeypatch, tmp_path, enabled=True)
     outcomes = iter(["done", "retry", "idle"])
-    fake_store = object()
+    class Store:
+        @contextmanager
+        def worker_lock(self):
+            yield True
+    fake_store = Store()
     monkeypatch.setattr(worker, "mysql_store_from_env", lambda: fake_store)
     monkeypatch.setattr(worker, "MetaSyntheticProcessor", lambda *args, **kwargs: object())
     monkeypatch.setattr(worker, "run_once", lambda store, settings, processor: next(outcomes))
@@ -49,9 +54,25 @@ def test_worker_drains_until_idle_and_reports_no_ids(monkeypatch, tmp_path, capl
 def test_controlled_replay_delegates_to_allowlist_guard(monkeypatch, tmp_path):
     _env(monkeypatch, tmp_path, enabled=True)
     class Store:
+        @contextmanager
+        def worker_lock(self):
+            yield True
         def replay_dead(self, lead_id, allowlist):
             assert lead_id == LEAD
             assert lead_id in allowlist
             return True
     monkeypatch.setattr(worker, "mysql_store_from_env", Store)
     assert worker.main(["--replay-dead", LEAD]) == 0
+
+
+def test_overlapping_worker_exits_without_claiming(monkeypatch, tmp_path, caplog):
+    _env(monkeypatch, tmp_path, enabled=True)
+    class Store:
+        @contextmanager
+        def worker_lock(self):
+            yield False
+    monkeypatch.setattr(worker, "mysql_store_from_env", Store)
+    monkeypatch.setattr(worker, "run_once", lambda *args: (_ for _ in ()).throw(AssertionError()))
+    with caplog.at_level("INFO"):
+        assert worker.main(["--max-items", "1"]) == 0
+    assert "worker_overlap_skipped" in " ".join(record.message for record in caplog.records)

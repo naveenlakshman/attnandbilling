@@ -7,7 +7,7 @@ from pathlib import Path
 import pymysql
 import pytest
 
-from staging.meta_lead_receiver.mysql_store import MySQLConfig, MySQLStore
+from staging.meta_lead_receiver.mysql_store import ERPMapping, MySQLConfig, MySQLStore
 from staging.meta_lead_receiver.receiver import Settings, StorageError, run_once
 
 
@@ -149,3 +149,119 @@ def test_connection_failure_is_safe_storage_error(settings):
                                    host="127.0.0.1", port=1))
     with pytest.raises(StorageError, match="connection unavailable"):
         store.health()
+
+
+def _production_result(lead_id, phone="9876543210"):
+    return {"lead_id": lead_id, "form_id": FORM, "created_time": "2026-11-18T06:30:00+00:00",
+            "ad_id": "123", "platform": "instagram", "name": "Meta Test Person", "phone": phone,
+            "field_data": [{"name": "full_name", "values": ["Meta Test Person"]},
+                           {"name": "phone_number", "values": [phone]},
+                           {"name": "when_would_you_like_to_join?", "values": ["Immediately"]}]}
+
+
+def _mapping(batch_id=50):
+    return ERPMapping(database="erp_receiver_test", institute_id=1, branch_id=2, course_id=43,
+                      batch_id=batch_id, counsellor_user_id=3, batch_start_date="2026-11-18",
+                      batch_end_date="2027-04-10", batch_start_time="12:00", batch_end_time="14:00")
+
+
+@pytest.fixture
+def erp_schema(mysql_store):
+    admin = _admin_config()
+    conn = pymysql.connect(**admin)
+    with conn.cursor() as cur:
+        cur.execute("DROP DATABASE IF EXISTS erp_receiver_test")
+        cur.execute("CREATE DATABASE erp_receiver_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci")
+        cur.execute("""CREATE TABLE erp_receiver_test.institutes(
+            id BIGINT PRIMARY KEY,status VARCHAR(20),timezone VARCHAR(64))""")
+        cur.execute("""CREATE TABLE erp_receiver_test.branches(
+            id INT PRIMARY KEY,institute_id BIGINT,is_active INT)""")
+        cur.execute("""CREATE TABLE erp_receiver_test.courses(
+            id INT PRIMARY KEY,institute_id BIGINT,is_active INT,course_name VARCHAR(255))""")
+        cur.execute("""CREATE TABLE erp_receiver_test.batches(
+            id INT PRIMARY KEY,course_id INT,branch_id INT,start_date VARCHAR(32),end_date VARCHAR(32),
+            start_time VARCHAR(32),end_time VARCHAR(32),status VARCHAR(32))""")
+        cur.execute("""CREATE TABLE erp_receiver_test.users(
+            id INT PRIMARY KEY,institute_id BIGINT,branch_id INT,is_active INT)""")
+        cur.execute("""CREATE TABLE erp_receiver_test.institute_memberships(
+            user_id INT,institute_id BIGINT,is_active INT)""")
+        cur.execute("""CREATE TABLE erp_receiver_test.leads(
+            id INT AUTO_INCREMENT PRIMARY KEY,institute_id BIGINT,name VARCHAR(255),phone VARCHAR(255),
+            whatsapp VARCHAR(255),interested_courses VARCHAR(255),lead_source VARCHAR(255),
+            decision_maker VARCHAR(255),branch_id INT,parent_discussion_status VARCHAR(255),
+            visit_status VARCHAR(255),lead_score INT,stage VARCHAR(255),last_contact_date VARCHAR(255),
+            next_followup_date VARCHAR(255),notes TEXT,status VARCHAR(255),is_deleted INT,
+            assigned_to_id INT,followup_count INT,created_at VARCHAR(255),updated_at VARCHAR(255))""")
+        cur.execute("""CREATE TABLE erp_receiver_test.activity_logs(
+            id INT AUTO_INCREMENT PRIMARY KEY,user_id INT,branch_id INT,action_type VARCHAR(255),
+            module_name VARCHAR(255),record_id INT,description TEXT,created_at VARCHAR(255),institute_id INT)""")
+        cur.execute("INSERT INTO erp_receiver_test.institutes VALUES(1,'active','Asia/Kolkata')")
+        cur.execute("INSERT INTO erp_receiver_test.branches VALUES(2,1,1)")
+        cur.execute("INSERT INTO erp_receiver_test.courses VALUES(43,1,1,'DFA 2026 With AI for Accounting')")
+        cur.execute("INSERT INTO erp_receiver_test.batches VALUES(50,43,2,'2026-11-18','2027-04-10','12:00','14:00','active')")
+        cur.execute("INSERT INTO erp_receiver_test.users VALUES(3,1,2,1)")
+        cur.execute("INSERT INTO erp_receiver_test.institute_memberships VALUES(3,1,1)")
+    conn.close()
+    yield
+    conn = pymysql.connect(**admin)
+    with conn.cursor() as cur:
+        cur.execute("DROP DATABASE IF EXISTS erp_receiver_test")
+    conn.close()
+
+
+def test_production_completion_atomically_creates_enquiry_and_pending_task(mysql_store, erp_schema):
+    production = Settings("", "secret", "verify", PAGE, FORM, frozenset(), storage_backend="mysql",
+                          enabled=True, processing_mode="production")
+    lead_id = "800000000000001"
+    event = _event(lead_id)
+    event["ad_id"] = None
+    event["created_time"] = None
+    assert mysql_store.ingest([event], production)["accepted"] == 1
+    item = mysql_store.claim()
+    result = mysql_store.complete_production(item, _production_result(lead_id), _mapping())
+    assert result == {"erp_lead_id": 1, "phone_match": False}
+    with mysql_store.connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT stage,last_contact_date,next_followup_date,followup_count,assigned_to_id,branch_id,lead_source FROM erp_receiver_test.leads")
+        row = cur.fetchone()
+        assert row == {"stage": "New Lead", "last_contact_date": None, "next_followup_date": "2026-11-18",
+                       "followup_count": 0, "assigned_to_id": 3, "branch_id": 2, "lead_source": "Instagram"}
+        cur.execute("""SELECT state,erp_lead_id,answers_json,batch_id,ad_id,submitted_at
+                    FROM notifications WHERE lead_id=%s""", (lead_id,))
+        inbox = cur.fetchone()
+        assert inbox["state"] == "DONE" and inbox["erp_lead_id"] == 1 and inbox["batch_id"] == 50
+        assert inbox["ad_id"] == "123"
+        assert inbox["submitted_at"].isoformat() == "2026-11-18T06:30:00"
+        assert "Meta Test Person" in str(inbox["answers_json"])
+        cur.execute("SELECT COUNT(*) AS n FROM erp_receiver_test.activity_logs")
+        assert cur.fetchone()["n"] == 1
+
+
+def test_production_phone_match_is_visible_without_overwriting_history(mysql_store, erp_schema):
+    production = Settings("", "secret", "verify", PAGE, FORM, frozenset(), storage_backend="mysql",
+                          enabled=True, processing_mode="production")
+    with mysql_store.connection() as conn, conn.cursor() as cur:
+        cur.execute("INSERT INTO erp_receiver_test.leads(institute_id,name,phone,is_deleted) VALUES(1,'Existing','98765-43210',0)")
+        conn.commit()
+    lead_id = "800000000000002"
+    mysql_store.ingest([_event(lead_id)], production)
+    result = mysql_store.complete_production(mysql_store.claim(), _production_result(lead_id), _mapping())
+    assert result["phone_match"] is True and result["erp_lead_id"] == 2
+    with mysql_store.connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT name,notes FROM erp_receiver_test.leads ORDER BY id")
+        rows = cur.fetchall()
+        assert rows[0]["name"] == "Existing" and "Possible matching phone enquiry IDs: 1" in rows[1]["notes"]
+
+
+def test_invalid_production_mapping_rolls_back_enquiry(mysql_store, erp_schema):
+    production = Settings("", "secret", "verify", PAGE, FORM, frozenset(), storage_backend="mysql",
+                          enabled=True, processing_mode="production")
+    lead_id = "800000000000003"
+    mysql_store.ingest([_event(lead_id)], production)
+    item = mysql_store.claim()
+    with pytest.raises(RuntimeError, match="mapping"):
+        mysql_store.complete_production(item, _production_result(lead_id), _mapping(batch_id=999))
+    with mysql_store.connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM erp_receiver_test.leads")
+        assert cur.fetchone()["n"] == 0
+        cur.execute("SELECT state,erp_lead_id FROM notifications WHERE lead_id=%s", (lead_id,))
+        assert cur.fetchone() == {"state": "PROCESSING", "erp_lead_id": None}

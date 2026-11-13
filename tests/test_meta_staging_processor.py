@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from staging.meta_lead_receiver.processor import MetaSyntheticProcessor, ProcessingError
+from staging.meta_lead_receiver.processor import MetaLeadRetriever, MetaSyntheticProcessor, ProcessingError
 from staging.meta_lead_receiver.receiver import Settings
 
 
@@ -67,6 +67,34 @@ def test_processor_blocks_unallowlisted_id_before_network(settings):
         processor({"lead_id": "999", "page_id": PAGE, "form_id": FORM})
     assert exc.value.safe_code == "invalid_response"
     assert session.calls == []
+
+
+def test_production_retrieval_accepts_real_id_and_validates_identity(settings):
+    real_id = "900000000000099"
+    session = Session([
+        Response(200, {"id": PAGE, "access_token": "page-token"}),
+        Response(200, {"id": real_id, "form_id": FORM, "created_time": "2026-11-13T00:00:00+0000",
+                       "platform": "instagram", "ad_id": "123",
+                       "field_data": [{"name": "full_name", "values": ["Test Person"]},
+                                      {"name": "phone_number", "values": ["+91 98765 43210"]},
+                                      {"name": "when_would_you_like_to_join?", "values": ["Immediately"]}]}),
+    ])
+    result = MetaLeadRetriever(settings, "token", "v27.0", session=session).retrieve(
+        {"lead_id": real_id, "page_id": PAGE, "form_id": FORM}, require_synthetic=False)
+    assert result.name == "Test Person" and result.phone == "9876543210"
+    assert result.platform == "instagram" and result.ad_id == "123"
+
+
+def test_production_retrieval_rejects_missing_phone(settings):
+    real_id = "900000000000099"
+    session = Session([
+        Response(200, {"id": PAGE, "access_token": "page-token"}),
+        Response(200, {"id": real_id, "form_id": FORM, "created_time": "2026-11-13T00:00:00+0000",
+                       "field_data": [{"name": "full_name", "values": ["Test Person"]}]}),
+    ])
+    with pytest.raises(ProcessingError):
+        MetaLeadRetriever(settings, "token", "v27.0", session=session).retrieve(
+            {"lead_id": real_id, "page_id": PAGE, "form_id": FORM}, require_synthetic=False)
 
 
 @pytest.mark.parametrize(("status", "code"), [(429, "rate_limited"), (503, "upstream_unavailable"),

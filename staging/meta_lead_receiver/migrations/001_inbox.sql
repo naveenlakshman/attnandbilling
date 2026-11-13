@@ -14,9 +14,22 @@ CREATE TABLE IF NOT EXISTS notifications (
     result_field_names_json JSON NULL,
     result_answer_count INT UNSIGNED NULL,
     result_values_sha256 CHAR(64) NULL,
+    answers_json JSON NULL,
+    phone_normalized CHAR(10) NULL,
+    platform VARCHAR(32) NULL,
+    duplicate_lead_ids_json JSON NULL,
+    erp_lead_id INT NULL,
+    erp_followup_due_date DATE NULL,
+    institute_id BIGINT NULL,
+    branch_id INT NULL,
+    course_id INT NULL,
+    batch_id INT NULL,
+    counsellor_user_id INT NULL,
     completed_at DATETIME(6) NULL,
     PRIMARY KEY (lead_id),
-    KEY ix_notifications_ready (state, available_at, created_at)
+    UNIQUE KEY uq_notifications_erp_lead (erp_lead_id),
+    KEY ix_notifications_ready (state, available_at, created_at),
+    KEY ix_notifications_phone (phone_normalized)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS audit (

@@ -17,4 +17,4 @@ COPY --chown=appuser:appuser staging /app/staging
 USER appuser
 EXPOSE 8080
 
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 2 --threads 4 --timeout 30 staging.meta_lead_receiver.wsgi:app"]
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 2 --timeout 30 staging.meta_lead_receiver.wsgi:app"]
