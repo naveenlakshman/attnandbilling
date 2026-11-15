@@ -1,0 +1,7 @@
+ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:5d4594aabeb15807f024ae6e226dd7459a47743e412981d6495c54ff5e3939e1
+FROM ${BASE_IMAGE}
+
+COPY --chown=appuser:appuser modules/baddebt/routes.py /app/modules/baddebt/routes.py
+COPY --chown=appuser:appuser templates/baddebt/create.html /app/templates/baddebt/create.html
+COPY --chown=appuser:appuser templates/billing/invoice_view.html /app/templates/billing/invoice_view.html
+COPY --chown=appuser:appuser tests/test_baddebt_multiple_writeoffs.py /app/tests/test_baddebt_multiple_writeoffs.py

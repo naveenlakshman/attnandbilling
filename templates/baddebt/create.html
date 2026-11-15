@@ -283,11 +283,13 @@
                 <option value="{{ inv.id }}" 
                         data-total="{{ inv.total_amount }}"
                         data-paid="{{ inv.paid_amount }}"
+                        data-written-off="{{ inv.written_off_amount }}"
+                        data-balance="{{ inv.total_amount - inv.paid_amount - inv.written_off_amount }}"
                         data-student="{{ inv.student_name }}"
                         data-code="{{ inv.student_code }}"
                         data-status="{{ inv.student_status }}"
                         {% if pre_selected_invoice and inv.id == pre_selected_invoice.id %}selected{% endif %}>
-                  {{ inv.invoice_no }} - {{ inv.student_name }} (Balance: ₹{{ "%.2f"|format(inv.total_amount - inv.paid_amount) }})
+                  {{ inv.invoice_no }} - {{ inv.student_name }} (Balance: ₹{{ "%.2f"|format(inv.total_amount - inv.paid_amount - inv.written_off_amount) }})
                 </option>
               {% endfor %}
             </select>
@@ -324,6 +326,10 @@
                 <div>
                   <label>Paid Amount</label>
                   <p id="detail-paid">₹0.00</p>
+                </div>
+                <div>
+                  <label>Previously Written Off</label>
+                  <p id="detail-written-off">₹0.00</p>
                 </div>
                 <div>
                   <label>Outstanding Balance</label>
@@ -442,7 +448,8 @@
 
     const total = parseFloat(option.dataset.total) || 0;
     const paid = parseFloat(option.dataset.paid) || 0;
-    const balance = total - paid;
+    const writtenOff = parseFloat(option.dataset.writtenOff) || 0;
+    const balance = Math.max(0, parseFloat(option.dataset.balance) || 0);
     const student = option.dataset.student;
     const code = option.dataset.code;
     const status = option.dataset.status;
@@ -455,6 +462,7 @@
     document.getElementById('detail-student-status').textContent = status;
     document.getElementById('detail-total').textContent = '₹' + total.toFixed(2);
     document.getElementById('detail-paid').textContent = '₹' + paid.toFixed(2);
+    document.getElementById('detail-written-off').textContent = '₹' + writtenOff.toFixed(2);
     document.getElementById('detail-balance').textContent = '₹' + balance.toFixed(2);
     document.getElementById('max-writeoff').textContent = '₹' + balance.toFixed(2);
     document.getElementById('student_status').value = status;
@@ -479,9 +487,7 @@
       return;
     }
 
-    const total = parseFloat(option.dataset.total) || 0;
-    const paid = parseFloat(option.dataset.paid) || 0;
-    const balance = total - paid;
+    const balance = Math.max(0, parseFloat(option.dataset.balance) || 0);
     const amount = parseFloat(amountInput.value) || 0;
 
     if (amount > balance) {

@@ -422,7 +422,7 @@
   {% if effective_status not in ['write_off', 'partially_written_off'] %}
   <a class="btn btn-primary" href="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">+ Record Payment</a>
   {% endif %}
-  {% if session.get("role") == "admin" and effective_status in ['unpaid', 'partially_paid'] %}
+  {% if session.get("role") == "admin" and effective_status in ['unpaid', 'partially_paid', 'partially_written_off'] %}
   <a class="btn btn-danger" href="{{ url_for('baddebt.create') }}?invoice_id={{ invoice.id }}" title="Write-off outstanding balance">✗ Write-off</a>
   {% endif %}
   <a class="btn btn-secondary" href="{{ url_for('billing.invoice_print', invoice_id=invoice.id) }}" target="_blank"> Print Bill </a>

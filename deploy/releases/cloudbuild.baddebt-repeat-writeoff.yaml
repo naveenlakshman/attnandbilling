@@ -1,0 +1,28 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:baddebt-repeat-writeoff
+
+steps:
+  - id: build-baddebt-repeat-writeoff
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - deploy/releases/Dockerfile.baddebt-repeat-writeoff
+      - --tag
+      - ${_IMAGE}
+      - .
+
+  - id: verify-baddebt-repeat-writeoff
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker run --rm ${_IMAGE} python -m py_compile modules/baddebt/routes.py
+        docker run --rm ${_IMAGE} python -c "from pathlib import Path; from jinja2 import Environment; env=Environment(); env.parse(Path('/app/templates/baddebt/create.html').read_text(encoding='utf-8')); env.parse(Path('/app/templates/billing/invoice_view.html').read_text(encoding='utf-8'))"
+        docker run --rm --env SECRET_KEY=cloud-build-baddebt-only ${_IMAGE} python -m pytest -q tests/test_baddebt_multiple_writeoffs.py
+
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s

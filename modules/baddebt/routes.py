@@ -215,13 +215,16 @@ def create():
                 s.status AS student_status,
                 (SELECT IFNULL(SUM(amount_received), 0)
                  FROM receipts
-                 WHERE invoice_id = i.id AND institute_id = ?) AS paid_amount
+                 WHERE invoice_id = i.id AND institute_id = ?) AS paid_amount,
+                (SELECT IFNULL(SUM(amount_written_off), 0)
+                 FROM bad_debt_writeoffs
+                 WHERE invoice_id = i.id AND institute_id = ?) AS written_off_amount
             FROM invoices i
             JOIN students s ON i.student_id = s.id
             WHERE i.id = ?
               AND i.institute_id = ?
               AND s.institute_id = ?
-        """, (current_inst, invoice_id, current_inst, current_inst))
+        """, (current_inst, current_inst, invoice_id, current_inst, current_inst))
         invoice = cur.fetchone()
 
         if not invoice:
@@ -231,8 +234,9 @@ def create():
 
         invoice_id = invoice["id"]
         paid_amount = float(invoice["paid_amount"] or 0)
+        written_off_amount = float(invoice["written_off_amount"] or 0)
         total_amount = float(invoice["total_amount"] or 0)
-        balance = total_amount - paid_amount
+        balance = total_amount - paid_amount - written_off_amount
 
         if amount_written_off > balance:
             flash(f"Write-off amount (₹{amount_written_off}) cannot exceed balance (₹{balance})", "error")
@@ -457,12 +461,19 @@ def create():
                     s.full_name AS student_name,
                     s.student_code,
                     s.status AS student_status,
-                    (SELECT IFNULL(SUM(amount_received), 0) FROM receipts WHERE invoice_id = i.id) AS paid_amount,
+                    (SELECT IFNULL(SUM(r.amount_received), 0)
+                     FROM receipts r
+                     WHERE r.invoice_id = i.id
+                       AND r.institute_id = i.institute_id) AS paid_amount,
+                    (SELECT IFNULL(SUM(bw.amount_written_off), 0)
+                     FROM bad_debt_writeoffs bw
+                     WHERE bw.invoice_id = i.id
+                       AND bw.institute_id = i.institute_id) AS written_off_amount,
                     i.branch_id
                 FROM invoices i
                 JOIN students s ON i.student_id = s.id
                 WHERE i.id = ?
-                  AND i.status IN ('unpaid', 'partially_paid')
+                  AND i.status IN ('unpaid', 'partially_paid', 'partially_written_off')
                   AND i.institute_id = ?
                   AND s.institute_id = ?
             """, (invoice_id_param, current_inst, current_inst))
@@ -479,11 +490,18 @@ def create():
             s.full_name AS student_name,
             s.student_code,
             s.status AS student_status,
-            (SELECT IFNULL(SUM(amount_received), 0) FROM receipts WHERE invoice_id = i.id) AS paid_amount,
+            (SELECT IFNULL(SUM(r.amount_received), 0)
+             FROM receipts r
+             WHERE r.invoice_id = i.id
+               AND r.institute_id = i.institute_id) AS paid_amount,
+            (SELECT IFNULL(SUM(bw.amount_written_off), 0)
+             FROM bad_debt_writeoffs bw
+             WHERE bw.invoice_id = i.id
+               AND bw.institute_id = i.institute_id) AS written_off_amount,
             i.branch_id
         FROM invoices i
         JOIN students s ON i.student_id = s.id
-        WHERE i.status IN ('unpaid', 'partially_paid')
+        WHERE i.status IN ('unpaid', 'partially_paid', 'partially_written_off')
           AND i.institute_id = ?
           AND s.institute_id = ?
         ORDER BY i.invoice_no DESC
