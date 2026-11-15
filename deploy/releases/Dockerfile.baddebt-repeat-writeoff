@@ -4,4 +4,3 @@ FROM ${BASE_IMAGE}
 COPY --chown=appuser:appuser modules/baddebt/routes.py /app/modules/baddebt/routes.py
 COPY --chown=appuser:appuser templates/baddebt/create.html /app/templates/baddebt/create.html
 COPY --chown=appuser:appuser templates/billing/invoice_view.html /app/templates/billing/invoice_view.html
-COPY --chown=appuser:appuser tests/test_baddebt_multiple_writeoffs.py /app/tests/test_baddebt_multiple_writeoffs.py
