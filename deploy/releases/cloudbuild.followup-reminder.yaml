@@ -19,7 +19,7 @@ steps:
       - -ceu
       - |
         docker run --rm ${_IMAGE} python -m py_compile modules/core/routes.py
-        docker run --rm ${_IMAGE} python -c "from pathlib import Path; from jinja2 import Environment; source=Path('/app/templates/base.html').read_text(encoding='utf-8'); Environment().parse(source); assert 'leadFollowupReminderModal' in source; assert 'showLeadFollowupReminder(data.leads)' in source"
+        docker run --rm ${_IMAGE} python -c "from pathlib import Path; from jinja2 import Environment; source=Path('/app/templates/base.html').read_text(encoding='utf-8'); Environment().parse(source); assert 'leadFollowupReminderModal' in source; assert 'leadFollowupReminderToast' in source; assert 'leadFollowupOwnerBreakdown' in source; assert 'leadReminderThreeHours = 3 * leadReminderOneHour' in source; assert 'showLeadFollowupReminder(data)' in source"
 
 images: ['${_IMAGE}']
 options:

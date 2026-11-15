@@ -188,6 +188,10 @@
           You have <strong><span id="leadFollowupReminderCount">0</span> lead follow-up<span id="leadFollowupReminderPlural">s</span></strong>
           due today or overdue.
         </p>
+        <div class="border rounded-3 bg-light p-3 mb-3 d-none" id="leadFollowupOwnerSection">
+          <p class="small fw-semibold text-uppercase text-muted mb-2">Pending by counsellor</p>
+          <ul class="list-unstyled mb-0" id="leadFollowupOwnerBreakdown"></ul>
+        </div>
         <p class="text-muted small mb-0">Open the follow-up console to contact these prospects and record the outcome.</p>
       </div>
       <div class="modal-footer border-0 pt-0">
@@ -196,6 +200,23 @@
           <i class="bi bi-telephone-outbound me-1" aria-hidden="true"></i> View follow-ups
         </a>
       </div>
+    </div>
+  </div>
+</div>
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;">
+  <div class="toast border-0 shadow-lg" id="leadFollowupReminderToast" role="status"
+       aria-live="polite" aria-atomic="true">
+    <div class="toast-header bg-danger-subtle text-danger border-0">
+      <i class="bi bi-telephone-outbound me-2" aria-hidden="true"></i>
+      <strong class="me-auto">Follow-up reminder</strong>
+      <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close reminder"></button>
+    </div>
+    <div class="toast-body">
+      <p class="mb-2">
+        You still have <strong><span id="leadFollowupToastCount">0</span> follow-up<span id="leadFollowupToastPlural">s</span></strong>
+        due today or overdue.
+      </p>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('leads.followups_today') }}">View follow-ups</a>
     </div>
   </div>
 </div>
@@ -293,33 +314,142 @@
     });
 
     // 4. Dynamic Sidebar Badge Updates
-    var leadReminderShown = false;
     var leadReminderAllowed = {{ 'false' if request.endpoint == 'leads.followups_today' else 'true' }};
+    var leadReminderUserKey = 'erp_lead_followup_reminder_v3_{{ session.get("user_id") }}';
+    var leadReminderOneHour = 60 * 60 * 1000;
+    var leadReminderThreeHours = 3 * leadReminderOneHour;
+    var leadReminderMemoryState = null;
 
-    function showLeadFollowupReminder(count) {
-      count = Number(count || 0);
-      if (!leadReminderAllowed || leadReminderShown || count <= 0 || !window.bootstrap) {
+    function leadReminderDateKey() {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    }
+
+    function defaultLeadReminderState() {
+      return {
+        date: leadReminderDateKey(),
+        lastModalAt: 0,
+        lastReminderAt: 0
+      };
+    }
+
+    function readLeadReminderState() {
+      var state = leadReminderMemoryState;
+      try {
+        var stored = window.localStorage.getItem(leadReminderUserKey);
+        if (stored) state = JSON.parse(stored);
+      } catch (error) {
+        // Private browsing or locked storage falls back to this page's memory.
+      }
+      if (!state || state.date !== leadReminderDateKey()) {
+        state = defaultLeadReminderState();
+      }
+      return state;
+    }
+
+    function writeLeadReminderState(state) {
+      leadReminderMemoryState = state;
+      try {
+        window.localStorage.setItem(leadReminderUserKey, JSON.stringify(state));
+      } catch (error) {
+        // The in-memory state still prevents repeated reminders on this page.
+      }
+    }
+
+    function clearLeadReminderState() {
+      leadReminderMemoryState = null;
+      try {
+        window.localStorage.removeItem(leadReminderUserKey);
+      } catch (error) {
+        // Nothing else is required when storage is unavailable.
+      }
+      if (window.bootstrap) {
+        var activeToast = document.getElementById('leadFollowupReminderToast');
+        var toastInstance = activeToast ? window.bootstrap.Toast.getInstance(activeToast) : null;
+        if (toastInstance) toastInstance.hide();
+
+        var activeModal = document.getElementById('leadFollowupReminderModal');
+        var modalInstance = activeModal ? window.bootstrap.Modal.getInstance(activeModal) : null;
+        if (modalInstance) modalInstance.hide();
+      }
+    }
+
+    function renderLeadFollowupOwnerBreakdown(data) {
+      var ownerSection = document.getElementById('leadFollowupOwnerSection');
+      var ownerList = document.getElementById('leadFollowupOwnerBreakdown');
+      var owners = Array.isArray(data.lead_owners) ? data.lead_owners : [];
+      if (ownerSection && ownerList && owners.length > 0) {
+        ownerList.textContent = '';
+        owners.forEach(function(owner) {
+          var item = document.createElement('li');
+          item.className = 'd-flex justify-content-between align-items-center py-1';
+
+          var name = document.createElement('span');
+          name.textContent = owner.owner_name || 'Unassigned';
+
+          var badge = document.createElement('span');
+          badge.className = 'badge rounded-pill bg-danger';
+          badge.textContent = Number(owner.count || 0);
+
+          item.appendChild(name);
+          item.appendChild(badge);
+          ownerList.appendChild(item);
+        });
+        ownerSection.classList.remove('d-none');
+      } else if (ownerSection) {
+        ownerSection.classList.add('d-none');
+      }
+    }
+
+    function showLeadFollowupReminder(data) {
+      var count = Number(data.leads || 0);
+      if (count <= 0) {
+        clearLeadReminderState();
+        return;
+      }
+      if (!window.bootstrap) {
         return;
       }
 
-      var modalElement = document.getElementById('leadFollowupReminderModal');
-      if (!modalElement) return;
-
-      var dateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-      var storageKey = 'erp_lead_followup_reminder_{{ session.get("user_id") }}_' + dateKey;
-      try {
-        if (window.localStorage.getItem(storageKey) === 'shown') return;
-        window.localStorage.setItem(storageKey, 'shown');
-      } catch (error) {
-        // Private browsing or locked storage must not prevent the reminder.
+      var now = Date.now();
+      var state = readLeadReminderState();
+      if (!leadReminderAllowed) {
+        // While the user is working in the follow-up console, postpone both
+        // reminder types instead of interrupting the workflow.
+        state.lastModalAt = now;
+        state.lastReminderAt = now;
+        writeLeadReminderState(state);
+        return;
       }
 
-      leadReminderShown = true;
-      var countElement = document.getElementById('leadFollowupReminderCount');
-      var pluralElement = document.getElementById('leadFollowupReminderPlural');
-      if (countElement) countElement.textContent = count;
-      if (pluralElement) pluralElement.textContent = count === 1 ? '' : 's';
-      window.bootstrap.Modal.getOrCreateInstance(modalElement).show();
+      if (!state.lastModalAt || now - state.lastModalAt >= leadReminderThreeHours) {
+        var modalElement = document.getElementById('leadFollowupReminderModal');
+        if (!modalElement || modalElement.classList.contains('show')) return;
+
+        var countElement = document.getElementById('leadFollowupReminderCount');
+        var pluralElement = document.getElementById('leadFollowupReminderPlural');
+        if (countElement) countElement.textContent = count;
+        if (pluralElement) pluralElement.textContent = count === 1 ? '' : 's';
+        renderLeadFollowupOwnerBreakdown(data);
+
+        state.lastModalAt = now;
+        state.lastReminderAt = now;
+        writeLeadReminderState(state);
+        window.bootstrap.Modal.getOrCreateInstance(modalElement).show();
+        return;
+      }
+
+      if (!state.lastReminderAt || now - state.lastReminderAt >= leadReminderOneHour) {
+        var toastElement = document.getElementById('leadFollowupReminderToast');
+        if (!toastElement) return;
+        var toastCount = document.getElementById('leadFollowupToastCount');
+        var toastPlural = document.getElementById('leadFollowupToastPlural');
+        if (toastCount) toastCount.textContent = count;
+        if (toastPlural) toastPlural.textContent = count === 1 ? '' : 's';
+
+        state.lastReminderAt = now;
+        writeLeadReminderState(state);
+        window.bootstrap.Toast.getOrCreateInstance(toastElement, { delay: 12000 }).show();
+      }
     }
 
     function loadSidebarBadges() {
@@ -339,7 +469,7 @@
             if (leadsToggle) leadsToggle.style.display = 'none';
             if (leadsSub) leadsSub.style.display = 'none';
           }
-          showLeadFollowupReminder(data.leads);
+          showLeadFollowupReminder(data);
 
           // Billing Badge
           var billingToggle = document.getElementById('badge-billing-toggle');

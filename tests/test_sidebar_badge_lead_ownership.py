@@ -31,6 +31,12 @@ def badge_client(tmp_path, monkeypatch):
             is_deleted INTEGER NOT NULL DEFAULT 0,
             next_followup_date TEXT
         );
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY,
+            institute_id INTEGER NOT NULL,
+            full_name TEXT,
+            username TEXT
+        );
         CREATE TABLE installment_plans (
             id INTEGER PRIMARY KEY, invoice_id INTEGER, status TEXT,
             due_date TEXT, amount_due REAL, amount_paid REAL
@@ -60,6 +66,14 @@ def badge_client(tmp_path, monkeypatch):
     )
     today = date.today().isoformat()
     future = (date.today() + timedelta(days=1)).isoformat()
+    conn.executemany(
+        "INSERT INTO users (id, institute_id, full_name, username) VALUES (?, ?, ?, ?)",
+        [
+            (22, 2, "Navi", "navi"),
+            (23, 2, "Meghana", "meghana"),
+            (24, 1, "Foreign User", "foreign"),
+        ],
+    )
     conn.executemany(
         """INSERT INTO leads
            (id, institute_id, assigned_to_id, status, is_deleted, next_followup_date)
@@ -100,6 +114,7 @@ def test_all_branch_staff_badge_excludes_other_counsellors_followups(badge_clien
     response = badge_client.get("/api/sidebar-badges")
     assert response.status_code == 200
     assert response.get_json()["leads"] == 0
+    assert response.get_json()["lead_owners"] == []
 
 
 def test_admin_badge_includes_all_due_followups_in_institute(badge_client):
@@ -109,11 +124,21 @@ def test_admin_badge_includes_all_due_followups_in_institute(badge_client):
     response = badge_client.get("/api/sidebar-badges")
     assert response.status_code == 200
     assert response.get_json()["leads"] == 2
+    assert response.get_json()["lead_owners"] == [
+        {"assigned_to_id": 23, "owner_name": "Meghana", "count": 2}
+    ]
 
 
-def test_base_template_has_daily_user_scoped_followup_reminder():
+def test_base_template_has_escalating_user_scoped_followup_reminders():
     template = Path("templates/base.html").read_text(encoding="utf-8")
     assert 'id="leadFollowupReminderModal"' in template
-    assert "erp_lead_followup_reminder_{{ session.get(\"user_id\") }}_" in template
-    assert "showLeadFollowupReminder(data.leads)" in template
+    assert 'id="leadFollowupReminderToast"' in template
+    assert 'id="leadFollowupOwnerBreakdown"' in template
+    assert "erp_lead_followup_reminder_v3_{{ session.get(\"user_id\") }}" in template
+    assert "leadReminderOneHour = 60 * 60 * 1000" in template
+    assert "leadReminderThreeHours = 3 * leadReminderOneHour" in template
+    assert "clearLeadReminderState()" in template
+    assert "state.lastModalAt = now" in template
+    assert "state.lastReminderAt = now" in template
+    assert "showLeadFollowupReminder(data)" in template
     assert "url_for('leads.followups_today')" in template

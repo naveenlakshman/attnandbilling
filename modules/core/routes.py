@@ -666,6 +666,7 @@ def sidebar_badges():
     today = datetime.now().date().isoformat()
 
     leads_count = 0
+    lead_owners = []
     billing_count = 0
     attendance_count = 0
     lms_count = 0
@@ -682,12 +683,34 @@ def sidebar_badges():
         # may see all counsellors' due leads.
         if role == "admin":
             cur.execute("""
-                SELECT COUNT(*) AS cnt FROM leads
-                WHERE institute_id = ? AND status = 'active' AND is_deleted = 0
-                  AND next_followup_date IS NOT NULL
-                  AND parse_date(next_followup_date) <= ?
+                SELECT
+                    l.assigned_to_id,
+                    COALESCE(
+                        NULLIF(TRIM(u.full_name), ''),
+                        NULLIF(TRIM(u.username), ''),
+                        'Unassigned'
+                    ) AS owner_name,
+                    COUNT(*) AS cnt
+                FROM leads l
+                LEFT JOIN users u
+                  ON u.id = l.assigned_to_id
+                 AND u.institute_id = l.institute_id
+                WHERE l.institute_id = ?
+                  AND l.status = 'active'
+                  AND l.is_deleted = 0
+                  AND l.next_followup_date IS NOT NULL
+                  AND parse_date(l.next_followup_date) <= ?
+                GROUP BY l.assigned_to_id, u.full_name, u.username
+                ORDER BY cnt DESC, owner_name ASC
             """, [institute_id, today])
-            leads_count = cur.fetchone()["cnt"]
+            for row in cur.fetchall():
+                count = int(row["cnt"] or 0)
+                leads_count += count
+                lead_owners.append({
+                    "assigned_to_id": row["assigned_to_id"],
+                    "owner_name": row["owner_name"],
+                    "count": count,
+                })
         else:
             cur.execute("""
                 SELECT COUNT(*) AS cnt FROM leads
@@ -780,6 +803,7 @@ def sidebar_badges():
 
     return jsonify({
         "leads": leads_count,
+        "lead_owners": lead_owners,
         "billing": billing_count,
         "attendance": attendance_count,
         "lms": lms_count,
