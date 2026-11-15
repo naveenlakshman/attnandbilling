@@ -676,7 +676,11 @@ def sidebar_badges():
     cur = conn.cursor()
     try:
         # 1. Leads Badge: count of active, non-deleted leads due today or overdue
-        if role == "admin" or can_view_all:
+        # Lead ownership is user-specific. Cross-branch visibility must not make
+        # another counsellor's follow-ups appear in a staff member's badge.
+        # Keep this aligned with /leads/followups, where only administrators
+        # may see all counsellors' due leads.
+        if role == "admin":
             cur.execute("""
                 SELECT COUNT(*) AS cnt FROM leads
                 WHERE institute_id = ? AND status = 'active' AND is_deleted = 0

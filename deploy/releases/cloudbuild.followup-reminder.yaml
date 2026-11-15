@@ -1,0 +1,27 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:followup-reminder
+
+steps:
+  - id: build-followup-reminder
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - deploy/releases/Dockerfile.followup-reminder
+      - --tag
+      - ${_IMAGE}
+      - .
+
+  - id: verify-followup-reminder
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker run --rm ${_IMAGE} python -m py_compile modules/core/routes.py
+        docker run --rm ${_IMAGE} python -c "from pathlib import Path; from jinja2 import Environment; source=Path('/app/templates/base.html').read_text(encoding='utf-8'); Environment().parse(source); assert 'leadFollowupReminderModal' in source; assert 'showLeadFollowupReminder(data.leads)' in source"
+
+images: [${_IMAGE}]
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s
