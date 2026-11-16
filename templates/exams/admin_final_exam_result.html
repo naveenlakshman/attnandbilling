@@ -217,8 +217,8 @@
           {% endif %}
           <span>Required Assignments Submitted (Assignments: {{ details.assignments.submitted }} / {{ details.assignments.total }})</span>
         </div>
-        <span class="badge {% if reasons.assignments_completed %}bg-success{% else %}bg-danger{% endif %}">
-          {% if reasons.assignments_completed %}All Submitted{% else %}Missing{% endif %}
+        <span class="badge {% if reasons.assignment_override_applied %}bg-warning text-dark{% elif reasons.assignments_completed %}bg-success{% else %}bg-danger{% endif %}">
+          {% if reasons.assignment_override_applied %}Staff-approved project exception{% elif reasons.assignments_completed %}All Submitted{% else %}Missing{% endif %}
         </span>
       </div>
 

@@ -109,6 +109,8 @@ class EligibilityService:
         # 3. Syllabus & Assignment Progress Checks across all mapped programs
         syllabus_completed = True if mapped_program_ids else False
         assignments_completed = True if mapped_program_ids else False
+        assignments_fully_submitted = True if mapped_program_ids else False
+        assignment_override_applied = False
         
         total_syllabus_chapters = 0
         total_syllabus_completed = 0
@@ -116,7 +118,11 @@ class EligibilityService:
         total_assign_submitted = 0
 
         for pid in mapped_program_ids:
-            from modules.exams.routes import _final_exam_syllabus_check, _final_exam_assignment_check
+            from modules.exams.routes import (
+                _final_exam_assignment_check,
+                _final_exam_assignment_override,
+                _final_exam_syllabus_check,
+            )
             
             prog_syllabus = _final_exam_syllabus_check(cur, student_id, pid)
             total_syllabus_chapters += prog_syllabus.get("total", 0)
@@ -128,10 +134,20 @@ class EligibilityService:
             total_assign_total += prog_assign.get("total", 0)
             total_assign_submitted += prog_assign.get("submitted", 0)
             if not prog_assign.get("passed", False):
-                assignments_completed = False
+                assignments_fully_submitted = False
+                if _final_exam_assignment_override(cur, student_id, pid):
+                    assignment_override_applied = True
+                else:
+                    assignments_completed = False
 
         syllabus = {"completed": total_syllabus_completed, "total": total_syllabus_chapters, "passed": syllabus_completed}
-        assignments = {"submitted": total_assign_submitted, "total": total_assign_total, "passed": assignments_completed}
+        assignments = {
+            "submitted": total_assign_submitted,
+            "total": total_assign_total,
+            "passed": assignments_completed,
+            "all_submitted": assignments_fully_submitted,
+            "override_applied": assignment_override_applied,
+        }
 
         # 4. Financial Dues (Must be <= 0 balance)
         from modules.exams.routes import _final_exam_dues_check
@@ -198,6 +214,8 @@ class EligibilityService:
             "has_passed_exam": has_passed_exam,
             "syllabus_completed": syllabus_completed,
             "assignments_completed": assignments_completed,
+            "assignments_fully_submitted": assignments_fully_submitted,
+            "assignment_override_applied": assignment_override_applied,
             "no_dues": no_dues,
             "is_invoiced": is_invoiced,
             "is_profile_verified": is_profile_verified

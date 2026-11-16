@@ -48,6 +48,11 @@
       <div class="kpi-body">
         <div class="kpi-label">💰 Revenue</div>
         <div class="kpi-value text-revenue">₹{{ "{:,.0f}".format(revenue_this_month) }}</div>
+        <div class="kpi-today" aria-label="Today's receipts">
+          <span class="kpi-today-label">Today</span>
+          <strong>₹{{ "{:,.0f}".format(today_receipt_total) }}</strong>
+          <span>{{ today_receipt_count }} receipt{{ '' if today_receipt_count == 1 else 's' }}</span>
+        </div>
         <div class="kpi-subtext">
           Net Profit: <span
             class="fw-bold {% if net_profit_this_month >= 0 %}text-success{% else %}text-danger{% endif %}">₹{{
@@ -65,6 +70,11 @@
       <div class="kpi-body">
         <div class="kpi-label">🎓 Students</div>
         <div class="kpi-value text-students">{{ active_students }}</div>
+        <div class="kpi-today" aria-label="Today's new students">
+          <span class="kpi-today-label">Today</span>
+          <strong>+{{ today_new_students }}</strong>
+          <span>new student{{ '' if today_new_students == 1 else 's' }}</span>
+        </div>
         <div class="kpi-subtext">
           Active Students (<span class="text-success fw-bold">+{{ new_students_this_month }} new</span>)
         </div>
@@ -80,6 +90,11 @@
       <div class="kpi-body">
         <div class="kpi-label">🎯 Leads</div>
         <div class="kpi-value text-leads">{{ active_leads }}</div>
+        <div class="kpi-today" aria-label="Today's new leads">
+          <span class="kpi-today-label">Today</span>
+          <strong>+{{ today_new_leads }}</strong>
+          <span>new lead{{ '' if today_new_leads == 1 else 's' }}</span>
+        </div>
         <div class="kpi-subtext">
           Active Leads (<span class="text-success fw-bold">{{ conversion_rate }}% win</span>)
         </div>
@@ -95,6 +110,11 @@
       <div class="kpi-body">
         <div class="kpi-label">💸 Due Payments</div>
         <div class="kpi-value text-danger">₹{{ "{:,.0f}".format(total_past_due + total_today_due) }}</div>
+        <div class="kpi-today" aria-label="Today's due payments">
+          <span class="kpi-today-label">Today</span>
+          <strong>₹{{ "{:,.0f}".format(total_today_due) }}</strong>
+          <span>{{ todays_dues|length }} installment{{ '' if todays_dues|length == 1 else 's' }}</span>
+        </div>
         <div class="kpi-subtext">
           Overdue: <span class="fw-bold text-danger">₹{{ "{:,.0f}".format(total_past_due) }}</span>
         </div>

@@ -1,0 +1,27 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:exam-project-dashboard-today
+
+steps:
+  - id: build-exam-project-dashboard-today
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - deploy/releases/Dockerfile.exam-project-dashboard-today
+      - --tag
+      - ${_IMAGE}
+      - .
+
+  - id: verify-exam-project-dashboard-today
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker run --rm ${_IMAGE} python -m py_compile modules/certificates/services.py modules/core/routes.py modules/exams/routes.py
+        docker run --rm ${_IMAGE} python -c "from pathlib import Path; from jinja2 import Environment; paths=['/app/templates/certificates/admin_issue.html','/app/templates/core/dashboard_new.html','/app/templates/exams/admin_final_exam_applications.html','/app/templates/exams/admin_final_exam_result.html','/app/templates/exams/student_final_exam_apply.html']; env=Environment(); [env.parse(Path(p).read_text(encoding='utf-8')) for p in paths]; dashboard=Path(paths[1]).read_text(encoding='utf-8'); applications=Path(paths[2]).read_text(encoding='utf-8'); apply=Path(paths[4]).read_text(encoding='utf-8'); assert \"Today's receipts\" in dashboard; assert 'today_new_students' in dashboard; assert 'Assignments / Projects' in applications; assert 'checks.application_ready' in apply"
+
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s

@@ -1,7 +1,11 @@
 import sqlite3
 from pathlib import Path
 
-from modules.exams.routes import _final_exam_assignment_check
+from modules.exams import routes as exam_routes
+from modules.exams.routes import (
+    _final_exam_assignment_check,
+    _final_exam_assignment_override,
+)
 
 
 def _connection():
@@ -41,6 +45,13 @@ def _connection():
             review_status TEXT,
             is_latest INTEGER NOT NULL DEFAULT 1,
             submitted_at TEXT
+        );
+        CREATE TABLE lms_final_exam_applications (
+            id INTEGER PRIMARY KEY,
+            student_id INTEGER NOT NULL,
+            course_id INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            applied_on TEXT NOT NULL
         );
 
         INSERT INTO lms_master_chapters VALUES (10, 'Excel Fundamentals', 'active');
@@ -121,3 +132,66 @@ def test_pending_assignment_link_opens_the_assignment_tab():
     assert "tab='assignments'" in exam_template
     assert "new URLSearchParams(window.location.search).get('tab')" in topic_template
     assert "requestedTab === 'assignments'" in topic_template
+
+
+def test_pending_assignments_are_advisory_for_exam_application(monkeypatch):
+    monkeypatch.setattr(
+        exam_routes,
+        "_final_exam_syllabus_check",
+        lambda cur, student_id, program_id: {"passed": True},
+    )
+    monkeypatch.setattr(
+        exam_routes,
+        "_final_exam_assignment_check",
+        lambda cur, student_id, program_id: {"passed": False, "missing": 2},
+    )
+    monkeypatch.setattr(
+        exam_routes,
+        "_final_exam_dues_check",
+        lambda cur, student_id: {"passed": True},
+    )
+    monkeypatch.setattr(
+        exam_routes,
+        "_final_exam_profile_check",
+        lambda cur, student_id: {"passed": True},
+    )
+
+    checks = exam_routes._final_exam_checks(None, student_id=50, program_id=7)
+
+    assert checks["application_ready"] is True
+    assert checks["all_passed"] is False
+
+
+def test_staff_approval_creates_assignment_or_project_override():
+    conn = _connection()
+    try:
+        assert _final_exam_assignment_override(conn.cursor(), student_id=50, program_id=7) is False
+        conn.execute(
+            """
+            INSERT INTO lms_final_exam_applications
+                VALUES (1, 50, 7, 'APPROVED', '2026-11-16 10:00:00')
+            """
+        )
+        assert _final_exam_assignment_override(conn.cursor(), student_id=50, program_id=7) is True
+        assert _final_exam_assignment_override(conn.cursor(), student_id=50, program_id=8) is False
+    finally:
+        conn.close()
+
+
+def test_staff_review_and_certificate_views_explain_the_exception():
+    root = Path(__file__).resolve().parents[1]
+    applications = (root / "templates" / "exams" / "admin_final_exam_applications.html").read_text(
+        encoding="utf-8"
+    )
+    result = (root / "templates" / "exams" / "admin_final_exam_result.html").read_text(
+        encoding="utf-8"
+    )
+    certificate = (root / "templates" / "certificates" / "admin_issue.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Assignments / Projects" in applications
+    assert "review project evidence" in applications
+    assert "pending assignment(s)" in applications
+    assert "Staff-approved project exception" in result
+    assert "Staff-approved project exception" in certificate

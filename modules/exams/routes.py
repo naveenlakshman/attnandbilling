@@ -352,33 +352,40 @@ def _final_exam_assignment_check(cur, student_id, program_id):
         (program_id, student_id),
     ).fetchall()
 
-    pending = []
-    for row in pending_rows:
-        item = dict(row)
+    pending = [dict(row) for row in pending_rows]
+    status_by_assignment = {}
+    if pending:
+        assignment_ids = [item["assignment_id"] for item in pending]
+        placeholders = ", ".join(["?"] * len(assignment_ids))
         latest_filter = "AND COALESCE(is_latest, 1) = 1" if "is_latest" in submission_columns else ""
         status_expression = (
             "COALESCE(review_status, status, 'submitted')"
             if "review_status" in submission_columns
             else "COALESCE(status, 'submitted')"
         )
-        latest_submission = cur.execute(
+        status_rows = cur.execute(
             f"""
-                SELECT {status_expression} AS submission_status
+                SELECT assignment_id, {status_expression} AS submission_status
                 FROM lms_assignment_submissions
-                WHERE assignment_id = ?
-                  AND student_id = ?
+                WHERE student_id = ?
+                  AND assignment_id IN ({placeholders})
                   {latest_filter}
                 ORDER BY submitted_at DESC, id DESC
-                LIMIT 1
             """,
-            (item["assignment_id"], student_id),
-        ).fetchone()
-        submission_status = latest_submission["submission_status"] if latest_submission else None
+            (student_id, *assignment_ids),
+        ).fetchall()
+        for status_row in status_rows:
+            status_by_assignment.setdefault(
+                status_row["assignment_id"],
+                status_row["submission_status"],
+            )
+
+    for item in pending:
+        submission_status = status_by_assignment.get(item["assignment_id"])
         item["submission_status"] = submission_status
         item["action_label"] = (
             "Needs resubmission" if submission_status == "rejected" else "Not submitted"
         )
-        pending.append(item)
 
     submitted = max(total - len(pending), 0)
 
@@ -447,11 +454,30 @@ def _final_exam_checks(cur, student_id, program_id):
         "assignments": assignments,
         "dues": dues,
         "profile": profile,
+        "application_ready": (syllabus["passed"] and
+                              dues["passed"] and
+                              profile["passed"]),
         "all_passed": (syllabus["passed"] and 
                        assignments["passed"] and 
                        dues["passed"] and 
                        profile["passed"]),
     }
+
+
+def _final_exam_assignment_override(cur, student_id, program_id):
+    """An approved exam application records staff acceptance of assignment/project evidence."""
+    return cur.execute(
+        """
+            SELECT id
+            FROM lms_final_exam_applications
+            WHERE student_id = ?
+              AND course_id = ?
+              AND status = 'APPROVED'
+            ORDER BY applied_on DESC, id DESC
+            LIMIT 1
+        """,
+        (student_id, program_id),
+    ).fetchone() is not None
 
 
 def _latest_final_exam_application(cur, student_id, program_id):
@@ -1195,8 +1221,8 @@ def final_exam_apply():
                 return redirect(url_for("exams.final_exam_apply"))
 
             checks = _final_exam_checks(cur, student_id, program_id)
-            if not checks["all_passed"]:
-                flash("Final exam application is blocked until all requirements are complete.", "warning")
+            if not checks["application_ready"]:
+                flash("Final exam application is blocked until syllabus, fee, and profile requirements are complete.", "warning")
                 return redirect(url_for("exams.final_exam_apply", program_id=program_id))
 
             existing = _latest_final_exam_application(cur, student_id, program_id)
@@ -1354,6 +1380,22 @@ def final_exam_applications():
             """,
             (current_inst,)
         ).fetchall()
+        applications = [dict(application) for application in applications]
+        for application in applications:
+            if application.get("program_name"):
+                application["assignment_check"] = _final_exam_assignment_check(
+                    cur,
+                    application["student_id"],
+                    application["course_id"],
+                )
+            else:
+                application["assignment_check"] = {
+                    "total": 0,
+                    "submitted": 0,
+                    "missing": 0,
+                    "pending": [],
+                    "passed": False,
+                }
     finally:
         conn.close()
 
@@ -1376,6 +1418,12 @@ def approve_final_exam_application(application_id):
             flash("Final exam application not found.", "warning")
             return redirect(url_for("exams.final_exam_applications"))
 
+        assignment_check = _final_exam_assignment_check(
+            cur,
+            application["student_id"],
+            application["course_id"],
+        )
+
         cur.execute(
             """
                 UPDATE lms_final_exam_applications
@@ -1390,7 +1438,11 @@ def approve_final_exam_application(application_id):
             action_type="approve",
             module_name="lms_final_exam_applications",
             record_id=application_id,
-            description=f"Approved final exam for {application['verified_name']}",
+            description=(
+                f"Approved final exam for {application['verified_name']} "
+                f"with {assignment_check['missing']} pending assignment(s); "
+                "staff accepted assignment completion or project evidence"
+            ),
             conn=conn,
         )
         conn.commit()

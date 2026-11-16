@@ -46,6 +46,10 @@
     border-color: #f3c3c3;
     background: #fff7f7;
   }
+  .check-panel.advisory {
+    border-color: #f1d28a;
+    background: #fffaf0;
+  }
   .check-label {
     font-weight: 700;
     color: #101827;
@@ -161,9 +165,12 @@
             <div class="check-label">Syllabus Completion</div>
             <p class="check-detail">{{ checks.syllabus.completed }} / {{ checks.syllabus.total }} topics completed.</p>
           </div>
-          <div class="check-panel {{ 'pass' if checks.assignments.passed else 'fail' }}">
-            <div class="check-label">Assignments</div>
+          <div class="check-panel {{ 'pass' if checks.assignments.passed else 'advisory' }}">
+            <div class="check-label">Assignments / Project Review</div>
             <p class="check-detail">{{ checks.assignments.submitted }} / {{ checks.assignments.total }} submitted.</p>
+            {% if not checks.assignments.passed %}
+              <p class="check-detail mt-1">You may still apply. Staff will review pending assignments or approved project work.</p>
+            {% endif %}
           </div>
           <div class="check-panel {{ 'pass' if checks.dues.passed else 'fail' }}">
             <div class="check-label">Fee Clearance</div>
@@ -188,17 +195,21 @@
               <span>You have completed and passed the final exam (Score: {{ exam_pass.score_percent }}%). Your certificate will be issued shortly.</span>
             </div>
           </div>
-        {% elif not checks.all_passed %}
+        {% elif not checks.application_ready %}
           <div class="alert alert-danger mt-3 mb-0">
             {% if not checks.syllabus.passed %}
               <div>Complete all remaining LMS topics for this program.</div>
             {% endif %}
-            {% if not checks.assignments.passed %}
-              <div><strong>Submit the assignments listed below before applying.</strong></div>
-            {% endif %}
             {% if not checks.dues.passed %}
               <div>Clear the pending fee balance of Rs. {{ "%.2f"|format(checks.dues.balance) }}.</div>
             {% endif %}
+            {% if not checks.profile.passed %}
+              <div>Complete your student profile before applying.</div>
+            {% endif %}
+          </div>
+        {% elif not checks.assignments.passed and (not application or application.status == 'REJECTED') %}
+          <div class="alert alert-warning mt-3 mb-0">
+            You can submit your final exam application with pending assignments. Staff will approve it only after reviewing your assignment completion or accepted project work.
           </div>
         {% elif application and application.status == 'PENDING' %}
           <div class="alert alert-warning mt-3 mb-0">
@@ -241,7 +252,7 @@
       </div>
     </div>
 
-    {% if checks.all_passed and (not application or application.status == 'REJECTED') and not exam_pass and not certificate %}
+    {% if checks.application_ready and (not application or application.status == 'REJECTED') and not exam_pass and not certificate %}
       <div class="exam-card">
         <div class="exam-card-header">
           <div>

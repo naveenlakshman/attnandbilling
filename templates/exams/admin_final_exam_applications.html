@@ -110,6 +110,7 @@
               <th>ID</th>
               <th>Student</th>
               <th>Program</th>
+              <th>Assignments / Projects</th>
               <th>Verified Details</th>
               <th>Exam Date</th>
               <th>Status</th>
@@ -131,6 +132,26 @@
                   <div class="student-main">{{ app.program_name or 'Program removed' }}</div>
                   {% if app.course_name %}
                     <div class="student-sub">{{ app.course_name }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="student-main">
+                    {{ app.assignment_check.submitted }} / {{ app.assignment_check.total }} submitted
+                  </div>
+                  {% if app.assignment_check.missing %}
+                    <div class="student-sub text-warning fw-bold">
+                      {{ app.assignment_check.missing }} pending — review project evidence
+                    </div>
+                    <details class="mt-1">
+                      <summary class="small text-primary" style="cursor:pointer;">View pending work</summary>
+                      <ul class="small mb-0 mt-1 ps-3">
+                        {% for assignment in app.assignment_check.pending %}
+                          <li>{{ assignment.chapter_title }} &rsaquo; {{ assignment.topic_title }} — {{ assignment.assignment_title }} ({{ assignment.action_label }})</li>
+                        {% endfor %}
+                      </ul>
+                    </details>
+                  {% else %}
+                    <div class="student-sub text-success fw-bold">All submitted</div>
                   {% endif %}
                 </td>
                 <td>
@@ -186,7 +207,8 @@
                 <td class="sticky-actions-col text-center">
                   {% if app.status == 'PENDING' %}
                     <div class="action-row justify-content-center">
-                      <form method="post" action="{{ url_for('exams.approve_final_exam_application', application_id=app.id) }}">
+                      <form method="post" action="{{ url_for('exams.approve_final_exam_application', application_id=app.id) }}"
+                            {% if app.assignment_check.missing %}onsubmit="return confirm('This student has {{ app.assignment_check.missing }} pending assignment(s). Approve only if the project or other completion evidence is acceptable. Continue?');"{% endif %}>
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-sm btn-success fw-bold px-3 shadow-sm">✓ Approve</button>
                       </form>

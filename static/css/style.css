@@ -1666,6 +1666,30 @@ body {
 .kpi-value.text-students { color: var(--color-info); }
 .kpi-value.text-leads { color: #a855f7; }
 
+.kpi-today {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.4rem;
+  margin-top: 0.55rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 7px;
+  background: #f1f5f9;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+.kpi-today strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+.kpi-today-label {
+  color: var(--primary-blue);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .kpi-subtext {
   font-size: 0.85rem;
   color: var(--text-secondary);
@@ -2000,6 +2024,15 @@ body {
     margin-bottom: 0.5rem;
     flex-grow: 1;
     line-height: 1.25;
+  }
+  .kpi-today {
+    margin-top: 0.35rem;
+    padding: 0.35rem 0.4rem;
+    gap: 0.15rem 0.3rem;
+    font-size: 0.65rem;
+  }
+  .kpi-today strong {
+    font-size: 0.75rem;
   }
   .kpi-action-btn {
     min-height: auto !important;

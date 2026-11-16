@@ -36,6 +36,49 @@ def _marked_percentage(marked_count, expected_count):
     return round((min(marked_count, expected_count) / expected_count) * 100, 1)
 
 
+def _admin_dashboard_today_metrics(cur, institute_id, today):
+    """Return institute-scoped activity recorded for the dashboard date."""
+    cur.execute(
+        """
+        SELECT COUNT(*) AS cnt,
+               COALESCE(SUM(r.amount_received), 0) AS total
+        FROM receipts r
+        JOIN invoices i ON r.invoice_id = i.id
+        JOIN students s ON i.student_id = s.id
+        WHERE s.institute_id = ? AND parse_date(r.receipt_date) = ?
+        """,
+        [institute_id, today],
+    )
+    receipt_row = cur.fetchone()
+
+    cur.execute(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM students
+        WHERE institute_id = ? AND parse_date(joined_date) = ?
+        """,
+        [institute_id, today],
+    )
+    student_row = cur.fetchone()
+
+    cur.execute(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM leads
+        WHERE institute_id = ? AND date(created_at) = ? AND is_deleted = 0
+        """,
+        [institute_id, today],
+    )
+    lead_row = cur.fetchone()
+
+    return {
+        "receipt_count": int(receipt_row["cnt"] or 0),
+        "receipt_total": float(receipt_row["total"] or 0),
+        "student_count": int(student_row["cnt"] or 0),
+        "lead_count": int(lead_row["cnt"] or 0),
+    }
+
+
 @core_bp.route("/erp")
 def home():
     if "user_id" in session:
@@ -183,6 +226,8 @@ def dashboard():
     """, [institute_id, current_month])
     revenue_this_month = float(cur.fetchone()["total"] or 0)
 
+    today_metrics = _admin_dashboard_today_metrics(cur, institute_id, today)
+
     # ── Expenses this month ─────────────────────────────────────
     cur.execute("""
         SELECT COALESCE(SUM(e.amount), 0) AS total
@@ -235,13 +280,6 @@ def dashboard():
     )
     total_leads_all = cur.fetchone()["cnt"]
     conversion_rate = round((total_converted / total_leads_all * 100), 1) if total_leads_all else 0
-
-    # ── Today's new leads ───────────────────────────────────────
-    cur.execute("""
-        SELECT COUNT(*) AS cnt FROM leads
-        WHERE institute_id = ? AND date(created_at) = ? AND is_deleted = 0
-    """, [institute_id, today])
-    today_new_leads = cur.fetchone()["cnt"]
 
     # ── Past due installments ───────────────────────────────────
     cur.execute("""
@@ -377,16 +415,19 @@ def dashboard():
         current_month=current_month,
         # Revenue & Expenses
         revenue_this_month=revenue_this_month,
+        today_receipt_total=today_metrics["receipt_total"],
+        today_receipt_count=today_metrics["receipt_count"],
         expenses_this_month=expenses_this_month,
         net_profit_this_month=revenue_this_month - expenses_this_month,
         # Students
         active_students=active_students,
         new_students_this_month=new_students_this_month,
+        today_new_students=today_metrics["student_count"],
         # Leads
         active_leads=active_leads,
         leads_by_stage=leads_by_stage,
         conversion_rate=conversion_rate,
-        today_new_leads=today_new_leads,
+        today_new_leads=today_metrics["lead_count"],
         # Receivables
         past_dues=past_dues,
         todays_dues=todays_dues,
