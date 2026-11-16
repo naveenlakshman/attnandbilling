@@ -19,7 +19,7 @@ steps:
       - -ceu
       - |
         docker run --rm ${_IMAGE} python -m py_compile modules/billing/routes.py
-        docker run --rm ${_IMAGE} python -c "from pathlib import Path; from jinja2 import Environment; invoice=Path('/app/templates/billing/invoice_view.html').read_text(encoding='utf-8-sig'); receipt=Path('/app/templates/billing/receipt_new.html').read_text(encoding='utf-8-sig'); env=Environment(); env.parse(invoice); env.parse(receipt); assert 'billing/_cashfree_checkout.html' not in invoice; assert 'offline-payment-tab' in receipt; assert 'online-payment-panel' in receipt; assert 'manual-receipt-form' in receipt"
+        docker run --rm ${_IMAGE} python -c "from pathlib import Path; from jinja2 import Environment; route=Path('/app/modules/billing/routes.py').read_text(encoding='utf-8'); invoice=Path('/app/templates/billing/invoice_view.html').read_text(encoding='utf-8-sig'); receipt=Path('/app/templates/billing/receipt_new.html').read_text(encoding='utf-8-sig'); env=Environment(); env.parse(invoice); env.parse(receipt); assert 'outstanding_amount' in route; assert 'cashfree_available' in route; assert 'billing/_cashfree_checkout.html' not in invoice; assert 'offline-payment-tab' in receipt; assert 'online-payment-panel' in receipt; assert 'manual-receipt-form' in receipt"
 
 images: ['${_IMAGE}']
 options:

@@ -1,6 +1,7 @@
 ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:b4734b76c93f5eb617b87346f5f186a4590e5176a4dffa487e7ec0d30d6b9fca
 FROM ${BASE_IMAGE}
 
-COPY --chown=appuser:appuser modules/billing/routes.py /app/modules/billing/routes.py
+# Preserve the production billing route because it includes the accuracy-ledger
+# invoice fields and the already-verified Cashfree receipt context.
 COPY --chown=appuser:appuser templates/billing/invoice_view.html /app/templates/billing/invoice_view.html
 COPY --chown=appuser:appuser templates/billing/receipt_new.html /app/templates/billing/receipt_new.html
