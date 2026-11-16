@@ -1,12 +1,12 @@
 ﻿{% extends "base.html" %}
 
-{% block title %}Record Receipt - {{ company.company_short_name }}{% endblock %}
+{% block title %}Collect Payment - {{ company.company_short_name }}{% endblock %}
 
 {% block content %}
 
 <style>
   .receipt-form-wrap {
-    max-width: 760px;
+    max-width: 1120px;
   }
 
   .page-header-row {
@@ -29,6 +29,43 @@
     border-radius: 10px;
     padding: 24px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .payment-mode-switch {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 10px;
+    border: 1px solid #d7deea;
+    border-radius: 10px;
+    background: #eef2f7;
+  }
+
+  .payment-mode-button {
+    min-width: 170px;
+    padding: 10px 18px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: #475569;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .payment-mode-button.active {
+    background: #ffffff;
+    color: #0d6efd;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.14);
+  }
+
+  .payment-mode-help {
+    margin: 0 0 18px;
+    color: #64748b;
+    font-size: 14px;
+  }
+
+  .payment-panel[hidden] {
+    display: none !important;
   }
 
   .receipt-form-grid {
@@ -99,20 +136,63 @@
     .receipt-form-grid {
       grid-template-columns: 1fr;
     }
+
+    .payment-mode-switch {
+      display: flex;
+      width: 100%;
+    }
+
+    .payment-mode-button {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 8px;
+    }
   }
 </style>
 
 <div class="receipt-form-wrap">
   <div class="page-header-row">
-    <h2>Record Receipt</h2>
+    <h2>Collect Payment</h2>
 
     <a href="{{ url_for('billing.invoice_view', invoice_id=invoice.id) }}" class="btn btn-secondary">
       ← Back to Invoice
     </a>
   </div>
 
+  <div class="payment-mode-switch" role="tablist" aria-label="Payment type">
+    <button
+      type="button"
+      id="offline-payment-tab"
+      class="payment-mode-button active"
+      role="tab"
+      aria-selected="true"
+      aria-controls="offline-payment-panel"
+      data-payment-mode="offline">Offline Payment</button>
+    {% if cashfree_available %}
+    <button
+      type="button"
+      id="online-payment-tab"
+      class="payment-mode-button"
+      role="tab"
+      aria-selected="false"
+      aria-controls="online-payment-panel"
+      data-payment-mode="online">Online Payment</button>
+    {% endif %}
+  </div>
+  <p class="payment-mode-help" id="payment-mode-help">
+    Record a cash, UPI, card or bank payment already received.
+  </p>
+
+  <section
+    id="offline-payment-panel"
+    class="payment-panel"
+    role="tabpanel"
+    aria-labelledby="offline-payment-tab">
   <div class="receipt-form-card">
-    <form method="POST" action="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">
+    <h3 class="h5 mb-2">Record a payment received</h3>
+    <p class="text-muted mb-4">Use this form for cash, UPI, card or bank payments you have already received.</p>
+    <form id="manual-receipt-form" method="POST" action="{{ url_for('billing.receipt_new', invoice_id=invoice.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="receipt-form-grid">
         <div class="form-group">
           <label>Invoice No</label>
@@ -188,9 +268,46 @@
       </div>
     </form>
   </div>
+  </section>
+
+  {% if cashfree_available %}
+  <section
+    id="online-payment-panel"
+    class="payment-panel"
+    role="tabpanel"
+    aria-labelledby="online-payment-tab"
+    hidden>
+    {% include 'billing/_cashfree_checkout.html' %}
+  </section>
+  {% endif %}
 </div>
 
 <script>
+  const paymentModeButtons = document.querySelectorAll('[data-payment-mode]');
+  const offlinePaymentPanel = document.getElementById('offline-payment-panel');
+  const onlinePaymentPanel = document.getElementById('online-payment-panel');
+  const paymentModeHelp = document.getElementById('payment-mode-help');
+
+  function selectPaymentMode(mode) {
+    const online = mode === 'online' && onlinePaymentPanel;
+    offlinePaymentPanel.hidden = Boolean(online);
+    if (onlinePaymentPanel) {
+      onlinePaymentPanel.hidden = !online;
+    }
+    paymentModeButtons.forEach((button) => {
+      const selected = button.dataset.paymentMode === mode;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-selected', selected ? 'true' : 'false');
+    });
+    paymentModeHelp.textContent = online
+      ? 'Collect securely through Cashfree or share the student payment link.'
+      : 'Record a cash, UPI, card or bank payment already received.';
+  }
+
+  paymentModeButtons.forEach((button) => {
+    button.addEventListener('click', () => selectPaymentMode(button.dataset.paymentMode));
+  });
+
   document.getElementById('receipt_date').valueAsDate = new Date();
 
   const balanceAmount = {{ balance_amount or 0 }};
@@ -206,7 +323,7 @@
     }
   });
 
-  document.querySelector('form').addEventListener('submit', function(e) {
+  document.getElementById('manual-receipt-form').addEventListener('submit', function(e) {
     const amount = parseFloat(amountInput.value) || 0;
 
     if (amount <= 0) {
