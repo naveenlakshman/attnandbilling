@@ -72,10 +72,41 @@
     justify-content: space-between;
     gap: 12px;
   }
+  .pending-assignment-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .pending-assignment-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 14px;
+    border: 1px solid #f0c2c2;
+    border-radius: 8px;
+    background: #fff;
+  }
+  .pending-assignment-path {
+    color: #6b7280;
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+  .pending-assignment-title {
+    color: #111827;
+    font-weight: 700;
+  }
+  .pending-assignment-status {
+    color: #9b1c1c;
+    font-size: 13px;
+    font-weight: 700;
+    margin-top: 3px;
+  }
   @media (max-width: 900px) {
     .check-grid { grid-template-columns: 1fr; }
     .exam-card-header { align-items: flex-start; flex-direction: column; }
     .unlock-action { align-items: flex-start; flex-direction: column; }
+    .pending-assignment-item { align-items: flex-start; flex-direction: column; }
   }
 </style>
 {% endblock %}
@@ -163,7 +194,7 @@
               <div>Complete all remaining LMS topics for this program.</div>
             {% endif %}
             {% if not checks.assignments.passed %}
-              <div>Submit all pending assignments before applying.</div>
+              <div><strong>Submit the assignments listed below before applying.</strong></div>
             {% endif %}
             {% if not checks.dues.passed %}
               <div>Clear the pending fee balance of Rs. {{ "%.2f"|format(checks.dues.balance) }}.</div>
@@ -186,6 +217,26 @@
               Your final exam is approved and scheduled for {{ application.requested_exam_date }}.
             </div>
           {% endif %}
+        {% endif %}
+
+        {% if not checks.assignments.passed and checks.assignments.pending %}
+          <div class="pending-assignment-list" aria-label="Pending assignments">
+            {% for assignment in checks.assignments.pending %}
+              <div class="pending-assignment-item">
+                <div>
+                  <div class="pending-assignment-path">
+                    {{ assignment.chapter_title }} &rsaquo; {{ assignment.topic_title }}
+                  </div>
+                  <div class="pending-assignment-title">{{ assignment.assignment_title }}</div>
+                  <div class="pending-assignment-status">{{ assignment.action_label }}</div>
+                </div>
+                <a class="btn btn-outline-primary btn-sm"
+                   href="{{ url_for('students.master_topic_view', program_id=selected_program.id, master_topic_id=assignment.master_topic_id, tab='assignments') }}">
+                  Open topic and submit
+                </a>
+              </div>
+            {% endfor %}
+          </div>
         {% endif %}
       </div>
     </div>

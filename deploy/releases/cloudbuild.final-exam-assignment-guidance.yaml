@@ -1,0 +1,27 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:final-exam-assignment-guidance
+
+steps:
+  - id: build-final-exam-assignment-guidance
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - deploy/releases/Dockerfile.final-exam-assignment-guidance
+      - --tag
+      - ${_IMAGE}
+      - .
+
+  - id: verify-final-exam-assignment-guidance
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker run --rm ${_IMAGE} python -m py_compile modules/exams/routes.py
+        docker run --rm ${_IMAGE} python -c "from pathlib import Path; from jinja2 import Environment; route=Path('/app/modules/exams/routes.py').read_text(encoding='utf-8'); exam=Path('/app/templates/exams/student_final_exam_apply.html').read_text(encoding='utf-8'); topic=Path('/app/templates/students/topic.html').read_text(encoding='utf-8'); env=Environment(); env.parse(exam); env.parse(topic); assert 'pending_rows = cur.execute' in route; assert 'Needs resubmission' in route; assert 'pending-assignment-list' in exam; assert \"tab='assignments'\" in exam; assert \"requestedTab === 'assignments'\" in topic"
+
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s

@@ -435,8 +435,11 @@ function ensureTinyMCE(callback) {
 
 // Restore saved tab states on load
 (function() {
+  var requestedTab = new URLSearchParams(window.location.search).get('tab');
   var savedTab = localStorage.getItem('lms_tab_' + window.location.pathname);
-  if (savedTab === 'notes') {
+  if (requestedTab === 'assignments') {
+    switchTab('assignments');
+  } else if (savedTab === 'notes') {
     switchTab('notes');
   } else if (savedTab === 'assignments') {
     switchTab('assignments');

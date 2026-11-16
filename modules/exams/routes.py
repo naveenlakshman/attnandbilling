@@ -320,30 +320,73 @@ def _final_exam_assignment_check(cur, student_id, program_id):
         (program_id,),
     ).fetchone()["total"] or 0
 
-    submitted = cur.execute(
+    pending_rows = cur.execute(
         f"""
-            SELECT COUNT(DISTINCT a.id) AS submitted
+            SELECT DISTINCT
+                   a.id AS assignment_id,
+                   a.title AS assignment_title,
+                   mt.id AS master_topic_id,
+                   mt.title AS topic_title,
+                   COALESCE(pc.custom_title, mc.title) AS chapter_title,
+                   pc.chapter_order,
+                   mt.topic_order
             FROM lms_assignments a
             JOIN lms_master_topics mt ON mt.id = a.master_topic_id
             JOIN lms_master_chapters mc ON mc.id = mt.master_chapter_id
             JOIN lms_program_chapters pc ON pc.master_chapter_id = mc.id
-            JOIN lms_assignment_submissions s
-              ON s.assignment_id = a.id
-             AND s.student_id = ?
-             {latest_clause}
-             AND COALESCE({review_column}, s.status, 'submitted') IN ('submitted', 'accepted', 'reviewed')
             WHERE pc.program_id = ?
               AND COALESCE(pc.is_visible, 1) = 1
               AND COALESCE(mc.status, 'active') = 'active'
               AND COALESCE(mt.status, 'active') = 'active'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM lms_assignment_submissions s
+                  WHERE s.assignment_id = a.id
+                    AND s.student_id = ?
+                    {latest_clause}
+                    AND COALESCE({review_column}, s.status, 'submitted')
+                        IN ('submitted', 'accepted', 'reviewed')
+              )
+            ORDER BY pc.chapter_order, mt.topic_order, a.id
         """,
-        (student_id, program_id),
-    ).fetchone()["submitted"] or 0
+        (program_id, student_id),
+    ).fetchall()
+
+    pending = []
+    for row in pending_rows:
+        item = dict(row)
+        latest_filter = "AND COALESCE(is_latest, 1) = 1" if "is_latest" in submission_columns else ""
+        status_expression = (
+            "COALESCE(review_status, status, 'submitted')"
+            if "review_status" in submission_columns
+            else "COALESCE(status, 'submitted')"
+        )
+        latest_submission = cur.execute(
+            f"""
+                SELECT {status_expression} AS submission_status
+                FROM lms_assignment_submissions
+                WHERE assignment_id = ?
+                  AND student_id = ?
+                  {latest_filter}
+                ORDER BY submitted_at DESC, id DESC
+                LIMIT 1
+            """,
+            (item["assignment_id"], student_id),
+        ).fetchone()
+        submission_status = latest_submission["submission_status"] if latest_submission else None
+        item["submission_status"] = submission_status
+        item["action_label"] = (
+            "Needs resubmission" if submission_status == "rejected" else "Not submitted"
+        )
+        pending.append(item)
+
+    submitted = max(total - len(pending), 0)
 
     return {
         "total": total,
         "submitted": submitted,
-        "missing": max(total - submitted, 0),
+        "missing": len(pending),
+        "pending": pending,
         "passed": submitted >= total,
     }
 
