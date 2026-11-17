@@ -19,9 +19,6 @@ steps:
       - --rm
       - ${_IMAGE}
       - python
-      - -m
-      - pytest
-      - -q
       - tests/test_invoice_list_rendering.py
 
 images: ['${_IMAGE}']

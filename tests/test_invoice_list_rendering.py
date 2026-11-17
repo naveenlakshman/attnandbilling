@@ -49,3 +49,8 @@ def test_accuracy_invoice_rows_use_ledger_balance_and_credit():
     assert "3075.00" in rendered
     assert "Credit:" in rendered
     assert "250.00" in rendered
+
+
+if __name__ == "__main__":
+    test_legacy_invoice_rows_render_without_accuracy_fields()
+    test_accuracy_invoice_rows_use_ledger_balance_and_credit()
