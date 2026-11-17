@@ -1,6 +1,7 @@
 import re
 import uuid
 from datetime import date
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import pytest
@@ -231,6 +232,19 @@ def test_manual_reminder_adds_payment_link_to_sent_and_logged_message(linked, mo
     assert response.json['success']
     assert '/billing/pay/' in messages[0]
     assert read(linked, 'SELECT message_text FROM reminder_logs')[0]['message_text'] == messages[0]
+
+
+def test_receivable_reminder_data_can_use_signed_payment_link(linked):
+    with linked.app.app_context():
+        conn = linked.connect()
+        try:
+            payment_url = links.build_link(conn, 1, 101)
+        finally:
+            conn.close()
+    assert payment_url == linked.payment_url
+    template = Path('templates/billing/receivables.html').read_text(encoding='utf-8')
+    assert '"paymentUrl": receivable_payment_links.get(item.invoice_id, "")' in template
+    assert 'appendPaymentLink(generateMessage(' in template
 
 
 def test_automatic_reminder_adds_same_link_without_request_context(linked, monkeypatch):

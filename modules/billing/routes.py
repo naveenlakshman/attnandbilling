@@ -7471,6 +7471,25 @@ def receivables():
     total_today_due = sum(float(row["balance_due"] or 0) for row in todays_dues)
     total_upcoming_due = sum(float(row["balance_due"] or 0) for row in upcoming_dues)
 
+    receivable_payment_links = {}
+    if payment_links.enabled(current_inst):
+        invoice_ids = {
+            int(row["invoice_id"])
+            for row in list(past_dues) + list(todays_dues) + list(upcoming_dues)
+            if row["invoice_id"] is not None
+        }
+        for invoice_id in invoice_ids:
+            try:
+                payment_url = payment_links.build_link(conn, current_inst, invoice_id)
+                if payment_url:
+                    receivable_payment_links[invoice_id] = payment_url
+            except cashfree.CashfreeError as exc:
+                logger.warning(
+                    "Could not create receivable payment link for invoice %s: %s",
+                    invoice_id,
+                    exc,
+                )
+
     # Expected receivables for the current month + next two months
     current_month_start = datetime.now().date().replace(day=1)
 
@@ -7625,6 +7644,7 @@ def receivables():
         branches=branches,
         branch_id=branch_id,
         reminder_stats=reminder_stats,
+        receivable_payment_links=receivable_payment_links,
         receivable_attendance_dates=receivable_attendance_dates,
         receivable_attendance_history=receivable_attendance_history,
         available_trainers=available_trainers,

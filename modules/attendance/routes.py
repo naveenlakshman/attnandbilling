@@ -820,12 +820,13 @@ def edit_batch(batch_id):
         current_inst = get_current_institute_id(default=1)
         # Get user info
         cur.execute(
-            "SELECT id, branch_id, can_view_all_branches FROM users WHERE id = ? AND institute_id = ?",
+            "SELECT id, branch_id, can_view_all_branches, role FROM users WHERE id = ? AND institute_id = ?",
             (user_id, current_inst),
         )
         user = cur.fetchone()
         if not user:
             return redirect(url_for('core.login'))
+        can_edit_start_date = str(user['role'] or '').lower() == 'admin'
         
         # Get batch
         cur.execute("""
@@ -847,7 +848,14 @@ def edit_batch(batch_id):
             # Get form data
             batch_name = request.form.get('batch_name', '').strip()
             course_id = request.form.get('course_id') or None
-            start_date = request.form.get('start_date') or None
+            # Once a batch exists, only an administrator may change its start
+            # date. Preserve the stored value for staff even if a crafted POST
+            # includes a different value.
+            start_date = (
+                (request.form.get('start_date') or None)
+                if can_edit_start_date
+                else batch['start_date']
+            )
             end_date = request.form.get('end_date') or None
             start_time = request.form.get('start_time') or None
             end_time = request.form.get('end_time') or None
@@ -863,7 +871,8 @@ def edit_batch(batch_id):
                 _branches = cur.fetchall()
                 return render_template('attendance/batch_form.html', batch=batch,
                                        error=msg, courses=_courses, trainers=_trainers,
-                                       branches=_branches, user=user, edit=True), 400
+                                       branches=_branches, user=user, edit=True,
+                                       can_edit_start_date=can_edit_start_date), 400
             
             # Validate
             if not batch_name:
@@ -944,7 +953,8 @@ def edit_batch(batch_id):
         return render_template('attendance/batch_form.html',
                              batch=batch, courses=courses, trainers=trainers,
                              branches=branches, inst_opening=inst_opening,
-                             inst_closing=inst_closing, edit=True, user=user)
+                             inst_closing=inst_closing, edit=True, user=user,
+                             can_edit_start_date=can_edit_start_date)
     
     finally:
         conn.close()

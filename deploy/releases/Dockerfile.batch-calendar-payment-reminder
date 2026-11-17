@@ -1,0 +1,14 @@
+ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:3dd0d101b0b22c61a4ebe077e3806ce9de1007fea1fc3c6ea155772663ef3c82
+FROM ${BASE_IMAGE}
+
+# Academy-calendar batch status and staff start-date protection.
+COPY --chown=appuser:appuser modules/attendance/routes.py /app/modules/attendance/routes.py
+COPY --chown=appuser:appuser modules/lms_admin/routes.py /app/modules/lms_admin/routes.py
+COPY --chown=appuser:appuser services/batch_schedule.py /app/services/batch_schedule.py
+COPY --chown=appuser:appuser templates/attendance/batch_form.html /app/templates/attendance/batch_form.html
+COPY --chown=appuser:appuser templates/includes/batch_end_summary.html /app/templates/includes/batch_end_summary.html
+COPY --chown=appuser:appuser templates/lms_admin/classroom_teaching_dashboard.html /app/templates/lms_admin/classroom_teaching_dashboard.html
+
+# Secure online-payment links in receivable reminder messages.
+COPY --chown=appuser:appuser modules/billing/routes.py /app/modules/billing/routes.py
+COPY --chown=appuser:appuser templates/billing/receivables.html /app/templates/billing/receivables.html

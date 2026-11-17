@@ -23,7 +23,7 @@ from config import Config, DB_PATH
 from modules.core.utils import login_required, admin_required, lms_content_manager_required
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
-from services.batch_schedule import batch_end_summary
+from services.batch_schedule import batch_end_summary, batch_start_summary
 from services.profile_updates import PROFILE_UPDATE_FIELDS, material_profile_changes
 from modules.lms_admin.publishing import get_program_publishing_readiness
 from modules.lms_admin.editorial import (
@@ -10367,7 +10367,7 @@ def classroom_teaching_dashboard():
             params.append(user_id)
             
         sql = f"""
-            SELECT b.id, b.batch_name, b.start_time, b.end_time, b.end_date, b.course_id,
+            SELECT b.id, b.batch_name, b.start_time, b.end_time, b.start_date, b.end_date, b.course_id,
                    br.branch_name, c.course_name, u.full_name as trainer_name,
                    (SELECT COUNT(DISTINCT sb.student_id) FROM student_batches sb WHERE sb.batch_id = b.id AND sb.status = 'active') as student_count,
                    (SELECT COUNT(DISTINCT ar.student_id)
@@ -10381,6 +10381,32 @@ def classroom_teaching_dashboard():
             ORDER BY b.batch_name ASC
         """
         raw_batches = cur.execute(sql, [today_date, current_inst, current_inst, *params]).fetchall()
+
+        calendar_row = cur.execute(
+            "SELECT working_days FROM tenant_attendance_calendar_settings WHERE institute_id = ?",
+            (current_inst,),
+        ).fetchone()
+        raw_working_days = (
+            calendar_row['working_days'] if calendar_row and calendar_row['working_days'] else '0,1,2,3,4,5'
+        )
+        academy_working_days = {
+            int(day.strip()) for day in raw_working_days.split(',')
+            if day.strip().isdigit() and 0 <= int(day.strip()) <= 6
+        } or set(range(6))
+        start_dates = [str(row['start_date'])[:10] for row in raw_batches if row['start_date']]
+        academy_holidays = set()
+        if start_dates:
+            calendar_start = min(min(start_dates), today_date)
+            calendar_end = max(max(start_dates), today_date)
+            holiday_rows = cur.execute(
+                """
+                    SELECT holiday_date
+                    FROM tenant_attendance_holidays
+                    WHERE institute_id = ? AND holiday_date BETWEEN ? AND ?
+                """,
+                (current_inst, calendar_start, calendar_end),
+            ).fetchall()
+            academy_holidays = {str(row['holiday_date'])[:10] for row in holiday_rows}
 
         batches = []
         for b in raw_batches:
@@ -10558,6 +10584,12 @@ def classroom_teaching_dashboard():
             b_dict['taught_cnt'] = taught_cnt
             b_dict['total_cnt'] = total_cnt
             b_dict['taught_pct'] = pct
+            b_dict['start_summary'] = batch_start_summary(
+                b_dict.get('start_date'),
+                working_days=academy_working_days,
+                holidays=academy_holidays,
+                today=ist_now.date(),
+            )
             b_dict['end_summary'] = batch_end_summary(b_dict.get('end_date'), today=ist_now.date())
             b_dict['next_topic'] = next_topic
             b_dict['earlier_pending_summary'] = earlier_pending_summary

@@ -430,6 +430,7 @@
   "invoiceNo": item.invoice_no,
   "dueDate": item.due_date,
   "balance": item.balance_due or 0,
+  "paymentUrl": receivable_payment_links.get(item.invoice_id, ""),
   "reminderType": rtype,
   "lastSent": stats.last_sent_at if stats else "",
   "count": stats.count if stats else 0
@@ -666,7 +667,7 @@
         </label>
         <textarea id="rm_message" class="form-control" rows="6" style="font-size:13px;resize:vertical;"></textarea>
         {% if config.CASHFREE_PAYMENT_LINKS_ENABLED and current_institute_id == config.CASHFREE_INSTITUTE_ID %}
-        <p class="small text-muted mt-2 mb-0">SMS reminders also include a secure payment link. Students can choose their current installment or full outstanding balance.</p>
+        <p class="small text-muted mt-2 mb-0">This reminder includes a secure online-payment link. Students can choose their current installment or full outstanding balance.</p>
         {% endif %}
       </div>
       <div class="modal-footer py-2 px-3 gap-2 flex-wrap justify-content-between">
@@ -705,13 +706,13 @@ let reminderModalInstance = null;
 function openReminderModal(btn) {
   currentReminder = JSON.parse(btn.dataset.reminder);
 
-  const message = generateMessage(
+  const message = appendPaymentLink(generateMessage(
     currentReminder.reminderType,
     currentReminder.studentName,
     currentReminder.balance,
     currentReminder.invoiceNo,
     currentReminder.dueDate
-  );
+  ), currentReminder.paymentUrl);
 
   document.getElementById('rm_student_info').textContent =
     currentReminder.studentName + ' · ' + currentReminder.invoiceNo;
@@ -750,6 +751,12 @@ function generateMessage(type, name, balance, invoiceNo, dueDate) {
   } else {
     return `Dear ${fullName}, this is a friendly reminder from ${COMPANY_NAME} that your upcoming installment of ${amt} is due on ${dateStr}. Kindly be prepared to make the payment on or before the due date. For any clarification, contact ${CONTACT_NUMBER}.`;
   }
+}
+
+function appendPaymentLink(message, paymentUrl) {
+  const url = String(paymentUrl || '').trim();
+  if (!url || message.includes(url)) return message;
+  return message.trimEnd() + `\nPay online: ${url}`;
 }
 
 function formatDateDisplay(dateStr) {

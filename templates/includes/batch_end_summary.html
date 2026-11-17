@@ -3,3 +3,9 @@
   {% if summary and summary.date %}End date: {{ summary.date_label }} · {{ summary.remaining_label }}{% else %}End date not set{% endif %}
 </span>
 {%- endmacro %}
+
+{% macro batch_start(summary) -%}
+<span class="badge batch-start-summary {{ summary.badge_class if summary else 'bg-light text-secondary border' }}"{% if summary and summary.date %} data-start-date="{{ summary.date }}" data-academy-days-elapsed="{{ summary.academy_days_elapsed }}"{% endif %}>
+  {% if summary and summary.date %}Started: {{ summary.date_label }} · {{ summary.status_label }}{% else %}Start date not set{% endif %}
+</span>
+{%- endmacro %}

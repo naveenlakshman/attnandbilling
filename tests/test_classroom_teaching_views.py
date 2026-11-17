@@ -4,7 +4,7 @@ from pathlib import Path
 from flask import Flask, render_template
 from jinja2 import ChoiceLoader, DictLoader, FileSystemLoader
 import pytest
-from services.batch_schedule import batch_end_summary
+from services.batch_schedule import batch_end_summary, batch_start_summary
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +29,7 @@ def make_app():
             next_topic='Working with functions',earlier_pending_summary='2 earlier topics pending' if index==2 else None,
             today_completed_topics=['Introduction'] if index%3==0 else [],last_taught_topic='Basics',last_taught_at='2026-10-31 10:00',launch_program_id=31 if index!=9 else None))
         batches[-1]['end_summary']=batch_end_summary('2026-11-20' if index!=9 else None,today=date(2026,11,2))
+        batches[-1]['start_summary']=batch_start_summary('2026-10-26',working_days={0,1,2,3,4,5},holidays={'2026-10-29'},today=date(2026,11,2))
     app.config['BATCHES'] = batches
     def dashboard():
         from flask import request
@@ -60,6 +61,7 @@ def test_both_views_use_one_filterable_batch_record_and_existing_actions(view):
     assert 'classroom_teaching_dashboard.js?v=1' in html
     assert html.count('data-days-remaining="18"')==16
     assert 'End date: 20-11-2026' in html and '18 days left' in html
+    assert 'Started: 26-10-2026' in html and '6 academy days completed' in html
     assert 'End date not set' in html
 
 

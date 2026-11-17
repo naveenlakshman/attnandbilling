@@ -18,6 +18,13 @@ for(const type of ['overdue','due_today','upcoming']) {
     assert.equal(decodeURIComponent(encodeURIComponent(message)),message);
   });
 }
+test('receivable reminder includes the secure payment link for every send option',()=>{
+  const base=context.generateMessage('overdue','Sujan H C',1250,'INV-7','2026-11-06');
+  const linked=context.appendPaymentLink(base,'https://tenant.example/billing/pay/signed-token');
+  assert.ok(linked.includes('\nPay online: https://tenant.example/billing/pay/signed-token'));
+  assert.equal(context.appendPaymentLink(linked,'https://tenant.example/billing/pay/signed-token'),linked);
+  assert.equal(context.appendPaymentLink(base,''),base);
+});
 test('blank and whitespace names are handled without losing initials',()=>{
   assert.ok(context.generateMessage('due_today','  Sujan  H C ',250,'INV-7','2026-11-06').startsWith('Dear Sujan H C,'));
   assert.ok(context.generateMessage('due_today',null,250,'INV-7','2026-11-06').startsWith('Dear Student,'));
