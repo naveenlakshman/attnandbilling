@@ -286,7 +286,13 @@
     </thead>
     <tbody>
       {% for inv in invoices %}
-      {% set balance = (inv.total_amount or 0) - (inv.paid_amount or 0) %}
+      {#
+        Accuracy-aware releases provide outstanding_amount and credit_amount,
+        while older invoice queries provide total_amount and paid_amount only.
+        Keep the list renderable across both shapes so a partial release cannot
+        take the entire invoice screen offline.
+      #}
+      {% set balance = (inv.outstanding_amount or 0) if inv.outstanding_amount is defined else ((inv.total_amount or 0) - (inv.paid_amount or 0)) %}
       <tr>
         <td class="td-sl" style="text-align:center;color:#999;font-size:12px;">{{ loop.index }}</td>
 
@@ -304,7 +310,7 @@
 
         <td data-label="Paid" style="color:#27ae60;" data-sort-key="paid" data-sort-value="{{ inv.paid_amount or 0 }}">&#8377; {{ "%.2f"|format(inv.paid_amount or 0) }}</td>
 
-        <td data-label="Balance" style="color:#c0392b;" data-sort-key="balance" data-sort-value="{{ balance }}">&#8377; {{ "%.2f"|format(balance) }}</td>
+        <td data-label="Balance" style="color:#c0392b;" data-sort-key="balance" data-sort-value="{{ balance }}">&#8377; {{ "%.2f"|format(balance) }}{% if inv.credit_amount is defined and inv.credit_amount %}<div class="text-success small">Credit: &#8377; {{ "%.2f"|format(inv.credit_amount) }}</div>{% endif %}</td>
 
         <td data-label="Status" data-sort-key="status" data-sort-value="{{ inv.status or '' }}">
           <span class="status-badge

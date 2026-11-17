@@ -1,0 +1,6 @@
+ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:26f284ffffc9cc01a1d200c6767269fc646c297a61cce8bef0565ed2e2ba5457
+FROM ${BASE_IMAGE}
+
+# Keep the invoice list compatible with both legacy and ledger-aware rows.
+COPY --chown=appuser:appuser templates/billing/invoices.html /app/templates/billing/invoices.html
+COPY --chown=appuser:appuser tests/test_invoice_list_rendering.py /app/tests/test_invoice_list_rendering.py

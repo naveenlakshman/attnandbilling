@@ -1,0 +1,30 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:invoice-list-render-hotfix
+
+steps:
+  - id: build-invoice-list-render-hotfix
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - deploy/releases/Dockerfile.invoice-list-render-hotfix
+      - --tag
+      - ${_IMAGE}
+      - .
+
+  - id: verify-invoice-list-render-hotfix
+    name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - ${_IMAGE}
+      - python
+      - -m
+      - pytest
+      - -q
+      - tests/test_invoice_list_rendering.py
+
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s
