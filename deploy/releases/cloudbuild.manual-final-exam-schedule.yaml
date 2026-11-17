@@ -1,0 +1,28 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:manual-final-exam-schedule
+
+steps:
+  - id: build-manual-final-exam-schedule
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - deploy/releases/Dockerfile.manual-final-exam-schedule
+      - --tag
+      - ${_IMAGE}
+      - .
+
+  - id: verify-manual-final-exam-schedule
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker run --rm ${_IMAGE} python -m py_compile modules/exams/routes.py services/final_exam_schedule.py
+        docker run --rm ${_IMAGE} python tests/test_manual_final_exam_schedule.py
+        docker run --rm ${_IMAGE} python -c "from pathlib import Path; from jinja2 import Environment; env=Environment(); env.parse(Path('/app/templates/exams/admin_manual_schedule.html').read_text(encoding='utf-8')); env.parse(Path('/app/templates/exams/admin_final_exam_applications.html').read_text(encoding='utf-8'))"
+
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s

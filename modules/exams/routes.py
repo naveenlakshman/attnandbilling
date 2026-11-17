@@ -5,7 +5,12 @@ from datetime import date, datetime, timedelta
 from flask import flash, redirect, render_template, request, session, url_for
 
 from db import get_conn, log_activity
-from modules.core.utils import lms_content_manager_required
+from modules.core.utils import admin_required, lms_content_manager_required
+from services.final_exam_schedule import (
+    apply_manual_schedule,
+    has_manual_fee_override,
+    preview_manual_schedule,
+)
 from services.tenant_context import get_current_institute_id
 from . import exams_bp
 
@@ -116,7 +121,7 @@ def _validate_question_fields(fields):
     return None
 
 
-def _student_required_redirect():
+def _student_required_redirect(*, manual_exam_application_id=None, allow_any_manual_exam=False):
     if "student_id" not in session:
         flash("Please login first.", "warning")
         return redirect(url_for("students.login"))
@@ -125,6 +130,18 @@ def _student_required_redirect():
         institute_id = int(get_current_institute_id(default=1))
         access = student_fee_access_status(int(session["student_id"]), institute_id)
         if access.get("locked"):
+            if manual_exam_application_id is not None or allow_any_manual_exam:
+                conn = get_conn()
+                try:
+                    if has_manual_fee_override(
+                        conn.cursor(),
+                        institute_id,
+                        int(session["student_id"]),
+                        manual_exam_application_id,
+                    ):
+                        return None
+                finally:
+                    conn.close()
             flash(
                 "Exams are temporarily unavailable because a fee installment is overdue. "
                 "Access will resume after payment is recorded.",
@@ -1196,7 +1213,7 @@ def download_sample_csv():
 
 @exams_bp.route("/student/final-exam/apply", methods=["GET", "POST"])
 def final_exam_apply():
-    auth_redirect = _student_required_redirect()
+    auth_redirect = _student_required_redirect(allow_any_manual_exam=True)
     if auth_redirect:
         return auth_redirect
 
@@ -1333,6 +1350,64 @@ def final_exam_apply():
         )
     finally:
         conn.close()
+
+
+@exams_bp.route("/lms_admin/final-exam/manual-schedule", methods=["GET", "POST"])
+@admin_required
+def manual_schedule_final_exams():
+    current_inst = get_current_institute_id(default=1)
+    branch_id = request.values.get("branch_id", type=int)
+    exam_date = request.values.get("exam_date", "").strip() or date.today().isoformat()
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        branches = cur.execute(
+            """SELECT id, branch_name FROM branches
+               WHERE institute_id = ? AND is_active = 1 ORDER BY branch_name""",
+            (current_inst,),
+        ).fetchall()
+        preview = None
+        if branch_id:
+            preview = preview_manual_schedule(cur, current_inst, branch_id)
+
+        if request.method == "POST":
+            if request.form.get("confirm_schedule") != "yes":
+                flash("Confirm the reviewed bulk schedule before applying it.", "warning")
+                return redirect(
+                    url_for(
+                        "exams.manual_schedule_final_exams",
+                        branch_id=branch_id,
+                        exam_date=exam_date,
+                    )
+                )
+            preview, scheduled_ids = apply_manual_schedule(
+                conn,
+                current_inst,
+                branch_id,
+                exam_date,
+                session["user_id"],
+            )
+            conn.commit()
+            flash(
+                f"Scheduled {len(scheduled_ids)} final exam application(s) for "
+                f"{preview['branch']['branch_name']} on {exam_date}.",
+                "success",
+            )
+            return redirect(url_for("exams.final_exam_applications"))
+    except ValueError as exc:
+        conn.rollback()
+        flash(str(exc), "danger")
+        preview = None
+    finally:
+        conn.close()
+
+    return render_template(
+        "exams/admin_manual_schedule.html",
+        branches=branches,
+        branch_id=branch_id,
+        exam_date=exam_date,
+        preview=preview,
+    )
 
 
 @exams_bp.route("/lms_admin/final-exam/applications", methods=["GET"])
@@ -1568,7 +1643,7 @@ def expire_final_exam_application(application_id):
 
 @exams_bp.route("/student/final-exam/take/<int:application_id>", methods=["GET"])
 def take_final_exam(application_id):
-    auth_redirect = _student_required_redirect()
+    auth_redirect = _student_required_redirect(manual_exam_application_id=application_id)
     if auth_redirect:
         return auth_redirect
 
@@ -1638,15 +1713,15 @@ def take_final_exam(application_id):
 
 @exams_bp.route("/student/final-exam/submit", methods=["POST"])
 def submit_final_exam():
-    auth_redirect = _student_required_redirect()
-    if auth_redirect:
-        return auth_redirect
-
     final_exam = session.get("final_exam_answers") or {}
     answer_key = final_exam.get("answers") or {}
     question_ids = final_exam.get("question_ids") or []
     application_id = final_exam.get("application_id")
     course_id = final_exam.get("course_id")
+
+    auth_redirect = _student_required_redirect(manual_exam_application_id=application_id)
+    if auth_redirect:
+        return auth_redirect
 
     if not answer_key or not question_ids or not application_id or not course_id:
         flash("Your final exam session has expired. Please start the exam again.", "warning")
@@ -1715,7 +1790,7 @@ def submit_final_exam():
 
 @exams_bp.route("/student/final-exam/result/<int:application_id>", methods=["GET"])
 def final_exam_result(application_id):
-    auth_redirect = _student_required_redirect()
+    auth_redirect = _student_required_redirect(manual_exam_application_id=application_id)
     if auth_redirect:
         return auth_redirect
 

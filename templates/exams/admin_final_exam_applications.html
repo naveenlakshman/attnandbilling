@@ -99,6 +99,11 @@
       <h1>Final Exam Applications</h1>
       <div class="text-muted">Review profile-verified requests and approve the exam unlock date.</div>
     </div>
+    {% if session.get('role') == 'admin' %}
+      <a class="btn btn-primary fw-bold" href="{{ url_for('exams.manual_schedule_final_exams') }}">
+        Manually Schedule Exams
+      </a>
+    {% endif %}
   </div>
 
   <div class="queue-card">

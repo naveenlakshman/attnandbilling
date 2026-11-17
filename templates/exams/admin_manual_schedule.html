@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Manually Schedule Final Exams{% endblock %}
+{% block page_title %}Manually Schedule Final Exams{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width: 1500px;">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+      <a href="{{ url_for('exams.final_exam_applications') }}" class="text-primary fw-bold">&larr; Final Exam Applications</a>
+      <h1 class="h3 fw-bold mt-2 mb-1">Manually Schedule Final Exams</h1>
+      <p class="text-muted mb-0">
+        Preview active students and programs before creating approved exam applications.
+      </p>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+      <form method="get" class="row g-3 align-items-end">
+        <div class="col-lg-5">
+          <label class="form-label fw-bold" for="branch_id">Branch</label>
+          <select class="form-select" id="branch_id" name="branch_id" required>
+            <option value="">-- Select branch --</option>
+            {% for branch in branches %}
+              <option value="{{ branch.id }}" {% if branch_id == branch.id %}selected{% endif %}>{{ branch.branch_name }} (ID {{ branch.id }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-lg-4">
+          <label class="form-label fw-bold" for="exam_date">Exam date</label>
+          <input class="form-control" type="date" id="exam_date" name="exam_date" value="{{ exam_date }}" required>
+        </div>
+        <div class="col-lg-3 d-grid">
+          <button class="btn btn-outline-primary fw-bold" type="submit">Preview Schedule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if preview %}
+    <div class="row g-3 mb-4">
+      <div class="col-md"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Active students</div><div class="h3 mb-0">{{ preview.student_count }}</div></div></div></div>
+      <div class="col-md"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Applications to schedule</div><div class="h3 text-success mb-0">{{ preview.schedulable_count }}</div></div></div></div>
+      <div class="col-md"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Already attempted</div><div class="h3 mb-0">{{ preview.attempted_count }}</div></div></div></div>
+      <div class="col-md"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">No questions</div><div class="h3 text-danger mb-0">{{ preview.blocked_question_count }}</div></div></div></div>
+      <div class="col-md"><div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">No active program</div><div class="h3 text-warning mb-0">{{ preview.students_without_program|length }}</div></div></div></div>
+    </div>
+
+    <div class="alert alert-info">
+      Exams use up to 50 randomized questions directly from each program's question bank. Approved students may take
+      this manually scheduled exam despite pending online topic completion, assignment uploads, or fees. Existing exam
+      attempts are never changed.
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header bg-white fw-bold py-3">
+        {{ preview.branch.branch_name }} — {{ exam_date }}
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Student</th><th>Program</th><th>Questions</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+          {% for row in preview.rows %}
+            <tr>
+              <td><strong>{{ row.student.full_name }}</strong><div class="small text-muted">{{ row.student.student_code }}</div></td>
+              <td>{{ row.program.program_name }}<div class="small text-muted">{{ row.program.course_name or '' }}</div></td>
+              <td>{{ row.question_count }}</td>
+              <td>
+                {% if row.action == 'create' %}<span class="badge bg-success">Create &amp; approve</span>
+                {% elif row.action == 'reschedule' %}<span class="badge bg-primary">Reschedule &amp; approve</span>
+                {% elif row.action == 'skip_attempted' %}<span class="badge bg-secondary">Already attempted — unchanged</span>
+                {% else %}<span class="badge bg-danger">Blocked — no questions</span>{% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" class="text-center text-muted py-4">No program-linked students found.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% if preview.students_without_program %}
+      <details class="card shadow-sm border-0 mb-4">
+        <summary class="card-header bg-white fw-bold py-3" style="cursor:pointer;">
+          Students without an active program ({{ preview.students_without_program|length }})
+        </summary>
+        <div class="card-body">
+          {% for student in preview.students_without_program %}
+            <span class="badge bg-light text-dark border me-1 mb-1">{{ student.student_code }} — {{ student.full_name }}</span>
+          {% endfor %}
+        </div>
+      </details>
+    {% endif %}
+
+    <form method="post" class="card border-danger shadow-sm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="branch_id" value="{{ branch_id }}">
+      <input type="hidden" name="exam_date" value="{{ exam_date }}">
+      <div class="card-body p-4">
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" value="yes" id="confirm_schedule" name="confirm_schedule" required>
+          <label class="form-check-label fw-bold" for="confirm_schedule">
+            I reviewed this list and authorize {{ preview.schedulable_count }} exam application(s) for {{ exam_date }}.
+          </label>
+        </div>
+        <button class="btn btn-danger fw-bold" type="submit" {% if not preview.schedulable_count %}disabled{% endif %}>
+          Schedule and Approve Exams
+        </button>
+      </div>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}
