@@ -17,6 +17,7 @@ import hashlib
 from services.storage import get_storage_service
 from services.tenant_context import get_current_institute_id
 from services.document_numbers import allocate_document_number
+from services.invoice_form import load_booking_branches, require_booking_branch
 from services.student_messages import registration_message, invoice_message, receipt_message, personalize_student_message
 from services import cashfree, payment_links
 from services.subscriptions import (
@@ -5345,23 +5346,15 @@ def invoice_new():
                 flash("Selected student not found.", "danger")
                 return redirect(url_for("billing.invoice_new"))
 
-            branch_id = student["branch_id"]
-
-            if not branch_id:
-                cur.execute(
-                    "SELECT id FROM branches WHERE institute_id = ? AND is_active = 1 LIMIT 1",
-                    (current_inst,)
+            try:
+                branch_id = require_booking_branch(
+                    conn,
+                    current_inst,
+                    request.form.get("invoice_branch_id"),
                 )
-                fallback_branch = cur.fetchone()
-                if fallback_branch:
-                    branch_id = fallback_branch["id"]
-                    cur.execute(
-                        "UPDATE students SET branch_id = ? WHERE id = ?",
-                        (branch_id, student_id)
-                    )
-                else:
-                    flash("Selected student does not have a branch assigned.", "danger")
-                    return redirect(url_for("billing.invoice_new"))
+            except ValueError as exc:
+                flash(str(exc), "danger")
+                return redirect(url_for("billing.invoice_new"))
 
             if student["status"] != "active":
                 try:
@@ -5689,10 +5682,11 @@ def invoice_new():
     cur.execute("""
         SELECT *
         FROM courses
-        WHERE is_active = 1
+        WHERE is_active = 1 AND institute_id = ?
         ORDER BY course_name ASC
-    """)
+    """, (current_inst,))
     courses = cur.fetchall()
+    admission_branches = load_booking_branches(conn, current_inst)
 
     conn.close()
     today = datetime.today().strftime("%Y-%m-%d")
@@ -5720,6 +5714,7 @@ def invoice_new():
         "billing/invoice_form_modern.html",
         students=students_dict,
         courses=courses_dict,
+        admission_branches=admission_branches,
         today=today,
         mode="create",
         prefill_student_id=prefill_student_id,

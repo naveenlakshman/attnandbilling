@@ -34,17 +34,22 @@ def test_runtime_patch_replaces_only_the_legacy_block():
 
 def test_admission_fragment_is_structured_responsive_and_preserves_fields():
     source = FRAGMENT.read_text(encoding="utf-8")
-    Environment().parse(source)
+    template = Environment().from_string(source)
 
     assert 'class="admission-setup-grid"' in source
-    assert "grid-template-columns: repeat(2" in source
+    assert "grid-template-columns: minmax(0, 720px)" in source
     assert "@media (max-width: 768px)" in source
     assert 'name="invoice_branch_id"' in source
-    assert 'name="admission_mode"' in source
-    assert 'value="new"' in source
-    assert 'value="existing"' in source
     assert 'for="invoice_branch_id"' in source
-    assert 'for="admission_mode"' in source
+    assert "No active branch is configured" in source
+
+    rendered = template.render(admission_branches=[{"id": 2, "branch_name": "Hoskote"}])
+    assert '<option value="2">Hoskote</option>' in rendered
+    assert 'name="invoice_branch_id"' in rendered
+
+    empty = template.render(admission_branches=[])
+    assert 'name="invoice_branch_id"' not in empty
+    assert "No active branch is configured" in empty
 
 
 if __name__ == "__main__":

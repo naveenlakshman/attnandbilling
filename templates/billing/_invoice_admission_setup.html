@@ -5,7 +5,7 @@
 
   .admission-setup-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 720px);
     gap: 20px;
   }
 
@@ -20,40 +20,47 @@
     line-height: 1.55;
   }
 
+  .admission-setup-empty {
+    padding: 12px 14px;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
   @media (max-width: 768px) {
     .admission-setup-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>
 
 <section class="modern-card admission-setup-card" aria-labelledby="admission-setup-title">
-  <div class="card-title" id="admission-setup-title">Admission Setup</div>
+  <div class="card-title" id="admission-setup-title">Invoice Booking</div>
 
   <div class="admission-setup-grid">
     <div class="form-field">
       <label for="invoice_branch_id">Invoice Booking Branch *</label>
+      {% if admission_branches %}
       <select name="invoice_branch_id" id="invoice_branch_id" required>
         <option value="">-- Select branch --</option>
         {% for branch in admission_branches %}
         <option value="{{ branch.id }}">{{ branch.branch_name }}</option>
         {% endfor %}
       </select>
-    </div>
-
-    <div class="form-field">
-      <label for="admission_mode">Admission Linkage *</label>
-      <select name="admission_mode" id="admission_mode" required>
-        <option value="">-- Select admission type --</option>
-        <option value="new">New purchase — create admissions for purchased courses</option>
-        <option value="existing">Additional invoice — link existing admissions</option>
-      </select>
+      {% else %}
+      <div class="admission-setup-empty" role="alert">
+        No active branch is configured for this institute. Ask an administrator to activate a branch before creating
+        the invoice.
+      </div>
+      {% endif %}
     </div>
   </div>
 
   <p class="admission-setup-help">
-    For a new DFA purchase, the system creates the applicable Basics and Tally admissions.
-    For an additional invoice on the same purchase, select existing admissions on the course rows.
-    Admission IDs are available in Admissions and Financial History.
+    Select the branch where this invoice is being booked. The selected branch is saved on the invoice for billing,
+    reporting and document numbering.
   </p>
 </section>

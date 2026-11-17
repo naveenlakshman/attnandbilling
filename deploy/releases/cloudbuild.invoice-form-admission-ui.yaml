@@ -14,12 +14,13 @@ steps:
 
   - id: verify-invoice-form-admission-ui
     name: gcr.io/cloud-builders/docker
+    entrypoint: bash
     args:
-      - run
-      - --rm
-      - ${_IMAGE}
-      - python
-      - tests/test_invoice_form_admission_ui.py
+      - -ceu
+      - |
+        docker run --rm ${_IMAGE} python -m py_compile modules/billing/routes.py services/invoice_form.py
+        docker run --rm ${_IMAGE} python tests/test_invoice_form_admission_ui.py
+        docker run --rm ${_IMAGE} python tests/test_invoice_booking_branches.py
 
 images: ['${_IMAGE}']
 options:

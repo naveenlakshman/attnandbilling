@@ -2,7 +2,10 @@ ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-dep
 FROM ${BASE_IMAGE}
 
 COPY --chown=appuser:appuser templates/billing/_invoice_admission_setup.html /app/templates/billing/_invoice_admission_setup.html
+COPY --chown=appuser:appuser modules/billing/routes.py /app/modules/billing/routes.py
+COPY --chown=appuser:appuser services/invoice_form.py /app/services/invoice_form.py
 COPY --chown=appuser:appuser deploy/releases/patch_invoice_form_admission_ui.py /app/deploy/releases/patch_invoice_form_admission_ui.py
 COPY --chown=appuser:appuser tests/test_invoice_form_admission_ui.py /app/tests/test_invoice_form_admission_ui.py
+COPY --chown=appuser:appuser tests/test_invoice_booking_branches.py /app/tests/test_invoice_booking_branches.py
 
 RUN python /app/deploy/releases/patch_invoice_form_admission_ui.py /app/templates/billing/invoice_form_modern.html
