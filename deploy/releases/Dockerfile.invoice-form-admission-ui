@@ -1,0 +1,8 @@
+ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:c2734f406e3ede9dfecc559d15505bccb4e1827163000145ede76305cc5abf0a
+FROM ${BASE_IMAGE}
+
+COPY --chown=appuser:appuser templates/billing/_invoice_admission_setup.html /app/templates/billing/_invoice_admission_setup.html
+COPY --chown=appuser:appuser deploy/releases/patch_invoice_form_admission_ui.py /app/deploy/releases/patch_invoice_form_admission_ui.py
+COPY --chown=appuser:appuser tests/test_invoice_form_admission_ui.py /app/tests/test_invoice_form_admission_ui.py
+
+RUN python /app/deploy/releases/patch_invoice_form_admission_ui.py /app/templates/billing/invoice_form_modern.html

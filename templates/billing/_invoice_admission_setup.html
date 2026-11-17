@@ -1,0 +1,59 @@
+<style>
+  .admission-setup-card {
+    grid-column: 1 / -1;
+  }
+
+  .admission-setup-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  .admission-setup-help {
+    margin: 18px 0 0;
+    padding: 12px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  @media (max-width: 768px) {
+    .admission-setup-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<section class="modern-card admission-setup-card" aria-labelledby="admission-setup-title">
+  <div class="card-title" id="admission-setup-title">Admission Setup</div>
+
+  <div class="admission-setup-grid">
+    <div class="form-field">
+      <label for="invoice_branch_id">Invoice Booking Branch *</label>
+      <select name="invoice_branch_id" id="invoice_branch_id" required>
+        <option value="">-- Select branch --</option>
+        {% for branch in admission_branches %}
+        <option value="{{ branch.id }}">{{ branch.branch_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-field">
+      <label for="admission_mode">Admission Linkage *</label>
+      <select name="admission_mode" id="admission_mode" required>
+        <option value="">-- Select admission type --</option>
+        <option value="new">New purchase — create admissions for purchased courses</option>
+        <option value="existing">Additional invoice — link existing admissions</option>
+      </select>
+    </div>
+  </div>
+
+  <p class="admission-setup-help">
+    For a new DFA purchase, the system creates the applicable Basics and Tally admissions.
+    For an additional invoice on the same purchase, select existing admissions on the course rows.
+    Admission IDs are available in Admissions and Financial History.
+  </p>
+</section>
