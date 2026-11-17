@@ -1,0 +1,27 @@
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production:final-exam-approved-action
+
+steps:
+  - id: build-final-exam-approved-action
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - deploy/releases/Dockerfile.final-exam-approved-action
+      - --tag
+      - ${_IMAGE}
+      - .
+
+  - id: verify-final-exam-approved-action
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker run --rm ${_IMAGE} python -m py_compile modules/exams/routes.py
+        docker run --rm ${_IMAGE} python tests/test_final_exam_approved_action.py
+
+images: ['${_IMAGE}']
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 900s

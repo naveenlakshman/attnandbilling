@@ -195,6 +195,30 @@
               <span>You have completed and passed the final exam (Score: {{ exam_pass.score_percent }}%). Your certificate will be issued shortly.</span>
             </div>
           </div>
+        {% elif application and application.status == 'APPROVED' %}
+          {% if exam_unlocked %}
+            <div class="alert alert-success mt-3 mb-0">
+              <div class="unlock-action">
+                <span>Your final exam is approved and open now. It remains available through the next day.</span>
+                <a class="btn btn-success" href="{{ url_for('exams.take_final_exam', application_id=application.id) }}">Take Final Exam</a>
+              </div>
+            </div>
+          {% elif exam_window_expired %}
+            <div class="alert alert-warning mt-3 mb-0">
+              Your approved final exam window for {{ application.requested_exam_date }} has expired. Please contact your college administrator to reschedule it.
+            </div>
+          {% else %}
+            <div class="alert alert-info mt-3 mb-0">
+              <div class="unlock-action">
+                <span>Your final exam is approved and scheduled for {{ application.requested_exam_date }}.</span>
+                <button class="btn btn-secondary" type="button" disabled>Opens on {{ application.requested_exam_date }}</button>
+              </div>
+            </div>
+          {% endif %}
+        {% elif application and application.status == 'PENDING' %}
+          <div class="alert alert-warning mt-3 mb-0">
+            Your application is pending staff approval for {{ application.requested_exam_date }}.
+          </div>
         {% elif not checks.application_ready %}
           <div class="alert alert-danger mt-3 mb-0">
             {% if not checks.syllabus.passed %}
@@ -211,23 +235,6 @@
           <div class="alert alert-warning mt-3 mb-0">
             You can submit your final exam application with pending assignments. Staff will approve it only after reviewing your assignment completion or accepted project work.
           </div>
-        {% elif application and application.status == 'PENDING' %}
-          <div class="alert alert-warning mt-3 mb-0">
-            Your application is pending staff approval for {{ application.requested_exam_date }}.
-          </div>
-        {% elif application and application.status == 'APPROVED' %}
-          {% if application.requested_exam_date <= today %}
-            <div class="alert alert-success mt-3 mb-0">
-              <div class="unlock-action">
-                <span>Your final exam is approved and unlocked for the scheduled date.</span>
-                <a class="btn btn-success" href="{{ url_for('exams.take_final_exam', application_id=application.id) }}">Take Final Exam</a>
-              </div>
-            </div>
-          {% else %}
-            <div class="alert alert-info mt-3 mb-0">
-              Your final exam is approved and scheduled for {{ application.requested_exam_date }}.
-            </div>
-          {% endif %}
         {% endif %}
 
         {% if not checks.assignments.passed and checks.assignments.pending %}

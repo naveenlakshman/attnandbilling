@@ -1302,6 +1302,8 @@ def final_exam_apply():
         selected_program = None
         checks = None
         application = None
+        exam_unlocked = False
+        exam_window_expired = False
         exam_pass = None
         certificate = None
         if selected_program_id:
@@ -1311,6 +1313,13 @@ def final_exam_apply():
             )
             checks = _final_exam_checks(cur, student_id, selected_program_id)
             application = _latest_final_exam_application(cur, student_id, selected_program_id)
+            exam_unlocked = _is_final_exam_unlocked(application)
+            if application and application["status"] == "APPROVED":
+                try:
+                    scheduled_date = date.fromisoformat(application["requested_exam_date"])
+                    exam_window_expired = date.today() > (scheduled_date + timedelta(days=1))
+                except (TypeError, ValueError):
+                    exam_window_expired = True
 
             # Check if they already passed the exam
             settings_row = cur.execute("SELECT default_pass_percentage FROM certificate_settings WHERE id = 1").fetchone()
@@ -1344,6 +1353,8 @@ def final_exam_apply():
             selected_program_id=selected_program_id,
             checks=checks,
             application=application,
+            exam_unlocked=exam_unlocked,
+            exam_window_expired=exam_window_expired,
             exam_pass=exam_pass,
             certificate=certificate,
             today=date.today().isoformat(),

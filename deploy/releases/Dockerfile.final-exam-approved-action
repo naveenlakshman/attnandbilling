@@ -1,0 +1,6 @@
+ARG BASE_IMAGE=asia-south1-docker.pkg.dev/global-it-edu-app/cloud-run-source-deploy/global-it-erp-production@sha256:cb5594d1ceb54f6a74cbbebaa977c8a7b591543e966d62aa50749bb29cb379de
+FROM ${BASE_IMAGE}
+
+COPY --chown=appuser:appuser modules/exams/routes.py /app/modules/exams/routes.py
+COPY --chown=appuser:appuser templates/exams/student_final_exam_apply.html /app/templates/exams/student_final_exam_apply.html
+COPY --chown=appuser:appuser tests/test_final_exam_approved_action.py /app/tests/test_final_exam_approved_action.py
